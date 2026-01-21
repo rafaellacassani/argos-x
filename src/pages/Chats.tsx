@@ -36,6 +36,7 @@ interface Chat {
   unread: number;
   online: boolean;
   phone: string;
+  lastMessageFromMe: boolean; // Track who sent the last message
 }
 
 interface Message {
@@ -403,6 +404,7 @@ export default function Chats() {
                                    lastMsg?.message?.extendedTextMessage?.text || 
                                    lastMsg?.pushName || "";
             const lastMsgTime = lastMsg?.messageTimestamp;
+            const lastMsgFromMe = lastMsg?.key?.fromMe || false;
 
             return {
               id: chat.id || chat.remoteJid,
@@ -413,6 +415,7 @@ export default function Chats() {
               unread: chat.unreadCount || 0,
               online: false,
               phone: formatPhoneFromJid(chat.remoteJid || chat.id),
+              lastMessageFromMe: lastMsgFromMe,
             };
           })
           .slice(0, 50); // Limit to 50 chats
@@ -518,6 +521,46 @@ export default function Chats() {
           chat.name.toLowerCase().includes(searchLower)
         );
       }
+
+      // Filter by response status
+      // "answered" = last message was from team (fromMe = true)
+      // "awaiting" = last message was from client (fromMe = false) - waiting for team response
+      // "unanswered" = has unread messages and last was from client
+      if (activeFilters.responseStatus && activeFilters.responseStatus.length > 0) {
+        result = result.filter((chat) => {
+          const statuses = activeFilters.responseStatus;
+          
+          // If "answered" is selected: show chats where last message was from team
+          if (statuses.includes("answered") && chat.lastMessageFromMe) {
+            return true;
+          }
+          
+          // If "awaiting" is selected: show chats where last message was from client (awaiting team response)
+          if (statuses.includes("awaiting") && !chat.lastMessageFromMe) {
+            return true;
+          }
+          
+          // If "unanswered" is selected: show chats with unread messages from client
+          if (statuses.includes("unanswered") && chat.unread > 0 && !chat.lastMessageFromMe) {
+            return true;
+          }
+          
+          return false;
+        });
+      }
+
+      // Filter by last message sender
+      if (activeFilters.lastMessageSender && activeFilters.lastMessageSender !== "any") {
+        result = result.filter((chat) => {
+          if (activeFilters.lastMessageSender === "client") {
+            return !chat.lastMessageFromMe;
+          }
+          if (activeFilters.lastMessageSender === "team") {
+            return chat.lastMessageFromMe;
+          }
+          return true;
+        });
+      }
       
       // Note: Other filters (stages, tags, etc.) would need lead data correlation
       // This is a simplified implementation that can be extended
@@ -537,6 +580,7 @@ export default function Chats() {
         const lastMsgContent = lastMsg?.message?.conversation || 
                                lastMsg?.message?.extendedTextMessage?.text || "";
         const lastMsgTime = lastMsg?.messageTimestamp;
+        const lastMsgFromMe = lastMsg?.key?.fromMe || false;
 
         return {
           id: chat.id || chat.remoteJid,
@@ -547,6 +591,7 @@ export default function Chats() {
           unread: chat.unreadCount || 0,
           online: false,
           phone: formatPhoneFromJid(chat.remoteJid || chat.id),
+          lastMessageFromMe: lastMsgFromMe,
         };
       })
       .slice(0, 50);

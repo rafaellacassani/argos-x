@@ -219,8 +219,7 @@ export function ChatFilters({
 
   const responseStatuses = [
     { id: "answered", label: "Respondido" },
-    { id: "awaiting", label: "Aguardando resposta" },
-    { id: "unanswered", label: "Não respondido" },
+    { id: "unanswered", label: "Sem resposta" },
   ];
 
   const interactionStatuses = [
