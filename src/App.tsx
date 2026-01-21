@@ -15,6 +15,7 @@ import Email from "./pages/Email";
 import Statistics from "./pages/Statistics";
 import Campaigns from "./pages/Campaigns";
 import Settings from "./pages/Settings";
+import Configuracoes from "./pages/Configuracoes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/statistics" element={<Statistics />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>
