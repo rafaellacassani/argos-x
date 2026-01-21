@@ -192,7 +192,7 @@ app.post("/logout/:instanceName", async (c) => {
   }
 });
 
-// Fetch all chats from an instance
+// Fetch all chats from an instance (filtered to today only)
 app.post("/chats/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
@@ -203,7 +203,48 @@ app.post("/chats/:instanceName", async (c) => {
       {}
     );
 
-    return c.json(result, 200, corsHeaders);
+    // Get today's date at midnight UTC
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const todayTimestamp = Math.floor(today.getTime() / 1000);
+    const todayISO = today.toISOString().split('T')[0]; // "2026-01-21"
+
+    console.log(`[Evolution API] Filtering chats from today: ${todayISO} (timestamp >= ${todayTimestamp})`);
+
+    const filteredChats = Array.isArray(result) 
+      ? result.filter((chat: any) => {
+          // Check multiple timestamp sources
+          const lastMsgTimestamp = chat.lastMessage?.messageTimestamp;
+          const updatedAtStr = chat.updatedAt;
+          
+          // Check ISO date format (updatedAt)
+          if (updatedAtStr) {
+            const chatDate = updatedAtStr.split('T')[0];
+            const isToday = chatDate === todayISO;
+            console.log(`[Evolution API] Chat ${chat.remoteJid}: updatedAt=${chatDate}, isToday=${isToday}`);
+            if (isToday) return true;
+          }
+          
+          // Check Unix timestamp (lastMessage.messageTimestamp)
+          if (lastMsgTimestamp) {
+            // Handle timestamp in seconds or milliseconds
+            const timestamp = lastMsgTimestamp > 9999999999 
+              ? Math.floor(lastMsgTimestamp / 1000) 
+              : lastMsgTimestamp;
+
+            const isToday = timestamp >= todayTimestamp;
+            console.log(`[Evolution API] Chat ${chat.remoteJid}: timestamp=${timestamp}, isToday=${isToday}`);
+            if (isToday) return true;
+          }
+          
+          console.log(`[Evolution API] Chat ${chat.remoteJid}: no valid timestamp, excluding`);
+          return false;
+        })
+      : [];
+
+    console.log(`[Evolution API] Filtered ${filteredChats.length} chats from today (out of ${Array.isArray(result) ? result.length : 0} total)`);
+
+    return c.json(filteredChats, 200, corsHeaders);
   } catch (error) {
     console.error("[Evolution API] Error fetching chats:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch chats";
