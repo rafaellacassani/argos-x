@@ -160,33 +160,89 @@ export function LeadDetailSheet({
             </div>
           </div>
 
-          {/* Stage Selector */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-white/80 text-sm">
-              <ChevronRight className="h-4 w-4" />
-              Fase do Lead
-            </Label>
-            <Select
-              value={lead.stage_id}
-              onValueChange={(value) => onMove(lead.id, value)}
-            >
-              <SelectTrigger className="bg-white/10 border-white/20 text-white hover:bg-white/20 focus:ring-white/30">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {stages.map(stage => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: stage.color }}
-                      />
-                      {stage.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* Stage & Tags Row */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Stage Selector */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-white/80 text-sm">
+                <ChevronRight className="h-4 w-4" />
+                Fase do Lead
+              </Label>
+              <Select
+                value={lead.stage_id}
+                onValueChange={(value) => onMove(lead.id, value)}
+              >
+                <SelectTrigger className="bg-white/10 border-white/20 text-white hover:bg-white/20 focus:ring-white/30">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map(stage => (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: stage.color }}
+                        />
+                        {stage.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2 text-white/80 text-sm">
+                <Tag className="h-4 w-4" />
+                Tags
+              </Label>
+              <div className="flex flex-wrap gap-1.5 min-h-[40px] p-2 bg-white/10 border border-white/20 rounded-md">
+                {lead.tags && lead.tags.length > 0 ? (
+                  lead.tags.map(tag => (
+                    <Badge
+                      key={tag.id}
+                      className="text-xs px-2 py-0.5 pr-1 flex items-center gap-1"
+                      style={{ 
+                        backgroundColor: `${tag.color}40`,
+                        color: 'white',
+                        borderColor: tag.color
+                      }}
+                    >
+                      {tag.name}
+                      <button
+                        className="ml-1 hover:bg-white/20 rounded-full p-0.5"
+                        onClick={() => onRemoveTag(lead.id, tag.id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-white/50 text-sm">Sem tags</span>
+                )}
+                {availableTags.length > 0 && (
+                  <Select onValueChange={(tagId) => onAddTag(lead.id, tagId)}>
+                    <SelectTrigger className="h-6 w-6 p-0 bg-white/20 border-0 hover:bg-white/30 [&>svg]:hidden">
+                      <span className="text-white text-lg leading-none">+</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableTags.map(tag => (
+                        <SelectItem key={tag.id} value={tag.id}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: tag.color }}
+                            />
+                            {tag.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Quick Actions */}
@@ -248,9 +304,8 @@ export function LeadDetailSheet({
         </div>
 
         <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col p-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="info">Informações</TabsTrigger>
-            <TabsTrigger value="tags">Tags</TabsTrigger>
             <TabsTrigger value="history">Histórico</TabsTrigger>
           </TabsList>
 
@@ -352,68 +407,6 @@ export function LeadDetailSheet({
                 <Calendar className="h-4 w-4" />
                 Criado em {formatDate(lead.created_at)}
               </div>
-            </TabsContent>
-
-            {/* Tags Tab */}
-            <TabsContent value="tags" className="space-y-4 m-0">
-              {/* Current Tags */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  Tags Atuais
-                </Label>
-                <div className="flex flex-wrap gap-2">
-                  {lead.tags && lead.tags.length > 0 ? (
-                    lead.tags.map(tag => (
-                      <Badge
-                        key={tag.id}
-                        variant="secondary"
-                        className="pr-1 flex items-center gap-1"
-                        style={{ 
-                          backgroundColor: `${tag.color}20`,
-                          color: tag.color,
-                          borderColor: tag.color
-                        }}
-                      >
-                        {tag.name}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 hover:bg-transparent"
-                          onClick={() => onRemoveTag(lead.id, tag.id)}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Nenhuma tag adicionada</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Add Tag */}
-              {availableTags.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Adicionar Tag</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {availableTags.map(tag => (
-                      <Badge
-                        key={tag.id}
-                        variant="outline"
-                        className="cursor-pointer hover:opacity-80"
-                        style={{ 
-                          borderColor: tag.color,
-                          color: tag.color
-                        }}
-                        onClick={() => onAddTag(lead.id, tag.id)}
-                      >
-                        + {tag.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
             </TabsContent>
 
             {/* History Tab */}
