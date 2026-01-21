@@ -158,26 +158,30 @@ const extractMessageContent = (msg: EvolutionMessage): {
   return { content: msg.messageType || "Mensagem", type: "text" };
 };
 
-// Helper to convert File to base64
+// Helper to convert File to base64 (returns pure base64, no data: prefix)
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      resolve(result);
+      // Strip the data:mime;base64, prefix - Evolution API expects pure base64
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
 };
 
-// Helper to convert Blob to base64
+// Helper to convert Blob to base64 (returns pure base64, no data: prefix)
 const blobToBase64 = (blob: Blob): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      resolve(result);
+      // Strip the data:mime;base64, prefix - Evolution API expects pure base64
+      const base64 = result.includes(',') ? result.split(',')[1] : result;
+      resolve(base64);
     };
     reader.onerror = reject;
     reader.readAsDataURL(blob);

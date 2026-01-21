@@ -387,9 +387,9 @@ app.post("/send-media/:instanceName", async (c) => {
       return c.json({ error: "number, mediatype, and media are required" }, 400, corsHeaders);
     }
 
-    console.log(`[Evolution API] Sending ${mediatype} to ${number}`);
+    console.log(`[Evolution API] Sending ${mediatype} to ${number}, base64 length: ${media?.length || 0}`);
 
-    // Evolution API v2 expects flat structure, not nested mediaMessage
+    // Evolution API v2 expects flat structure with pure base64
     const result = await evolutionRequest(
       `/message/sendMedia/${instanceName}`,
       "POST",
@@ -424,21 +424,17 @@ app.post("/send-audio/:instanceName", async (c) => {
       return c.json({ error: "number and audio are required" }, 400, corsHeaders);
     }
 
-    console.log(`[Evolution API] Sending audio to ${number}`);
+    console.log(`[Evolution API] Sending audio to ${number}, base64 length: ${audio?.length || 0}`);
 
+    // Evolution API v2 expects flat structure for sendWhatsAppAudio
     const result = await evolutionRequest(
       `/message/sendWhatsAppAudio/${instanceName}`,
       "POST",
       {
         number,
-        audioMessage: {
-          audio
-        },
-        options: {
-          delay: 0,
-          presence: "recording",
-          encoding: true
-        }
+        audio,
+        delay: 0,
+        encoding: true
       }
     );
 
