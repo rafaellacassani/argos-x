@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Search,
   Phone,
@@ -6,12 +6,11 @@ import {
   MoreVertical,
   Star,
   Archive,
-  Filter,
   RefreshCw,
   MessageCircle,
   AlertCircle,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,9 +20,11 @@ import {
   type EvolutionMessage,
   type EvolutionInstance,
 } from "@/hooks/useEvolutionAPI";
+import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
 
 interface Chat {
   id: string;
@@ -207,6 +208,10 @@ export default function Chats() {
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
+  
+  // Load leads data for filters
+  const { stages, tags, leads } = useLeads();
 
   const { 
     listInstances, 
@@ -476,10 +481,50 @@ export default function Chats() {
     loadMessages();
   }, [selectedInstance, selectedChat?.id]);
 
-  const filteredChats = chats.filter((chat) =>
-    chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    chat.phone.includes(searchTerm)
-  );
+  // Calculate active filters count
+  const activeFiltersCount = useMemo(() => {
+    if (!activeFilters) return 0;
+    return countActiveFilters(activeFilters);
+  }, [activeFilters]);
+
+  // Handle filters change
+  const handleFiltersChange = useCallback((filters: ChatFiltersFormData) => {
+    setActiveFilters(filters);
+  }, []);
+
+  // Apply filters to chats
+  const filteredChats = useMemo(() => {
+    let result = chats.filter((chat) =>
+      chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      chat.phone.includes(searchTerm)
+    );
+
+    // Apply additional filters if active
+    if (activeFilters) {
+      // Filter by lead search
+      if (activeFilters.leadSearch) {
+        const searchLower = activeFilters.leadSearch.toLowerCase();
+        result = result.filter(
+          (chat) =>
+            chat.name.toLowerCase().includes(searchLower) ||
+            chat.phone.includes(activeFilters.leadSearch!)
+        );
+      }
+
+      // Filter by participant search
+      if (activeFilters.participantSearch) {
+        const searchLower = activeFilters.participantSearch.toLowerCase();
+        result = result.filter((chat) =>
+          chat.name.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Note: Other filters (stages, tags, etc.) would need lead data correlation
+      // This is a simplified implementation that can be extended
+    }
+
+    return result;
+  }, [chats, searchTerm, activeFilters]);
 
   const handleRefresh = async () => {
     if (!selectedInstance) return;
@@ -561,9 +606,12 @@ export default function Chats() {
               >
                 <RefreshCw className={cn("w-4 h-4", loadingChats && "animate-spin")} />
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <Filter className="w-4 h-4" />
-              </Button>
+              <ChatFilters
+                stages={stages}
+                tags={tags}
+                onFiltersChange={handleFiltersChange}
+                activeFiltersCount={activeFiltersCount}
+              />
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Archive className="w-4 h-4" />
               </Button>
