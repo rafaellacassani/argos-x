@@ -406,6 +406,30 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const downloadMedia = useCallback(async (instanceName: string, messageId: string, convertToMp4 = false): Promise<{ base64?: string; mimetype?: string } | null> => {
+    try {
+      console.log(`[useEvolutionAPI] downloadMedia: ${instanceName}, messageId: ${messageId}`);
+      
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/media/${instanceName}`, {
+        method: "POST",
+        body: { messageId, convertToMp4 },
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data;
+    } catch (err) {
+      console.error("[useEvolutionAPI] downloadMedia error:", err);
+      return null;
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -417,5 +441,6 @@ export function useEvolutionAPI() {
     logoutInstance,
     fetchChats,
     fetchMessages,
+    downloadMedia,
   };
 }

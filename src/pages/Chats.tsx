@@ -169,7 +169,13 @@ export default function Chats() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
 
-  const { listInstances, fetchChats, fetchMessages, getConnectionState } = useEvolutionAPI();
+  const { listInstances, fetchChats, fetchMessages, getConnectionState, downloadMedia } = useEvolutionAPI();
+
+  // Handler for downloading media
+  const handleDownloadMedia = async (messageId: string, convertToMp4 = false) => {
+    if (!selectedInstance) return null;
+    return downloadMedia(selectedInstance, messageId, convertToMp4);
+  };
 
   // Load connected instances on mount
   useEffect(() => {
@@ -545,6 +551,7 @@ export default function Chats() {
                       fileName={msg.fileName}
                       duration={msg.duration}
                       index={index}
+                      onDownloadMedia={handleDownloadMedia}
                     />
                   ))}
                 </div>
