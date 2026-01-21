@@ -347,8 +347,19 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      // Return messages array
-      const messages = Array.isArray(data?.messages) ? data.messages : Array.isArray(data) ? data : [];
+      // Handle different response structures from Evolution API
+      // The API returns: { messages: { records: [...], total, pages, currentPage } }
+      let messages: EvolutionMessage[] = [];
+      
+      if (data?.messages?.records && Array.isArray(data.messages.records)) {
+        messages = data.messages.records;
+      } else if (Array.isArray(data?.messages)) {
+        messages = data.messages;
+      } else if (Array.isArray(data)) {
+        messages = data;
+      }
+
+      console.log(`[useEvolutionAPI] fetchMessages: Found ${messages.length} messages for ${remoteJid}`);
       return messages;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao buscar mensagens";
