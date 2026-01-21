@@ -540,8 +540,8 @@ export default function Chats() {
             return true;
           }
           
-          // If "unanswered" is selected: show chats with unread messages from client
-          if (statuses.includes("unanswered") && chat.unread > 0 && !chat.lastMessageFromMe) {
+          // If "unanswered" is selected: show chats where last message was from client (regardless of read status)
+          if (statuses.includes("unanswered") && !chat.lastMessageFromMe) {
             return true;
           }
           
