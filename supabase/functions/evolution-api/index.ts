@@ -192,4 +192,62 @@ app.post("/logout/:instanceName", async (c) => {
   }
 });
 
+// Fetch all chats from an instance
+app.post("/chats/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+
+    const result = await evolutionRequest(
+      `/chat/findChats/${instanceName}`,
+      "POST",
+      {}
+    );
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error fetching chats:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch chats";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
+// Fetch messages from a chat
+app.post("/messages/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    const { remoteJid, limit = 50 } = await c.req.json();
+
+    if (!remoteJid) {
+      return c.json({ error: "remoteJid is required" }, 400, corsHeaders);
+    }
+
+    const result = await evolutionRequest(
+      `/chat/findMessages/${instanceName}`,
+      "POST",
+      {
+        where: {
+          key: {
+            remoteJid,
+          },
+        },
+        limit,
+      }
+    );
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error fetching messages:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch messages";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
 Deno.serve(app.fetch);
