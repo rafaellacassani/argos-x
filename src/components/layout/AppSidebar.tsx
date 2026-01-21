@@ -13,6 +13,7 @@ import {
   BarChart3,
   Megaphone,
   Plug,
+  Settings,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -31,6 +32,7 @@ const menuItems = [
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns" },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
+  { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
 export function AppSidebar() {
