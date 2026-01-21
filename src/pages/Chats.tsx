@@ -640,7 +640,59 @@ export default function Chats() {
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-lg">Conversas</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display font-bold text-lg">Conversas</h2>
+              <Button
+                variant={activeFilters?.responseStatus?.includes("unanswered") ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-6 px-2 text-xs font-medium rounded-full",
+                  activeFilters?.responseStatus?.includes("unanswered")
+                    ? "bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                    : "border-destructive/50 text-destructive hover:bg-destructive/10"
+                )}
+                onClick={() => {
+                  const isActive = activeFilters?.responseStatus?.includes("unanswered");
+                  if (isActive) {
+                    // Clear the filter
+                    const newFilters = {
+                      ...activeFilters,
+                      responseStatus: [],
+                    } as ChatFiltersFormData;
+                    setActiveFilters(newFilters);
+                    // Update URL
+                    const params = new URLSearchParams(window.location.search);
+                    params.delete("responseStatus");
+                    window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+                  } else {
+                    // Apply unanswered filter
+                    const newFilters = {
+                      ...(activeFilters || {
+                        periodPreset: "any",
+                        stageIds: [],
+                        starred: false,
+                        responseStatus: [],
+                        interactionStatus: "",
+                        chatSource: [],
+                        responsibleUser: "",
+                        leadSearch: "",
+                        participantSearch: "",
+                        lastMessageSender: "any",
+                        tagIds: [],
+                      }),
+                      responseStatus: ["unanswered"],
+                    } as ChatFiltersFormData;
+                    setActiveFilters(newFilters);
+                    // Update URL
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("responseStatus", "unanswered");
+                    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+                  }
+                }}
+              >
+                Sem resposta
+              </Button>
+            </div>
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
