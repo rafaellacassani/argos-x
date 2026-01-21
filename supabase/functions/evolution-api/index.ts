@@ -303,4 +303,43 @@ app.post("/messages/:instanceName", async (c) => {
   }
 });
 
+// Get media as base64 (download and decrypt)
+app.post("/media/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    const { messageId, convertToMp4 = false } = await c.req.json();
+
+    if (!messageId) {
+      return c.json({ error: "messageId is required" }, 400, corsHeaders);
+    }
+
+    console.log(`[Evolution API] Downloading media for message: ${messageId}`);
+
+    const result = await evolutionRequest(
+      `/chat/getBase64FromMediaMessage/${instanceName}`,
+      "POST",
+      {
+        message: {
+          key: {
+            id: messageId
+          }
+        },
+        convertToMp4
+      }
+    );
+
+    console.log(`[Evolution API] Media downloaded, base64 length: ${result?.base64?.length || 0}`);
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error downloading media:", error);
+    const message = error instanceof Error ? error.message : "Failed to download media";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
 Deno.serve(app.fetch);
