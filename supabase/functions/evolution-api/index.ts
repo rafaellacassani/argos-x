@@ -342,4 +342,117 @@ app.post("/media/:instanceName", async (c) => {
   }
 });
 
+// Send text message
+app.post("/send-text/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    const { number, text } = await c.req.json();
+
+    if (!number || !text) {
+      return c.json({ error: "number and text are required" }, 400, corsHeaders);
+    }
+
+    console.log(`[Evolution API] Sending text to ${number}`);
+
+    const result = await evolutionRequest(
+      `/message/sendText/${instanceName}`,
+      "POST",
+      {
+        number,
+        text,
+        delay: 0,
+        linkPreview: true
+      }
+    );
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error sending text:", error);
+    const message = error instanceof Error ? error.message : "Failed to send message";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
+// Send media message (image, video, document)
+app.post("/send-media/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    const { number, mediatype, media, caption, fileName } = await c.req.json();
+
+    if (!number || !media || !mediatype) {
+      return c.json({ error: "number, mediatype, and media are required" }, 400, corsHeaders);
+    }
+
+    console.log(`[Evolution API] Sending ${mediatype} to ${number}`);
+
+    const result = await evolutionRequest(
+      `/message/sendMedia/${instanceName}`,
+      "POST",
+      {
+        number,
+        mediaMessage: {
+          mediatype,
+          caption: caption || "",
+          media,
+          fileName: fileName || undefined
+        }
+      }
+    );
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error sending media:", error);
+    const message = error instanceof Error ? error.message : "Failed to send media";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
+// Send audio message (PTT - Push to Talk)
+app.post("/send-audio/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    const { number, audio } = await c.req.json();
+
+    if (!number || !audio) {
+      return c.json({ error: "number and audio are required" }, 400, corsHeaders);
+    }
+
+    console.log(`[Evolution API] Sending audio to ${number}`);
+
+    const result = await evolutionRequest(
+      `/message/sendWhatsAppAudio/${instanceName}`,
+      "POST",
+      {
+        number,
+        audioMessage: {
+          audio
+        },
+        options: {
+          delay: 0,
+          presence: "recording",
+          encoding: true
+        }
+      }
+    );
+
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error("[Evolution API] Error sending audio:", error);
+    const message = error instanceof Error ? error.message : "Failed to send audio";
+    return c.json(
+      { error: message },
+      500,
+      corsHeaders
+    );
+  }
+});
+
 Deno.serve(app.fetch);

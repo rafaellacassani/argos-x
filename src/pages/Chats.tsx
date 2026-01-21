@@ -1,14 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Phone,
   Video,
   MoreVertical,
-  Paperclip,
-  Smile,
-  Send,
-  Image,
-  Mic,
   Star,
   Archive,
   Filter,
@@ -28,6 +23,7 @@ import {
 } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
 import { MessageBubble } from "@/components/chat/MessageBubble";
+import { ChatInput } from "@/components/chat/ChatInput";
 
 interface Chat {
   id: string;
@@ -64,6 +60,11 @@ const formatPhoneFromJid = (jid: string): string => {
     return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 8)}-${number.slice(8)}`;
   }
   return `+${number}`;
+};
+
+// Helper to extract just the number from jid for sending
+const extractNumberFromJid = (jid: string): string => {
+  return jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "");
 };
 
 // Helper to format timestamp
@@ -157,9 +158,41 @@ const extractMessageContent = (msg: EvolutionMessage): {
   return { content: msg.messageType || "Mensagem", type: "text" };
 };
 
+// Helper to convert File to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+// Helper to convert Blob to base64
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
+// Helper to get media type from file
+const getMediaType = (file: File): "image" | "video" | "document" => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  return "document";
+};
+
 export default function Chats() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
-  const [message, setMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -169,13 +202,132 @@ export default function Chats() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
 
-  const { listInstances, fetchChats, fetchMessages, getConnectionState, downloadMedia } = useEvolutionAPI();
+  const { 
+    listInstances, 
+    fetchChats, 
+    fetchMessages, 
+    getConnectionState, 
+    downloadMedia,
+    sendText,
+    sendMedia,
+    sendAudio,
+    loading: apiLoading 
+  } = useEvolutionAPI();
 
   // Handler for downloading media
-  const handleDownloadMedia = async (messageId: string, convertToMp4 = false) => {
+  const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
     if (!selectedInstance) return null;
     return downloadMedia(selectedInstance, messageId, convertToMp4);
-  };
+  }, [selectedInstance, downloadMedia]);
+
+  // Handler for sending text message
+  const handleSendMessage = useCallback(async (text: string): Promise<boolean> => {
+    if (!selectedInstance || !selectedChat) return false;
+    
+    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const success = await sendText(selectedInstance, number, text);
+    
+    if (success) {
+      // Add message to local state optimistically
+      const newMessage: Message = {
+        id: `local-${Date.now()}`,
+        content: text,
+        time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        sent: true,
+        read: false,
+        type: "text",
+      };
+      setMessages((prev) => [...prev, newMessage]);
+      
+      toast({
+        title: "Mensagem enviada",
+        description: "Sua mensagem foi enviada com sucesso.",
+      });
+    } else {
+      toast({
+        title: "Erro ao enviar",
+        description: "Não foi possível enviar a mensagem.",
+        variant: "destructive",
+      });
+    }
+    
+    return success;
+  }, [selectedInstance, selectedChat, sendText]);
+
+  // Handler for sending media
+  const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
+    if (!selectedInstance || !selectedChat) return false;
+    
+    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const mediatype = getMediaType(file);
+    const base64 = await fileToBase64(file);
+    
+    const success = await sendMedia(selectedInstance, number, mediatype, base64, caption, file.name);
+    
+    if (success) {
+      // Add message to local state optimistically
+      const newMessage: Message = {
+        id: `local-${Date.now()}`,
+        content: caption || "",
+        time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        sent: true,
+        read: false,
+        type: mediatype,
+        thumbnailBase64: mediatype === "image" ? base64 : undefined,
+        fileName: file.name,
+      };
+      setMessages((prev) => [...prev, newMessage]);
+      
+      toast({
+        title: "Mídia enviada",
+        description: `${file.name} foi enviado com sucesso.`,
+      });
+    } else {
+      toast({
+        title: "Erro ao enviar",
+        description: "Não foi possível enviar a mídia.",
+        variant: "destructive",
+      });
+    }
+    
+    return success;
+  }, [selectedInstance, selectedChat, sendMedia]);
+
+  // Handler for sending audio
+  const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
+    if (!selectedInstance || !selectedChat) return false;
+    
+    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const base64 = await blobToBase64(audioBlob);
+    
+    const success = await sendAudio(selectedInstance, number, base64);
+    
+    if (success) {
+      // Add message to local state optimistically
+      const newMessage: Message = {
+        id: `local-${Date.now()}`,
+        content: "",
+        time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+        sent: true,
+        read: false,
+        type: "audio",
+      };
+      setMessages((prev) => [...prev, newMessage]);
+      
+      toast({
+        title: "Áudio enviado",
+        description: "Seu áudio foi enviado com sucesso.",
+      });
+    } else {
+      toast({
+        title: "Erro ao enviar",
+        description: "Não foi possível enviar o áudio.",
+        variant: "destructive",
+      });
+    }
+    
+    return success;
+  }, [selectedInstance, selectedChat, sendAudio]);
 
   // Load connected instances on mount
   useEffect(() => {
@@ -558,36 +710,13 @@ export default function Chats() {
               )}
             </ScrollArea>
 
-            {/* Input */}
-            <div className="p-4 border-t border-border bg-card">
-              <div className="flex items-center gap-2 max-w-3xl mx-auto">
-                <Button variant="ghost" size="icon" className="text-muted-foreground">
-                  <Smile className="w-5 h-5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="text-muted-foreground">
-                  <Paperclip className="w-5 h-5" />
-                </Button>
-                <div className="flex-1 relative">
-                  <Input
-                    placeholder="Digite sua mensagem..."
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    className="pr-20 bg-muted/50 border-transparent focus:border-secondary"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-                      <Image className="w-4 h-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-                      <Mic className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-                <Button size="icon" className="bg-secondary hover:bg-secondary/90">
-                  <Send className="w-5 h-5" />
-                </Button>
-              </div>
-            </div>
+            {/* Chat Input */}
+            <ChatInput
+              onSendMessage={handleSendMessage}
+              onSendMedia={handleSendMedia}
+              onSendAudio={handleSendAudio}
+              disabled={apiLoading}
+            />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">

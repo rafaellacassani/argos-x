@@ -430,6 +430,106 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const sendText = useCallback(async (instanceName: string, number: string, text: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`[useEvolutionAPI] sendText to ${number}`);
+      
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/send-text/${instanceName}`, {
+        method: "POST",
+        body: { number, text },
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao enviar mensagem";
+      setError(message);
+      console.error("[useEvolutionAPI] sendText error:", err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const sendMedia = useCallback(async (
+    instanceName: string, 
+    number: string, 
+    mediatype: "image" | "video" | "document", 
+    media: string, 
+    caption?: string,
+    fileName?: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`[useEvolutionAPI] sendMedia (${mediatype}) to ${number}`);
+      
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/send-media/${instanceName}`, {
+        method: "POST",
+        body: { number, mediatype, media, caption, fileName },
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao enviar mídia";
+      setError(message);
+      console.error("[useEvolutionAPI] sendMedia error:", err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const sendAudio = useCallback(async (instanceName: string, number: string, audio: string): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`[useEvolutionAPI] sendAudio to ${number}`);
+      
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/send-audio/${instanceName}`, {
+        method: "POST",
+        body: { number, audio },
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao enviar áudio";
+      setError(message);
+      console.error("[useEvolutionAPI] sendAudio error:", err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -442,5 +542,8 @@ export function useEvolutionAPI() {
     fetchChats,
     fetchMessages,
     downloadMedia,
+    sendText,
+    sendMedia,
+    sendAudio,
   };
 }
