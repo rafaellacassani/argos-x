@@ -198,6 +198,7 @@ export default function Chats() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
+  const [loadingInstances, setLoadingInstances] = useState(true);
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
@@ -332,18 +333,23 @@ export default function Chats() {
   // Load connected instances on mount
   useEffect(() => {
     const loadInstances = async () => {
-      const data = await listInstances();
-      // Filter only connected instances
-      const connectedInstances: EvolutionInstance[] = [];
-      for (const instance of data) {
-        const state = await getConnectionState(instance.instanceName);
-        if (state?.instance?.state === "open") {
-          connectedInstances.push({ ...instance, connectionStatus: "open" });
+      setLoadingInstances(true);
+      try {
+        const data = await listInstances();
+        // Filter only connected instances
+        const connectedInstances: EvolutionInstance[] = [];
+        for (const instance of data) {
+          const state = await getConnectionState(instance.instanceName);
+          if (state?.instance?.state === "open") {
+            connectedInstances.push({ ...instance, connectionStatus: "open" });
+          }
         }
-      }
-      setInstances(connectedInstances);
-      if (connectedInstances.length > 0) {
-        setSelectedInstance(connectedInstances[0].instanceName);
+        setInstances(connectedInstances);
+        if (connectedInstances.length > 0) {
+          setSelectedInstance(connectedInstances[0].instanceName);
+        }
+      } finally {
+        setLoadingInstances(false);
       }
     };
     loadInstances();
@@ -493,6 +499,18 @@ export default function Chats() {
       description: `${transformedChats.length} conversas carregadas.`,
     });
   };
+
+  // Loading instances
+  if (loadingInstances) {
+    return (
+      <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 mx-auto mb-4 text-primary animate-spin" />
+          <p className="text-muted-foreground">Carregando conexões...</p>
+        </div>
+      </div>
+    );
+  }
 
   // No connected instance
   if (instances.length === 0) {
