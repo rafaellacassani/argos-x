@@ -85,6 +85,7 @@ export function MessageBubble({
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioDuration, setAudioDuration] = useState(duration || 0);
   const [waveformBars] = useState(() => generateWaveformBars(35));
+  const [hasAutoPlayed, setHasAutoPlayed] = useState(false);
 
   // Initialize audio base64 from local prop
   useEffect(() => {
@@ -170,13 +171,14 @@ export function MessageBubble({
     }
   }, [id, onDownloadMedia, audioBase64, isPlaying]);
 
-  // Auto-play when audio is loaded
+  // Auto-play when audio is FIRST loaded (not for local audio, only once)
   useEffect(() => {
-    if (audioBase64 && audioElementRef.current && !isPlaying && !localAudioBase64) {
+    if (audioBase64 && audioElementRef.current && !hasAutoPlayed && !localAudioBase64) {
       audioElementRef.current.play();
       setIsPlaying(true);
+      setHasAutoPlayed(true);
     }
-  }, [audioBase64, isPlaying, localAudioBase64]);
+  }, [audioBase64, hasAutoPlayed, localAudioBase64]);
 
   const handleAudioTimeUpdate = useCallback(() => {
     if (audioElementRef.current) {
