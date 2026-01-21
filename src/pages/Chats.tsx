@@ -114,6 +114,7 @@ export default function Chats() {
   const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   const { listInstances, fetchChats, fetchMessages, getConnectionState } = useEvolutionAPI();
 
@@ -143,9 +144,19 @@ export default function Chats() {
 
     const loadChats = async () => {
       setLoadingChats(true);
+      setChatError(null);
       try {
         const data = await fetchChats(selectedInstance);
         console.log("[Chats] Raw chats data:", data);
+
+        // Check if data is empty array or has an error
+        if (!Array.isArray(data) || data.length === 0) {
+          // Check if it's an error response
+          if ((data as any)?.error) {
+            setChatError(`Erro na instância "${selectedInstance}": ${(data as any).error}`);
+            return;
+          }
+        }
 
         // Transform to our Chat interface
         const transformedChats: Chat[] = data
@@ -172,14 +183,16 @@ export default function Chats() {
           .slice(0, 50); // Limit to 50 chats
 
         setChats(transformedChats);
+        setChatError(null);
         if (transformedChats.length > 0 && !selectedChat) {
           setSelectedChat(transformedChats[0]);
         }
       } catch (err) {
         console.error("[Chats] Error loading chats:", err);
+        setChatError(`Não foi possível carregar conversas de "${selectedInstance}". Tente outra instância.`);
         toast({
           title: "Erro ao carregar conversas",
-          description: "Não foi possível carregar as conversas do WhatsApp.",
+          description: `A instância "${selectedInstance}" retornou erro. Tente selecionar outra.`,
           variant: "destructive",
         });
       } finally {
@@ -310,15 +323,20 @@ export default function Chats() {
               </Button>
             </div>
           </div>
-          {instances.length > 1 && (
+          {instances.length >= 1 && (
             <select
               value={selectedInstance || ""}
-              onChange={(e) => setSelectedInstance(e.target.value)}
-              className="w-full mb-3 px-3 py-2 rounded-lg bg-muted/50 border-transparent text-sm"
+              onChange={(e) => {
+                setSelectedInstance(e.target.value);
+                setChats([]);
+                setSelectedChat(null);
+                setChatError(null);
+              }}
+              className="w-full mb-3 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm"
             >
               {instances.map((inst) => (
                 <option key={inst.instanceName} value={inst.instanceName}>
-                  {inst.instanceName}
+                  {inst.profileName || inst.instanceName}
                 </option>
               ))}
             </select>
@@ -339,6 +357,16 @@ export default function Chats() {
           {loadingChats ? (
             <div className="flex items-center justify-center p-8">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : chatError ? (
+            <div className="p-6 text-center">
+              <AlertCircle className="w-10 h-10 mx-auto mb-2 text-destructive" />
+              <p className="text-sm text-destructive mb-3">{chatError}</p>
+              {instances.length > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  Selecione outra instância acima.
+                </p>
+              )}
             </div>
           ) : filteredChats.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
