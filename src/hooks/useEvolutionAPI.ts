@@ -165,6 +165,25 @@ export function useEvolutionAPI() {
     setError(null);
 
     try {
+      // 1. Buscar instâncias registradas no banco de dados local (CRM)
+      const { data: localInstances, error: dbError } = await supabase
+        .from('whatsapp_instances')
+        .select('*');
+
+      if (dbError) {
+        console.error("[useEvolutionAPI] Error fetching local instances:", dbError);
+      }
+
+      // Se não há instâncias locais, retornar vazio (ignora Evolution API)
+      if (!localInstances || localInstances.length === 0) {
+        console.log("[useEvolutionAPI] No local instances found");
+        return [];
+      }
+
+      const localInstanceNames = localInstances.map(inst => inst.instance_name);
+      console.log("[useEvolutionAPI] Local instance names:", localInstanceNames);
+
+      // 2. Buscar dados atualizados da Evolution API
       const { data, error: fnError } = await supabase.functions.invoke("evolution-api/fetch-instances", {
         method: "GET",
       });
@@ -177,8 +196,8 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      // Map API response to our interface
-      const instances = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
+      // 3. Mapear e filtrar apenas as instâncias que estão no banco local
+      const allInstances = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
         instanceName: item.name as string,
         instanceId: item.id as string,
         profileName: item.profileName as string,
@@ -186,7 +205,14 @@ export function useEvolutionAPI() {
         ownerJid: item.ownerJid as string,
         connectionStatus: item.connectionStatus as "open" | "close" | "connecting",
       })) : [];
-      return instances;
+
+      // Filtrar para mostrar apenas instâncias do CRM
+      const filteredInstances = allInstances.filter(inst => 
+        localInstanceNames.includes(inst.instanceName)
+      );
+
+      console.log("[useEvolutionAPI] Filtered instances:", filteredInstances.map(i => i.instanceName));
+      return filteredInstances;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao listar conexões";
       setError(message);
@@ -202,6 +228,7 @@ export function useEvolutionAPI() {
     setError(null);
 
     try {
+      // 1. Deletar na Evolution API
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/delete/${instanceName}`, {
         method: "DELETE",
       });
@@ -212,6 +239,16 @@ export function useEvolutionAPI() {
 
       if (data?.error) {
         throw new Error(data.error);
+      }
+
+      // 2. Remover do banco de dados local
+      const { error: dbError } = await supabase
+        .from('whatsapp_instances')
+        .delete()
+        .eq('instance_name', instanceName);
+
+      if (dbError) {
+        console.error("[useEvolutionAPI] Error deleting from local DB:", dbError);
       }
 
       return true;

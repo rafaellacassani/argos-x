@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 type Step = "name" | "creating" | "qrcode" | "waiting" | "success" | "error";
 
@@ -148,6 +149,20 @@ export function ConnectionModal({
         if (state?.instance?.state === "open") {
           if (pollingRef.current) clearInterval(pollingRef.current);
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          
+          // Salvar instância no banco de dados local
+          const sanitizedName = instanceName
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "-")
+            .replace(/-+/g, "-")
+            .replace(/^-|-$/g, "");
+          
+          await supabase.from('whatsapp_instances').upsert({
+            instance_name: sanitizedName,
+            display_name: instanceName.trim()
+          }, { onConflict: 'instance_name' });
+          
           setStep("success");
 
           toast({
