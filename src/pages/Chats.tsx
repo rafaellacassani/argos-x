@@ -404,7 +404,10 @@ export default function Chats() {
                                    lastMsg?.message?.extendedTextMessage?.text || 
                                    lastMsg?.pushName || "";
             const lastMsgTime = lastMsg?.messageTimestamp;
-            const lastMsgFromMe = lastMsg?.key?.fromMe || false;
+            const lastMsgFromMe = lastMsg?.key?.fromMe ?? false;
+            
+            // Debug log for filter verification
+            console.log(`[Chats] Chat ${chat.remoteJid}: lastMsgFromMe=${lastMsgFromMe}, hasLastMessage=${!!lastMsg}, key=${JSON.stringify(lastMsg?.key)}`);
 
             return {
               id: chat.id || chat.remoteJid,
@@ -527,26 +530,30 @@ export default function Chats() {
       // "awaiting" = last message was from client (fromMe = false) - waiting for team response
       // "unanswered" = has unread messages and last was from client
       if (activeFilters.responseStatus && activeFilters.responseStatus.length > 0) {
+        const statuses = activeFilters.responseStatus;
+        console.log(`[Chats] Applying filter with statuses: ${statuses.join(', ')}`);
+        console.log(`[Chats] Before filter: ${result.length} chats`);
+        
         result = result.filter((chat) => {
-          const statuses = activeFilters.responseStatus;
-          
           // If "answered" is selected: show chats where last message was from team
-          if (statuses.includes("answered") && chat.lastMessageFromMe) {
+          if (statuses.includes("answered") && chat.lastMessageFromMe === true) {
             return true;
           }
           
           // If "awaiting" is selected: show chats where last message was from client (awaiting team response)
-          if (statuses.includes("awaiting") && !chat.lastMessageFromMe) {
+          if (statuses.includes("awaiting") && chat.lastMessageFromMe === false) {
             return true;
           }
           
           // If "unanswered" is selected: show chats where last message was from client (regardless of read status)
-          if (statuses.includes("unanswered") && !chat.lastMessageFromMe) {
+          if (statuses.includes("unanswered") && chat.lastMessageFromMe === false) {
             return true;
           }
           
           return false;
         });
+        
+        console.log(`[Chats] After filter: ${result.length} chats`);
       }
 
       // Filter by last message sender

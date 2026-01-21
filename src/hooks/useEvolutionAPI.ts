@@ -36,7 +36,15 @@ export interface EvolutionChat {
   profilePicUrl?: string;
   unreadCount?: number;
   lastMsgTimestamp?: number;
-  lastMessage?: string;
+  lastMessage?: {
+    key?: {
+      remoteJid?: string;
+      fromMe?: boolean;
+      id?: string;
+    };
+    message?: Record<string, unknown>;
+    messageTimestamp?: number;
+  };
 }
 
 export interface EvolutionMessage {
@@ -343,7 +351,7 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      // Map API response to our interface
+      // Map API response to our interface - include lastMessage for fromMe detection
       const chats = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
         id: item.id as string,
         remoteJid: item.remoteJid as string || item.id as string,
@@ -352,6 +360,7 @@ export function useEvolutionAPI() {
         profilePicUrl: item.profilePicUrl as string,
         unreadCount: item.unreadCount as number,
         lastMsgTimestamp: item.lastMsgTimestamp as number,
+        lastMessage: item.lastMessage as EvolutionChat['lastMessage'],
       })) : [];
       return chats;
     } catch (err) {
