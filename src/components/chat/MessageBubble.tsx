@@ -68,6 +68,7 @@ export function MessageBubble({
   const [fullMediaMimetype, setFullMediaMimetype] = useState<string | null>(null);
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [audioBase64, setAudioBase64] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
 
   const formatDuration = (seconds?: number): string => {
     if (!seconds) return "";
@@ -86,6 +87,7 @@ export function MessageBubble({
     }
 
     setIsLoadingMedia(true);
+    setMediaError(null);
     try {
       const result = await onDownloadMedia(id, type === "video");
       if (result?.base64) {
@@ -95,9 +97,12 @@ export function MessageBubble({
         setFullMediaBase64(base64WithPrefix);
         setFullMediaMimetype(result.mimetype || null);
         setShowMediaModal(true);
+      } else {
+        setMediaError("Mídia não disponível");
       }
     } catch (err) {
       console.error("Error downloading media:", err);
+      setMediaError("Erro ao carregar mídia");
     } finally {
       setIsLoadingMedia(false);
     }
@@ -119,6 +124,7 @@ export function MessageBubble({
     if (!onDownloadMedia || !id) return;
 
     setIsLoadingMedia(true);
+    setMediaError(null);
     try {
       const result = await onDownloadMedia(id, false);
       if (result?.base64) {
@@ -127,9 +133,12 @@ export function MessageBubble({
           : `data:${result.mimetype || "audio/ogg"};base64,${result.base64}`;
         setAudioBase64(base64WithPrefix);
         // Audio will auto-play when ref is set
+      } else {
+        setMediaError("Áudio não disponível");
       }
     } catch (err) {
       console.error("Error downloading audio:", err);
+      setMediaError("Erro ao carregar áudio");
     } finally {
       setIsLoadingMedia(false);
     }
@@ -151,7 +160,8 @@ export function MessageBubble({
   const renderMedia = () => {
     switch (type) {
       case "image":
-        const imageSrc = thumbnailBase64 || mediaUrl;
+        // Show thumbnail if available, otherwise show placeholder
+        const imageSrc = thumbnailBase64;
         if (imageSrc && !imageError) {
           return (
             <div className="mb-2">
@@ -172,6 +182,11 @@ export function MessageBubble({
                     <ExternalLink className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
                   )}
                 </div>
+                {mediaError && (
+                  <div className="absolute bottom-2 left-2 right-2 bg-destructive/80 text-white text-xs px-2 py-1 rounded">
+                    {mediaError}
+                  </div>
+                )}
               </div>
               {content && (
                 <p className="text-sm mt-2 whitespace-pre-wrap break-words">
@@ -181,10 +196,34 @@ export function MessageBubble({
             </div>
           );
         }
+        // No thumbnail available - show placeholder with click to load
         return (
-          <div className="flex items-center gap-2 text-sm">
-            <ImageIcon className="w-5 h-5 opacity-70" />
-            <span>{content || "📷 Imagem"}</span>
+          <div className="mb-2">
+            <div 
+              className="relative cursor-pointer group w-48 h-32 bg-muted/50 rounded-lg flex items-center justify-center"
+              onClick={handleMediaClick}
+            >
+              {isLoadingMedia ? (
+                <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <ImageIcon className="w-10 h-10 text-muted-foreground" />
+                  <div className="absolute bottom-2 left-2 right-2 text-xs text-muted-foreground text-center">
+                    Clique para ver
+                  </div>
+                </>
+              )}
+              {mediaError && (
+                <div className="absolute bottom-2 left-2 right-2 bg-destructive/80 text-white text-xs px-2 py-1 rounded text-center">
+                  {mediaError}
+                </div>
+              )}
+            </div>
+            {content && (
+              <p className="text-sm mt-2 whitespace-pre-wrap break-words">
+                {renderTextWithLinks(content)}
+              </p>
+            )}
           </div>
         );
 
@@ -221,6 +260,11 @@ export function MessageBubble({
               {duration && (
                 <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
                   {formatDuration(duration)}
+                </div>
+              )}
+              {mediaError && (
+                <div className="absolute bottom-2 left-2 right-2 bg-destructive/80 text-white text-xs px-2 py-1 rounded text-center">
+                  {mediaError}
                 </div>
               )}
             </div>
@@ -265,9 +309,14 @@ export function MessageBubble({
               <div className="h-1 bg-current/20 rounded-full overflow-hidden">
                 <div className="h-full w-0 bg-current/60 rounded-full" />
               </div>
-              {duration && (
-                <span className="text-xs opacity-60">{formatDuration(duration)}</span>
-              )}
+              <div className="flex items-center justify-between">
+                {duration && (
+                  <span className="text-xs opacity-60">{formatDuration(duration)}</span>
+                )}
+                {mediaError && (
+                  <span className="text-xs text-destructive">{mediaError}</span>
+                )}
+              </div>
             </div>
             <Volume2 className="w-4 h-4 opacity-50 flex-shrink-0" />
           </div>
@@ -291,7 +340,9 @@ export function MessageBubble({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{fileName || content || "Documento"}</p>
-              <p className="text-xs opacity-70">Clique para baixar</p>
+              <p className="text-xs opacity-70">
+                {mediaError || "Clique para baixar"}
+              </p>
             </div>
             <Download className="w-4 h-4 opacity-50" />
           </div>
