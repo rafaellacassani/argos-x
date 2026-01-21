@@ -14,6 +14,257 @@ export type Database = {
   }
   public: {
     Tables: {
+      funnel_stages: {
+        Row: {
+          color: string
+          created_at: string
+          funnel_id: string
+          id: string
+          is_loss_stage: boolean | null
+          is_win_stage: boolean | null
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          funnel_id: string
+          id?: string
+          is_loss_stage?: boolean | null
+          is_win_stage?: boolean | null
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          funnel_id?: string
+          id?: string
+          is_loss_stage?: boolean | null
+          is_win_stage?: boolean | null
+          name?: string
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funnel_stages_funnel_id_fkey"
+            columns: ["funnel_id"]
+            isOneToOne: false
+            referencedRelation: "funnels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funnels: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lead_history: {
+        Row: {
+          action: string
+          created_at: string
+          from_stage_id: string | null
+          id: string
+          lead_id: string
+          metadata: Json | null
+          performed_by: string | null
+          to_stage_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          lead_id: string
+          metadata?: Json | null
+          performed_by?: string | null
+          to_stage_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          from_stage_id?: string | null
+          id?: string
+          lead_id?: string
+          metadata?: Json | null
+          performed_by?: string | null
+          to_stage_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_history_from_stage_id_fkey"
+            columns: ["from_stage_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_history_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_history_to_stage_id_fkey"
+            columns: ["to_stage_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_tag_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          lead_id: string
+          tag_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lead_id: string
+          tag_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lead_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_tag_assignments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_tag_assignments_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "lead_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_tags: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      leads: {
+        Row: {
+          avatar_url: string | null
+          company: string | null
+          created_at: string
+          email: string | null
+          id: string
+          instance_name: string | null
+          name: string
+          notes: string | null
+          phone: string
+          position: number
+          responsible_user: string | null
+          source: string | null
+          stage_id: string
+          status: Database["public"]["Enums"]["lead_status"]
+          updated_at: string
+          value: number | null
+          whatsapp_jid: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          instance_name?: string | null
+          name: string
+          notes?: string | null
+          phone: string
+          position?: number
+          responsible_user?: string | null
+          source?: string | null
+          stage_id: string
+          status?: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+          value?: number | null
+          whatsapp_jid?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          instance_name?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string
+          position?: number
+          responsible_user?: string | null
+          source?: string | null
+          stage_id?: string
+          status?: Database["public"]["Enums"]["lead_status"]
+          updated_at?: string
+          value?: number | null
+          whatsapp_jid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null
@@ -46,7 +297,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      lead_status: "active" | "won" | "lost" | "archived"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -173,6 +424,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      lead_status: ["active", "won", "lost", "archived"],
+    },
   },
 } as const
