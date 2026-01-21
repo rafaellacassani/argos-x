@@ -9,7 +9,6 @@ import {
   Video,
   Globe,
   RefreshCw,
-  Settings2,
   Smartphone,
   QrCode,
   Link2,
@@ -35,6 +34,7 @@ interface Integration {
   connected: boolean;
   available: boolean;
   connectedCount?: number;
+  phoneNumber?: string | null;
 }
 
 const getStatusColor = (status: string) => {
@@ -69,6 +69,20 @@ const getStatusLabel = (status: string) => {
     default:
       return status;
   }
+};
+
+const formatPhoneNumber = (ownerJid: string | undefined) => {
+  if (!ownerJid) return null;
+  // ownerJid vem no formato: 5511999999999@s.whatsapp.net
+  const number = ownerJid.replace(/@s\.whatsapp\.net$/, "");
+  // Formatar: +55 (11) 99999-9999
+  if (number.length === 13) {
+    return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 9)}-${number.slice(9)}`;
+  }
+  if (number.length === 12) {
+    return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 8)}-${number.slice(8)}`;
+  }
+  return `+${number}`;
 };
 
 export default function Settings() {
@@ -149,9 +163,11 @@ export default function Settings() {
     });
   };
 
-  const connectedCount = instances.filter(
+  const connectedInstances = instances.filter(
     (i) => i.connectionStatus === "open"
-  ).length;
+  );
+  const connectedCount = connectedInstances.length;
+  const connectedPhone = formatPhoneNumber(connectedInstances[0]?.ownerJid);
 
   const integrations: Integration[] = [
     {
@@ -160,6 +176,7 @@ export default function Settings() {
       description: "Conecte via QR Code",
       icon: <MessageCircle className="w-6 h-6 text-green-500" />,
       connected: connectedCount > 0,
+      phoneNumber: connectedPhone,
       available: true,
       connectedCount,
     },
@@ -288,9 +305,16 @@ export default function Settings() {
                   )}
                 </div>
                 <h3 className="font-semibold text-lg mb-1">{integration.name}</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <p className="text-sm text-muted-foreground mb-2">
                   {integration.description}
                 </p>
+                {integration.phoneNumber && (
+                  <p className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+                    <Phone className="w-4 h-4 text-success" />
+                    {integration.phoneNumber}
+                  </p>
+                )}
+                {!integration.phoneNumber && <div className="mb-2" />}
                 {integration.available ? (
                   <Button
                     className="w-full"
