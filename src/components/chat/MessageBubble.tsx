@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Volume2, Loader2, X } from "lucide-react";
+import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Loader2, X, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -16,6 +16,7 @@ interface MessageBubbleProps {
   thumbnailBase64?: string;
   fileName?: string;
   duration?: number;
+  localAudioBase64?: string; // For locally sent audio that can play immediately
   index: number;
   instanceName?: string;
   onDownloadMedia?: (messageId: string, convertToMp4?: boolean) => Promise<{ base64?: string; mimetype?: string } | null>;
@@ -46,6 +47,17 @@ const renderTextWithLinks = (text: string) => {
   });
 };
 
+// Generate waveform bars for audio visualization
+const generateWaveformBars = (count: number) => {
+  const bars = [];
+  for (let i = 0; i < count; i++) {
+    // Generate semi-random heights for visual variety
+    const height = Math.sin(i * 0.5) * 0.3 + Math.random() * 0.4 + 0.3;
+    bars.push(height);
+  }
+  return bars;
+};
+
 export function MessageBubble({
   id,
   content,
@@ -57,23 +69,34 @@ export function MessageBubble({
   thumbnailBase64,
   fileName,
   duration,
+  localAudioBase64,
   index,
   onDownloadMedia,
 }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const [imageError, setImageError] = useState(false);
   const [isLoadingMedia, setIsLoadingMedia] = useState(false);
   const [fullMediaBase64, setFullMediaBase64] = useState<string | null>(null);
   const [fullMediaMimetype, setFullMediaMimetype] = useState<string | null>(null);
   const [showMediaModal, setShowMediaModal] = useState(false);
-  const [audioBase64, setAudioBase64] = useState<string | null>(null);
+  const [audioBase64, setAudioBase64] = useState<string | null>(localAudioBase64 || null);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(duration || 0);
+  const [waveformBars] = useState(() => generateWaveformBars(35));
+
+  // Initialize audio base64 from local prop
+  useEffect(() => {
+    if (localAudioBase64 && !audioBase64) {
+      setAudioBase64(localAudioBase64);
+    }
+  }, [localAudioBase64, audioBase64]);
 
   const formatDuration = (seconds?: number): string => {
-    if (!seconds) return "";
+    if (!seconds || seconds <= 0) return "0:00";
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -109,19 +132,23 @@ export function MessageBubble({
   }, [id, onDownloadMedia, fullMediaBase64, type]);
 
   const handleAudioPlay = useCallback(async () => {
-    // If we have an audio ref with source, play/pause it
-    if (audioRef && audioBase64) {
+    // If we already have audio loaded, play/pause
+    if (audioBase64 && audioElementRef.current) {
       if (isPlaying) {
-        audioRef.pause();
+        audioElementRef.current.pause();
+        setIsPlaying(false);
       } else {
-        audioRef.play();
+        audioElementRef.current.play();
+        setIsPlaying(true);
       }
-      setIsPlaying(!isPlaying);
       return;
     }
 
     // Need to download audio first
-    if (!onDownloadMedia || !id) return;
+    if (!onDownloadMedia || !id) {
+      setMediaError("Áudio não disponível");
+      return;
+    }
 
     setIsLoadingMedia(true);
     setMediaError(null);
@@ -132,7 +159,6 @@ export function MessageBubble({
           ? result.base64 
           : `data:${result.mimetype || "audio/ogg"};base64,${result.base64}`;
         setAudioBase64(base64WithPrefix);
-        // Audio will auto-play when ref is set
       } else {
         setMediaError("Áudio não disponível");
       }
@@ -142,20 +168,44 @@ export function MessageBubble({
     } finally {
       setIsLoadingMedia(false);
     }
-  }, [id, onDownloadMedia, audioRef, audioBase64, isPlaying]);
+  }, [id, onDownloadMedia, audioBase64, isPlaying]);
+
+  // Auto-play when audio is loaded
+  useEffect(() => {
+    if (audioBase64 && audioElementRef.current && !isPlaying && !localAudioBase64) {
+      audioElementRef.current.play();
+      setIsPlaying(true);
+    }
+  }, [audioBase64, isPlaying, localAudioBase64]);
+
+  const handleAudioTimeUpdate = useCallback(() => {
+    if (audioElementRef.current) {
+      const progress = (audioElementRef.current.currentTime / audioElementRef.current.duration) * 100;
+      setAudioProgress(progress || 0);
+    }
+  }, []);
+
+  const handleAudioLoadedMetadata = useCallback(() => {
+    if (audioElementRef.current) {
+      setAudioDuration(audioElementRef.current.duration);
+    }
+  }, []);
 
   const handleAudioEnded = () => {
     setIsPlaying(false);
+    setAudioProgress(0);
   };
 
-  // Auto-play audio when loaded
-  const handleAudioRef = useCallback((ref: HTMLAudioElement | null) => {
-    setAudioRef(ref);
-    if (ref && audioBase64 && !isPlaying) {
-      ref.play();
-      setIsPlaying(true);
-    }
-  }, [audioBase64, isPlaying]);
+  const handleWaveformClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioElementRef.current || !audioBase64) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    
+    audioElementRef.current.currentTime = percentage * audioElementRef.current.duration;
+    setAudioProgress(percentage * 100);
+  }, [audioBase64]);
 
   const renderMedia = () => {
     switch (type) {
@@ -164,7 +214,7 @@ export function MessageBubble({
         const imageSrc = thumbnailBase64;
         if (imageSrc && !imageError) {
           return (
-            <div className="mb-2">
+            <div className="-mx-4 -mt-2.5 mb-1">
               <div 
                 className="relative cursor-pointer group"
                 onClick={handleMediaClick}
@@ -172,10 +222,11 @@ export function MessageBubble({
                 <img
                   src={imageSrc}
                   alt="Imagem"
-                  className="max-w-full rounded-lg max-h-64 object-cover hover:opacity-90 transition-opacity"
+                  className="w-full max-w-[280px] rounded-t-2xl object-cover hover:opacity-95 transition-opacity"
+                  style={{ maxHeight: "300px" }}
                   onError={() => setImageError(true)}
                 />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-lg transition-colors flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-t-2xl transition-colors flex items-center justify-center">
                   {isLoadingMedia ? (
                     <Loader2 className="w-8 h-8 text-white animate-spin drop-shadow-lg" />
                   ) : (
@@ -189,7 +240,7 @@ export function MessageBubble({
                 )}
               </div>
               {content && (
-                <p className="text-sm mt-2 whitespace-pre-wrap break-words">
+                <p className="text-sm mt-2 px-4 whitespace-pre-wrap break-words">
                   {renderTextWithLinks(content)}
                 </p>
               )}
@@ -230,7 +281,7 @@ export function MessageBubble({
       case "video":
         const videoThumb = thumbnailBase64;
         return (
-          <div className="mb-2">
+          <div className="-mx-4 -mt-2.5 mb-1">
             <div 
               className="relative cursor-pointer group"
               onClick={handleMediaClick}
@@ -239,10 +290,11 @@ export function MessageBubble({
                 <img
                   src={videoThumb}
                   alt="Vídeo"
-                  className="max-w-full rounded-lg max-h-64 object-cover"
+                  className="w-full max-w-[280px] rounded-t-2xl object-cover"
+                  style={{ maxHeight: "300px" }}
                 />
               ) : (
-                <div className="w-64 h-36 bg-muted-foreground/20 rounded-lg flex items-center justify-center">
+                <div className="w-64 h-36 bg-muted-foreground/20 rounded-t-2xl flex items-center justify-center">
                   <Video className="w-8 h-8 opacity-50" />
                 </div>
               )}
@@ -269,7 +321,7 @@ export function MessageBubble({
               )}
             </div>
             {content && (
-              <p className="text-sm mt-2 whitespace-pre-wrap break-words">
+              <p className="text-sm mt-2 px-4 whitespace-pre-wrap break-words">
                 {renderTextWithLinks(content)}
               </p>
             )}
@@ -277,48 +329,95 @@ export function MessageBubble({
         );
 
       case "audio":
+        const currentTime = audioElementRef.current?.currentTime || 0;
+        const displayDuration = audioDuration || duration || 0;
+        const displayTime = isPlaying ? currentTime : displayDuration;
+        
         return (
-          <div className="flex items-center gap-3 min-w-[200px] py-1">
+          <div className="flex items-center gap-3 min-w-[240px] max-w-[320px] py-1">
+            {/* Play/Pause Button */}
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "h-10 w-10 rounded-full flex-shrink-0",
-                sent ? "bg-secondary-foreground/20 hover:bg-secondary-foreground/30" : "bg-muted-foreground/20 hover:bg-muted-foreground/30"
+                "h-12 w-12 rounded-full flex-shrink-0 transition-colors",
+                sent 
+                  ? "bg-secondary-foreground/20 hover:bg-secondary-foreground/30 text-secondary-foreground" 
+                  : "bg-primary/20 hover:bg-primary/30 text-primary"
               )}
               onClick={handleAudioPlay}
               disabled={isLoadingMedia}
             >
               {isLoadingMedia ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-6 h-6 animate-spin" />
               ) : isPlaying ? (
-                <Pause className="w-5 h-5" />
+                <Pause className="w-6 h-6" fill="currentColor" />
               ) : (
-                <Play className="w-5 h-5 ml-0.5" />
+                <Play className="w-6 h-6 ml-0.5" fill="currentColor" />
               )}
             </Button>
+
+            {/* Audio element */}
             {audioBase64 && (
               <audio
-                ref={handleAudioRef}
+                ref={audioElementRef}
                 src={audioBase64}
                 onEnded={handleAudioEnded}
+                onTimeUpdate={handleAudioTimeUpdate}
+                onLoadedMetadata={handleAudioLoadedMetadata}
                 preload="auto"
               />
             )}
-            <div className="flex-1 flex flex-col gap-1">
-              <div className="h-1 bg-current/20 rounded-full overflow-hidden">
-                <div className="h-full w-0 bg-current/60 rounded-full" />
+
+            {/* Waveform and duration */}
+            <div className="flex-1 flex flex-col gap-1.5">
+              {/* Waveform bars */}
+              <div 
+                className="flex items-center gap-[2px] h-6 cursor-pointer"
+                onClick={handleWaveformClick}
+              >
+                {waveformBars.map((height, i) => {
+                  const barProgress = (i / waveformBars.length) * 100;
+                  const isPlayed = barProgress <= audioProgress;
+                  return (
+                    <div
+                      key={i}
+                      className={cn(
+                        "w-[3px] rounded-full transition-colors",
+                        isPlayed 
+                          ? (sent ? "bg-secondary-foreground/80" : "bg-primary") 
+                          : (sent ? "bg-secondary-foreground/30" : "bg-primary/30")
+                      )}
+                      style={{ height: `${height * 24}px` }}
+                    />
+                  );
+                })}
               </div>
+
+              {/* Duration */}
               <div className="flex items-center justify-between">
-                {duration && (
-                  <span className="text-xs opacity-60">{formatDuration(duration)}</span>
-                )}
+                <span className={cn(
+                  "text-xs",
+                  sent ? "text-secondary-foreground/70" : "text-muted-foreground"
+                )}>
+                  {formatDuration(displayTime)}
+                </span>
                 {mediaError && (
                   <span className="text-xs text-destructive">{mediaError}</span>
                 )}
               </div>
             </div>
-            <Volume2 className="w-4 h-4 opacity-50 flex-shrink-0" />
+
+            {/* Microphone icon indicator */}
+            <div className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+              sent ? "bg-secondary-foreground/10" : "bg-primary/10"
+            )}>
+              <Mic className={cn(
+                "w-5 h-5",
+                sent ? "text-secondary-foreground/60" : "text-primary/60"
+              )} />
+            </div>
           </div>
         );
 
@@ -367,15 +466,25 @@ export function MessageBubble({
       >
         <div
           className={cn(
-            "max-w-[70%] rounded-2xl px-4 py-2.5 overflow-hidden",
+            "max-w-[70%] rounded-2xl overflow-hidden",
+            type === "image" || type === "video" ? "px-0 py-0" : "px-4 py-2.5",
             sent
               ? "bg-secondary text-secondary-foreground rounded-br-md"
               : "bg-muted rounded-bl-md"
           )}
           style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
         >
-          {renderMedia()}
-          <div className={cn("flex items-center gap-1 mt-1", sent ? "justify-end" : "justify-start")}>
+          {/* Media content */}
+          <div className={type === "image" || type === "video" ? "" : ""}>
+            {renderMedia()}
+          </div>
+          
+          {/* Time and read status - inside bubble for media, separate for others */}
+          <div className={cn(
+            "flex items-center gap-1",
+            type === "image" || type === "video" ? "px-4 py-2" : "mt-1",
+            sent ? "justify-end" : "justify-start"
+          )}>
             <span className={cn("text-[10px]", sent ? "text-secondary-foreground/70" : "text-muted-foreground")}>
               {time}
             </span>

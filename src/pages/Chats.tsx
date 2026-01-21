@@ -48,6 +48,7 @@ interface Message {
   thumbnailBase64?: string;
   fileName?: string;
   duration?: number;
+  localAudioBase64?: string; // For locally sent audio that can play immediately
 }
 
 // Helper to format phone from jid
@@ -305,10 +306,17 @@ export default function Chats() {
     const number = extractNumberFromJid(selectedChat.remoteJid);
     const base64 = await blobToBase64(audioBlob);
     
+    // Create data URL for local playback (with proper prefix)
+    const reader = new FileReader();
+    const localAudioDataUrl = await new Promise<string>((resolve) => {
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(audioBlob);
+    });
+    
     const success = await sendAudio(selectedInstance, number, base64);
     
     if (success) {
-      // Add message to local state optimistically
+      // Add message to local state optimistically with audio data for playback
       const newMessage: Message = {
         id: `local-${Date.now()}`,
         content: "",
@@ -316,6 +324,7 @@ export default function Chats() {
         sent: true,
         read: false,
         type: "audio",
+        localAudioBase64: localAudioDataUrl, // Include audio data for immediate playback
       };
       setMessages((prev) => [...prev, newMessage]);
       
@@ -724,6 +733,7 @@ export default function Chats() {
                       thumbnailBase64={msg.thumbnailBase64}
                       fileName={msg.fileName}
                       duration={msg.duration}
+                      localAudioBase64={msg.localAudioBase64}
                       index={index}
                       onDownloadMedia={handleDownloadMedia}
                     />
