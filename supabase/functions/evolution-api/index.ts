@@ -1,6 +1,6 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 
-const app = new Hono();
+const app = new Hono().basePath("/evolution-api");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +8,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
-const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+// Normalize the API URL - remove trailing /manager if present
+const rawApiUrl = Deno.env.get("EVOLUTION_API_URL") || "";
+const EVOLUTION_API_URL = rawApiUrl.replace(/\/manager\/?$/, "");
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 
 // Helper function to make requests to Evolution API
@@ -35,6 +37,15 @@ async function evolutionRequest(
   }
 
   const response = await fetch(url, options);
+  
+  // Check if response is JSON
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    const text = await response.text();
+    console.error(`[Evolution API] Non-JSON response: ${text.substring(0, 200)}`);
+    throw new Error(`Evolution API returned non-JSON response (status: ${response.status})`);
+  }
+  
   const data = await response.json();
 
   console.log(`[Evolution API] Response status: ${response.status}`);

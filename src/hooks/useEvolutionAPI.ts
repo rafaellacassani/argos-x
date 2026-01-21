@@ -3,9 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface EvolutionInstance {
   instanceName: string;
+  name?: string;
   instanceId?: string;
+  id?: string;
   status?: string;
   owner?: string;
+  ownerJid?: string;
   profileName?: string;
   profilePicUrl?: string;
   connectionStatus?: "open" | "close" | "connecting";
@@ -135,8 +138,16 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      // The API returns an array of instances
-      return Array.isArray(data) ? data : [];
+      // Map API response to our interface
+      const instances = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
+        instanceName: item.name as string,
+        instanceId: item.id as string,
+        profileName: item.profileName as string,
+        profilePicUrl: item.profilePicUrl as string,
+        ownerJid: item.ownerJid as string,
+        connectionStatus: item.connectionStatus as "open" | "close" | "connecting",
+      })) : [];
+      return instances;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao listar conexões";
       setError(message);
