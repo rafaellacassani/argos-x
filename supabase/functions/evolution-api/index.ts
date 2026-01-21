@@ -389,17 +389,16 @@ app.post("/send-media/:instanceName", async (c) => {
 
     console.log(`[Evolution API] Sending ${mediatype} to ${number}`);
 
+    // Evolution API v2 expects flat structure, not nested mediaMessage
     const result = await evolutionRequest(
       `/message/sendMedia/${instanceName}`,
       "POST",
       {
         number,
-        mediaMessage: {
-          mediatype,
-          caption: caption || "",
-          media,
-          fileName: fileName || undefined
-        }
+        mediatype,
+        media,
+        caption: caption || "",
+        fileName: fileName || undefined
       }
     );
 
