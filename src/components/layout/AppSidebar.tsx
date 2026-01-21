@@ -76,8 +76,8 @@ export function AppSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-3 overflow-y-auto scrollbar-thin">
-        <ul className="space-y-1">
+      <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
+        <ul className="space-y-2">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
             return (
@@ -85,10 +85,10 @@ export function AppSidebar() {
                 <NavLink
                   to={item.path}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
+                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      ? "bg-sidebar-accent text-white"
+                      : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white"
                   )}
                 >
                   {isActive && (
@@ -101,7 +101,7 @@ export function AppSidebar() {
                   <item.icon
                     className={cn(
                       "w-5 h-5 flex-shrink-0 transition-colors",
-                      isActive ? "text-sidebar-primary" : "text-sidebar-muted group-hover:text-sidebar-foreground"
+                      isActive ? "text-sidebar-primary" : "text-white/80 group-hover:text-white"
                     )}
                   />
                   <AnimatePresence>
