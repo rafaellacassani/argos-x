@@ -53,14 +53,37 @@ export interface EvolutionMessage {
     };
     imageMessage?: {
       caption?: string;
+      url?: string;
+      directPath?: string;
+      mimetype?: string;
     };
     videoMessage?: {
       caption?: string;
+      url?: string;
+      directPath?: string;
+      mimetype?: string;
     };
     documentMessage?: {
       fileName?: string;
+      url?: string;
+      directPath?: string;
+      mimetype?: string;
     };
-    audioMessage?: object;
+    audioMessage?: {
+      url?: string;
+      directPath?: string;
+      mimetype?: string;
+      seconds?: number;
+      ptt?: boolean;
+    };
+    interactiveMessage?: {
+      body?: {
+        text?: string;
+      };
+      footer?: {
+        text?: string;
+      };
+    };
   };
   messageType?: string;
   messageTimestamp?: number;
