@@ -12,7 +12,9 @@ interface MessageBubbleProps {
   read: boolean;
   type: "text" | "image" | "audio" | "document" | "video";
   mediaUrl?: string;
+  thumbnailBase64?: string;
   fileName?: string;
+  duration?: number;
   index: number;
 }
 
@@ -51,12 +53,23 @@ export function MessageBubble({
   read,
   type,
   mediaUrl,
+  thumbnailBase64,
   fileName,
+  duration,
   index,
 }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [showFullImage, setShowFullImage] = useState(false);
+
+  // Format duration (seconds) to mm:ss
+  const formatDuration = (seconds?: number): string => {
+    if (!seconds) return "";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleAudioPlay = () => {
     if (audioRef) {
@@ -76,18 +89,26 @@ export function MessageBubble({
   const renderMedia = () => {
     switch (type) {
       case "image":
-        if (mediaUrl && !imageError) {
+        // Use thumbnail if available, fallback to mediaUrl
+        const imageSrc = thumbnailBase64 || mediaUrl;
+        if (imageSrc && !imageError) {
           return (
             <div className="mb-2">
-              <a href={mediaUrl} target="_blank" rel="noopener noreferrer">
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => mediaUrl && window.open(mediaUrl, '_blank')}
+              >
                 <img
-                  src={mediaUrl}
+                  src={imageSrc}
                   alt="Imagem"
-                  className="max-w-full rounded-lg max-h-64 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                  className="max-w-full rounded-lg max-h-64 object-cover hover:opacity-90 transition-opacity"
                   onError={() => setImageError(true)}
                 />
-              </a>
-              {content && content !== "📷 Imagem" && (
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-colors flex items-center justify-center">
+                  <ExternalLink className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </div>
+              {content && (
                 <p className="text-sm mt-2 whitespace-pre-wrap break-words">
                   {renderTextWithLinks(content)}
                 </p>
@@ -98,21 +119,45 @@ export function MessageBubble({
         return (
           <div className="flex items-center gap-2 text-sm">
             <ImageIcon className="w-5 h-5 opacity-70" />
-            <span>{content || "Imagem"}</span>
+            <span>{content || "📷 Imagem"}</span>
           </div>
         );
 
       case "video":
-        if (mediaUrl) {
+        // Use thumbnail for video preview
+        const videoThumb = thumbnailBase64;
+        if (videoThumb || mediaUrl) {
           return (
             <div className="mb-2">
-              <video
-                src={mediaUrl}
-                controls
-                className="max-w-full rounded-lg max-h-64"
-                preload="metadata"
-              />
-              {content && content !== "🎥 Vídeo" && (
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => mediaUrl && window.open(mediaUrl, '_blank')}
+              >
+                {videoThumb ? (
+                  <img
+                    src={videoThumb}
+                    alt="Vídeo"
+                    className="max-w-full rounded-lg max-h-64 object-cover"
+                  />
+                ) : (
+                  <div className="w-64 h-36 bg-muted-foreground/20 rounded-lg flex items-center justify-center">
+                    <Video className="w-8 h-8 opacity-50" />
+                  </div>
+                )}
+                {/* Play button overlay */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center group-hover:bg-black/80 transition-colors">
+                    <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                  </div>
+                </div>
+                {/* Duration badge */}
+                {duration && (
+                  <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                    {formatDuration(duration)}
+                  </div>
+                )}
+              </div>
+              {content && (
                 <p className="text-sm mt-2 whitespace-pre-wrap break-words">
                   {renderTextWithLinks(content)}
                 </p>
@@ -123,46 +168,45 @@ export function MessageBubble({
         return (
           <div className="flex items-center gap-2 text-sm">
             <Video className="w-5 h-5 opacity-70" />
-            <span>{content || "Vídeo"}</span>
+            <span>{content || "🎥 Vídeo"}</span>
           </div>
         );
 
       case "audio":
-        if (mediaUrl) {
-          return (
-            <div className="flex items-center gap-3 min-w-[200px]">
+        return (
+          <div className="flex items-center gap-3 min-w-[200px] py-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-10 w-10 rounded-full flex-shrink-0",
+                sent ? "bg-secondary-foreground/20 hover:bg-secondary-foreground/30" : "bg-muted-foreground/20 hover:bg-muted-foreground/30"
+              )}
+              onClick={handleAudioPlay}
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5" />
+              ) : (
+                <Play className="w-5 h-5 ml-0.5" />
+              )}
+            </Button>
+            {mediaUrl && (
               <audio
                 ref={(ref) => setAudioRef(ref)}
                 src={mediaUrl}
                 onEnded={handleAudioEnded}
                 preload="metadata"
               />
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-full",
-                  sent ? "bg-secondary-foreground/20 hover:bg-secondary-foreground/30" : "bg-muted-foreground/20 hover:bg-muted-foreground/30"
-                )}
-                onClick={handleAudioPlay}
-              >
-                {isPlaying ? (
-                  <Pause className="w-5 h-5" />
-                ) : (
-                  <Play className="w-5 h-5 ml-0.5" />
-                )}
-              </Button>
-              <div className="flex-1 h-1 bg-current/20 rounded-full overflow-hidden">
+            )}
+            <div className="flex-1 flex flex-col gap-1">
+              <div className="h-1 bg-current/20 rounded-full overflow-hidden">
                 <div className="h-full w-0 bg-current/60 rounded-full" />
               </div>
-              <Volume2 className="w-4 h-4 opacity-50" />
+              {duration && (
+                <span className="text-xs opacity-60">{formatDuration(duration)}</span>
+              )}
             </div>
-          );
-        }
-        return (
-          <div className="flex items-center gap-2 text-sm">
-            <Volume2 className="w-5 h-5 opacity-70" />
-            <span>Áudio</span>
+            <Volume2 className="w-4 h-4 opacity-50 flex-shrink-0" />
           </div>
         );
 

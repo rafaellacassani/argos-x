@@ -49,7 +49,9 @@ interface Message {
   read: boolean;
   type: "text" | "image" | "audio" | "document" | "video";
   mediaUrl?: string;
+  thumbnailBase64?: string;
   fileName?: string;
+  duration?: number;
 }
 
 // Helper to format phone from jid
@@ -81,12 +83,14 @@ const formatTime = (timestamp: number | undefined): string => {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 };
 
-// Helper to extract message content with media URLs
+// Helper to extract message content with media URLs and thumbnails
 const extractMessageContent = (msg: EvolutionMessage): { 
   content: string; 
   type: Message["type"]; 
   mediaUrl?: string;
+  thumbnailBase64?: string;
   fileName?: string;
+  duration?: number;
 } => {
   // Text messages
   if (msg.message?.conversation) {
@@ -104,21 +108,26 @@ const extractMessageContent = (msg: EvolutionMessage): {
     return { content, type: "text" };
   }
   
-  // Image messages
+  // Image messages - use thumbnail for preview
   if (msg.message?.imageMessage) {
+    const thumbnail = msg.message.imageMessage.jpegThumbnail;
     return { 
       content: msg.message.imageMessage.caption || "", 
       type: "image",
-      mediaUrl: msg.message.imageMessage.url || undefined
+      mediaUrl: msg.message.imageMessage.url || undefined,
+      thumbnailBase64: thumbnail ? `data:image/jpeg;base64,${thumbnail}` : undefined
     };
   }
   
-  // Video messages
+  // Video messages - use thumbnail for preview
   if (msg.message?.videoMessage) {
+    const thumbnail = msg.message.videoMessage.jpegThumbnail;
     return { 
       content: msg.message.videoMessage.caption || "", 
       type: "video",
-      mediaUrl: msg.message.videoMessage.url || undefined
+      mediaUrl: msg.message.videoMessage.url || undefined,
+      thumbnailBase64: thumbnail ? `data:image/jpeg;base64,${thumbnail}` : undefined,
+      duration: msg.message.videoMessage.seconds
     };
   }
   
@@ -127,16 +136,19 @@ const extractMessageContent = (msg: EvolutionMessage): {
     return { 
       content: "", 
       type: "audio",
-      mediaUrl: msg.message.audioMessage.url || undefined
+      mediaUrl: msg.message.audioMessage.url || undefined,
+      duration: msg.message.audioMessage.seconds
     };
   }
   
   // Document messages
   if (msg.message?.documentMessage) {
+    const thumbnail = msg.message.documentMessage.jpegThumbnail;
     return { 
       content: msg.message.documentMessage.fileName || "Documento", 
       type: "document",
       mediaUrl: msg.message.documentMessage.url || undefined,
+      thumbnailBase64: thumbnail ? `data:image/jpeg;base64,${thumbnail}` : undefined,
       fileName: msg.message.documentMessage.fileName || undefined
     };
   }
@@ -257,7 +269,7 @@ export default function Chats() {
         // Transform to our Message interface
         const transformedMessages: Message[] = data
           .map((msg) => {
-            const { content, type, mediaUrl, fileName } = extractMessageContent(msg);
+            const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
             const timestamp = msg.messageTimestamp;
             const date = timestamp ? new Date(timestamp * 1000) : new Date();
 
@@ -269,7 +281,9 @@ export default function Chats() {
               read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
               type,
               mediaUrl,
+              thumbnailBase64,
               fileName,
+              duration,
             };
           })
           .reverse(); // Most recent at bottom
@@ -527,7 +541,9 @@ export default function Chats() {
                       read={msg.read}
                       type={msg.type}
                       mediaUrl={msg.mediaUrl}
+                      thumbnailBase64={msg.thumbnailBase64}
                       fileName={msg.fileName}
+                      duration={msg.duration}
                       index={index}
                     />
                   ))}
