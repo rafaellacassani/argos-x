@@ -56,18 +56,26 @@ export interface EvolutionMessage {
       url?: string;
       directPath?: string;
       mimetype?: string;
+      jpegThumbnail?: string;
+      width?: number;
+      height?: number;
     };
     videoMessage?: {
       caption?: string;
       url?: string;
       directPath?: string;
       mimetype?: string;
+      jpegThumbnail?: string;
+      seconds?: number;
+      width?: number;
+      height?: number;
     };
     documentMessage?: {
       fileName?: string;
       url?: string;
       directPath?: string;
       mimetype?: string;
+      jpegThumbnail?: string;
     };
     audioMessage?: {
       url?: string;
@@ -83,6 +91,10 @@ export interface EvolutionMessage {
       footer?: {
         text?: string;
       };
+    };
+    stickerMessage?: {
+      url?: string;
+      mimetype?: string;
     };
   };
   messageType?: string;
