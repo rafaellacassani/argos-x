@@ -133,31 +133,25 @@ export function LeadDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-hidden flex flex-col">
-        <SheetHeader className="space-y-4 pb-4 border-b">
-          {/* Lead Header */}
+      <SheetContent className="w-full sm:max-w-lg overflow-hidden flex flex-col p-0">
+        {/* Dark Header with Stage Selector */}
+        <div className="bg-[#060369] text-white p-6 space-y-4">
+          {/* Lead Info Row */}
           <div className="flex items-start gap-4">
-            <Avatar className="h-16 w-16">
+            <Avatar className="h-16 w-16 border-2 border-white/20">
               <AvatarImage src={lead.avatar_url} alt={lead.name} />
-              <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
+              <AvatarFallback className="bg-white/10 text-white text-xl font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             
             <div className="flex-1 min-w-0">
-              <SheetTitle className="text-xl font-bold truncate">{lead.name}</SheetTitle>
+              <SheetHeader className="p-0 space-y-0">
+                <SheetTitle className="text-xl font-bold truncate text-white">{lead.name}</SheetTitle>
+              </SheetHeader>
               <div className="flex items-center gap-2 mt-1">
-                <Badge 
-                  variant="outline"
-                  style={{ 
-                    borderColor: currentStage?.color,
-                    color: currentStage?.color
-                  }}
-                >
-                  {currentStage?.name || 'Sem fase'}
-                </Badge>
                 {lead.source === 'whatsapp' && (
-                  <Badge variant="secondary" className="text-emerald-600 bg-emerald-50">
+                  <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30">
                     <MessageSquare className="h-3 w-3 mr-1" />
                     WhatsApp
                   </Badge>
@@ -166,19 +160,54 @@ export function LeadDetailSheet({
             </div>
           </div>
 
+          {/* Stage Selector */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2 text-white/80 text-sm">
+              <ChevronRight className="h-4 w-4" />
+              Fase do Lead
+            </Label>
+            <Select
+              value={lead.stage_id}
+              onValueChange={(value) => onMove(lead.id, value)}
+            >
+              <SelectTrigger className="bg-white/10 border-white/20 text-white hover:bg-white/20 focus:ring-white/30">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map(stage => (
+                  <SelectItem key={stage.id} value={stage.id}>
+                    <div className="flex items-center gap-2">
+                      <div 
+                        className="w-3 h-3 rounded-full" 
+                        style={{ backgroundColor: stage.color }}
+                      />
+                      {stage.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Quick Actions */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 pt-2">
             {lead.whatsapp_jid && onOpenChat && (
               <Button 
                 variant="outline" 
                 size="sm"
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
                 onClick={() => onOpenChat(lead.whatsapp_jid!)}
               >
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Abrir Chat
               </Button>
             )}
-            <Button variant="outline" size="sm" asChild>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              asChild
+            >
               <a href={`tel:${lead.phone}`}>
                 <Phone className="h-4 w-4 mr-2" />
                 Ligar
@@ -186,7 +215,11 @@ export function LeadDetailSheet({
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="bg-red-500/20 border-red-500/30 text-red-300 hover:bg-red-500/30 hover:text-red-200"
+                >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </AlertDialogTrigger>
@@ -212,9 +245,9 @@ export function LeadDetailSheet({
               </AlertDialogContent>
             </AlertDialog>
           </div>
-        </SheetHeader>
+        </div>
 
-        <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col mt-4">
+        <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col p-4">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="info">Informações</TabsTrigger>
             <TabsTrigger value="tags">Tags</TabsTrigger>
@@ -224,35 +257,6 @@ export function LeadDetailSheet({
           <ScrollArea className="flex-1 mt-4">
             {/* Info Tab */}
             <TabsContent value="info" className="space-y-4 m-0">
-              {/* Move to Stage */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <ChevronRight className="h-4 w-4" />
-                  Mover para Fase
-                </Label>
-                <Select
-                  value={lead.stage_id}
-                  onValueChange={(value) => onMove(lead.id, value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stages.map(stage => (
-                      <SelectItem key={stage.id} value={stage.id}>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-2 h-2 rounded-full" 
-                            style={{ backgroundColor: stage.color }}
-                          />
-                          {stage.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               {/* Contact Info */}
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
