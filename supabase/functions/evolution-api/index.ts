@@ -210,19 +210,30 @@ app.post("/chats/:instanceName", async (c) => {
     const todayISO = today.toISOString().split('T')[0]; // "2026-01-21"
 
     console.log(`[Evolution API] Filtering chats from today: ${todayISO} (timestamp >= ${todayTimestamp})`);
+    console.log(`[Evolution API] Total chats from API: ${Array.isArray(result) ? result.length : 0}`);
 
     const filteredChats = Array.isArray(result) 
       ? result.filter((chat: any) => {
           // Check multiple timestamp sources
           const lastMsgTimestamp = chat.lastMessage?.messageTimestamp;
           const updatedAtStr = chat.updatedAt;
+          const windowStart = chat.windowStart;
           
-          // Check ISO date format (updatedAt)
+          // Check ISO date format (updatedAt or windowStart)
           if (updatedAtStr) {
             const chatDate = updatedAtStr.split('T')[0];
-            const isToday = chatDate === todayISO;
-            console.log(`[Evolution API] Chat ${chat.remoteJid}: updatedAt=${chatDate}, isToday=${isToday}`);
-            if (isToday) return true;
+            if (chatDate === todayISO) {
+              console.log(`[Evolution API] ✓ Chat ${chat.remoteJid}: updatedAt=${chatDate} matches today`);
+              return true;
+            }
+          }
+          
+          if (windowStart) {
+            const windowDate = windowStart.split('T')[0];
+            if (windowDate === todayISO) {
+              console.log(`[Evolution API] ✓ Chat ${chat.remoteJid}: windowStart=${windowDate} matches today`);
+              return true;
+            }
           }
           
           // Check Unix timestamp (lastMessage.messageTimestamp)
@@ -232,17 +243,18 @@ app.post("/chats/:instanceName", async (c) => {
               ? Math.floor(lastMsgTimestamp / 1000) 
               : lastMsgTimestamp;
 
-            const isToday = timestamp >= todayTimestamp;
-            console.log(`[Evolution API] Chat ${chat.remoteJid}: timestamp=${timestamp}, isToday=${isToday}`);
-            if (isToday) return true;
+            if (timestamp >= todayTimestamp) {
+              console.log(`[Evolution API] ✓ Chat ${chat.remoteJid}: timestamp=${timestamp} >= ${todayTimestamp}`);
+              return true;
+            }
           }
           
-          console.log(`[Evolution API] Chat ${chat.remoteJid}: no valid timestamp, excluding`);
+          console.log(`[Evolution API] ✗ Chat ${chat.remoteJid}: no valid today timestamp (updatedAt=${updatedAtStr}, windowStart=${windowStart}, msgTs=${lastMsgTimestamp})`);
           return false;
         })
       : [];
 
-    console.log(`[Evolution API] Filtered ${filteredChats.length} chats from today (out of ${Array.isArray(result) ? result.length : 0} total)`);
+    console.log(`[Evolution API] Filtered ${filteredChats.length} chats from today`);
 
     return c.json(filteredChats, 200, corsHeaders);
   } catch (error) {
