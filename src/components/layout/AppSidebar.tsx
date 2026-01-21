@@ -12,7 +12,7 @@ import {
   Mail,
   BarChart3,
   Megaphone,
-  Settings,
+  Plug,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -30,7 +30,7 @@ const menuItems = [
   { icon: Mail, label: "Email", path: "/email" },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns" },
-  { icon: Settings, label: "Configurações", path: "/settings" },
+  { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
 ];
 
 export function AppSidebar() {
@@ -88,7 +88,8 @@ export function AppSidebar() {
                     "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
                     isActive
                       ? "bg-sidebar-accent text-white"
-                      : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white"
+                      : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
+                    item.highlight && !isActive && "bg-sidebar-primary/20 border border-sidebar-primary/30"
                   )}
                 >
                   {isActive && (

@@ -251,7 +251,7 @@ export default function Settings() {
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">
-          Configurações
+          Integrações
         </h1>
         <p className="text-muted-foreground">
           Gerencie integrações e configurações do sistema
