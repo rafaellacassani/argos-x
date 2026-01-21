@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import {
   Search,
   Phone,
@@ -8,8 +7,6 @@ import {
   Paperclip,
   Smile,
   Send,
-  Check,
-  CheckCheck,
   Image,
   Mic,
   Star,
@@ -19,17 +16,18 @@ import {
   MessageCircle,
   AlertCircle,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
   useEvolutionAPI,
-  type EvolutionChat,
   type EvolutionMessage,
   type EvolutionInstance,
 } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
+import { MessageBubble } from "@/components/chat/MessageBubble";
 
 interface Chat {
   id: string;
@@ -50,6 +48,8 @@ interface Message {
   sent: boolean;
   read: boolean;
   type: "text" | "image" | "audio" | "document" | "video";
+  mediaUrl?: string;
+  fileName?: string;
 }
 
 // Helper to format phone from jid
@@ -81,26 +81,67 @@ const formatTime = (timestamp: number | undefined): string => {
   return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 };
 
-// Helper to extract message content
-const extractMessageContent = (msg: EvolutionMessage): { content: string; type: Message["type"] } => {
+// Helper to extract message content with media URLs
+const extractMessageContent = (msg: EvolutionMessage): { 
+  content: string; 
+  type: Message["type"]; 
+  mediaUrl?: string;
+  fileName?: string;
+} => {
+  // Text messages
   if (msg.message?.conversation) {
     return { content: msg.message.conversation, type: "text" };
   }
   if (msg.message?.extendedTextMessage?.text) {
     return { content: msg.message.extendedTextMessage.text, type: "text" };
   }
+  
+  // Interactive messages (buttons, etc.)
+  if (msg.message?.interactiveMessage?.body?.text) {
+    const footer = msg.message.interactiveMessage.footer?.text;
+    let content = msg.message.interactiveMessage.body.text;
+    if (footer) content += `\n\n${footer}`;
+    return { content, type: "text" };
+  }
+  
+  // Image messages
   if (msg.message?.imageMessage) {
-    return { content: msg.message.imageMessage.caption || "📷 Imagem", type: "image" };
+    return { 
+      content: msg.message.imageMessage.caption || "", 
+      type: "image",
+      mediaUrl: msg.message.imageMessage.url || undefined
+    };
   }
+  
+  // Video messages
   if (msg.message?.videoMessage) {
-    return { content: msg.message.videoMessage.caption || "🎥 Vídeo", type: "video" };
+    return { 
+      content: msg.message.videoMessage.caption || "", 
+      type: "video",
+      mediaUrl: msg.message.videoMessage.url || undefined
+    };
   }
+  
+  // Audio messages
   if (msg.message?.audioMessage) {
-    return { content: "🎵 Áudio", type: "audio" };
+    return { 
+      content: "", 
+      type: "audio",
+      mediaUrl: msg.message.audioMessage.url || undefined
+    };
   }
+  
+  // Document messages
   if (msg.message?.documentMessage) {
-    return { content: `📄 ${msg.message.documentMessage.fileName || "Documento"}`, type: "document" };
+    return { 
+      content: msg.message.documentMessage.fileName || "Documento", 
+      type: "document",
+      mediaUrl: msg.message.documentMessage.url || undefined,
+      fileName: msg.message.documentMessage.fileName || undefined
+    };
   }
+  
+  // Fallback
   return { content: msg.messageType || "Mensagem", type: "text" };
 };
 
@@ -216,7 +257,7 @@ export default function Chats() {
         // Transform to our Message interface
         const transformedMessages: Message[] = data
           .map((msg) => {
-            const { content, type } = extractMessageContent(msg);
+            const { content, type, mediaUrl, fileName } = extractMessageContent(msg);
             const timestamp = msg.messageTimestamp;
             const date = timestamp ? new Date(timestamp * 1000) : new Date();
 
@@ -227,6 +268,8 @@ export default function Chats() {
               sent: msg.key?.fromMe || false,
               read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
               type,
+              mediaUrl,
+              fileName,
             };
           })
           .reverse(); // Most recent at bottom
@@ -475,36 +518,18 @@ export default function Chats() {
                   </div>
 
                   {messages.map((msg, index) => (
-                    <motion.div
+                    <MessageBubble
                       key={msg.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.01 }}
-                      className={cn("flex", msg.sent ? "justify-end" : "justify-start")}
-                    >
-                      <div
-                        className={cn(
-                          "max-w-[70%] rounded-2xl px-4 py-2.5",
-                          msg.sent
-                            ? "bg-secondary text-secondary-foreground rounded-br-md"
-                            : "bg-muted rounded-bl-md"
-                        )}
-                      >
-                        <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                        <div className={cn("flex items-center gap-1 mt-1", msg.sent ? "justify-end" : "justify-start")}>
-                          <span className={cn("text-[10px]", msg.sent ? "text-secondary-foreground/70" : "text-muted-foreground")}>
-                            {msg.time}
-                          </span>
-                          {msg.sent && (
-                            msg.read ? (
-                              <CheckCheck className="w-3 h-3 text-secondary-foreground/70" />
-                            ) : (
-                              <Check className="w-3 h-3 text-secondary-foreground/70" />
-                            )
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
+                      id={msg.id}
+                      content={msg.content}
+                      time={msg.time}
+                      sent={msg.sent}
+                      read={msg.read}
+                      type={msg.type}
+                      mediaUrl={msg.mediaUrl}
+                      fileName={msg.fileName}
+                      index={index}
+                    />
                   ))}
                 </div>
               )}
