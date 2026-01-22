@@ -409,10 +409,14 @@ export default function Chats() {
             // Debug log for filter verification
             console.log(`[Chats] Chat ${chat.remoteJid}: lastMsgFromMe=${lastMsgFromMe}, hasLastMessage=${!!lastMsg}, key=${JSON.stringify(lastMsg?.key)}`);
 
+            // Only use pushName from last message if it was sent by the CLIENT (fromMe = false)
+            // If last message was from team, ignore its pushName and use chat.pushName or phone fallback
+            const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
+            
             return {
               id: chat.id || chat.remoteJid,
               remoteJid: chat.remoteJid || chat.id,
-              name: lastMsg?.pushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
+              name: contactPushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
               lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
               time: formatTime(lastMsgTime),
               unread: chat.unreadCount || 0,
