@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 const menuItems = [
   { icon: Home, label: "Início", path: "/" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Users, label: "Leads", path: "/leads" },
+  { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: Calendar, label: "Calendário", path: "/calendar" },

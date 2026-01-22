@@ -122,7 +122,7 @@ export default function Leads() {
       <div className="p-4 lg:p-6 border-b bg-background">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold text-foreground">Pipeline de Vendas</h1>
+            <h1 className="text-2xl font-bold text-foreground">Funil de Vendas</h1>
             {funnels.length > 0 && (
               <Select
                 value={currentFunnel?.id}
