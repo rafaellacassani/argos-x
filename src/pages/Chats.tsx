@@ -256,11 +256,6 @@ export default function Chats() {
         type: "text",
       };
       setMessages((prev) => [...prev, newMessage]);
-      
-      toast({
-        title: "Mensagem enviada",
-        description: "Sua mensagem foi enviada com sucesso.",
-      });
     } else {
       toast({
         title: "Erro ao enviar",
@@ -297,15 +292,10 @@ export default function Chats() {
         fileName: file.name,
       };
       setMessages((prev) => [...prev, newMessage]);
-      
-      toast({
-        title: "Mídia enviada",
-        description: `${file.name} foi enviado com sucesso.`,
-      });
     } else {
       toast({
-        title: "Erro ao enviar",
-        description: "Não foi possível enviar a mídia.",
+        title: "Erro ao enviar mídia",
+        description: `Não foi possível enviar ${file.name}.`,
         variant: "destructive",
       });
     }
@@ -340,17 +330,12 @@ export default function Chats() {
         sent: true,
         read: false,
         type: "audio",
-        localAudioBase64: localAudioDataUrl, // Include audio data for immediate playback
+        localAudioBase64: localAudioDataUrl,
       };
       setMessages((prev) => [...prev, newMessage]);
-      
-      toast({
-        title: "Áudio enviado",
-        description: "Seu áudio foi enviado com sucesso.",
-      });
     } else {
       toast({
-        title: "Erro ao enviar",
+        title: "Erro ao enviar áudio",
         description: "Não foi possível enviar o áudio.",
         variant: "destructive",
       });
