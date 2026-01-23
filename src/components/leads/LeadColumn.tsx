@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Plus } from 'lucide-react';
+import { MoreHorizontal, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { LeadCard } from './LeadCard';
+import { StageSettingsDialog } from './StageSettingsDialog';
 import type { Lead, FunnelStage } from '@/hooks/useLeads';
 
 interface LeadColumnProps {
@@ -21,6 +22,7 @@ interface LeadColumnProps {
   onOpenChat?: (jid: string) => void;
   onAddLead?: (stageId: string) => void;
   onEditStage?: (stage: FunnelStage) => void;
+  onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -30,8 +32,10 @@ export const LeadColumn = memo(function LeadColumn({
   onLeadDelete,
   onOpenChat,
   onAddLead,
-  onEditStage
+  onEditStage,
+  onUpdateStage
 }: LeadColumnProps) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
   
   const formatCurrency = (value: number) => {
@@ -72,20 +76,27 @@ export const LeadColumn = memo(function LeadColumn({
               <Plus className="h-4 w-4" />
             </Button>
           )}
-          {onEditStage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 relative">
+                <MoreHorizontal className="h-4 w-4" />
+                {stage.bot_id && (
+                  <Bot className="h-3 w-3 absolute -top-1 -right-1 text-primary" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {onEditStage && (
                 <DropdownMenuItem onClick={() => onEditStage(stage)}>
                   Editar Fase
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+              )}
+              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                <Bot className="h-4 w-4 mr-2" />
+                Configurar Automação
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -149,6 +160,13 @@ export const LeadColumn = memo(function LeadColumn({
           </div>
         )}
       </Droppable>
+
+      <StageSettingsDialog
+        stage={stage}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        onUpdate={onUpdateStage || (() => {})}
+      />
     </div>
   );
 });

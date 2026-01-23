@@ -41,7 +41,8 @@ export default function Leads() {
     addTagToLead,
     removeTagFromLead,
     refreshLeads,
-    createFunnel
+    createFunnel,
+    updateStage
   } = useLeads();
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -179,6 +180,7 @@ export default function Leads() {
           onLeadMove={handleLeadMove}
           onOpenChat={handleOpenChat}
           onAddLead={handleAddLead}
+          onUpdateStage={updateStage}
         />
       </div>
 
