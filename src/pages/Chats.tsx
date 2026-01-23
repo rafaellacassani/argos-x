@@ -37,6 +37,8 @@ interface Chat {
   online: boolean;
   phone: string;
   lastMessageFromMe: boolean; // Track who sent the last message
+  instanceName?: string; // Source instance for "All" mode
+  instanceLabel?: string; // Display name of source instance
 }
 
 interface Message {
@@ -228,16 +230,20 @@ export default function Chats() {
 
   // Handler for downloading media
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
-    if (!selectedInstance) return null;
-    return downloadMedia(selectedInstance, messageId, convertToMp4);
-  }, [selectedInstance, downloadMedia]);
+    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all") return null;
+    return downloadMedia(targetInstance, messageId, convertToMp4);
+  }, [selectedInstance, selectedChat, downloadMedia]);
 
   // Handler for sending text message
   const handleSendMessage = useCallback(async (text: string): Promise<boolean> => {
-    if (!selectedInstance || !selectedChat) return false;
+    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
     const number = extractNumberFromJid(selectedChat.remoteJid);
-    const success = await sendText(selectedInstance, number, text);
+    const success = await sendText(targetInstance, number, text);
     
     if (success) {
       // Add message to local state optimistically
@@ -268,13 +274,15 @@ export default function Chats() {
 
   // Handler for sending media
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
-    if (!selectedInstance || !selectedChat) return false;
+    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
     const number = extractNumberFromJid(selectedChat.remoteJid);
     const mediatype = getMediaType(file);
     const base64 = await fileToBase64(file);
     
-    const success = await sendMedia(selectedInstance, number, mediatype, base64, caption, file.name);
+    const success = await sendMedia(targetInstance, number, mediatype, base64, caption, file.name);
     
     if (success) {
       // Add message to local state optimistically
@@ -307,7 +315,9 @@ export default function Chats() {
 
   // Handler for sending audio
   const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
-    if (!selectedInstance || !selectedChat) return false;
+    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
     const number = extractNumberFromJid(selectedChat.remoteJid);
     const base64 = await blobToBase64(audioBlob);
@@ -319,7 +329,7 @@ export default function Chats() {
       reader.readAsDataURL(audioBlob);
     });
     
-    const success = await sendAudio(selectedInstance, number, base64);
+    const success = await sendAudio(targetInstance, number, base64);
     
     if (success) {
       // Add message to local state optimistically with audio data for playback
@@ -364,7 +374,10 @@ export default function Chats() {
           }
         }
         setInstances(connectedInstances);
-        if (connectedInstances.length > 0) {
+        if (connectedInstances.length > 1) {
+          // If multiple instances, default to "all" mode
+          setSelectedInstance("all");
+        } else if (connectedInstances.length === 1) {
           setSelectedInstance(connectedInstances[0].instanceName);
         }
       } finally {
@@ -372,6 +385,35 @@ export default function Chats() {
       }
     };
     loadInstances();
+  }, []);
+
+  // Helper function to transform raw chat data
+  const transformChatData = useCallback((chat: any, instanceName?: string, instanceLabel?: string): Chat => {
+    const lastMsg = chat.lastMessage;
+    const lastMsgContent = lastMsg?.message?.conversation || 
+                           lastMsg?.message?.extendedTextMessage?.text || 
+                           lastMsg?.pushName || "";
+    const lastMsgTime = lastMsg?.messageTimestamp;
+    const lastMsgFromMe = lastMsg?.key?.fromMe ?? false;
+    
+    // Only use pushName from last message if it was sent by the CLIENT (fromMe = false)
+    const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
+    
+    return {
+      id: chat.id || chat.remoteJid,
+      remoteJid: chat.remoteJid || chat.id,
+      name: contactPushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
+      lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
+      time: formatTime(lastMsgTime),
+      unread: chat.unreadCount || 0,
+      online: false,
+      phone: formatPhoneFromJid(chat.remoteJid || chat.id),
+      lastMessageFromMe: lastMsgFromMe,
+      instanceName,
+      instanceLabel,
+      // Store raw timestamp for sorting
+      _timestamp: lastMsgTime || 0,
+    } as Chat & { _timestamp: number };
   }, []);
 
   // Load chats when instance is selected
@@ -382,62 +424,66 @@ export default function Chats() {
       setLoadingChats(true);
       setChatError(null);
       try {
-        const data = await fetchChats(selectedInstance);
-        console.log("[Chats] Raw chats data:", data);
+        let allChats: (Chat & { _timestamp?: number })[] = [];
+        
+        if (selectedInstance === "all") {
+          // Fetch from ALL instances in parallel
+          const promises = instances.map(async (inst) => {
+            try {
+              const data = await fetchChats(inst.instanceName);
+              if (!Array.isArray(data)) return [];
+              return data
+                .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+                .map((chat: any) => transformChatData(
+                  chat, 
+                  inst.instanceName, 
+                  inst.profileName || inst.instanceName
+                ));
+            } catch (err) {
+              console.error(`[Chats] Error fetching from ${inst.instanceName}:`, err);
+              return [];
+            }
+          });
+          
+          const results = await Promise.all(promises);
+          allChats = results.flat();
+          
+          // Sort by timestamp (most recent first)
+          allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
+          
+          // Limit total chats
+          allChats = allChats.slice(0, 100);
+          
+        } else {
+          // Fetch from single instance
+          const data = await fetchChats(selectedInstance);
+          console.log("[Chats] Raw chats data:", data);
 
-        // Check if data is empty array or has an error
-        if (!Array.isArray(data) || data.length === 0) {
-          // Check if it's an error response
-          if ((data as any)?.error) {
-            setChatError(`Erro na instância "${selectedInstance}": ${(data as any).error}`);
-            return;
+          // Check if data is empty array or has an error
+          if (!Array.isArray(data) || data.length === 0) {
+            if ((data as any)?.error) {
+              setChatError(`Erro na instância "${selectedInstance}": ${(data as any).error}`);
+              return;
+            }
           }
+
+          allChats = data
+            .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+            .map((chat: any) => transformChatData(chat))
+            .slice(0, 50);
         }
 
-        // Transform to our Chat interface
-        const transformedChats: Chat[] = data
-          .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us")) // Filter out groups for now
-          .map((chat: any) => {
-            // Get last message info from the chat object
-            const lastMsg = chat.lastMessage;
-            const lastMsgContent = lastMsg?.message?.conversation || 
-                                   lastMsg?.message?.extendedTextMessage?.text || 
-                                   lastMsg?.pushName || "";
-            const lastMsgTime = lastMsg?.messageTimestamp;
-            const lastMsgFromMe = lastMsg?.key?.fromMe ?? false;
-            
-            // Debug log for filter verification
-            console.log(`[Chats] Chat ${chat.remoteJid}: lastMsgFromMe=${lastMsgFromMe}, hasLastMessage=${!!lastMsg}, key=${JSON.stringify(lastMsg?.key)}`);
-
-            // Only use pushName from last message if it was sent by the CLIENT (fromMe = false)
-            // If last message was from team, ignore its pushName and use chat.pushName or phone fallback
-            const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
-            
-            return {
-              id: chat.id || chat.remoteJid,
-              remoteJid: chat.remoteJid || chat.id,
-              name: contactPushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
-              lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
-              time: formatTime(lastMsgTime),
-              unread: chat.unreadCount || 0,
-              online: false,
-              phone: formatPhoneFromJid(chat.remoteJid || chat.id),
-              lastMessageFromMe: lastMsgFromMe,
-            };
-          })
-          .slice(0, 50); // Limit to 50 chats
-
-        setChats(transformedChats);
+        setChats(allChats);
         setChatError(null);
-        if (transformedChats.length > 0 && !selectedChat) {
-          setSelectedChat(transformedChats[0]);
+        if (allChats.length > 0 && !selectedChat) {
+          setSelectedChat(allChats[0]);
         }
       } catch (err) {
         console.error("[Chats] Error loading chats:", err);
-        setChatError(`Não foi possível carregar conversas de "${selectedInstance}". Tente outra instância.`);
+        setChatError(`Não foi possível carregar conversas. Tente novamente.`);
         toast({
           title: "Erro ao carregar conversas",
-          description: `A instância "${selectedInstance}" retornou erro. Tente selecionar outra.`,
+          description: "Não foi possível carregar as conversas. Tente novamente.",
           variant: "destructive",
         });
       } finally {
@@ -446,16 +492,20 @@ export default function Chats() {
     };
 
     loadChats();
-  }, [selectedInstance]);
+  }, [selectedInstance, instances, transformChatData]);
 
   // Load messages when chat is selected
   useEffect(() => {
-    if (!selectedInstance || !selectedChat) return;
+    if (!selectedChat) return;
+    
+    // Determine which instance to use for fetching messages
+    const targetInstance = selectedChat.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all") return;
 
     const loadMessages = async () => {
       setLoadingMessages(true);
       try {
-        const data = await fetchMessages(selectedInstance, selectedChat.remoteJid, 100);
+        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 100);
         console.log("[Chats] Raw messages data:", data);
 
         // Transform to our Message interface
@@ -489,7 +539,7 @@ export default function Chats() {
     };
 
     loadMessages();
-  }, [selectedInstance, selectedChat?.id]);
+  }, [selectedInstance, selectedChat?.id, selectedChat?.instanceName]);
 
   // Calculate active filters count
   const activeFiltersCount = useMemo(() => {
@@ -583,35 +633,57 @@ export default function Chats() {
   const handleRefresh = async () => {
     if (!selectedInstance) return;
     setLoadingChats(true);
-    const data = await fetchChats(selectedInstance);
-    const transformedChats: Chat[] = data
-      .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
-      .map((chat: any) => {
-        const lastMsg = chat.lastMessage;
-        const lastMsgContent = lastMsg?.message?.conversation || 
-                               lastMsg?.message?.extendedTextMessage?.text || "";
-        const lastMsgTime = lastMsg?.messageTimestamp;
-        const lastMsgFromMe = lastMsg?.key?.fromMe || false;
-
-        return {
-          id: chat.id || chat.remoteJid,
-          remoteJid: chat.remoteJid || chat.id,
-          name: lastMsg?.pushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
-          lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
-          time: formatTime(lastMsgTime),
-          unread: chat.unreadCount || 0,
-          online: false,
-          phone: formatPhoneFromJid(chat.remoteJid || chat.id),
-          lastMessageFromMe: lastMsgFromMe,
-        };
-      })
-      .slice(0, 50);
-    setChats(transformedChats);
-    setLoadingChats(false);
-    toast({
-      title: "Conversas atualizadas",
-      description: `${transformedChats.length} conversas carregadas.`,
-    });
+    
+    try {
+      let allChats: (Chat & { _timestamp?: number })[] = [];
+      
+      if (selectedInstance === "all") {
+        // Refresh all instances in parallel
+        const promises = instances.map(async (inst) => {
+          try {
+            const data = await fetchChats(inst.instanceName);
+            if (!Array.isArray(data)) return [];
+            return data
+              .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+              .map((chat: any) => transformChatData(
+                chat,
+                inst.instanceName,
+                inst.profileName || inst.instanceName
+              ));
+          } catch (err) {
+            console.error(`[Chats] Error refreshing ${inst.instanceName}:`, err);
+            return [];
+          }
+        });
+        
+        const results = await Promise.all(promises);
+        allChats = results.flat();
+        allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
+        allChats = allChats.slice(0, 100);
+      } else {
+        // Refresh single instance
+        const data = await fetchChats(selectedInstance);
+        allChats = data
+          .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+          .map((chat: any) => transformChatData(chat))
+          .slice(0, 50);
+      }
+      
+      setChats(allChats);
+      toast({
+        title: "Conversas atualizadas",
+        description: `${allChats.length} conversas carregadas.`,
+      });
+    } catch (err) {
+      console.error("[Chats] Error refreshing chats:", err);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar as conversas.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingChats(false);
+    }
   };
 
   // Loading instances
@@ -736,6 +808,12 @@ export default function Chats() {
               }}
               className="w-full mb-3 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm"
             >
+              {/* "Todos" option when multiple instances */}
+              {instances.length > 1 && (
+                <option value="all">
+                  Todos ({instances.length} conexões)
+                </option>
+              )}
               {instances.map((inst) => (
                 <option key={inst.instanceName} value={inst.instanceName}>
                   {inst.profileName || inst.instanceName}
@@ -804,7 +882,15 @@ export default function Chats() {
                       <span className="font-medium text-foreground truncate">{chat.name}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0">{chat.time}</span>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">{chat.phone}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
+                      {/* Show source badge when in "all" mode */}
+                      {selectedInstance === "all" && chat.instanceLabel && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary truncate max-w-[80px]">
+                          {chat.instanceLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {chat.unread > 0 && (
                     <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center">
