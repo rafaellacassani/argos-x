@@ -9,6 +9,8 @@ import Dashboard from "./pages/Dashboard";
 import Leads from "./pages/Leads";
 import Chats from "./pages/Chats";
 import AIAgents from "./pages/AIAgents";
+import SalesBots from "./pages/SalesBots";
+import SalesBotBuilder from "./pages/SalesBotBuilder";
 import CalendarPage from "./pages/CalendarPage";
 import Contacts from "./pages/Contacts";
 import Email from "./pages/Email";
@@ -33,6 +35,9 @@ const App = () => (
             <Route path="/leads" element={<Leads />} />
             <Route path="/chats" element={<Chats />} />
             <Route path="/ai-agents" element={<AIAgents />} />
+            <Route path="/salesbots" element={<SalesBots />} />
+            <Route path="/salesbots/builder" element={<SalesBotBuilder />} />
+            <Route path="/salesbots/builder/:id" element={<SalesBotBuilder />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/contacts" element={<Contacts />} />
             <Route path="/email" element={<Email />} />
