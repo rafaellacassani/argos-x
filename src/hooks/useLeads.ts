@@ -173,6 +173,25 @@ export function useLeads() {
     }
   }, []);
 
+  // Create a new tag
+  const createTag = useCallback(async (name: string, color: string): Promise<LeadTag | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_tags')
+        .insert({ name, color })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setTags(prev => [...prev, data]);
+      return data as LeadTag;
+    } catch (err) {
+      console.error('Error creating tag:', err);
+      return null;
+    }
+  }, []);
+
   // Create a new lead
   const createLead = useCallback(async (leadData: Partial<Lead>) => {
     try {
@@ -613,6 +632,8 @@ export function useLeads() {
     createFunnel,
     updateStage,
     getStatistics,
+    createTag,
+    fetchTags,
     
     // Refresh
     refreshLeads: () => fetchLeads(stages.map(s => s.id)),

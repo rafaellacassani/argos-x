@@ -20,10 +20,12 @@ import {
   type EvolutionMessage,
   type EvolutionInstance,
 } from "@/hooks/useEvolutionAPI";
-import { useLeads } from "@/hooks/useLeads";
+import { useLeads, type Lead } from "@/hooks/useLeads";
+import { useTagRules } from "@/hooks/useTagRules";
 import { toast } from "@/hooks/use-toast";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatTagManager } from "@/components/chat/ChatTagManager";
 import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
 
 interface Chat {
@@ -214,7 +216,10 @@ export default function Chats() {
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
   
   // Load leads data for filters and auto-create leads
-  const { stages, tags, leads, createLead } = useLeads();
+  const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag } = useLeads();
+  
+  // Load tag rules for auto-tagging
+  const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
 
   const { 
     listInstances, 
@@ -498,7 +503,7 @@ export default function Chats() {
               // Mark as processed to avoid duplicates
               processedJidsRef.current.add(chat.remoteJid);
               
-              await createLead({
+              const newLead = await createLead({
                 name: chat.name,
                 phone: chat.phone,
                 whatsapp_jid: chat.remoteJid,
@@ -506,6 +511,17 @@ export default function Chats() {
                 source: 'whatsapp',
               });
               console.log(`[Chats] Created lead for ${chat.name} (${chat.remoteJid})`);
+              
+              // Auto-tag based on first message content
+              if (newLead && chat.lastMessage && tagRules.length > 0) {
+                const matchingTagIds = checkMessageAgainstRules(chat.lastMessage);
+                if (matchingTagIds.length > 0) {
+                  console.log(`[Chats] Applying ${matchingTagIds.length} auto-tags to lead ${newLead.id}`);
+                  for (const tagId of matchingTagIds) {
+                    await addTagToLead(newLead.id, tagId);
+                  }
+                }
+              }
             } catch (err) {
               console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
               // Remove from processed if creation failed, so it can be retried
@@ -527,7 +543,7 @@ export default function Chats() {
     };
 
     loadChats();
-  }, [selectedInstance, instances, transformChatData, createLead]);
+  }, [selectedInstance, instances, transformChatData, createLead, tagRules, checkMessageAgainstRules, addTagToLead]);
 
   // Load messages when chat is selected
   useEffect(() => {
@@ -944,35 +960,55 @@ export default function Chats() {
         {selectedChat ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 px-4 border-b border-border flex items-center justify-between bg-card">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold text-sm">
-                    {selectedChat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+            <div className="px-4 py-3 border-b border-border bg-card">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold text-sm">
+                      {selectedChat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+                    </div>
+                    {selectedChat.online && (
+                      <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-card" />
+                    )}
                   </div>
-                  {selectedChat.online && (
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-card" />
-                  )}
+                  <div>
+                    <h3 className="font-semibold text-foreground">{selectedChat.name}</h3>
+                    <p className="text-xs text-muted-foreground">{selectedChat.phone}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">{selectedChat.name}</h3>
-                  <p className="text-xs text-muted-foreground">{selectedChat.phone}</p>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon">
+                    <Phone className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Video className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <Star className="w-5 h-5" />
+                  </Button>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="w-5 h-5" />
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon">
-                  <Phone className="w-5 h-5" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <Video className="w-5 h-5" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <Star className="w-5 h-5" />
-                </Button>
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="w-5 h-5" />
-                </Button>
-              </div>
+              {/* Tags Section */}
+              {(() => {
+                const currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
+                if (currentLead) {
+                  return (
+                    <div className="mt-2 pt-2 border-t border-border/50">
+                      <ChatTagManager
+                        lead={currentLead}
+                        allTags={tags}
+                        onAddTag={addTagToLead}
+                        onRemoveTag={removeTagFromLead}
+                        onCreateTag={createTag}
+                      />
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {/* Messages */}
