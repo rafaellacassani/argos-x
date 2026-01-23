@@ -24,7 +24,7 @@ interface SendMessageNodeContentProps {
   node: BotNode;
   onUpdate: (data: Record<string, unknown>) => void;
   executionStatus?: ExecutionStatus;
-  onTest?: (instanceName: string, forceWithoutConversation: boolean) => void;
+  onTest?: (leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
   isTestingAvailable?: boolean;
 }
@@ -41,6 +41,7 @@ export function SendMessageNodeContent({
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [selectedTestLead, setSelectedTestLead] = useState<string>('');
+  const [isSending, setIsSending] = useState(false);
   const { listInstances } = useEvolutionAPI();
 
   const message = (node.data.message as string) || '';
@@ -68,9 +69,19 @@ export function SendMessageNodeContent({
     loadInstances();
   }, []);
 
-  const handleTest = () => {
+  // Update sending state based on execution status
+  useEffect(() => {
+    if (executionStatus?.status === 'running') {
+      setIsSending(true);
+    } else {
+      setIsSending(false);
+    }
+  }, [executionStatus]);
+
+  const handleTest = async () => {
     if (onTest && instanceName && selectedTestLead) {
-      onTest(instanceName, forceWithoutConversation);
+      setIsSending(true);
+      await onTest(selectedTestLead, instanceName, forceWithoutConversation);
     }
   };
 
@@ -196,11 +207,20 @@ export function SendMessageNodeContent({
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs w-full"
-                disabled={!instanceName || !selectedTestLead || !message.trim()}
+                disabled={!instanceName || !selectedTestLead || !message.trim() || isSending}
                 onClick={handleTest}
               >
-                <Send className="w-3 h-3 mr-1" />
-                Enviar mensagem de teste
+                {isSending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3 h-3 mr-1" />
+                    Enviar mensagem de teste
+                  </>
+                )}
               </Button>
             </div>
           )}

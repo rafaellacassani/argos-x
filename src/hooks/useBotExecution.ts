@@ -140,6 +140,12 @@ export function useBotExecution() {
         timestamp: new Date().toISOString(),
       };
       updateNodeStatus(nodeId, successStatus);
+      
+      toast({
+        title: '✅ Mensagem enviada',
+        description: `Mensagem enviada com sucesso para ${lead.name}`,
+      });
+      
       return successStatus;
 
     } catch (error) {
@@ -151,6 +157,13 @@ export function useBotExecution() {
         timestamp: new Date().toISOString(),
       };
       updateNodeStatus(nodeId, errorStatus);
+      
+      toast({
+        title: '❌ Erro ao enviar',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      
       return errorStatus;
     }
   }, [sendText, updateNodeStatus]);
