@@ -265,6 +265,48 @@ export type Database = {
           },
         ]
       }
+      salesbots: {
+        Row: {
+          conversions_count: number
+          created_at: string
+          description: string | null
+          executions_count: number
+          flow_data: Json | null
+          id: string
+          is_active: boolean
+          name: string
+          trigger_config: Json | null
+          trigger_type: string
+          updated_at: string
+        }
+        Insert: {
+          conversions_count?: number
+          created_at?: string
+          description?: string | null
+          executions_count?: number
+          flow_data?: Json | null
+          id?: string
+          is_active?: boolean
+          name: string
+          trigger_config?: Json | null
+          trigger_type?: string
+          updated_at?: string
+        }
+        Update: {
+          conversions_count?: number
+          created_at?: string
+          description?: string | null
+          executions_count?: number
+          flow_data?: Json | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          trigger_config?: Json | null
+          trigger_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tag_rules: {
         Row: {
           created_at: string
