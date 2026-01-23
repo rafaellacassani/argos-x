@@ -185,10 +185,110 @@ export function useLeads() {
       if (error) throw error;
       
       setTags(prev => [...prev, data]);
+      toast.success('Tag criada com sucesso!');
       return data as LeadTag;
     } catch (err) {
       console.error('Error creating tag:', err);
+      toast.error('Erro ao criar tag');
       return null;
+    }
+  }, []);
+
+  // Update a tag
+  const updateTag = useCallback(async (tagId: string, updates: { name?: string; color?: string }): Promise<LeadTag | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_tags')
+        .update(updates)
+        .eq('id', tagId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setTags(prev => prev.map(t => t.id === tagId ? { ...t, ...data } : t));
+      toast.success('Tag atualizada!');
+      return data as LeadTag;
+    } catch (err) {
+      console.error('Error updating tag:', err);
+      toast.error('Erro ao atualizar tag');
+      return null;
+    }
+  }, []);
+
+  // Delete a tag
+  const deleteTag = useCallback(async (tagId: string): Promise<boolean> => {
+    try {
+      // First delete all tag assignments
+      await supabase
+        .from('lead_tag_assignments')
+        .delete()
+        .eq('tag_id', tagId);
+
+      // Then delete the tag
+      const { error } = await supabase
+        .from('lead_tags')
+        .delete()
+        .eq('id', tagId);
+
+      if (error) throw error;
+      
+      setTags(prev => prev.filter(t => t.id !== tagId));
+      toast.success('Tag removida!');
+      return true;
+    } catch (err) {
+      console.error('Error deleting tag:', err);
+      toast.error('Erro ao remover tag');
+      return false;
+    }
+  }, []);
+
+  // Get tag usage count
+  const getTagUsageCount = useCallback(async (tagId: string): Promise<number> => {
+    try {
+      const { count, error } = await supabase
+        .from('lead_tag_assignments')
+        .select('*', { count: 'exact', head: true })
+        .eq('tag_id', tagId);
+
+      if (error) throw error;
+      return count || 0;
+    } catch (err) {
+      console.error('Error getting tag usage count:', err);
+      return 0;
+    }
+  }, []);
+
+  // Get all tags with usage counts
+  const getTagsWithCounts = useCallback(async (): Promise<Array<LeadTag & { usageCount: number }>> => {
+    try {
+      const { data: tagsData, error: tagsError } = await supabase
+        .from('lead_tags')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (tagsError) throw tagsError;
+
+      // Get counts for all tags
+      const { data: countsData, error: countsError } = await supabase
+        .from('lead_tag_assignments')
+        .select('tag_id');
+
+      if (countsError) throw countsError;
+
+      // Count occurrences
+      const countMap = new Map<string, number>();
+      (countsData || []).forEach(item => {
+        countMap.set(item.tag_id, (countMap.get(item.tag_id) || 0) + 1);
+      });
+
+      return (tagsData || []).map(tag => ({
+        ...tag,
+        usageCount: countMap.get(tag.id) || 0
+      }));
+    } catch (err) {
+      console.error('Error fetching tags with counts:', err);
+      return [];
     }
   }, []);
 
@@ -633,6 +733,10 @@ export function useLeads() {
     updateStage,
     getStatistics,
     createTag,
+    updateTag,
+    deleteTag,
+    getTagUsageCount,
+    getTagsWithCounts,
     fetchTags,
     
     // Refresh
