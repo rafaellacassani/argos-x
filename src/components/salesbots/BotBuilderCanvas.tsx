@@ -44,18 +44,15 @@ export function BotBuilderCanvas({
 
   const handleTestNode = useCallback(async (
     nodeId: string,
+    leadId: string,
     instanceName: string,
     forceWithoutConversation: boolean
   ) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
 
-    // Get selected test lead from node data
-    const leadId = (node.data.testLeadId as string) || testLeads[0]?.id;
-    if (!leadId) return;
-
     await testNodeExecution(node, leadId, instanceName, forceWithoutConversation);
-  }, [nodes, testLeads, testNodeExecution]);
+  }, [nodes, testNodeExecution]);
 
   const handleAddNode = useCallback((type: string, position?: { x: number; y: number }) => {
     const newNode: BotNode = {

@@ -32,7 +32,7 @@ interface BotNodeCardProps {
   onEndConnect: (targetId: string) => void;
   onDelete: () => void;
   executionStatus?: ExecutionStatus;
-  onTestNode?: (nodeId: string, instanceName: string, forceWithoutConversation: boolean) => void;
+  onTestNode?: (nodeId: string, leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
 }
 
@@ -195,7 +195,7 @@ interface NodeContentProps {
   node: BotNode;
   onUpdate: (data: Record<string, unknown>) => void;
   executionStatus?: ExecutionStatus;
-  onTestNode?: (nodeId: string, instanceName: string, forceWithoutConversation: boolean) => void;
+  onTestNode?: (nodeId: string, leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
 }
 
@@ -209,9 +209,9 @@ function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = 
           executionStatus={executionStatus}
           testLeads={testLeads}
           isTestingAvailable={!!onTestNode}
-          onTest={(instanceName, forceWithoutConversation) => {
+          onTest={(leadId, instanceName, forceWithoutConversation) => {
             if (onTestNode) {
-              onTestNode(node.id, instanceName, forceWithoutConversation);
+              onTestNode(node.id, leadId, instanceName, forceWithoutConversation);
             }
           }}
         />
