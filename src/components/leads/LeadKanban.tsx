@@ -13,6 +13,7 @@ interface LeadKanbanProps {
   onOpenChat?: (jid: string) => void;
   onAddLead?: (stageId: string) => void;
   onEditStage?: (stage: FunnelStage) => void;
+  onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
 }
 
 export const LeadKanban = memo(function LeadKanban({
@@ -23,7 +24,8 @@ export const LeadKanban = memo(function LeadKanban({
   onLeadMove,
   onOpenChat,
   onAddLead,
-  onEditStage
+  onEditStage,
+  onUpdateStage
 }: LeadKanbanProps) {
   
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -81,6 +83,7 @@ export const LeadKanban = memo(function LeadKanban({
               onOpenChat={onOpenChat}
               onAddLead={onAddLead}
               onEditStage={onEditStage}
+              onUpdateStage={onUpdateStage}
             />
           ))}
         </div>

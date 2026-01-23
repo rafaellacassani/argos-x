@@ -14,8 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      bot_execution_logs: {
+        Row: {
+          bot_id: string
+          executed_at: string
+          id: string
+          lead_id: string
+          message: string | null
+          node_id: string
+          status: string
+        }
+        Insert: {
+          bot_id: string
+          executed_at?: string
+          id?: string
+          lead_id: string
+          message?: string | null
+          node_id: string
+          status: string
+        }
+        Update: {
+          bot_id?: string
+          executed_at?: string
+          id?: string
+          lead_id?: string
+          message?: string | null
+          node_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bot_execution_logs_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "salesbots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bot_execution_logs_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funnel_stages: {
         Row: {
+          bot_id: string | null
           color: string
           created_at: string
           funnel_id: string
@@ -27,6 +73,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bot_id?: string | null
           color?: string
           created_at?: string
           funnel_id: string
@@ -38,6 +85,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bot_id?: string | null
           color?: string
           created_at?: string
           funnel_id?: string
@@ -49,6 +97,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "funnel_stages_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "salesbots"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "funnel_stages_funnel_id_fkey"
             columns: ["funnel_id"]

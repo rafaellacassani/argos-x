@@ -1,6 +1,117 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import type { BotFlowData } from './useSalesBots';
+
+// Helper function to execute bot flow (standalone to avoid hook rules)
+async function executeBotFlow(botId: string, leadId: string) {
+  try {
+    console.log(`[BotFlow] Starting execution - Bot: ${botId}, Lead: ${leadId}`);
+    
+    // Fetch bot
+    const { data: bot } = await supabase
+      .from('salesbots')
+      .select('flow_data, is_active, name')
+      .eq('id', botId)
+      .maybeSingle();
+
+    if (!bot?.is_active) return;
+
+    const flowData = bot.flow_data as unknown as BotFlowData | null;
+    const nodes = flowData?.nodes || [];
+    const edges = flowData?.edges || [];
+
+    if (nodes.length === 0) return;
+
+    // Fetch lead
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('id, phone, whatsapp_jid, instance_name')
+      .eq('id', leadId)
+      .maybeSingle();
+
+    if (!lead) return;
+
+    // Find start node (no incoming edges)
+    const targetIds = new Set(edges.map(e => e.target));
+    let currentNode = nodes.find(n => !targetIds.has(n.id)) || nodes[0];
+
+    while (currentNode) {
+      // Log execution
+      await supabase.from('bot_execution_logs').insert({
+        bot_id: botId,
+        lead_id: leadId,
+        node_id: currentNode.id,
+        status: 'running'
+      });
+
+      let success = true;
+      let message = '';
+
+      // Execute node based on type
+      if (currentNode.type === 'send_message') {
+        const messageText = currentNode.data?.message as string;
+        if (messageText && lead.instance_name) {
+          const targetNumber = lead.whatsapp_jid || lead.phone?.replace(/\D/g, '');
+          if (targetNumber) {
+            const { error } = await supabase.functions.invoke('evolution-api', {
+              body: {
+                action: 'send-text',
+                instanceName: lead.instance_name,
+                data: { number: targetNumber, text: messageText }
+              }
+            });
+            success = !error;
+            message = success ? 'Mensagem enviada' : 'Falha ao enviar';
+          } else {
+            success = false;
+            message = 'Sem número válido';
+          }
+        } else {
+          success = false;
+          message = messageText ? 'Sem instância WhatsApp' : 'Mensagem não configurada';
+        }
+      } else {
+        message = `Bloco ${currentNode.type} executado (placeholder)`;
+      }
+
+      // Update log with result
+      await supabase.from('bot_execution_logs').insert({
+        bot_id: botId,
+        lead_id: leadId,
+        node_id: currentNode.id,
+        status: success ? 'success' : 'error',
+        message
+      });
+
+      console.log(`[BotFlow] Node ${currentNode.type}: ${message}`);
+
+      if (!success) break;
+
+      // Get next node
+      const edge = edges.find(e => e.source === currentNode!.id);
+      currentNode = edge ? nodes.find(n => n.id === edge.target) : undefined;
+    }
+
+    // Increment executions count
+    const { data: currentBot } = await supabase
+      .from('salesbots')
+      .select('executions_count')
+      .eq('id', botId)
+      .maybeSingle();
+    
+    if (currentBot) {
+      await supabase
+        .from('salesbots')
+        .update({ executions_count: (currentBot.executions_count || 0) + 1 })
+        .eq('id', botId);
+    }
+
+    console.log('[BotFlow] Execution completed');
+  } catch (err) {
+    console.error('[BotFlow] Execution error:', err);
+  }
+}
 
 export interface Lead {
   id: string;
@@ -41,6 +152,7 @@ export interface FunnelStage {
   position: number;
   is_win_stage: boolean;
   is_loss_stage: boolean;
+  bot_id?: string | null;
   created_at: string;
   updated_at: string;
   leads?: Lead[];
@@ -450,6 +562,28 @@ export function useLeads() {
           to_stage_id: newStageId,
           performed_by: performedBy
         });
+
+        // Trigger bot automation for new stage
+        const { data: stageData } = await supabase
+          .from('funnel_stages')
+          .select('bot_id')
+          .eq('id', newStageId)
+          .maybeSingle();
+
+        if (stageData?.bot_id) {
+          // Check if bot is active
+          const { data: botData } = await supabase
+            .from('salesbots')
+            .select('is_active')
+            .eq('id', stageData.bot_id)
+            .maybeSingle();
+
+          if (botData?.is_active) {
+            console.log(`[SalesBot] Triggering bot ${stageData.bot_id} for lead ${leadId}`);
+            // Execute bot flow in background
+            executeBotFlow(stageData.bot_id!, leadId);
+          }
+        }
       }
 
       // Update local state
