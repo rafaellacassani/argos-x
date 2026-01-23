@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BotNode, BotEdge } from '@/hooks/useSalesBots';
+import { useBotExecution, TestLead } from '@/hooks/useBotExecution';
 import { BotNodeCard } from './BotNodeCard';
 import { NodeTypeSelector } from './NodeTypeSelector';
 
@@ -23,7 +24,38 @@ export function BotBuilderCanvas({
   const [showNodeSelector, setShowNodeSelector] = useState(false);
   const [nodeSelectorPosition, setNodeSelectorPosition] = useState({ x: 0, y: 0 });
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [testLeads, setTestLeads] = useState<TestLead[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const {
+    executionStatuses,
+    fetchTestLeads,
+    testNodeExecution,
+  } = useBotExecution();
+
+  // Load test leads on mount
+  useEffect(() => {
+    const loadTestLeads = async () => {
+      const leads = await fetchTestLeads();
+      setTestLeads(leads);
+    };
+    loadTestLeads();
+  }, [fetchTestLeads]);
+
+  const handleTestNode = useCallback(async (
+    nodeId: string,
+    instanceName: string,
+    forceWithoutConversation: boolean
+  ) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // Get selected test lead from node data
+    const leadId = (node.data.testLeadId as string) || testLeads[0]?.id;
+    if (!leadId) return;
+
+    await testNodeExecution(node, leadId, instanceName, forceWithoutConversation);
+  }, [nodes, testLeads, testNodeExecution]);
 
   const handleAddNode = useCallback((type: string, position?: { x: number; y: number }) => {
     const newNode: BotNode = {
@@ -190,6 +222,9 @@ export function BotBuilderCanvas({
               setConnectingFrom(null);
             }}
             onDelete={() => handleDeleteNode(node.id)}
+            executionStatus={executionStatuses[node.id]}
+            onTestNode={handleTestNode}
+            testLeads={testLeads}
           />
         ))}
 

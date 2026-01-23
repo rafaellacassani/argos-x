@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
+import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
 import { Button } from '@/components/ui/button';
+import { SendMessageNodeContent } from './SendMessageNodeContent';
 
 interface BotNodeCardProps {
   node: BotNode;
@@ -29,6 +31,9 @@ interface BotNodeCardProps {
   onStartConnect: () => void;
   onEndConnect: (targetId: string) => void;
   onDelete: () => void;
+  executionStatus?: ExecutionStatus;
+  onTestNode?: (nodeId: string, instanceName: string, forceWithoutConversation: boolean) => void;
+  testLeads?: TestLead[];
 }
 
 const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; color: string }> = {
@@ -54,6 +59,9 @@ export function BotNodeCard({
   onStartConnect,
   onEndConnect,
   onDelete,
+  executionStatus,
+  onTestNode,
+  testLeads = [],
 }: BotNodeCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -138,7 +146,13 @@ export function BotNodeCard({
 
       {/* Content */}
       <div className="p-3 no-drag">
-        <NodeContent node={node} onUpdate={onUpdate} />
+        <NodeContent
+          node={node}
+          onUpdate={onUpdate}
+          executionStatus={executionStatus}
+          onTestNode={onTestNode}
+          testLeads={testLeads}
+        />
       </div>
 
       {/* Connection Points */}
@@ -180,18 +194,26 @@ export function BotNodeCard({
 interface NodeContentProps {
   node: BotNode;
   onUpdate: (data: Record<string, unknown>) => void;
+  executionStatus?: ExecutionStatus;
+  onTestNode?: (nodeId: string, instanceName: string, forceWithoutConversation: boolean) => void;
+  testLeads?: TestLead[];
 }
 
-function NodeContent({ node, onUpdate }: NodeContentProps) {
+function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = [] }: NodeContentProps) {
   switch (node.type) {
     case 'send_message':
       return (
-        <textarea
-          className="w-full p-2 text-sm bg-background border rounded resize-none"
-          placeholder="Digite a mensagem..."
-          rows={3}
-          value={(node.data.message as string) || ''}
-          onChange={(e) => onUpdate({ message: e.target.value })}
+        <SendMessageNodeContent
+          node={node}
+          onUpdate={onUpdate}
+          executionStatus={executionStatus}
+          testLeads={testLeads}
+          isTestingAvailable={!!onTestNode}
+          onTest={(instanceName, forceWithoutConversation) => {
+            if (onTestNode) {
+              onTestNode(node.id, instanceName, forceWithoutConversation);
+            }
+          }}
         />
       );
 
