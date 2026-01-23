@@ -17,12 +17,14 @@ import {
   WifiOff,
   Trash2,
   Plus,
+  Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
+import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
 
@@ -263,6 +265,10 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="auto-tags">
+            <Tag className="w-4 h-4 mr-1" />
+            Tags Automáticas
+          </TabsTrigger>
           <TabsTrigger value="general">Geral</TabsTrigger>
           <TabsTrigger value="team">Equipe</TabsTrigger>
           <TabsTrigger value="billing">Plano & Faturamento</TabsTrigger>
@@ -567,6 +573,11 @@ export default function Settings() {
               ))}
             </div>
           </div>
+        </TabsContent>
+
+        {/* Auto Tags Tab */}
+        <TabsContent value="auto-tags">
+          <AutoTagRules />
         </TabsContent>
 
         {/* Team Tab */}
