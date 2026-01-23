@@ -99,13 +99,76 @@ export function useBotFlowExecution() {
         console.log(`[BotFlow] Wait block - skipping delay in execution`);
         return { success: true, message: 'Delay ignorado na execução automática' };
 
-      case 'tag':
-        console.log(`[BotFlow] Tag block - placeholder`);
-        return { success: true, message: 'Tag aplicada (placeholder)' };
+      case 'tag': {
+        const action = node.data?.action as 'add' | 'remove';
+        const tagId = node.data?.tag_id as string;
+        
+        if (!tagId) {
+          return { success: false, message: 'Tag não configurada no bloco' };
+        }
+        
+        if (action === 'add') {
+          const { error } = await supabase
+            .from('lead_tag_assignments')
+            .insert({ lead_id: lead.id, tag_id: tagId });
+          console.log(`[BotFlow] Tag ADD: ${tagId} -> Lead ${lead.id}`, error || 'OK');
+          return { 
+            success: !error, 
+            message: error ? 'Falha ao aplicar tag' : 'Tag aplicada ao lead' 
+          };
+        } else if (action === 'remove') {
+          const { error } = await supabase
+            .from('lead_tag_assignments')
+            .delete()
+            .eq('lead_id', lead.id)
+            .eq('tag_id', tagId);
+          console.log(`[BotFlow] Tag REMOVE: ${tagId} -> Lead ${lead.id}`, error || 'OK');
+          return { 
+            success: !error, 
+            message: error ? 'Falha ao remover tag' : 'Tag removida do lead' 
+          };
+        }
+        return { success: false, message: 'Ação de tag inválida' };
+      }
 
-      case 'move_stage':
-        console.log(`[BotFlow] Move stage block - placeholder`);
-        return { success: true, message: 'Movimentação de etapa (placeholder)' };
+      case 'move_stage': {
+        const targetStageId = node.data?.stage_id as string;
+        
+        if (!targetStageId) {
+          return { success: false, message: 'Etapa não configurada no bloco' };
+        }
+        
+        // Get current stage for history
+        const { data: currentLead } = await supabase
+          .from('leads')
+          .select('stage_id')
+          .eq('id', lead.id)
+          .maybeSingle();
+        
+        const fromStageId = currentLead?.stage_id;
+        
+        // Update lead's stage
+        const { error } = await supabase
+          .from('leads')
+          .update({ stage_id: targetStageId, position: 0 })
+          .eq('id', lead.id);
+        
+        if (error) {
+          return { success: false, message: 'Falha ao mover lead de etapa' };
+        }
+        
+        // Record history
+        await supabase.from('lead_history').insert({
+          lead_id: lead.id,
+          action: 'stage_changed',
+          from_stage_id: fromStageId,
+          to_stage_id: targetStageId,
+          performed_by: 'SalesBot'
+        });
+        
+        console.log(`[BotFlow] Move Stage: ${fromStageId} -> ${targetStageId}`);
+        return { success: true, message: 'Lead movido para nova etapa' };
+      }
 
       case 'webhook':
         console.log(`[BotFlow] Webhook block - placeholder`);
