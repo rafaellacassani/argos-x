@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Search,
   Phone,
@@ -213,8 +213,8 @@ export default function Chats() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
   
-  // Load leads data for filters
-  const { stages, tags, leads } = useLeads();
+  // Load leads data for filters and auto-create leads
+  const { stages, tags, leads, createLead } = useLeads();
 
   const { 
     listInstances, 
@@ -401,6 +401,15 @@ export default function Chats() {
     } as Chat & { _timestamp: number };
   }, []);
 
+  // Ref to track leads for auto-creation without causing re-renders
+  const leadsRef = useRef(leads);
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
+  
+  // Ref to track which JIDs we've already processed for lead creation
+  const processedJidsRef = useRef<Set<string>>(new Set());
+
   // Load chats when instance is selected
   useEffect(() => {
     if (!selectedInstance) return;
@@ -463,6 +472,47 @@ export default function Chats() {
         if (allChats.length > 0 && !selectedChat) {
           setSelectedChat(allChats[0]);
         }
+        
+        // Auto-create leads for new WhatsApp conversations
+        // Only create for chats where the last message is from client (not from team)
+        const currentLeads = leadsRef.current;
+        const chatsNeedingLeads = allChats.filter((chat) => {
+          // Skip if already processed this JID in this session
+          if (processedJidsRef.current.has(chat.remoteJid)) return false;
+          
+          // Only process chats where the client initiated or last responded
+          if (chat.lastMessageFromMe) return false;
+          
+          // Check if lead already exists for this WhatsApp JID
+          const existingLead = currentLeads.find(
+            (lead) => lead.whatsapp_jid === chat.remoteJid
+          );
+          return !existingLead;
+        });
+        
+        if (chatsNeedingLeads.length > 0) {
+          console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads for new WhatsApp conversations`);
+          
+          for (const chat of chatsNeedingLeads) {
+            try {
+              // Mark as processed to avoid duplicates
+              processedJidsRef.current.add(chat.remoteJid);
+              
+              await createLead({
+                name: chat.name,
+                phone: chat.phone,
+                whatsapp_jid: chat.remoteJid,
+                instance_name: chat.instanceName,
+                source: 'whatsapp',
+              });
+              console.log(`[Chats] Created lead for ${chat.name} (${chat.remoteJid})`);
+            } catch (err) {
+              console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
+              // Remove from processed if creation failed, so it can be retried
+              processedJidsRef.current.delete(chat.remoteJid);
+            }
+          }
+        }
       } catch (err) {
         console.error("[Chats] Error loading chats:", err);
         setChatError(`Não foi possível carregar conversas. Tente novamente.`);
@@ -477,7 +527,7 @@ export default function Chats() {
     };
 
     loadChats();
-  }, [selectedInstance, instances, transformChatData]);
+  }, [selectedInstance, instances, transformChatData, createLead]);
 
   // Load messages when chat is selected
   useEffect(() => {
