@@ -16,6 +16,7 @@ export interface BotEdge {
   target: string;
   sourceHandle?: string;
   targetHandle?: string;
+  label?: string;
 }
 
 export interface BotFlowData {

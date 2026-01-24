@@ -43,17 +43,110 @@ export function useBotFlowExecution() {
     return startNode || nodes[0] || null;
   }, []);
 
-  const getNextNode = useCallback((currentNodeId: string, nodes: BotNode[], edges: BotEdge[]): BotNode | null => {
-    const edge = edges.find(e => e.source === currentNodeId);
+  const getNextNode = useCallback((currentNodeId: string, nodes: BotNode[], edges: BotEdge[], label?: string): BotNode | null => {
+    // If a label is provided (for condition blocks), find edge with matching label
+    let edge: BotEdge | undefined;
+    if (label) {
+      edge = edges.find(e => e.source === currentNodeId && e.label === label);
+    }
+    // Fallback to any edge from this node
+    if (!edge) {
+      edge = edges.find(e => e.source === currentNodeId);
+    }
     if (!edge) return null;
     return nodes.find(n => n.id === edge.target) || null;
+  }, []);
+
+  const evaluateCondition = useCallback(async (
+    node: BotNode,
+    leadId: string
+  ): Promise<{ result: boolean; message: string }> => {
+    const field = node.data?.field as string;
+    const operator = node.data?.operator as 'equals' | 'contains' | 'not_equals';
+    const value = node.data?.value as string;
+
+    if (!field || !operator || value === undefined) {
+      return { result: false, message: 'Condição não configurada corretamente' };
+    }
+
+    // Fetch lead data with tags
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('name, phone, stage_id')
+      .eq('id', leadId)
+      .maybeSingle();
+
+    if (!lead) {
+      return { result: false, message: 'Lead não encontrado' };
+    }
+
+    let fieldValue: string | string[] = '';
+
+    if (field === 'tags') {
+      // Fetch lead tags
+      const { data: tagAssignments } = await supabase
+        .from('lead_tag_assignments')
+        .select('tag_id, lead_tags(name)')
+        .eq('lead_id', leadId);
+
+      const tagNames = tagAssignments?.map(t => 
+        (t.lead_tags as { name: string } | null)?.name || ''
+      ).filter(Boolean) || [];
+      const tagIds = tagAssignments?.map(t => t.tag_id) || [];
+      
+      // For tags, we check both name and id
+      fieldValue = [...tagNames, ...tagIds];
+    } else if (field === 'stage_id') {
+      fieldValue = lead.stage_id || '';
+    } else if (field === 'name') {
+      fieldValue = lead.name || '';
+    } else if (field === 'phone') {
+      fieldValue = lead.phone || '';
+    }
+
+    // Evaluate condition
+    let result = false;
+    const normalizedValue = value.toLowerCase();
+
+    if (Array.isArray(fieldValue)) {
+      // For arrays (like tags)
+      const normalizedArray = fieldValue.map(v => v.toLowerCase());
+      switch (operator) {
+        case 'equals':
+          result = normalizedArray.includes(normalizedValue);
+          break;
+        case 'contains':
+          result = normalizedArray.some(v => v.includes(normalizedValue));
+          break;
+        case 'not_equals':
+          result = !normalizedArray.includes(normalizedValue);
+          break;
+      }
+    } else {
+      // For string fields
+      const normalizedField = fieldValue.toLowerCase();
+      switch (operator) {
+        case 'equals':
+          result = normalizedField === normalizedValue;
+          break;
+        case 'contains':
+          result = normalizedField.includes(normalizedValue);
+          break;
+        case 'not_equals':
+          result = normalizedField !== normalizedValue;
+          break;
+      }
+    }
+
+    console.log(`[BotFlow] Condition: ${field} ${operator} "${value}" = ${result}`);
+    return { result, message: `Condição avaliada: ${result ? 'verdadeiro' : 'falso'}` };
   }, []);
 
   const executeNode = useCallback(async (
     node: BotNode,
     lead: { id: string; phone: string; whatsapp_jid?: string | null; instance_name?: string | null },
     botId: string
-  ): Promise<{ success: boolean; message: string }> => {
+  ): Promise<{ success: boolean; message: string; conditionResult?: boolean }> => {
     console.log(`[BotFlow] Executing node: ${node.type} (${node.id})`);
 
     switch (node.type) {
@@ -91,9 +184,14 @@ export function useBotFlowExecution() {
         };
       }
 
-      case 'condition':
-        console.log(`[BotFlow] Condition block - placeholder (passing through)`);
-        return { success: true, message: 'Condição avaliada (placeholder)' };
+      case 'condition': {
+        const conditionEval = await evaluateCondition(node, lead.id);
+        return { 
+          success: true, 
+          message: conditionEval.message,
+          conditionResult: conditionEval.result
+        };
+      }
 
       case 'wait':
         console.log(`[BotFlow] Wait block - skipping delay in execution`);
@@ -257,7 +355,7 @@ export function useBotFlowExecution() {
         console.log(`[BotFlow] Unknown block type: ${node.type}`);
         return { success: true, message: `Bloco ${node.type} não implementado` };
     }
-  }, [sendText]);
+  }, [sendText, evaluateCondition]);
 
   const executeFlow = useCallback(async (
     botId: string,
@@ -347,8 +445,14 @@ export function useBotFlowExecution() {
           break; // Stop flow on error
         }
 
-        // Get next node
-        currentNode = getNextNode(currentNode.id, nodes, edges);
+        // Get next node - handle condition branching
+        if (currentNode.type === 'condition' && execResult.conditionResult !== undefined) {
+          const branchLabel = execResult.conditionResult ? 'true' : 'false';
+          console.log(`[BotFlow] Condition branch: ${branchLabel}`);
+          currentNode = getNextNode(currentNode.id, nodes, edges, branchLabel);
+        } else {
+          currentNode = getNextNode(currentNode.id, nodes, edges);
+        }
       }
 
       // Update bot executions count directly
