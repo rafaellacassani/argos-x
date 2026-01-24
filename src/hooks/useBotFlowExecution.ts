@@ -170,9 +170,88 @@ export function useBotFlowExecution() {
         return { success: true, message: 'Lead movido para nova etapa' };
       }
 
-      case 'webhook':
-        console.log(`[BotFlow] Webhook block - placeholder`);
-        return { success: true, message: 'Webhook executado (placeholder)' };
+      case 'action':
+      case 'webhook': {
+        const webhookUrl = node.data?.url as string;
+        const method = (node.data?.method as 'POST' | 'GET') || 'POST';
+        const payloadFields = node.data?.payload_fields as string[] | undefined;
+
+        // Validate URL
+        if (!webhookUrl || !webhookUrl.startsWith('https://')) {
+          return { success: false, message: 'URL inválida ou não configurada (requer https://)' };
+        }
+
+        // Build payload from lead data
+        const fullLeadData: Record<string, unknown> = {
+          id: lead.id,
+          phone: lead.phone,
+          whatsapp_jid: lead.whatsapp_jid,
+          instance_name: lead.instance_name
+        };
+
+        // Fetch additional lead data if needed
+        const { data: leadDetails } = await supabase
+          .from('leads')
+          .select('name, email, company, value, stage_id, source, notes')
+          .eq('id', lead.id)
+          .maybeSingle();
+
+        if (leadDetails) {
+          Object.assign(fullLeadData, leadDetails);
+        }
+
+        // Fetch lead tags
+        const { data: tagAssignments } = await supabase
+          .from('lead_tag_assignments')
+          .select('tag_id, lead_tags(name, color)')
+          .eq('lead_id', lead.id);
+
+        fullLeadData.tags = tagAssignments?.map(t => ({
+          id: t.tag_id,
+          name: (t.lead_tags as { name: string; color: string } | null)?.name,
+          color: (t.lead_tags as { name: string; color: string } | null)?.color
+        })) || [];
+
+        // Filter payload fields if specified
+        let payload: Record<string, unknown> = fullLeadData;
+        if (payloadFields && payloadFields.length > 0) {
+          payload = {};
+          for (const field of payloadFields) {
+            if (field in fullLeadData) {
+              payload[field] = fullLeadData[field];
+            }
+          }
+        }
+
+        // Add metadata
+        payload.bot_id = botId;
+        payload.executed_at = new Date().toISOString();
+
+        try {
+          console.log(`[BotFlow] Webhook ${method} -> ${webhookUrl}`);
+          console.log('[BotFlow] Payload:', payload);
+
+          const response = await fetch(webhookUrl, {
+            method,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: method === 'POST' ? JSON.stringify(payload) : undefined
+          });
+
+          const statusCode = response.status;
+          console.log(`[BotFlow] Webhook response: ${statusCode}`);
+
+          if (response.ok) {
+            return { success: true, message: `Webhook executado (${statusCode})` };
+          } else {
+            return { success: false, message: `Webhook falhou (${statusCode})` };
+          }
+        } catch (error) {
+          console.error('[BotFlow] Webhook error:', error);
+          return { success: false, message: `Erro ao chamar webhook: ${error instanceof Error ? error.message : 'Erro desconhecido'}` };
+        }
+      }
 
       default:
         console.log(`[BotFlow] Unknown block type: ${node.type}`);
