@@ -320,6 +320,80 @@ export type Database = {
           },
         ]
       }
+      meta_accounts: {
+        Row: {
+          created_at: string
+          id: string
+          token_expires_at: string | null
+          updated_at: string
+          user_access_token: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_access_token: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_access_token?: string
+        }
+        Relationships: []
+      }
+      meta_pages: {
+        Row: {
+          created_at: string
+          id: string
+          instagram_account_id: string | null
+          instagram_username: string | null
+          is_active: boolean
+          meta_account_id: string
+          page_access_token: string
+          page_id: string
+          page_name: string
+          platform: Database["public"]["Enums"]["meta_platform"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instagram_account_id?: string | null
+          instagram_username?: string | null
+          is_active?: boolean
+          meta_account_id: string
+          page_access_token: string
+          page_id: string
+          page_name: string
+          platform?: Database["public"]["Enums"]["meta_platform"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instagram_account_id?: string | null
+          instagram_username?: string | null
+          is_active?: boolean
+          meta_account_id?: string
+          page_access_token?: string
+          page_id?: string
+          page_name?: string
+          platform?: Database["public"]["Enums"]["meta_platform"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_pages_meta_account_id_fkey"
+            columns: ["meta_account_id"]
+            isOneToOne: false
+            referencedRelation: "meta_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salesbots: {
         Row: {
           conversions_count: number
@@ -430,6 +504,7 @@ export type Database = {
     }
     Enums: {
       lead_status: "active" | "won" | "lost" | "archived"
+      meta_platform: "facebook" | "instagram" | "both"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -558,6 +633,7 @@ export const Constants = {
   public: {
     Enums: {
       lead_status: ["active", "won", "lost", "archived"],
+      meta_platform: ["facebook", "instagram", "both"],
     },
   },
 } as const
