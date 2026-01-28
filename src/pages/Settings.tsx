@@ -18,6 +18,7 @@ import {
   Trash2,
   Plus,
   Tag,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +28,10 @@ import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
+
+type MetaPage = Tables<"meta_pages">;
 
 interface Integration {
   id: string;
@@ -37,6 +42,7 @@ interface Integration {
   available: boolean;
   connectedCount?: number;
   phoneNumber?: string | null;
+  metaPages?: MetaPage[];
 }
 
 const getStatusColor = (status: string) => {
@@ -92,6 +98,9 @@ export default function Settings() {
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(false);
+  const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(false);
+  const [connectingMeta, setConnectingMeta] = useState(false);
 
   const {
     loading,
@@ -99,6 +108,80 @@ export default function Settings() {
     deleteInstance,
     getConnectionState,
   } = useEvolutionAPI();
+
+  // Fetch meta pages on mount
+  const fetchMetaPages = async () => {
+    setLoadingMeta(true);
+    try {
+      const { data, error } = await supabase
+        .from("meta_pages")
+        .select("*")
+        .eq("is_active", true);
+      
+      if (error) throw error;
+      setMetaPages(data || []);
+    } catch (err) {
+      console.error("Error fetching meta pages:", err);
+    } finally {
+      setLoadingMeta(false);
+    }
+  };
+
+  // Handle Meta OAuth connection
+  const handleConnectMeta = async () => {
+    setConnectingMeta(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("facebook-oauth/url", {
+        method: "POST",
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("URL não recebida");
+      }
+    } catch (err) {
+      console.error("Error connecting to Meta:", err);
+      toast({
+        title: "Erro ao conectar",
+        description: "Não foi possível iniciar a conexão com a Meta.",
+        variant: "destructive",
+      });
+    } finally {
+      setConnectingMeta(false);
+    }
+  };
+
+  // Detect OAuth callback success
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const metaConnected = params.get("meta_connected");
+    const pagesCount = params.get("pages");
+    const errorParam = params.get("error");
+
+    if (metaConnected === "true") {
+      toast({
+        title: "Conta conectada!",
+        description: `${pagesCount || "Suas"} página(s) conectada(s) com sucesso.`,
+      });
+      // Clear URL params
+      window.history.replaceState({}, "", "/settings");
+      fetchMetaPages();
+    } else if (errorParam) {
+      toast({
+        title: "Erro na conexão",
+        description: decodeURIComponent(errorParam),
+        variant: "destructive",
+      });
+      window.history.replaceState({}, "", "/settings");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMetaPages();
+  }, []);
 
   // Fetch instances on mount and when tab changes
   const fetchInstances = async () => {
@@ -195,16 +278,20 @@ export default function Settings() {
       name: "Instagram",
       description: "Mensagens diretas",
       icon: <Instagram className="w-6 h-6 text-pink-500" />,
-      connected: false,
-      available: false,
+      connected: metaPages.some((p) => p.platform === "instagram" || p.platform === "both"),
+      available: true,
+      connectedCount: metaPages.filter((p) => p.platform === "instagram" || p.platform === "both").length,
+      metaPages: metaPages.filter((p) => p.platform === "instagram" || p.platform === "both"),
     },
     {
       id: "facebook",
       name: "Facebook",
       description: "Messenger",
       icon: <Facebook className="w-6 h-6 text-blue-600" />,
-      connected: false,
-      available: false,
+      connected: metaPages.some((p) => p.platform === "facebook" || p.platform === "both"),
+      available: true,
+      connectedCount: metaPages.filter((p) => p.platform === "facebook" || p.platform === "both").length,
+      metaPages: metaPages.filter((p) => p.platform === "facebook" || p.platform === "both"),
     },
     {
       id: "tiktok",
@@ -320,18 +407,51 @@ export default function Settings() {
                     {integration.phoneNumber}
                   </p>
                 )}
-                {!integration.phoneNumber && <div className="mb-2" />}
+                {/* Show connected Meta pages */}
+                {integration.metaPages && integration.metaPages.length > 0 && (
+                  <div className="mb-4 space-y-1">
+                    {integration.metaPages.slice(0, 2).map((page) => (
+                      <p key={page.id} className="text-sm font-medium text-foreground flex items-center gap-2">
+                        {integration.id === "instagram" ? (
+                          <>
+                            <Instagram className="w-4 h-4 text-pink-500" />
+                            @{page.instagram_username || page.page_name}
+                          </>
+                        ) : (
+                          <>
+                            <Facebook className="w-4 h-4 text-blue-600" />
+                            {page.page_name}
+                          </>
+                        )}
+                      </p>
+                    ))}
+                    {integration.metaPages.length > 2 && (
+                      <p className="text-xs text-muted-foreground">
+                        +{integration.metaPages.length - 2} mais
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!integration.phoneNumber && !integration.metaPages?.length && <div className="mb-2" />}
                 {integration.available ? (
                   <Button
                     className="w-full"
                     variant={integration.connected ? "outline" : "default"}
+                    disabled={(integration.id === "instagram" || integration.id === "facebook") && connectingMeta}
                     onClick={() => {
                       if (integration.id === "whatsapp-business") {
                         setShowConnectionModal(true);
+                      } else if (integration.id === "instagram" || integration.id === "facebook") {
+                        handleConnectMeta();
                       }
                     }}
                   >
-                    {integration.connected ? (
+                    {(integration.id === "instagram" || integration.id === "facebook") && connectingMeta ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Conectando...
+                      </>
+                    ) : integration.connected ? (
                       <>
                         <Plus className="w-4 h-4 mr-2" />
                         Adicionar Conexão
@@ -339,7 +459,7 @@ export default function Settings() {
                     ) : (
                       <>
                         <Link2 className="w-4 h-4 mr-2" />
-                        Criar Conexão
+                        Conectar
                       </>
                     )}
                   </Button>
