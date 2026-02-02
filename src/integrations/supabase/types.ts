@@ -521,6 +521,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "leads_responsible_user_fkey"
+            columns: ["responsible_user"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "leads_stage_id_fkey"
             columns: ["stage_id"]
             isOneToOne: false
@@ -603,6 +610,42 @@ export type Database = {
           },
         ]
       }
+      notification_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          no_response_minutes: number | null
+          notify_no_response: boolean | null
+          notify_weekly_report: boolean | null
+          updated_at: string | null
+          user_id: string
+          weekly_report_day: number | null
+          weekly_report_hour: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          no_response_minutes?: number | null
+          notify_no_response?: boolean | null
+          notify_weekly_report?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          weekly_report_day?: number | null
+          weekly_report_hour?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          no_response_minutes?: number | null
+          notify_no_response?: boolean | null
+          notify_weekly_report?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          weekly_report_day?: number | null
+          weekly_report_hour?: number | null
+        }
+        Relationships: []
+      }
       salesbots: {
         Row: {
           conversions_count: number
@@ -680,6 +723,57 @@ export type Database = {
           },
         ]
       }
+      user_profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          phone: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          phone?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          phone?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null
@@ -709,12 +803,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_my_roles: {
+        Args: never
+        Returns: Database["public"]["Enums"]["app_role"][]
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       increment_agent_executions: {
         Args: { agent_id_param: string }
         Returns: undefined
       }
     }
     Enums: {
+      app_role: "admin" | "manager" | "seller"
       lead_status: "active" | "won" | "lost" | "archived"
       meta_platform: "facebook" | "instagram" | "both"
     }
@@ -844,6 +950,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "manager", "seller"],
       lead_status: ["active", "won", "lost", "archived"],
       meta_platform: ["facebook", "instagram", "both"],
     },
