@@ -372,6 +372,38 @@ export type Database = {
           },
         ]
       }
+      lead_sales: {
+        Row: {
+          created_at: string | null
+          id: string
+          lead_id: string
+          product_name: string
+          value: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          product_name: string
+          value?: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          product_name?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_sales_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_tag_assignments: {
         Row: {
           created_at: string

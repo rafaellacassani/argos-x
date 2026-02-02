@@ -124,10 +124,15 @@ export const LeadCard = memo(function LeadCard({
           </div>
 
           {/* Value */}
-          {lead.value > 0 && (
+          {((lead.total_sales_value || 0) > 0 || lead.value > 0) && (
             <div className="flex items-center gap-1.5 mb-3 text-sm font-medium text-emerald-600 dark:text-emerald-400">
               <DollarSign className="h-4 w-4" />
-              {formatCurrency(lead.value)}
+              {formatCurrency(lead.total_sales_value || lead.value)}
+              {(lead.sales_count || 0) > 0 && (
+                <span className="text-muted-foreground font-normal ml-1">
+                  ({lead.sales_count} {lead.sales_count === 1 ? 'venda' : 'vendas'})
+                </span>
+              )}
             </div>
           )}
 
