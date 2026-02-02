@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.facebook-oauth]
 verify_jwt = false
+
+[functions.ai-agent-chat]
+verify_jwt = false
