@@ -677,7 +677,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      increment_agent_executions: {
+        Args: { agent_id_param: string }
+        Returns: undefined
+      }
     }
     Enums: {
       lead_status: "active" | "won" | "lost" | "archived"
