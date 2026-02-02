@@ -70,7 +70,7 @@ export function AppSidebar() {
                 <span className="font-display font-bold text-lg text-sidebar-foreground leading-tight">
                   Inboxia
                 </span>
-                <span className="text-[10px] text-sidebar-muted font-medium tracking-wide">
+                <span className="text-[10px] font-medium tracking-wide" style={{ color: '#07C3E8' }}>
                   by Mkt Boost
                 </span>
               </motion.div>
