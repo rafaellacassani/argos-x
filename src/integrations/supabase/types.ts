@@ -14,6 +14,183 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_executions: {
+        Row: {
+          agent_id: string
+          error_message: string | null
+          executed_at: string
+          id: string
+          input_message: string
+          latency_ms: number | null
+          lead_id: string | null
+          output_message: string | null
+          session_id: string
+          status: string
+          tokens_used: number | null
+          tools_used: Json | null
+        }
+        Insert: {
+          agent_id: string
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          input_message: string
+          latency_ms?: number | null
+          lead_id?: string | null
+          output_message?: string | null
+          session_id: string
+          status?: string
+          tokens_used?: number | null
+          tools_used?: Json | null
+        }
+        Update: {
+          agent_id?: string
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          input_message?: string
+          latency_ms?: number | null
+          lead_id?: string | null
+          output_message?: string | null
+          session_id?: string
+          status?: string
+          tokens_used?: number | null
+          tools_used?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_executions_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_executions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_memories: {
+        Row: {
+          agent_id: string
+          context_window: number | null
+          created_at: string
+          id: string
+          is_paused: boolean | null
+          lead_id: string | null
+          messages: Json
+          session_id: string
+          summary: string | null
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          context_window?: number | null
+          created_at?: string
+          id?: string
+          is_paused?: boolean | null
+          lead_id?: string | null
+          messages?: Json
+          session_id: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          context_window?: number | null
+          created_at?: string
+          id?: string
+          is_paused?: boolean | null
+          lead_id?: string | null
+          messages?: Json
+          session_id?: string
+          summary?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_memories_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_memories_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agents: {
+        Row: {
+          created_at: string
+          description: string | null
+          fallback_config: Json | null
+          id: string
+          is_active: boolean | null
+          max_tokens: number | null
+          message_split_enabled: boolean | null
+          message_split_length: number | null
+          model: string
+          name: string
+          pause_code: string | null
+          resume_keyword: string | null
+          system_prompt: string
+          temperature: number | null
+          tools: Json | null
+          trigger_config: Json | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          fallback_config?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_tokens?: number | null
+          message_split_enabled?: boolean | null
+          message_split_length?: number | null
+          model?: string
+          name: string
+          pause_code?: string | null
+          resume_keyword?: string | null
+          system_prompt: string
+          temperature?: number | null
+          tools?: Json | null
+          trigger_config?: Json | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          fallback_config?: Json | null
+          id?: string
+          is_active?: boolean | null
+          max_tokens?: number | null
+          message_split_enabled?: boolean | null
+          message_split_length?: number | null
+          model?: string
+          name?: string
+          pause_code?: string | null
+          resume_keyword?: string | null
+          system_prompt?: string
+          temperature?: number | null
+          tools?: Json | null
+          trigger_config?: Json | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       bot_execution_logs: {
         Row: {
           bot_id: string
