@@ -121,7 +121,17 @@ app.post("/", async (c) => {
 
     const instanceName = instances[0].instance_name;
 
-    // 4. For each user, check their leads
+    // 4. Get all user profiles for mapping responsible_user to names
+    const { data: allProfiles } = await supabase
+      .from("user_profiles")
+      .select("id, full_name");
+    
+    const profileMap = new Map<string, string>();
+    (allProfiles || []).forEach((p: { id: string; full_name: string }) => {
+      profileMap.set(p.id, p.full_name);
+    });
+
+    // 5. For each user, check their leads
     let notificationsSent = 0;
 
     for (const setting of settings) {
@@ -164,11 +174,32 @@ app.post("/", async (c) => {
         continue;
       }
 
-      // Build notification message
-      const leadNames = leads.slice(0, 5).map((l) => `• ${l.name}`).join("\n");
-      const moreCount = leads.length > 5 ? `\n... e mais ${leads.length - 5}` : "";
+      // Build notification message based on role
+      let message = "";
 
-      const message = `🔔 *ALERTA - Clientes aguardando resposta*\n\nOlá ${profile.full_name}!\n\nOs seguintes clientes estão esperando há mais de ${minutesThreshold} minutos:\n\n${leadNames}${moreCount}\n\n⏰ Acesse o CRM para responder.`;
+      if (isAdmin) {
+        // Admin receives: lead name, phone, and responsible seller
+        const leadsList = leads.slice(0, 5).map((l) => {
+          const responsibleName = l.responsible_user 
+            ? profileMap.get(l.responsible_user) || "Não atribuído"
+            : "Não atribuído";
+          const cleanPhone = l.phone?.replace(/\D/g, "") || "";
+          return `• *${l.name}*\n  📱 ${l.phone || "Sem telefone"}\n  👤 Responsável: ${responsibleName}`;
+        }).join("\n\n");
+        
+        const moreCount = leads.length > 5 ? `\n\n... e mais ${leads.length - 5} leads` : "";
+
+        message = `🔔 *ALERTA ADMIN - Clientes aguardando resposta*\n\nOlá ${profile.full_name}!\n\nOs seguintes clientes estão esperando há mais de ${minutesThreshold} minutos:\n\n${leadsList}${moreCount}\n\n⏰ Acesse o CRM para acompanhar.`;
+      } else {
+        // Seller receives: lead name and phone
+        const leadsList = leads.slice(0, 5).map((l) => {
+          return `• *${l.name}*\n  📱 ${l.phone || "Sem telefone"}`;
+        }).join("\n\n");
+        
+        const moreCount = leads.length > 5 ? `\n\n... e mais ${leads.length - 5} leads` : "";
+
+        message = `🔔 *ALERTA - Clientes aguardando resposta*\n\nOlá ${profile.full_name}!\n\nOs seguintes clientes estão esperando há mais de ${minutesThreshold} minutos:\n\n${leadsList}${moreCount}\n\n⏰ Acesse o CRM para responder.`;
+      }
 
       // Send notification
       const sent = await sendWhatsAppMessage(instanceName, profile.phone, message);
