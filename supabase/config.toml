@@ -8,3 +8,12 @@ verify_jwt = false
 
 [functions.ai-agent-chat]
 verify_jwt = false
+
+[functions.evolution-api]
+verify_jwt = false
+
+[functions.check-no-response]
+verify_jwt = false
+
+[functions.weekly-report]
+verify_jwt = false
