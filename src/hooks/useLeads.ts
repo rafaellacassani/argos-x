@@ -183,6 +183,14 @@ async function executeBotFlow(botId: string, leadId: string) {
   }
 }
 
+export interface LeadSale {
+  id: string;
+  lead_id: string;
+  product_name: string;
+  value: number;
+  created_at: string;
+}
+
 export interface Lead {
   id: string;
   name: string;
@@ -202,6 +210,10 @@ export interface Lead {
   created_at: string;
   updated_at: string;
   tags?: LeadTag[];
+  // Multiple sales support
+  sales?: LeadSale[];
+  total_sales_value?: number;
+  sales_count?: number;
 }
 
 export interface Funnel {
@@ -313,24 +325,42 @@ export function useLeads() {
         .order('position', { ascending: true });
 
       if (error) throw error;
+
+      const leadIds = (data || []).map(l => l.id);
       
-      // Fetch tags for each lead
-      const leadsWithTags = await Promise.all(
-        (data || []).map(async (lead) => {
-          const { data: tagData } = await supabase
-            .from('lead_tag_assignments')
-            .select('tag_id, lead_tags(*)')
-            .eq('lead_id', lead.id);
-          
-          return {
-            ...lead,
-            tags: tagData?.map(t => t.lead_tags).filter(Boolean) || []
-          };
-        })
-      );
+      // Fetch tags and sales in parallel
+      const [tagAssignments, salesData] = await Promise.all([
+        supabase
+          .from('lead_tag_assignments')
+          .select('lead_id, tag_id, lead_tags(*)')
+          .in('lead_id', leadIds),
+        supabase
+          .from('lead_sales')
+          .select('*')
+          .in('lead_id', leadIds)
+      ]);
+
+      // Map tags and sales to leads
+      const leadsWithData = (data || []).map(lead => {
+        const leadTags = (tagAssignments.data || [])
+          .filter(t => t.lead_id === lead.id)
+          .map(t => t.lead_tags)
+          .filter(Boolean);
+        
+        const leadSales = (salesData.data || []).filter(s => s.lead_id === lead.id);
+        const totalSalesValue = leadSales.reduce((sum, s) => sum + Number(s.value || 0), 0);
+
+        return {
+          ...lead,
+          tags: leadTags,
+          sales: leadSales as LeadSale[],
+          total_sales_value: totalSalesValue,
+          sales_count: leadSales.length
+        };
+      });
       
-      setLeads(leadsWithTags as Lead[]);
-      return leadsWithTags;
+      setLeads(leadsWithData as Lead[]);
+      return leadsWithData;
     } catch (err) {
       console.error('Error fetching leads:', err);
       setError('Erro ao carregar leads');
@@ -759,6 +789,147 @@ export function useLeads() {
     }
   }, []);
 
+  // Sales CRUD functions
+  const addSale = useCallback(async (leadId: string, productName: string, value: number): Promise<LeadSale | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_sales')
+        .insert({ lead_id: leadId, product_name: productName, value })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // Update local state
+      setLeads(prev => prev.map(l => {
+        if (l.id === leadId) {
+          const newSales = [...(l.sales || []), data as LeadSale];
+          return {
+            ...l,
+            sales: newSales,
+            total_sales_value: newSales.reduce((sum, s) => sum + Number(s.value), 0),
+            sales_count: newSales.length
+          };
+        }
+        return l;
+      }));
+      
+      return data as LeadSale;
+    } catch (err) {
+      console.error('Error adding sale:', err);
+      toast.error('Erro ao adicionar venda');
+      return null;
+    }
+  }, []);
+
+  const updateSale = useCallback(async (saleId: string, updates: { product_name?: string; value?: number }): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('lead_sales')
+        .update(updates)
+        .eq('id', saleId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // Update local state
+      setLeads(prev => prev.map(l => {
+        const saleIndex = l.sales?.findIndex(s => s.id === saleId);
+        if (saleIndex !== undefined && saleIndex >= 0 && l.sales) {
+          const newSales = [...l.sales];
+          newSales[saleIndex] = { ...newSales[saleIndex], ...data };
+          return {
+            ...l,
+            sales: newSales,
+            total_sales_value: newSales.reduce((sum, s) => sum + Number(s.value), 0)
+          };
+        }
+        return l;
+      }));
+      
+      return true;
+    } catch (err) {
+      console.error('Error updating sale:', err);
+      toast.error('Erro ao atualizar venda');
+      return false;
+    }
+  }, []);
+
+  const deleteSale = useCallback(async (saleId: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('lead_sales')
+        .delete()
+        .eq('id', saleId);
+
+      if (error) throw error;
+      
+      // Update local state
+      setLeads(prev => prev.map(l => {
+        if (l.sales?.some(s => s.id === saleId)) {
+          const newSales = l.sales.filter(s => s.id !== saleId);
+          return {
+            ...l,
+            sales: newSales,
+            total_sales_value: newSales.reduce((sum, s) => sum + Number(s.value), 0),
+            sales_count: newSales.length
+          };
+        }
+        return l;
+      }));
+      
+      return true;
+    } catch (err) {
+      console.error('Error deleting sale:', err);
+      toast.error('Erro ao remover venda');
+      return false;
+    }
+  }, []);
+
+  const saveSales = useCallback(async (
+    leadId: string, 
+    sales: Array<{ id?: string; product_name: string; value: number }>,
+    originalSales: LeadSale[]
+  ): Promise<boolean> => {
+    try {
+      // Find deleted, updated, and new sales
+      const currentIds = new Set(sales.filter(s => s.id).map(s => s.id));
+      const deletedSales = originalSales.filter(s => !currentIds.has(s.id));
+      const newSales = sales.filter(s => !s.id && s.product_name.trim());
+      const updatedSales = sales.filter(s => s.id && s.product_name.trim());
+
+      // Delete removed sales
+      for (const sale of deletedSales) {
+        await supabase.from('lead_sales').delete().eq('id', sale.id);
+      }
+
+      // Insert new sales
+      if (newSales.length > 0) {
+        await supabase.from('lead_sales').insert(
+          newSales.map(s => ({ lead_id: leadId, product_name: s.product_name, value: s.value }))
+        );
+      }
+
+      // Update existing sales
+      for (const sale of updatedSales) {
+        const original = originalSales.find(o => o.id === sale.id);
+        if (original && (original.product_name !== sale.product_name || original.value !== sale.value)) {
+          await supabase
+            .from('lead_sales')
+            .update({ product_name: sale.product_name, value: sale.value })
+            .eq('id', sale.id);
+        }
+      }
+
+      return true;
+    } catch (err) {
+      console.error('Error saving sales:', err);
+      toast.error('Erro ao salvar vendas');
+      return false;
+    }
+  }, []);
+
   // Check if lead exists for a WhatsApp JID
   const findLeadByWhatsAppJid = useCallback(async (jid: string): Promise<Lead | null> => {
     try {
@@ -942,6 +1113,12 @@ export function useLeads() {
     getTagUsageCount,
     getTagsWithCounts,
     fetchTags,
+    
+    // Sales
+    addSale,
+    updateSale,
+    deleteSale,
+    saveSales,
     
     // Refresh
     refreshLeads: () => fetchLeads(stages.map(s => s.id)),

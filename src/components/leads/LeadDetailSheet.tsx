@@ -14,7 +14,7 @@ import {
   History,
   ChevronRight,
   Trash2,
-  ExternalLink
+  Plus
 } from 'lucide-react';
 import {
   Sheet,
@@ -48,7 +48,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import type { Lead, FunnelStage, LeadTag, LeadHistory } from '@/hooks/useLeads';
+import type { Lead, FunnelStage, LeadTag, LeadHistory, LeadSale } from '@/hooks/useLeads';
 
 interface LeadDetailSheetProps {
   lead: Lead | null;
@@ -63,6 +63,17 @@ interface LeadDetailSheetProps {
   onAddTag: (leadId: string, tagId: string) => void;
   onRemoveTag: (leadId: string, tagId: string) => void;
   onOpenChat?: (jid: string) => void;
+  onSaveSales?: (
+    leadId: string, 
+    sales: Array<{ id?: string; product_name: string; value: number }>,
+    originalSales: LeadSale[]
+  ) => Promise<boolean>;
+}
+
+interface EditableSale {
+  id?: string;
+  product_name: string;
+  value: number;
 }
 
 export function LeadDetailSheet({
@@ -77,9 +88,11 @@ export function LeadDetailSheet({
   onDelete,
   onAddTag,
   onRemoveTag,
-  onOpenChat
+  onOpenChat,
+  onSaveSales
 }: LeadDetailSheetProps) {
   const [editedLead, setEditedLead] = useState<Partial<Lead>>({});
+  const [editedSales, setEditedSales] = useState<EditableSale[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Reset edited state when lead changes
@@ -94,6 +107,13 @@ export function LeadDetailSheet({
         responsible_user: lead.responsible_user,
         notes: lead.notes
       });
+      setEditedSales(
+        (lead.sales || []).map(s => ({
+          id: s.id,
+          product_name: s.product_name,
+          value: Number(s.value)
+        }))
+      );
     }
   }, [lead]);
 
@@ -113,9 +133,36 @@ export function LeadDetailSheet({
     setIsSaving(true);
     try {
       await onUpdate(lead.id, editedLead);
+      // Save sales if handler provided
+      if (onSaveSales) {
+        await onSaveSales(lead.id, editedSales, lead.sales || []);
+      }
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleAddSale = () => {
+    setEditedSales(prev => [...prev, { product_name: '', value: 0 }]);
+  };
+
+  const handleRemoveSale = (index: number) => {
+    setEditedSales(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSaleChange = (index: number, field: 'product_name' | 'value', value: string | number) => {
+    setEditedSales(prev => prev.map((sale, i) => 
+      i === index ? { ...sale, [field]: value } : sale
+    ));
+  };
+
+  const totalSalesValue = editedSales.reduce((sum, s) => sum + Number(s.value || 0), 0);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
   };
 
   const formatDate = (dateStr: string) => {
@@ -358,17 +405,76 @@ export function LeadDetailSheet({
                 />
               </div>
 
+              {/* Sales Section */}
+              <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2 text-base font-semibold">
+                    <DollarSign className="h-4 w-4" />
+                    Vendas
+                  </Label>
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    Total: {formatCurrency(totalSalesValue)}
+                  </span>
+                </div>
+                
+                {editedSales.length > 0 ? (
+                  <div className="space-y-2">
+                    {editedSales.map((sale, index) => (
+                      <div key={sale.id || `new-${index}`} className="flex items-center gap-2">
+                        <Input
+                          placeholder="Produto/Serviço"
+                          value={sale.product_name}
+                          onChange={(e) => handleSaleChange(index, 'product_name', e.target.value)}
+                          className="flex-1"
+                        />
+                        <div className="relative w-28">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">R$</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={sale.value || ''}
+                            onChange={(e) => handleSaleChange(index, 'value', parseFloat(e.target.value) || 0)}
+                            className="pl-8"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleRemoveSale(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhuma venda registrada</p>
+                )}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleAddSale}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar nova venda
+                </Button>
+              </div>
+
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Valor da Venda (R$)
+                  <User className="h-4 w-4" />
+                  Responsável
                 </Label>
                 <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={editedLead.value || 0}
-                  onChange={(e) => setEditedLead(prev => ({ ...prev, value: parseFloat(e.target.value) || 0 }))}
+                  value={editedLead.responsible_user || ''}
+                  onChange={(e) => setEditedLead(prev => ({ ...prev, responsible_user: e.target.value }))}
+                  placeholder="Nome do responsável"
                 />
               </div>
 

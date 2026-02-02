@@ -42,7 +42,8 @@ export default function Leads() {
     removeTagFromLead,
     refreshLeads,
     createFunnel,
-    updateStage
+    updateStage,
+    saveSales
   } = useLeads();
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -197,6 +198,7 @@ export default function Leads() {
         onAddTag={addTagToLead}
         onRemoveTag={removeTagFromLead}
         onOpenChat={handleOpenChat}
+        onSaveSales={saveSales}
       />
 
       <CreateLeadDialog
