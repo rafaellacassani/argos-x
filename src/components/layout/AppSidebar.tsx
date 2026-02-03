@@ -17,9 +17,9 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import inboxiaIcon from "@/assets/inboxia-icon.png";
 
 const menuItems = [
   { icon: Home, label: "Início", path: "/" },
@@ -55,8 +55,8 @@ export function AppSidebar() {
           animate={{ opacity: 1 }}
           className="flex items-center gap-3"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 flex items-center justify-center shadow-lg">
-            <Sparkles className="w-5 h-5 text-sidebar-primary-foreground" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
+            <img src={inboxiaIcon} alt="Inboxia" className="w-10 h-10 object-contain" />
           </div>
           <AnimatePresence>
             {!collapsed && (
