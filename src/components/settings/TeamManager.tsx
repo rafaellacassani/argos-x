@@ -8,6 +8,7 @@ import {
   Shield,
   UserCog,
   BadgeCheck,
+  Bell,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -46,7 +47,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useTeam, type AppRole, type UserProfile, type NotificationSettings } from "@/hooks/useTeam";
+import { useTeam, type AppRole, type UserProfile, type NotificationType } from "@/hooks/useTeam";
 import { cn } from "@/lib/utils";
 
 const ROLE_LABELS: Record<AppRole, { label: string; icon: React.ElementType; color: string }> = {
@@ -55,7 +56,12 @@ const ROLE_LABELS: Record<AppRole, { label: string; icon: React.ElementType; col
   seller: { label: "Vendedor", icon: BadgeCheck, color: "#22C55E" },
 };
 
-const DAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const NOTIFICATION_LABELS: Record<NotificationType, string> = {
+  weekly_report: "Dashboard semanal",
+  no_response: "Sem resposta",
+  both: "Ambos",
+  none: "Nenhum",
+};
 
 interface MemberEditorProps {
   member?: UserProfile | null;
@@ -67,8 +73,6 @@ interface MemberEditorProps {
     email?: string;
     roles: AppRole[];
   }) => Promise<void>;
-  onSaveNotifications?: (settings: Partial<NotificationSettings>) => Promise<void>;
-  initialNotifications?: NotificationSettings | null;
   isNew?: boolean;
 }
 
@@ -77,8 +81,6 @@ function MemberEditor({
   isOpen,
   onClose,
   onSave,
-  onSaveNotifications,
-  initialNotifications,
   isNew = false,
 }: MemberEditorProps) {
   const [isActive, setIsActive] = useState(true);
@@ -86,14 +88,6 @@ function MemberEditor({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [selectedRole, setSelectedRole] = useState<AppRole>("seller");
-  
-  // Notification settings
-  const [notifyNoResponse, setNotifyNoResponse] = useState(true);
-  const [noResponseMinutes, setNoResponseMinutes] = useState(10);
-  const [notifyWeeklyReport, setNotifyWeeklyReport] = useState(true);
-  const [weeklyReportDay, setWeeklyReportDay] = useState(1);
-  const [weeklyReportHour, setWeeklyReportHour] = useState(9);
-
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -111,22 +105,6 @@ function MemberEditor({
       setIsActive(true);
     }
   }, [member, isOpen]);
-
-  useEffect(() => {
-    if (initialNotifications) {
-      setNotifyNoResponse(initialNotifications.notify_no_response);
-      setNoResponseMinutes(initialNotifications.no_response_minutes);
-      setNotifyWeeklyReport(initialNotifications.notify_weekly_report);
-      setWeeklyReportDay(initialNotifications.weekly_report_day);
-      setWeeklyReportHour(initialNotifications.weekly_report_hour);
-    } else {
-      setNotifyNoResponse(true);
-      setNoResponseMinutes(10);
-      setNotifyWeeklyReport(true);
-      setWeeklyReportDay(1);
-      setWeeklyReportHour(9);
-    }
-  }, [initialNotifications, isOpen]);
 
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, "");
@@ -148,17 +126,6 @@ function MemberEditor({
         email: email.trim() || undefined,
         roles: [selectedRole],
       });
-
-      if (onSaveNotifications && !isNew) {
-        await onSaveNotifications({
-          notify_no_response: notifyNoResponse,
-          no_response_minutes: noResponseMinutes,
-          notify_weekly_report: notifyWeeklyReport,
-          weekly_report_day: weeklyReportDay,
-          weekly_report_hour: weeklyReportHour,
-        });
-      }
-
       onClose();
     } finally {
       setSaving(false);
@@ -260,20 +227,20 @@ function MemberEditor({
         </div>
 
         {/* Role Tabs */}
-        <div className="px-6 pt-4">
+        <div className="p-6">
           <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as AppRole)}>
             <TabsList className="h-auto p-1 bg-muted/50">
-                  {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => {
-                    const { label, icon: Icon, color } = ROLE_LABELS[role];
-                    return (
-                      <TabsTrigger
-                        key={role}
-                        value={role}
-                        className="flex items-center gap-2 px-4 py-2 data-[state=active]:shadow-sm"
-                        style={{
-                          color: selectedRole === role ? color : undefined,
-                        }}
-                      >
+              {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => {
+                const { label, icon: Icon, color } = ROLE_LABELS[role];
+                return (
+                  <TabsTrigger
+                    key={role}
+                    value={role}
+                    className="flex items-center gap-2 px-4 py-2 data-[state=active]:shadow-sm"
+                    style={{
+                      color: selectedRole === role ? color : undefined,
+                    }}
+                  >
                     <Icon className="h-4 w-4" />
                     {label}
                   </TabsTrigger>
@@ -281,109 +248,11 @@ function MemberEditor({
               })}
             </TabsList>
           </Tabs>
-        </div>
-
-        {/* Notification Settings */}
-        <div className="p-6 space-y-6">
-          <div>
-            <h4 className="text-sm font-medium mb-4 flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-success" />
-              Notificações via WhatsApp
-            </h4>
-
-            <div className="space-y-4">
-              {/* No Response Alert */}
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Alerta de cliente sem resposta</p>
-                  <p className="text-xs text-muted-foreground">
-                    Receber aviso quando um cliente aguardar mais do que o tempo definido
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {notifyNoResponse && (
-                    <Select
-                      value={noResponseMinutes.toString()}
-                      onValueChange={(v) => setNoResponseMinutes(Number(v))}
-                    >
-                      <SelectTrigger className="w-28 h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover">
-                        <SelectItem value="5">5 min</SelectItem>
-                        <SelectItem value="10">10 min</SelectItem>
-                        <SelectItem value="15">15 min</SelectItem>
-                        <SelectItem value="30">30 min</SelectItem>
-                        <SelectItem value="60">1 hora</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <Switch
-                    checked={notifyNoResponse}
-                    onCheckedChange={setNotifyNoResponse}
-                  />
-                </div>
-              </div>
-
-              {/* Weekly Report - Only for managers */}
-              {selectedRole === "manager" && (
-                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">Relatório semanal de vendas</p>
-                    <p className="text-xs text-muted-foreground">
-                      Receber resumo com ranking de vendedores e métricas
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {notifyWeeklyReport && (
-                      <div className="flex gap-2">
-                        <Select
-                          value={weeklyReportDay.toString()}
-                          onValueChange={(v) => setWeeklyReportDay(Number(v))}
-                        >
-                          <SelectTrigger className="w-24 h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            {DAY_LABELS.map((day, idx) => (
-                              <SelectItem key={idx} value={idx.toString()}>
-                                {day}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={weeklyReportHour.toString()}
-                          onValueChange={(v) => setWeeklyReportHour(Number(v))}
-                        >
-                          <SelectTrigger className="w-20 h-8 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover max-h-48">
-                            {Array.from({ length: 24 }, (_, i) => (
-                              <SelectItem key={i} value={i.toString()}>
-                                {i.toString().padStart(2, "0")}:00
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    <Switch
-                      checked={notifyWeeklyReport}
-                      onCheckedChange={setNotifyWeeklyReport}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* Info */}
-          <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
+          <div className="mt-6 text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
             <strong>📱 Importante:</strong> As notificações serão enviadas para o WhatsApp
-            cadastrado acima, via Marketing Boost. Certifique-se de que o número está correto
-            e ativo.
+            cadastrado acima. Configure as preferências de notificação na tabela principal.
           </div>
         </div>
       </DialogContent>
@@ -399,13 +268,11 @@ export function TeamManager() {
     createTeamMember,
     updateTeamMember,
     deleteTeamMember,
-    fetchNotificationSettings,
     updateNotificationSettings,
   } = useTeam();
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<UserProfile | null>(null);
-  const [editingNotifications, setEditingNotifications] = useState<NotificationSettings | null>(null);
 
   useEffect(() => {
     fetchTeamMembers();
@@ -413,14 +280,11 @@ export function TeamManager() {
 
   const openCreate = () => {
     setEditingMember(null);
-    setEditingNotifications(null);
     setIsEditorOpen(true);
   };
 
-  const openEdit = async (member: UserProfile) => {
+  const openEdit = (member: UserProfile) => {
     setEditingMember(member);
-    const settings = await fetchNotificationSettings(member.user_id);
-    setEditingNotifications(settings);
     setIsEditorOpen(true);
   };
 
@@ -438,10 +302,13 @@ export function TeamManager() {
     await fetchTeamMembers();
   };
 
-  const handleSaveNotifications = async (settings: Partial<NotificationSettings>) => {
-    if (editingMember) {
-      await updateNotificationSettings(editingMember.user_id, settings);
-    }
+  const handleNotificationChange = async (userId: string, type: NotificationType) => {
+    const settings = {
+      notify_no_response: type === "no_response" || type === "both",
+      notify_weekly_report: type === "weekly_report" || type === "both",
+    };
+    await updateNotificationSettings(userId, settings);
+    await fetchTeamMembers();
   };
 
   return (
@@ -480,12 +347,18 @@ export function TeamManager() {
         ) : (
           <div className="border rounded-lg overflow-hidden">
             {/* Table Header */}
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <div className="w-10"></div>
               <div>Nome</div>
               <div>Função</div>
               <div>WhatsApp</div>
-              <div className="w-20 text-center">Ações</div>
+              <div className="w-40">
+                <div className="flex items-center gap-1">
+                  <Bell className="h-3 w-3" />
+                  Notificações
+                </div>
+              </div>
+              <div className="w-12 text-center">Ações</div>
             </div>
 
             {/* Table Body */}
@@ -497,13 +370,15 @@ export function TeamManager() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   className={cn(
-                    "grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors cursor-pointer",
+                    "grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors",
                     idx !== teamMembers.length - 1 && "border-b"
                   )}
-                  onClick={() => openEdit(member)}
                 >
                   {/* Avatar */}
-                  <Avatar className="h-10 w-10">
+                  <Avatar 
+                    className="h-10 w-10 cursor-pointer" 
+                    onClick={() => openEdit(member)}
+                  >
                     <AvatarImage src={member.avatar_url || undefined} />
                     <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground font-semibold text-sm">
                       {member.full_name.charAt(0).toUpperCase()}
@@ -511,7 +386,10 @@ export function TeamManager() {
                   </Avatar>
 
                   {/* Name & Email */}
-                  <div className="min-w-0">
+                  <div 
+                    className="min-w-0 cursor-pointer" 
+                    onClick={() => openEdit(member)}
+                  >
                     <p className="font-medium truncate">{member.full_name}</p>
                     <p className="text-sm text-muted-foreground truncate">
                       {member.email || "Sem email"}
@@ -544,8 +422,36 @@ export function TeamManager() {
                     {member.phone || "—"}
                   </div>
 
+                  {/* Notifications Select */}
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <Select
+                      value={member.notification_type}
+                      onValueChange={(value: NotificationType) => 
+                        handleNotificationChange(member.user_id, value)
+                      }
+                    >
+                      <SelectTrigger className="w-40 h-8 text-xs">
+                        <SelectValue placeholder="Selecionar..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        <SelectItem value="weekly_report">
+                          {NOTIFICATION_LABELS.weekly_report}
+                        </SelectItem>
+                        <SelectItem value="no_response">
+                          {NOTIFICATION_LABELS.no_response}
+                        </SelectItem>
+                        <SelectItem value="both">
+                          {NOTIFICATION_LABELS.both}
+                        </SelectItem>
+                        <SelectItem value="none">
+                          {NOTIFICATION_LABELS.none}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   {/* Actions */}
-                  <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center justify-center">
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -590,16 +496,16 @@ export function TeamManager() {
           </h4>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>
-              • <strong>Administradores:</strong> Recebem alertas de TODOS os clientes sem
-              resposta
+              • <strong>Dashboard semanal:</strong> Relatório com ranking de vendedores e métricas
             </li>
             <li>
-              • <strong>Vendedores:</strong> Recebem alertas apenas dos SEUS clientes (leads
-              atribuídos)
+              • <strong>Sem resposta:</strong> Alertas quando leads estão aguardando resposta
             </li>
             <li>
-              • <strong>Gestores:</strong> Recebem relatório semanal com ranking de vendedores e
-              métricas
+              • <strong>Ambos:</strong> Recebe dashboard semanal E alertas de sem resposta
+            </li>
+            <li>
+              • <strong>Nenhum:</strong> Não recebe notificações via WhatsApp
             </li>
           </ul>
         </div>
@@ -612,11 +518,8 @@ export function TeamManager() {
         onClose={() => {
           setIsEditorOpen(false);
           setEditingMember(null);
-          setEditingNotifications(null);
         }}
         onSave={handleSave}
-        onSaveNotifications={editingMember ? handleSaveNotifications : undefined}
-        initialNotifications={editingNotifications}
         isNew={!editingMember}
       />
     </Card>

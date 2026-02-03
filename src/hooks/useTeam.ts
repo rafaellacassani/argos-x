@@ -4,6 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 
 export type AppRole = "admin" | "manager" | "seller";
 
+export type NotificationType = "weekly_report" | "no_response" | "both" | "none";
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -14,6 +16,7 @@ export interface UserProfile {
   created_at: string;
   updated_at: string;
   roles: AppRole[];
+  notification_type: NotificationType;
 }
 
 export interface NotificationSettings {
@@ -30,6 +33,20 @@ export function useTeam() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+
+  // Helper function to convert booleans to notification type
+  const getNotificationType = (
+    notifyNoResponse: boolean | null,
+    notifyWeeklyReport: boolean | null
+  ): NotificationType => {
+    const noResponse = notifyNoResponse ?? false;
+    const weeklyReport = notifyWeeklyReport ?? false;
+    
+    if (noResponse && weeklyReport) return "both";
+    if (noResponse) return "no_response";
+    if (weeklyReport) return "weekly_report";
+    return "none";
+  };
 
   const fetchTeamMembers = useCallback(async () => {
     setLoading(true);
@@ -49,13 +66,30 @@ export function useTeam() {
 
       if (rolesError) throw rolesError;
 
-      // Combine profiles with roles
-      const membersWithRoles: UserProfile[] = (profiles || []).map((profile) => ({
-        ...profile,
-        roles: (roles || [])
-          .filter((r) => r.user_id === profile.user_id)
-          .map((r) => r.role as AppRole),
-      }));
+      // Fetch notification settings for all users
+      const { data: notificationSettings, error: notifError } = await supabase
+        .from("notification_settings")
+        .select("*");
+
+      if (notifError) throw notifError;
+
+      // Combine profiles with roles and notification settings
+      const membersWithRoles: UserProfile[] = (profiles || []).map((profile) => {
+        const userSettings = (notificationSettings || []).find(
+          (ns) => ns.user_id === profile.user_id
+        );
+        
+        return {
+          ...profile,
+          roles: (roles || [])
+            .filter((r) => r.user_id === profile.user_id)
+            .map((r) => r.role as AppRole),
+          notification_type: getNotificationType(
+            userSettings?.notify_no_response ?? null,
+            userSettings?.notify_weekly_report ?? null
+          ),
+        };
+      });
 
       setTeamMembers(membersWithRoles);
       return membersWithRoles;
