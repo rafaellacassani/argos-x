@@ -560,6 +560,62 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_conversations: {
+        Row: {
+          content: string | null
+          created_at: string
+          direction: string
+          id: string
+          media_url: string | null
+          message_id: string | null
+          message_type: string
+          meta_page_id: string | null
+          platform: string
+          raw_payload: Json | null
+          sender_id: string
+          sender_name: string | null
+          timestamp: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          media_url?: string | null
+          message_id?: string | null
+          message_type?: string
+          meta_page_id?: string | null
+          platform?: string
+          raw_payload?: Json | null
+          sender_id: string
+          sender_name?: string | null
+          timestamp?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          direction?: string
+          id?: string
+          media_url?: string | null
+          message_id?: string | null
+          message_type?: string
+          meta_page_id?: string | null
+          platform?: string
+          raw_payload?: Json | null
+          sender_id?: string
+          sender_name?: string | null
+          timestamp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_conversations_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_pages: {
         Row: {
           created_at: string

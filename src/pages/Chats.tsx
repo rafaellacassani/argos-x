@@ -20,6 +20,7 @@ import {
   type EvolutionMessage,
   type EvolutionInstance,
 } from "@/hooks/useEvolutionAPI";
+import { useMetaChat, type MetaPage, type MetaConversation } from "@/hooks/useMetaChat";
 import { useLeads, type Lead } from "@/hooks/useLeads";
 import { useTagRules } from "@/hooks/useTagRules";
 import { toast } from "@/hooks/use-toast";
@@ -38,9 +39,14 @@ interface Chat {
   unread: number;
   online: boolean;
   phone: string;
-  lastMessageFromMe: boolean; // Track who sent the last message
+  lastMessageFromMe: boolean;
   instanceName?: string; // Source instance for "All" mode
   instanceLabel?: string; // Display name of source instance
+  // Meta-specific fields
+  isMeta?: boolean;
+  metaPageId?: string;
+  metaSenderId?: string;
+  metaPlatform?: string;
 }
 
 interface Message {
@@ -78,6 +84,22 @@ const extractNumberFromJid = (jid: string): string => {
 const formatTime = (timestamp: number | undefined): string => {
   if (!timestamp) return "";
   const date = new Date(timestamp * 1000);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "agora";
+  if (diffMins < 60) return `${diffMins} min`;
+  if (diffHours < 24) return `${diffHours}h`;
+  if (diffDays === 1) return "ontem";
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+};
+
+// Helper to format Meta timestamp (ISO string)
+const formatMetaTime = (isoString: string): string => {
+  const date = new Date(isoString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -221,6 +243,18 @@ export default function Chats() {
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
 
+  // Meta chat hook
+  const {
+    metaPages,
+    conversations: metaConversations,
+    messages: metaMessages,
+    loading: metaLoading,
+    fetchConversations: fetchMetaConversations,
+    fetchMessages: fetchMetaMessages,
+    sendMessage: sendMetaMessage,
+    subscribeToRealtime,
+  } = useMetaChat();
+
   const { 
     listInstances, 
     fetchChats, 
@@ -243,15 +277,35 @@ export default function Chats() {
 
   // Handler for sending text message
   const handleSendMessage = useCallback(async (text: string): Promise<boolean> => {
-    // Use chat's instance if in "all" mode, otherwise use selectedInstance
-    const targetInstance = selectedChat?.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
+    if (!selectedChat) return false;
+
+    // Meta chat - send via Graph API
+    if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
+      const success = await sendMetaMessage(selectedChat.metaPageId, selectedChat.metaSenderId, text);
+      if (success) {
+        const newMessage: Message = {
+          id: `local-${Date.now()}`,
+          content: text,
+          time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          sent: true,
+          read: false,
+          type: "text",
+        };
+        setMessages((prev) => [...prev, newMessage]);
+      } else {
+        toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
+      }
+      return success;
+    }
+
+    // WhatsApp chat - send via Evolution API
+    const targetInstance = selectedChat.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all") return false;
     
     const number = extractNumberFromJid(selectedChat.remoteJid);
     const success = await sendText(targetInstance, number, text);
     
     if (success) {
-      // Add message to local state optimistically
       const newMessage: Message = {
         id: `local-${Date.now()}`,
         content: text,
@@ -262,15 +316,11 @@ export default function Chats() {
       };
       setMessages((prev) => [...prev, newMessage]);
     } else {
-      toast({
-        title: "Erro ao enviar",
-        description: "Não foi possível enviar a mensagem.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
     
     return success;
-  }, [selectedInstance, selectedChat, sendText]);
+  }, [selectedInstance, selectedChat, sendText, sendMetaMessage]);
 
   // Handler for sending media
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
@@ -349,7 +399,7 @@ export default function Chats() {
     return success;
   }, [selectedInstance, selectedChat, sendAudio]);
 
-  // Load connected instances on mount
+  // Load connected instances on mount (WhatsApp + Meta)
   useEffect(() => {
     const loadInstances = async () => {
       setLoadingInstances(true);
@@ -364,18 +414,23 @@ export default function Chats() {
           }
         }
         setInstances(connectedInstances);
-        if (connectedInstances.length > 1) {
-          // If multiple instances, default to "all" mode
+
+        // Determine total sources (WhatsApp + Meta pages)
+        const totalSources = connectedInstances.length + metaPages.length;
+
+        if (totalSources > 1) {
           setSelectedInstance("all");
         } else if (connectedInstances.length === 1) {
           setSelectedInstance(connectedInstances[0].instanceName);
+        } else if (metaPages.length === 1) {
+          setSelectedInstance(`meta:${metaPages[0].id}`);
         }
       } finally {
         setLoadingInstances(false);
       }
     };
     loadInstances();
-  }, []);
+  }, [metaPages.length]);
 
   // Helper function to transform raw chat data
   const transformChatData = useCallback((chat: any, instanceName?: string, instanceLabel?: string): Chat => {
@@ -424,9 +479,32 @@ export default function Chats() {
       setChatError(null);
       try {
         let allChats: (Chat & { _timestamp?: number })[] = [];
+
+        const isMetaSource = selectedInstance.startsWith("meta:");
         
-        if (selectedInstance === "all") {
-          // Fetch from ALL instances in parallel
+        if (isMetaSource) {
+          // Load Meta conversations only
+          const metaPageId = selectedInstance.replace("meta:", "");
+          const convs = await fetchMetaConversations(metaPageId);
+          allChats = (convs || []).map((conv) => ({
+            id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
+            remoteJid: conv.sender_id,
+            name: conv.sender_name || conv.sender_id,
+            lastMessage: conv.last_message,
+            time: formatMetaTime(conv.last_timestamp),
+            unread: conv.unread_count,
+            online: false,
+            phone: conv.sender_id,
+            lastMessageFromMe: false,
+            isMeta: true,
+            metaPageId: conv.meta_page_id,
+            metaSenderId: conv.sender_id,
+            metaPlatform: conv.platform,
+            instanceLabel: conv.page_name || conv.platform,
+            _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
+          }));
+        } else if (selectedInstance === "all") {
+          // Fetch from ALL WhatsApp instances in parallel
           const promises = instances.map(async (inst) => {
             try {
               const data = await fetchChats(inst.instanceName);
@@ -446,19 +524,41 @@ export default function Chats() {
           
           const results = await Promise.all(promises);
           allChats = results.flat();
+
+          // Also fetch Meta conversations
+          if (metaPages.length > 0) {
+            try {
+              const metaConvs = await fetchMetaConversations();
+              const metaChats = (metaConvs || []).map((conv) => ({
+                id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
+                remoteJid: conv.sender_id,
+                name: conv.sender_name || conv.sender_id,
+                lastMessage: conv.last_message,
+                time: formatMetaTime(conv.last_timestamp),
+                unread: conv.unread_count,
+                online: false,
+                phone: conv.sender_id,
+                lastMessageFromMe: false,
+                isMeta: true,
+                metaPageId: conv.meta_page_id,
+                metaSenderId: conv.sender_id,
+                metaPlatform: conv.platform,
+                instanceLabel: conv.page_name || conv.platform,
+                _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
+              }));
+              allChats = [...allChats, ...metaChats];
+            } catch (err) {
+              console.error("[Chats] Error fetching Meta conversations:", err);
+            }
+          }
           
           // Sort by timestamp (most recent first)
           allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
-          
-          // Limit total chats
           allChats = allChats.slice(0, 100);
           
         } else {
-          // Fetch from single instance
+          // Fetch from single WhatsApp instance
           const data = await fetchChats(selectedInstance);
-          console.log("[Chats] Raw chats data:", data);
-
-          // Check if data is empty array or has an error
           if (!Array.isArray(data) || data.length === 0) {
             if ((data as any)?.error) {
               setChatError(`Erro na instância "${selectedInstance}": ${(data as any).error}`);
@@ -478,31 +578,21 @@ export default function Chats() {
           setSelectedChat(allChats[0]);
         }
         
-        // Auto-create leads for new WhatsApp conversations
-        // Only create for chats where the last message is from client (not from team)
+        // Auto-create leads for new WhatsApp conversations (skip Meta for now)
         const currentLeads = leadsRef.current;
         const chatsNeedingLeads = allChats.filter((chat) => {
-          // Skip if already processed this JID in this session
+          if (chat.isMeta) return false; // Skip Meta chats for auto-lead
           if (processedJidsRef.current.has(chat.remoteJid)) return false;
-          
-          // Only process chats where the client initiated or last responded
           if (chat.lastMessageFromMe) return false;
-          
-          // Check if lead already exists for this WhatsApp JID
-          const existingLead = currentLeads.find(
-            (lead) => lead.whatsapp_jid === chat.remoteJid
-          );
+          const existingLead = currentLeads.find((lead) => lead.whatsapp_jid === chat.remoteJid);
           return !existingLead;
         });
         
         if (chatsNeedingLeads.length > 0) {
-          console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads for new WhatsApp conversations`);
-          
+          console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads`);
           for (const chat of chatsNeedingLeads) {
             try {
-              // Mark as processed to avoid duplicates
               processedJidsRef.current.add(chat.remoteJid);
-              
               const newLead = await createLead({
                 name: chat.name,
                 phone: chat.phone,
@@ -510,21 +600,14 @@ export default function Chats() {
                 instance_name: chat.instanceName,
                 source: 'whatsapp',
               });
-              console.log(`[Chats] Created lead for ${chat.name} (${chat.remoteJid})`);
-              
-              // Auto-tag based on first message content
               if (newLead && chat.lastMessage && tagRules.length > 0) {
                 const matchingTagIds = checkMessageAgainstRules(chat.lastMessage);
-                if (matchingTagIds.length > 0) {
-                  console.log(`[Chats] Applying ${matchingTagIds.length} auto-tags to lead ${newLead.id}`);
-                  for (const tagId of matchingTagIds) {
-                    await addTagToLead(newLead.id, tagId);
-                  }
+                for (const tagId of matchingTagIds) {
+                  await addTagToLead(newLead.id, tagId);
                 }
               }
             } catch (err) {
               console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
-              // Remove from processed if creation failed, so it can be retried
               processedJidsRef.current.delete(chat.remoteJid);
             }
           }
@@ -532,24 +615,49 @@ export default function Chats() {
       } catch (err) {
         console.error("[Chats] Error loading chats:", err);
         setChatError(`Não foi possível carregar conversas. Tente novamente.`);
-        toast({
-          title: "Erro ao carregar conversas",
-          description: "Não foi possível carregar as conversas. Tente novamente.",
-          variant: "destructive",
-        });
+        toast({ title: "Erro ao carregar conversas", description: "Tente novamente.", variant: "destructive" });
       } finally {
         setLoadingChats(false);
       }
     };
 
     loadChats();
-  }, [selectedInstance, instances, transformChatData, createLead, tagRules, checkMessageAgainstRules, addTagToLead]);
+  }, [selectedInstance, instances, metaPages, transformChatData, createLead, tagRules, checkMessageAgainstRules, addTagToLead, fetchMetaConversations]);
 
   // Load messages when chat is selected
   useEffect(() => {
     if (!selectedChat) return;
+
+    // Meta chat - load from meta_conversations
+    if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
+      const loadMetaMsgs = async () => {
+        setLoadingMessages(true);
+        try {
+          const msgs = await fetchMetaMessages(selectedChat.metaPageId!, selectedChat.metaSenderId!);
+          const transformed: Message[] = (msgs || []).map((msg) => {
+            const date = new Date(msg.timestamp);
+            return {
+              id: msg.id,
+              content: msg.content || "",
+              time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              sent: msg.direction === "outbound",
+              read: true,
+              type: (msg.message_type === "image" ? "image" : msg.message_type === "video" ? "video" : msg.message_type === "audio" ? "audio" : "text") as Message["type"],
+              mediaUrl: msg.media_url || undefined,
+            };
+          });
+          setMessages(transformed);
+        } catch (err) {
+          console.error("[Chats] Error loading Meta messages:", err);
+        } finally {
+          setLoadingMessages(false);
+        }
+      };
+      loadMetaMsgs();
+      return;
+    }
     
-    // Determine which instance to use for fetching messages
+    // WhatsApp chat - load via Evolution API
     const targetInstance = selectedChat.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all") return;
 
@@ -557,15 +665,11 @@ export default function Chats() {
       setLoadingMessages(true);
       try {
         const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 100);
-        console.log("[Chats] Raw messages data:", data);
-
-        // Transform to our Message interface
         const transformedMessages: Message[] = data
           .map((msg) => {
             const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
             const timestamp = msg.messageTimestamp;
             const date = timestamp ? new Date(timestamp * 1000) : new Date();
-
             return {
               id: msg.key?.id || Math.random().toString(),
               content,
@@ -579,8 +683,7 @@ export default function Chats() {
               duration,
             };
           })
-          .reverse(); // Most recent at bottom
-
+          .reverse();
         setMessages(transformedMessages);
       } catch (err) {
         console.error("[Chats] Error loading messages:", err);
@@ -588,9 +691,17 @@ export default function Chats() {
         setLoadingMessages(false);
       }
     };
-
     loadMessages();
-  }, [selectedInstance, selectedChat?.id, selectedChat?.instanceName]);
+  }, [selectedInstance, selectedChat?.id, selectedChat?.instanceName, selectedChat?.isMeta, fetchMetaMessages]);
+
+  // Subscribe to Meta realtime updates
+  useEffect(() => {
+    if (metaPages.length === 0) return;
+    const metaPageId = selectedChat?.metaPageId;
+    const senderId = selectedChat?.metaSenderId;
+    const unsub = subscribeToRealtime(metaPageId, senderId);
+    return unsub;
+  }, [metaPages, selectedChat?.metaPageId, selectedChat?.metaSenderId, subscribeToRealtime]);
 
   // Calculate active filters count
   const activeFiltersCount = useMemo(() => {
@@ -749,15 +860,15 @@ export default function Chats() {
     );
   }
 
-  // No connected instance
-  if (instances.length === 0) {
+  // No connected instance and no Meta pages
+  if (instances.length === 0 && metaPages.length === 0) {
     return (
       <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
         <div className="text-center">
           <MessageCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
           <h2 className="text-xl font-semibold mb-2">Nenhuma conexão ativa</h2>
           <p className="text-muted-foreground mb-4">
-            Conecte seu WhatsApp Business em Integrações para ver suas conversas.
+            Conecte seu WhatsApp Business ou Meta em Integrações para ver suas conversas.
           </p>
           <Button onClick={() => window.location.href = "/settings"}>
             Ir para Integrações
@@ -848,7 +959,7 @@ export default function Chats() {
               </Button>
             </div>
           </div>
-          {instances.length >= 1 && (
+          {(instances.length + metaPages.length) >= 1 && (
             <select
               value={selectedInstance || ""}
               onChange={(e) => {
@@ -859,15 +970,21 @@ export default function Chats() {
               }}
               className="w-full mb-3 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm"
             >
-              {/* "Todos" option when multiple instances */}
-              {instances.length > 1 && (
+              {/* "Todos" option when multiple sources */}
+              {(instances.length + metaPages.length) > 1 && (
                 <option value="all">
-                  Todos ({instances.length} conexões)
+                  Todos ({instances.length + metaPages.length} conexões)
                 </option>
               )}
               {instances.map((inst) => (
                 <option key={inst.instanceName} value={inst.instanceName}>
-                  {inst.profileName || inst.instanceName}
+                  📱 {inst.profileName || inst.instanceName}
+                </option>
+              ))}
+              {metaPages.map((page) => (
+                <option key={page.id} value={`meta:${page.id}`}>
+                  {page.platform === "instagram" ? "📸" : "💬"} {page.page_name}
+                  {page.instagram_username ? ` (@${page.instagram_username})` : ""}
                 </option>
               ))}
             </select>
@@ -935,8 +1052,13 @@ export default function Chats() {
                     </div>
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
-                      {/* Show source badge when in "all" mode */}
-                      {selectedInstance === "all" && chat.instanceLabel && (
+                      {/* Show source badge */}
+                      {chat.isMeta && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 truncate max-w-[80px]">
+                          {chat.metaPlatform === "instagram" ? "📸 IG" : chat.metaPlatform === "whatsapp_business" ? "📱 WABA" : "💬 FB"}
+                        </span>
+                      )}
+                      {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary truncate max-w-[80px]">
                           {chat.instanceLabel}
                         </span>
