@@ -1,81 +1,128 @@
 
-# Simplificação do Sistema de Notificações
 
-## Visão Geral
-Redesenhar a interface de notificações para que o Admin tenha controle centralizado sobre quem recebe quais alertas, em vez de cada usuário configurar individualmente.
+# Integração Meta (WhatsApp Business API) com o Chat
 
-## Mudanças na Interface
+## Situação Atual
 
-### Tela de Equipe (TeamManager.tsx)
-A tabela de membros da equipe vai incluir uma coluna de **Notificações** com um seletor simples:
+Após análise detalhada do código, identifiquei o seguinte cenário:
+
+### O que funciona
+- **WhatsApp via Evolution API (QR Code)**: Totalmente funcional -- o Chat recebe, exibe e envia mensagens via Evolution API
+- **OAuth do Meta**: A edge function `facebook-oauth` troca códigos por tokens e salva nas tabelas `meta_accounts` e `meta_pages`
+- **Webhook do Meta**: A edge function `facebook-webhook` recebe eventos da Meta, mas **apenas faz log** -- nao processa nem armazena as mensagens
+
+### O problema principal
+O webhook do Meta (`facebook-webhook`) **nao faz nada** com as mensagens recebidas. Ele apenas imprime no console e retorna 200. Nao ha:
+- Armazenamento de mensagens recebidas via Meta
+- Envio de respostas via Graph API do Facebook/Instagram
+- Integracao das conversas Meta no modulo de Chat
+
+---
+
+## Plano de Implementacao
+
+### 1. Criar tabela `meta_conversations` (banco de dados)
+
+Tabela para armazenar conversas e mensagens recebidas/enviadas via Meta:
+
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | uuid | PK |
+| meta_page_id | uuid | FK para meta_pages |
+| platform | text | 'facebook', 'instagram', 'whatsapp_business' |
+| sender_id | text | ID do remetente na plataforma Meta |
+| sender_name | text | Nome do remetente |
+| message_id | text | ID da mensagem na Meta (para deduplicacao) |
+| content | text | Conteudo da mensagem |
+| message_type | text | 'text', 'image', 'video', 'audio', 'sticker' |
+| media_url | text | URL da midia (se aplicavel) |
+| direction | text | 'inbound' ou 'outbound' |
+| timestamp | timestamptz | Quando a mensagem foi enviada |
+| raw_payload | jsonb | Payload original da Meta |
+| created_at | timestamptz | Quando foi salvo |
+
+### 2. Atualizar a Edge Function `facebook-webhook`
+
+Transformar de "apenas log" para processamento real:
+
+- **Parsear mensagens** de Facebook Messenger, Instagram DM e WhatsApp Business API
+- **Salvar no banco** cada mensagem recebida na tabela `meta_conversations`
+- **Identificar plataforma** (Facebook, Instagram, WhatsApp Business) automaticamente
+- **Deduplicar** mensagens usando o `message_id` da Meta
+
+### 3. Criar Edge Function `meta-send-message`
+
+Nova edge function para enviar respostas via Graph API:
+
+- Enviar mensagens de texto via Facebook Messenger
+- Enviar mensagens de texto via Instagram DM
+- Usar o `page_access_token` correto da tabela `meta_pages`
+- Suportar diferentes tipos de conteudo (texto, imagem)
+
+### 4. Atualizar o modulo de Chat (`Chats.tsx`)
+
+Integrar as conversas Meta ao lado das conversas WhatsApp:
+
+- Adicionar uma nova "fonte" de conversas alem do Evolution API
+- No seletor de instancias, incluir opcoes para paginas Meta conectadas
+- Carregar conversas da tabela `meta_conversations` agrupadas por `sender_id`
+- Enviar respostas via a nova edge function `meta-send-message`
+- Manter a opcao "Todos" unificando WhatsApp + Meta
+
+### 5. Configurar Realtime
+
+- Habilitar realtime na tabela `meta_conversations` para que novas mensagens aparecam instantaneamente no Chat
+
+---
+
+## Detalhes Tecnicos
+
+### Fluxo de Mensagem Recebida (Meta)
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│  Equipe & Notificações                                     [+ Adicionar]     │
-├──────────────────────────────────────────────────────────────────────────────┤
-│  Avatar │ Nome           │ Função      │ WhatsApp         │ Notificações    │
-├─────────┼────────────────┼─────────────┼──────────────────┼─────────────────┤
-│   👤    │ João Silva     │ Vendedor    │ (27) 99999-9999  │ [▼ Sem resposta]│
-│   👤    │ Maria Admin    │ Admin       │ (27) 88888-8888  │ [▼ Ambos      ] │
-│   👤    │ Carlos Gestor  │ Gestor      │ (27) 77777-7777  │ [▼ Nenhum     ] │
-└─────────┴────────────────┴─────────────┴──────────────────┴─────────────────┘
+Meta Platform --> Webhook (facebook-webhook)
+                    |
+                    v
+              Parsear evento
+                    |
+                    v
+          Salvar em meta_conversations
+                    |
+                    v
+          Realtime notifica o Chat UI
+                    |
+                    v
+          Mensagem aparece na tela
 ```
 
-### Opções do Seletor de Notificações
-- **Dashboard semanal** - Recebe apenas o relatório semanal
-- **Sem resposta** - Recebe apenas alertas de leads sem resposta  
-- **Ambos** - Recebe dashboard semanal E alertas de sem resposta
-- **Nenhum** - Não recebe nenhuma notificação
+### Fluxo de Resposta (Meta)
 
-### Modal de Edição (Simplificado)
-O modal de edição do membro vai focar apenas nos dados básicos:
-- Avatar, Nome, Email, WhatsApp, Função
-- **Remove** toda a seção de configuração de notificações do modal
-- A seleção de notificações fica diretamente na tabela principal
+```text
+Chat UI --> meta-send-message (edge function)
+                    |
+                    v
+          Buscar page_access_token
+                    |
+                    v
+          Graph API (Facebook/Instagram)
+                    |
+                    v
+          Salvar em meta_conversations (outbound)
+```
 
----
+### Arquivos a Criar/Modificar
 
-## Mudanças Técnicas
+| Arquivo | Acao |
+|---------|------|
+| Tabela `meta_conversations` | Criar via migracao |
+| `supabase/functions/facebook-webhook/index.ts` | Reescrever para processar e salvar mensagens |
+| `supabase/functions/meta-send-message/index.ts` | Criar nova edge function |
+| `src/hooks/useMetaChat.ts` | Criar hook para conversas Meta |
+| `src/pages/Chats.tsx` | Integrar fonte Meta ao lado do Evolution API |
+| `supabase/config.toml` | Adicionar config da nova funcao |
 
-### 1. Banco de Dados (notification_settings)
-Manter a estrutura atual, mas a lógica de UI muda:
-- `notify_no_response` = true/false
-- `notify_weekly_report` = true/false
-
-Combinações:
-| Opção UI | notify_no_response | notify_weekly_report |
-|----------|-------------------|---------------------|
-| Dashboard semanal | false | true |
-| Sem resposta | true | false |
-| Ambos | true | true |
-| Nenhum | false | false |
-
-### 2. TeamManager.tsx
-- Adicionar coluna de Select na tabela
-- Criar função `getNotificationType()` para converter os booleans em tipo UI
-- Criar função `handleNotificationChange()` para atualizar os settings
-- Remover seção de notificações do modal `MemberEditor`
-- Carregar notification settings junto com os membros
-
-### 3. useTeam.ts
-- Modificar `fetchTeamMembers()` para também buscar notification_settings de cada membro
-- Adicionar propriedade `notification_settings` no tipo `UserProfile`
-
----
-
-## Fluxo de Uso
-1. Admin acessa `/configuracoes` → Aba Equipe
-2. Vê a lista de todos os membros com suas notificações atuais
-3. Clica no dropdown de "Notificações" de qualquer membro
-4. Seleciona a opção desejada
-5. A mudança é salva automaticamente no banco
-
----
-
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `src/components/settings/TeamManager.tsx` | Adicionar coluna de select, remover config do modal |
-| `src/hooks/useTeam.ts` | Incluir notification_settings no fetch de membros |
+### Pre-requisitos ja atendidos
+- Secrets `FACEBOOK_APP_ID` e `FACEBOOK_APP_SECRET` ja configurados
+- Tabelas `meta_accounts` e `meta_pages` ja existem com tokens salvos
+- Webhook `facebook-webhook` ja deployado e verificado com token `inboxia-verification`
 
