@@ -23,14 +23,58 @@ const APP_URL = Deno.env.get("APP_URL") || "https://inboxia-prime-ai.lovable.app
 // Create Supabase client with service role for database operations
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// CSRF state token helpers using HMAC-SHA256
+async function generateState(): Promise<string> {
+  const timestamp = Date.now().toString();
+  const nonce = crypto.randomUUID();
+  const payload = `${timestamp}:${nonce}`;
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(FACEBOOK_APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  const hmac = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return btoa(`${payload}:${hmac}`);
+}
+
+async function validateState(state: string): Promise<boolean> {
+  try {
+    const decoded = atob(state);
+    const parts = decoded.split(":");
+    if (parts.length !== 3) return false;
+    const [timestamp, nonce, hmac] = parts;
+    // Reject tokens older than 10 minutes
+    if (Date.now() - parseInt(timestamp) > 600_000) return false;
+    const payload = `${timestamp}:${nonce}`;
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw", encoder.encode(FACEBOOK_APP_SECRET),
+      { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+    const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+    return expected === hmac;
+  } catch {
+    return false;
+  }
+}
+
 // GET - OAuth callback handler
 app.get("/", async (c) => {
   const code = c.req.query("code");
   const error = c.req.query("error");
   const errorDescription = c.req.query("error_description");
+  const state = c.req.query("state");
 
   console.log("[Facebook OAuth] Callback received");
   console.log(`[Facebook OAuth] Code: ${code ? "present" : "missing"}`);
+
+  // Validate CSRF state parameter
+  if (!state || !(await validateState(state))) {
+    console.error("[Facebook OAuth] Invalid or missing state parameter");
+    return c.redirect(`${APP_URL}/settings?error=invalid_state`);
+  }
 
   // Handle OAuth errors
   if (error) {
@@ -190,14 +234,16 @@ app.post("/url", async (c) => {
     "business_management",
   ];
 
+  const state = await generateState();
+
   const oauthUrl = new URL("https://www.facebook.com/v18.0/dialog/oauth");
   oauthUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
   oauthUrl.searchParams.set("redirect_uri", REDIRECT_URI);
   oauthUrl.searchParams.set("scope", scopes.join(","));
   oauthUrl.searchParams.set("response_type", "code");
-  oauthUrl.searchParams.set("config_id", ""); // Optional: for business login
+  oauthUrl.searchParams.set("state", state);
 
-  console.log("[Facebook OAuth] OAuth URL generated");
+  console.log("[Facebook OAuth] OAuth URL generated with CSRF state");
 
   return c.json({ url: oauthUrl.toString() }, 200, corsHeaders);
 });

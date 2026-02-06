@@ -4,10 +4,32 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 const app = new Hono().basePath("/facebook-webhook");
 
 const VERIFY_TOKEN = "inboxia-verification";
+const FACEBOOK_APP_SECRET = Deno.env.get("FACEBOOK_APP_SECRET")!;
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Helper: verify Meta X-Hub-Signature-256 header
+async function verifySignature(rawBody: string, signatureHeader: string | null): Promise<boolean> {
+  if (!signatureHeader || !FACEBOOK_APP_SECRET) return false;
+  const [algo, signature] = signatureHeader.split("=");
+  if (algo !== "sha256" || !signature) return false;
+
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(FACEBOOK_APP_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+  const expected = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return expected === signature;
+}
 
 // GET - Meta webhook verification (challenge)
 app.get("/", (c) => {
@@ -281,7 +303,22 @@ async function processWhatsAppBusinessEvent(entry: any) {
 // POST - Receive real-time events
 app.post("/", async (c) => {
   try {
-    const body = await c.req.json();
+    const rawBody = await c.req.text();
+
+    // Validate Meta signature
+    const signatureHeader = c.req.header("x-hub-signature-256");
+    if (signatureHeader) {
+      const valid = await verifySignature(rawBody, signatureHeader);
+      if (!valid) {
+        console.error("[Facebook Webhook] ❌ Invalid signature");
+        return c.json({ error: "Invalid signature" }, 403);
+      }
+      console.log("[Facebook Webhook] ✅ Signature verified");
+    } else {
+      console.warn("[Facebook Webhook] ⚠️ No signature header present");
+    }
+
+    const body = JSON.parse(rawBody);
     console.log("[Facebook Webhook] 📩 Event received:", JSON.stringify(body).substring(0, 500));
 
     const object = body.object;
