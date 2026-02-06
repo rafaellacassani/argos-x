@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.weekly-report]
 verify_jwt = false
+
+[functions.meta-send-message]
+verify_jwt = false
