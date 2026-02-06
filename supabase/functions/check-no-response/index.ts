@@ -71,9 +71,27 @@ async function sendWhatsAppMessage(instanceName: string, phone: string, message:
 
 app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 
-// Main check endpoint - should be called by cron
+// Main check endpoint - should be called by cron or authenticated user
 app.post("/", async (c) => {
   try {
+    // Auth: Accept service role key or authenticated user
+    const authHeader = c.req.header("authorization") || "";
+    const apiKey = c.req.header("apikey") || "";
+    const isServiceRole = apiKey === SUPABASE_SERVICE_ROLE_KEY;
+    
+    if (!isServiceRole) {
+      if (!authHeader.startsWith("Bearer ")) {
+        return c.json({ error: "Unauthorized" }, 401, corsHeaders);
+      }
+      const authClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const token = authHeader.replace("Bearer ", "");
+      const { data, error } = await authClient.auth.getClaims(token);
+      if (error || !data?.claims) {
+        return c.json({ error: "Unauthorized" }, 401, corsHeaders);
+      }
+    }
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log("[check-no-response] Starting check...");
