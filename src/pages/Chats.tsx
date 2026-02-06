@@ -403,31 +403,36 @@ export default function Chats() {
   useEffect(() => {
     const loadInstances = async () => {
       setLoadingInstances(true);
+      let connectedInstances: EvolutionInstance[] = [];
       try {
         const data = await listInstances();
-        // Filter only connected instances
-        const connectedInstances: EvolutionInstance[] = [];
         for (const instance of data) {
           const state = await getConnectionState(instance.instanceName);
           if (state?.instance?.state === "open") {
             connectedInstances.push({ ...instance, connectionStatus: "open" });
           }
         }
-        setInstances(connectedInstances);
-
-        // Determine total sources (WhatsApp + Meta pages)
-        const totalSources = connectedInstances.length + metaPages.length;
-
-        if (totalSources > 1) {
-          setSelectedInstance("all");
-        } else if (connectedInstances.length === 1) {
-          setSelectedInstance(connectedInstances[0].instanceName);
-        } else if (metaPages.length === 1) {
-          setSelectedInstance(`meta:${metaPages[0].id}`);
-        }
-      } finally {
-        setLoadingInstances(false);
+      } catch (err) {
+        console.warn("[Chats] Evolution API indisponível:", err);
+        toast({
+          title: "WhatsApp indisponível",
+          description: "Não foi possível conectar ao servidor WhatsApp. Conversas Meta continuam disponíveis.",
+          variant: "destructive",
+        });
       }
+
+      setInstances(connectedInstances);
+
+      const totalSources = connectedInstances.length + metaPages.length;
+      if (totalSources > 1) {
+        setSelectedInstance("all");
+      } else if (connectedInstances.length === 1) {
+        setSelectedInstance(connectedInstances[0].instanceName);
+      } else if (metaPages.length === 1) {
+        setSelectedInstance(`meta:${metaPages[0].id}`);
+      }
+
+      setLoadingInstances(false);
     };
     loadInstances();
   }, [metaPages.length]);
