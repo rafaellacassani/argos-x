@@ -18,9 +18,11 @@ const signupSchema = loginSchema.extend({
   fullName: z.string().trim().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
 });
 
+type AuthMode = "login" | "signup" | "forgot";
+
 export default function Auth() {
-  const { user, loading, signIn, signUp } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
+  const { user, loading, signIn, signUp, resetPassword } = useAuth();
+  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -43,7 +45,16 @@ export default function Auth() {
     setSubmitting(true);
 
     try {
-      if (isLogin) {
+      if (mode === "forgot") {
+        const parsed = loginSchema.shape.email.parse(email);
+        const { error } = await resetPassword(parsed);
+        if (error) {
+          toast({ title: "Erro", description: error.message, variant: "destructive" });
+        } else {
+          toast({ title: "Email enviado!", description: "Verifique sua caixa de entrada para redefinir a senha." });
+          setMode("login");
+        }
+      } else if (mode === "login") {
         const parsed = loginSchema.parse({ email, password });
         const { error } = await signIn(parsed.email, parsed.password);
         if (error) {
@@ -80,13 +91,13 @@ export default function Auth() {
         <div className="text-center mb-8">
           <h1 className="font-display text-3xl font-bold text-foreground">Inboxia</h1>
           <p className="text-muted-foreground mt-2">
-            {isLogin ? "Entre na sua conta" : "Crie sua conta"}
+            {mode === "login" ? "Entre na sua conta" : mode === "signup" ? "Crie sua conta" : "Recupere sua senha"}
           </p>
         </div>
 
         <div className="inboxia-card p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
+            {mode === "signup" && (
               <div className="space-y-2">
                 <Label htmlFor="fullName">Nome completo</Label>
                 <div className="relative">
@@ -120,36 +131,60 @@ export default function Auth() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  maxLength={128}
-                />
+            {mode !== "forgot" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    maxLength={128}
+                  />
+                </div>
               </div>
-            </div>
+            )}
+
+            {mode === "login" && (
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => setMode("forgot")}
+                  className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                >
+                  Esqueci minha senha
+                </button>
+              </div>
+            )}
 
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {isLogin ? "Entrar" : "Cadastrar"}
+              {mode === "login" ? "Entrar" : mode === "signup" ? "Cadastrar" : "Enviar link de recuperação"}
             </Button>
           </form>
 
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-primary hover:underline"
-            >
-              {isLogin ? "Não tem conta? Cadastre-se" : "Já tem conta? Entre"}
-            </button>
+          <div className="mt-4 text-center space-y-1">
+            {mode === "forgot" ? (
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className="text-sm text-primary hover:underline"
+              >
+                Voltar para o login
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMode(mode === "login" ? "signup" : "login")}
+                className="text-sm text-primary hover:underline"
+              >
+                {mode === "login" ? "Não tem conta? Cadastre-se" : "Já tem conta? Entre"}
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
