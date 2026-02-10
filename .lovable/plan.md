@@ -1,39 +1,43 @@
 
-# Corrigir Chat Travando quando Evolution API está Offline
 
-## Problema
-A tela de Chat fica presa em "Carregando conexões..." porque a chamada `listInstances()` da Evolution API dá timeout (servidor offline em `76.13.224.22:8080`). Isso bloqueia **todo** o Chat, inclusive as conversas Meta que funcionam independentemente.
+## Recuperacao de Senha - "Esqueci minha senha"
 
-## Solução
-Adicionar tratamento de erro (`try/catch`) na chamada à Evolution API dentro do `loadInstances`, para que:
-- Se a Evolution API falhar, o Chat continue funcionando com as páginas Meta disponíveis
-- Um toast discreto informe que o WhatsApp está indisponível
-- O loading seja liberado normalmente
+### O que sera feito
 
-## Mudança Técnica
+Adicionar o fluxo completo de recuperacao de senha na pagina de login, com 3 estados:
 
-### Arquivo: `src/pages/Chats.tsx` (linhas ~403-433)
+1. **Link "Esqueci minha senha"** na tela de login - envia um email com link de redefinicao
+2. **Pagina de redefinicao de senha** (`/auth/reset-password`) - formulario para digitar a nova senha
 
-Envolver a chamada `listInstances()` + `getConnectionState()` em um try/catch separado, para que falhas na Evolution API não impeçam o carregamento das conversas Meta.
+### Como funciona
 
-Lógica atual:
-```text
-loadInstances()
-  -> listInstances()          <-- se falhar, trava tudo
-  -> getConnectionState()
-  -> setInstances()
-  -> setLoadingInstances(false)
-```
+O sistema de autenticacao do Lovable Cloud ja possui suporte nativo para reset de senha. O fluxo sera:
 
-Nova lógica:
-```text
-loadInstances()
-  -> try { listInstances() }
-  -> catch { setInstances([]) + toast warning }
-  -> setLoadingInstances(false)   <-- sempre executa
-```
+1. Usuario clica em "Esqueci minha senha" na tela de login
+2. Digita o email e clica em "Enviar link"
+3. Recebe um email com um link de redefinicao
+4. Ao clicar no link, e redirecionado para `/auth/reset-password`
+5. Digita a nova senha e confirma
+6. Senha atualizada com sucesso, redirecionado para o app
 
-### Resultado
-- Se Evolution API estiver offline: Chat abre normalmente mostrando apenas conversas Meta
-- Se nenhuma conexão existir (nem Evolution, nem Meta): mostra tela "Nenhuma conexão ativa"
-- Se ambas estiverem ativas: funciona como antes, mostrando tudo unificado
+### Detalhes tecnicos
+
+**Arquivo: `src/pages/Auth.tsx`**
+- Adicionar um terceiro estado na pagina: `"login" | "signup" | "forgot"` (substituindo o booleano `isLogin`)
+- No estado `"forgot"`: mostrar apenas o campo de email e um botao "Enviar link de recuperacao"
+- Chamar `supabase.auth.resetPasswordForEmail(email, { redirectTo })` com redirect para `/auth/reset-password`
+- Mostrar toast de confirmacao apos envio
+
+**Arquivo: `src/pages/ResetPassword.tsx`** (novo)
+- Pagina com dois campos: "Nova senha" e "Confirmar senha"
+- Validacao com Zod (minimo 6 caracteres, senhas iguais)
+- Chamar `supabase.auth.updateUser({ password })` para salvar a nova senha
+- Apos sucesso, redirecionar para `/`
+
+**Arquivo: `src/hooks/useAuth.tsx`**
+- Adicionar funcao `resetPassword(email: string)` ao contexto
+- Adicionar funcao `updatePassword(newPassword: string)` ao contexto
+
+**Arquivo: `src/App.tsx`**
+- Adicionar rota publica `/auth/reset-password` apontando para `ResetPassword`
+
