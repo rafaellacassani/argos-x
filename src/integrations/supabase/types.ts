@@ -744,6 +744,71 @@ export type Database = {
         }
         Relationships: []
       }
+      scheduled_messages: {
+        Row: {
+          channel_type: string
+          contact_name: string | null
+          created_at: string
+          created_by: string | null
+          error_message: string | null
+          id: string
+          instance_name: string | null
+          message: string
+          meta_page_id: string | null
+          phone_number: string | null
+          remote_jid: string | null
+          scheduled_at: string
+          sender_id: string | null
+          sent_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          channel_type: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          instance_name?: string | null
+          message: string
+          meta_page_id?: string | null
+          phone_number?: string | null
+          remote_jid?: string | null
+          scheduled_at: string
+          sender_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          channel_type?: string
+          contact_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          error_message?: string | null
+          id?: string
+          instance_name?: string | null
+          message?: string
+          meta_page_id?: string | null
+          phone_number?: string | null
+          remote_jid?: string | null
+          scheduled_at?: string
+          sender_id?: string | null
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tag_rules: {
         Row: {
           created_at: string

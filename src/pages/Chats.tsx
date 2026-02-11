@@ -28,6 +28,7 @@ import { MessageBubble } from "@/components/chat/MessageBubble";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatTagManager } from "@/components/chat/ChatTagManager";
 import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
+import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover";
 
 interface Chat {
   id: string;
@@ -1104,6 +1105,21 @@ export default function Chats() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <ScheduleMessagePopover
+                    channelType={
+                      selectedChat.isMeta
+                        ? selectedChat.metaPlatform === "instagram"
+                          ? "meta_instagram"
+                          : "meta_facebook"
+                        : "whatsapp"
+                    }
+                    instanceName={selectedChat.instanceName || selectedInstance || undefined}
+                    remoteJid={selectedChat.remoteJid}
+                    phoneNumber={selectedChat.phone}
+                    metaPageId={selectedChat.metaPageId}
+                    senderId={selectedChat.metaSenderId}
+                    contactName={selectedChat.name}
+                  />
                   <Button variant="ghost" size="icon">
                     <Phone className="w-5 h-5" />
                   </Button>
