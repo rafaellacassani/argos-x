@@ -1188,6 +1188,7 @@ export type Database = {
         Returns: Database["public"]["Enums"]["app_role"][]
       }
       get_user_workspace_id: { Args: { _user_id: string }; Returns: string }
+      get_user_workspace_ids: { Args: { _user_id: string }; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1198,6 +1199,10 @@ export type Database = {
       increment_agent_executions: {
         Args: { agent_id_param: string }
         Returns: undefined
+      }
+      is_workspace_admin: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
       }
     }
     Enums: {
