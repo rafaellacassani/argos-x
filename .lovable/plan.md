@@ -1,150 +1,93 @@
 
 
-## Sistema Multi-Tenant (Workspaces) para SaaS
+## Corrigir Recursao Infinita nas Policies de `workspace_members`
 
-### Visao Geral
+### Problema
 
-Transformar o CRM de single-tenant em multi-tenant, onde cada empresa (ex: ECX) tem seu proprio workspace com dados completamente isolados. Cada empresa se cadastra, cria seu workspace e convida seus membros (SDRs, gestores).
+O erro "infinite recursion detected in policy for relation workspace_members" ocorre porque:
 
-### O Que Muda
+1. A policy SELECT de `workspace_members` usa `get_user_workspace_id(auth.uid())`
+2. Essa funcao faz um SELECT em `workspace_members` para descobrir o workspace do usuario
+3. Esse SELECT dispara a policy novamente, que chama a funcao novamente... loop infinito
 
-Hoje todos os usuarios autenticados veem todos os dados. Apos a implementacao, cada registro no banco tera um `workspace_id` e as politicas de seguranca (RLS) garantirao que um usuario so veja dados do seu proprio workspace.
+Alem disso, a policy INSERT (`user_id = auth.uid()`) impede o admin de inserir seu proprio registro de membro logo apos criar o workspace, pois a policy de admin exige que ele ja seja admin (o que ainda nao existe naquele momento).
 
----
+### Solucao
 
-### Etapa 1: Criar tabelas de Workspace e Membership
+Reescrever as policies de `workspace_members` para evitar a recursao:
 
-Novas tabelas no banco de dados:
+1. **SELECT**: Trocar de `get_user_workspace_id()` para um subquery direto que nao dispara a funcao recursiva:
+   ```
+   USING (
+     workspace_id IN (
+       SELECT wm.workspace_id FROM workspace_members wm
+       WHERE wm.user_id = auth.uid()
+     )
+   )
+   ```
+   Porem isso tambem causa recursao. A solucao correta e usar `SECURITY DEFINER` na funcao `get_user_workspace_id` com a flag `SET search_path` e marcar a funcao para **bypassar RLS** internamente.
 
-```text
-workspaces
-+------------------+----------+
-| id (uuid, PK)    |          |
-| name (text)      | "ECX"    |
-| slug (text)      | "ecx"    |
-| created_by (uuid)|          |
-| created_at       |          |
-+------------------+----------+
+   Na pratica, a melhor abordagem e:
+   - Dropar todas as policies atuais de `workspace_members`
+   - Recriar a funcao `get_user_workspace_id` como `SECURITY DEFINER` (ja e) mas acessando a tabela diretamente sem passar por RLS (usando uma query que bypassa RLS)
+   - Recriar as policies de `workspace_members` sem usar `get_user_workspace_id` — em vez disso, usar subqueries simples com `auth.uid()` direto
 
-workspace_members
-+------------------+----------+
-| id (uuid, PK)    |          |
-| workspace_id     | FK       |
-| user_id (uuid)   |          |
-| role (app_role)   | admin/   |
-|                  | manager/ |
-|                  | seller   |
-| invited_at       |          |
-| accepted_at      |          |
-+------------------+----------+
+2. **INSERT**: Permitir que qualquer usuario autenticado insira um membro onde `user_id = auth.uid()` (auto-insercao) — isso ja existe mas precisa funcionar sem conflito com a policy de admin.
+
+### Migracao SQL
+
+```sql
+-- Dropar policies existentes de workspace_members
+DROP POLICY IF EXISTS "Admins can manage workspace members" ON workspace_members;
+DROP POLICY IF EXISTS "Members can view their workspace members" ON workspace_members;
+DROP POLICY IF EXISTS "Users can insert themselves as members" ON workspace_members;
+
+-- Recriar get_user_workspace_id para bypassar RLS na consulta interna
+-- (ja e SECURITY DEFINER, entao nao precisa de RLS check)
+-- Verificar que a funcao esta correta
+
+-- Recriar policies sem recursao
+-- SELECT: usuario pode ver membros dos workspaces onde ele e membro
+CREATE POLICY "Members can view workspace members"
+  ON workspace_members FOR SELECT
+  USING (user_id = auth.uid() OR workspace_id IN (
+    SELECT wm.workspace_id FROM workspace_members wm WHERE wm.user_id = auth.uid()
+  ));
+
+-- INSERT: usuario pode se auto-inserir
+CREATE POLICY "Users can insert themselves"
+  ON workspace_members FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+-- UPDATE/DELETE: apenas admins do workspace
+CREATE POLICY "Admins can update members"
+  ON workspace_members FOR UPDATE
+  USING (EXISTS (
+    SELECT 1 FROM workspace_members wm
+    WHERE wm.workspace_id = workspace_members.workspace_id
+    AND wm.user_id = auth.uid()
+    AND wm.role = 'admin'
+  ));
+
+CREATE POLICY "Admins can delete members"
+  ON workspace_members FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM workspace_members wm
+    WHERE wm.workspace_id = workspace_members.workspace_id
+    AND wm.user_id = auth.uid()
+    AND wm.role = 'admin'
+  ));
 ```
 
-### Etapa 2: Adicionar `workspace_id` em todas as tabelas de dados
+**Nota**: O SELECT com subquery em `workspace_members` referenciando a propria tabela ainda pode causar recursao. A solucao definitiva e tornar **todas as policies de workspace_members PERMISSIVE** (nao RESTRICTIVE como estao agora) e usar apenas `auth.uid()` direto sem chamar funcoes que consultem a mesma tabela.
 
-Adicionar coluna `workspace_id` (uuid, NOT NULL, FK para workspaces) nas seguintes tabelas:
-- `leads`
-- `funnels`
-- `funnel_stages`
-- `lead_tags`
-- `lead_tag_assignments`
-- `lead_history`
-- `lead_sales`
-- `ai_agents`
-- `agent_memories`
-- `agent_executions`
-- `salesbots`
-- `bot_execution_logs`
-- `whatsapp_instances`
-- `meta_accounts`
-- `meta_pages`
-- `meta_conversations`
-- `scheduled_messages`
-- `tag_rules`
+### Mudanca no Codigo Frontend
 
-Para os dados existentes, serao atribuidos a um workspace "default" criado automaticamente.
-
-### Etapa 3: Funcao auxiliar de seguranca
-
-Criar funcao `get_user_workspace_id()` (SECURITY DEFINER) que retorna o `workspace_id` ativo do usuario autenticado. Essa funcao sera usada em todas as politicas RLS.
-
-```text
-get_user_workspace_id(user_id) -> uuid
-  Busca em workspace_members o workspace do usuario
-```
-
-### Etapa 4: Atualizar todas as politicas RLS
-
-Substituir as politicas atuais (que usam apenas `true` para autenticados) por politicas que filtram pelo workspace:
-
-```text
-Antes:  USING (true)
-Depois: USING (workspace_id = get_user_workspace_id(auth.uid()))
-```
-
-Isso garante que um usuario da ECX nunca veja dados de outra empresa.
-
-### Etapa 5: Fluxo de cadastro e onboarding
-
-1. Usuario se cadastra (signup existente)
-2. Apos login, se nao tem workspace: tela de "Criar Workspace" (nome da empresa)
-3. Ao criar, vira admin do workspace automaticamente
-4. Pode convidar membros por email com role (admin/manager/seller)
-5. Membro convidado faz signup e ja entra no workspace correto
-
-Novos componentes:
-- `src/pages/CreateWorkspace.tsx` — tela de criacao
-- `src/pages/AcceptInvite.tsx` — tela para aceitar convite
-- `src/components/settings/WorkspaceSettings.tsx` — gerenciar workspace
-- `src/hooks/useWorkspace.ts` — hook com workspace ativo e contexto
-
-### Etapa 6: Contexto de Workspace no frontend
-
-- Criar `WorkspaceProvider` que carrega o workspace ativo apos login
-- Todas as queries ao banco passam a incluir `workspace_id` automaticamente
-- Sidebar mostra nome do workspace atual
-- TeamManager passa a usar `workspace_members` em vez de profiles globais
-
-### Etapa 7: Atualizar hooks existentes
-
-Todos os hooks que fazem queries ao banco precisam incluir o filtro de workspace:
-- `useLeads` — adicionar `.eq('workspace_id', workspaceId)`
-- `useTeam` — buscar de `workspace_members` em vez de `user_profiles` globais
-- `useAIAgents` — filtrar por workspace
-- `useSalesBots` — filtrar por workspace
-- `useTagRules` — filtrar por workspace
-- `useMetaChat` — filtrar por workspace
-
----
+Nenhuma mudanca no frontend e necessaria — o problema e 100% nas policies RLS do banco.
 
 ### Detalhes Tecnicos
 
-**Migracao SQL**: Uma unica migracao grande que:
-1. Cria tabelas `workspaces` e `workspace_members`
-2. Cria workspace default para dados existentes
-3. Adiciona `workspace_id` em todas as tabelas
-4. Popula `workspace_id` com o workspace default
-5. Cria funcoes auxiliares (`get_user_workspace_id`)
-6. Recria todas as politicas RLS com filtro de workspace
-
-**Arquivos novos**:
-- `src/hooks/useWorkspace.ts`
-- `src/pages/CreateWorkspace.tsx`
-- `src/pages/AcceptInvite.tsx`
-- `src/components/settings/WorkspaceSettings.tsx`
-
-**Arquivos modificados**:
-- `src/hooks/useAuth.tsx` — integrar workspace no fluxo pos-login
-- `src/hooks/useLeads.ts` — adicionar filtro workspace
-- `src/hooks/useTeam.ts` — buscar de workspace_members
-- `src/hooks/useAIAgents.ts` — filtro workspace
-- `src/hooks/useSalesBots.ts` — filtro workspace
-- `src/hooks/useTagRules.ts` — filtro workspace
-- `src/hooks/useMetaChat.ts` — filtro workspace
-- `src/components/layout/AppSidebar.tsx` — mostrar nome do workspace
-- `src/components/layout/TopBar.tsx` — menu com troca de workspace
-- `src/components/settings/TeamManager.tsx` — usar workspace_members
-- `src/App.tsx` — adicionar rotas de onboarding e WorkspaceProvider
-- `src/components/layout/ProtectedRoute.tsx` — redirecionar para criar workspace se necessario
-
-**Impacto**: Esta e a maior mudanca arquitetural do projeto. Recomendo implementar em fases, comecando pelo banco de dados e RLS, depois o onboarding, e por fim a adaptacao de cada modulo.
+- Todas as policies atuais de `workspace_members` sao `RESTRICTIVE` (Command: ALL com Permissive: No). Isso significa que TODAS devem ser satisfeitas. Precisamos troca-las para `PERMISSIVE` para que qualquer uma delas possa autorizar o acesso.
+- A funcao `get_user_workspace_id` e `SECURITY DEFINER`, o que significa que ela roda com privilegios do dono da funcao (geralmente superuser), entao ela ja bypassa RLS. O problema e que as policies da tabela `workspace_members` que usam subqueries na PROPRIA tabela causam recursao — nao a funcao em si.
+- A solucao e usar policies PERMISSIVE e evitar subqueries auto-referenciais nas policies de `workspace_members`.
 
