@@ -120,101 +120,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const createWorkspace = useCallback(async (name: string): Promise<Workspace | null> => {
     if (!user) return null;
 
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-
-    const syncAuthSession = async () => {
-      // Em alguns navegadores/condições, o estado do Auth pode estar ok no React,
-      // mas o token não estar sendo anexado nas chamadas do PostgREST.
-      // Forçamos o carregamento/refresh e re-set da sessão antes de gravar.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const current = sessionData.session;
-
-      if (current?.access_token && current.refresh_token) {
-        await supabase.auth.setSession({
-          access_token: current.access_token,
-          refresh_token: current.refresh_token,
-        });
-        return current;
-      }
-
-      const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
-        console.warn("Failed to refresh session before workspace create:", refreshError);
-        return null;
-      }
-
-      const next = refreshed.session;
-      if (next?.access_token && next.refresh_token) {
-        await supabase.auth.setSession({
-          access_token: next.access_token,
-          refresh_token: next.refresh_token,
-        });
-      }
-
-      return next ?? null;
-    };
-
-    const isRlsAuthError = (err: unknown) => {
-      const anyErr = err as { code?: string; message?: string } | null;
-      const msg = anyErr?.message ?? "";
-      return anyErr?.code === "42501" || msg.toLowerCase().includes("row-level security policy");
-    };
-
     try {
-      const session = await syncAuthSession();
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        console.error("Workspace create blocked: no session/access_token available");
+        console.error("No session available for workspace creation");
         return null;
       }
 
-      const attemptInsert = async () => {
-        const { data: ws, error: wsError } = await supabase
-          .from("workspaces")
-          .insert({ name, slug: `${slug}-${Date.now()}`, created_by: user.id })
-          .select()
-          .single();
+      const response = await supabase.functions.invoke("create-workspace", {
+        body: { name },
+      });
 
-        if (wsError) throw wsError;
-        return ws as Workspace;
-      };
-
-      let workspace = await attemptInsert();
-
-      // Retry 1x se cair como anon (RLS 42501) por sessão não anexada.
-      // Isso evita o “Mesmo erro” intermitente após login/refresh.
-      try {
-        // Add creator as admin member
-        const { error: memberError } = await supabase.from("workspace_members").insert({
-          workspace_id: workspace.id,
-          user_id: user.id,
-          role: "admin" as const,
-          accepted_at: new Date().toISOString(),
-        });
-
-        if (memberError) throw memberError;
-      } catch (memberErr) {
-        if (isRlsAuthError(memberErr)) {
-          await syncAuthSession();
-          const { error: memberErrorRetry } = await supabase.from("workspace_members").insert({
-            workspace_id: workspace.id,
-            user_id: user.id,
-            role: "admin" as const,
-            accepted_at: new Date().toISOString(),
-          });
-          if (memberErrorRetry) throw memberErrorRetry;
-        } else {
-          throw memberErr;
-        }
+      if (response.error) {
+        console.error("Edge function error:", response.error);
+        return null;
       }
 
-      setWorkspace(workspace);
+      const { workspace: ws } = response.data;
+      if (!ws) {
+        console.error("No workspace returned from edge function");
+        return null;
+      }
+
+      setWorkspace(ws as Workspace);
       setMembership({
         id: "",
-        workspace_id: workspace.id,
+        workspace_id: ws.id,
         user_id: user.id,
         role: "admin",
         invited_at: new Date().toISOString(),
@@ -222,49 +153,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         invited_email: null,
       });
 
-      return workspace;
+      return ws as Workspace;
     } catch (err) {
-      if (isRlsAuthError(err)) {
-        // Uma segunda tentativa completa (sincroniza sessão e tenta inserir novamente)
-        try {
-          await syncAuthSession();
-          const { data: ws, error: wsError } = await supabase
-            .from("workspaces")
-            .insert({ name, slug: `${slug}-${Date.now()}`, created_by: user.id })
-            .select()
-            .single();
-
-          if (wsError) throw wsError;
-
-          const workspace = ws as Workspace;
-
-          const { error: memberError } = await supabase.from("workspace_members").insert({
-            workspace_id: workspace.id,
-            user_id: user.id,
-            role: "admin" as const,
-            accepted_at: new Date().toISOString(),
-          });
-
-          if (memberError) throw memberError;
-
-          setWorkspace(workspace);
-          setMembership({
-            id: "",
-            workspace_id: workspace.id,
-            user_id: user.id,
-            role: "admin",
-            invited_at: new Date().toISOString(),
-            accepted_at: new Date().toISOString(),
-            invited_email: null,
-          });
-
-          return workspace;
-        } catch (retryErr) {
-          console.error("Error creating workspace (after auth retry):", retryErr);
-          return null;
-        }
-      }
-
       console.error("Error creating workspace:", err);
       return null;
     }
