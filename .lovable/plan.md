@@ -1,61 +1,150 @@
 
 
-## Importacao em Massa de Contatos para o Funil de Vendas
+## Sistema Multi-Tenant (Workspaces) para SaaS
 
-### Objetivo
-Permitir importar contatos via CSV e criar automaticamente um card (lead) na Etapa 1 do funil ("Leads de Entrada") para cada contato importado. Tambem conectar a pagina de Contatos ao banco de dados real.
+### Visao Geral
 
-### Capacidade
-- O banco suporta facilmente **10.000 a 50.000+ contatos** sem problemas de performance
-- Recomendacao: importar em lotes de ate **500 por vez** para evitar timeouts no navegador
-- Hoje existem 106 leads; a etapa destino sera "Leads de Entrada" (posicao 0)
+Transformar o CRM de single-tenant em multi-tenant, onde cada empresa (ex: ECX) tem seu proprio workspace com dados completamente isolados. Cada empresa se cadastra, cria seu workspace e convida seus membros (SDRs, gestores).
+
+### O Que Muda
+
+Hoje todos os usuarios autenticados veem todos os dados. Apos a implementacao, cada registro no banco tera um `workspace_id` e as politicas de seguranca (RLS) garantirao que um usuario so veja dados do seu proprio workspace.
 
 ---
 
-### Etapa 1: Conectar pagina de Contatos ao banco real
+### Etapa 1: Criar tabelas de Workspace e Membership
 
-Atualmente a pagina `src/pages/Contacts.tsx` usa dados mockados. Vamos substituir pelo hook `useLeads` existente para puxar os leads reais da tabela `leads`.
+Novas tabelas no banco de dados:
 
-- Remover o array `contacts` hardcoded
-- Usar `useLeads()` para buscar leads do banco
-- Adaptar a tabela para exibir os campos reais (name, phone, email, company, source, tags, created_at)
-- Manter busca e selecao em massa funcionando
+```text
+workspaces
++------------------+----------+
+| id (uuid, PK)    |          |
+| name (text)      | "ECX"    |
+| slug (text)      | "ecx"    |
+| created_by (uuid)|          |
+| created_at       |          |
++------------------+----------+
 
-### Etapa 2: Componente de importacao CSV
+workspace_members
++------------------+----------+
+| id (uuid, PK)    |          |
+| workspace_id     | FK       |
+| user_id (uuid)   |          |
+| role (app_role)   | admin/   |
+|                  | manager/ |
+|                  | seller   |
+| invited_at       |          |
+| accepted_at      |          |
++------------------+----------+
+```
 
-Criar um dialog `ImportContactsDialog.tsx` que:
-1. Aceita upload de arquivo CSV (ate ~10.000 linhas)
-2. Faz parse do CSV no navegador (sem precisar de backend)
-3. Mostra preview das primeiras 5 linhas para o usuario confirmar
-4. Permite mapear colunas do CSV para campos do lead (nome, telefone, email, empresa)
-5. Exibe barra de progresso durante a importacao
+### Etapa 2: Adicionar `workspace_id` em todas as tabelas de dados
 
-### Etapa 3: Logica de importacao em lotes
+Adicionar coluna `workspace_id` (uuid, NOT NULL, FK para workspaces) nas seguintes tabelas:
+- `leads`
+- `funnels`
+- `funnel_stages`
+- `lead_tags`
+- `lead_tag_assignments`
+- `lead_history`
+- `lead_sales`
+- `ai_agents`
+- `agent_memories`
+- `agent_executions`
+- `salesbots`
+- `bot_execution_logs`
+- `whatsapp_instances`
+- `meta_accounts`
+- `meta_pages`
+- `meta_conversations`
+- `scheduled_messages`
+- `tag_rules`
 
-- Processar o CSV e inserir leads em lotes de 100 registros via `supabase.from('leads').insert(batch)`
-- Cada lead sera criado com:
-  - `stage_id`: ID da etapa "Leads de Entrada"
-  - `source`: "importacao"
-  - `status`: "active"
-  - `position`: auto-incrementado
-- Ao final, exibir resumo: X importados, Y erros (duplicatas por telefone, etc.)
+Para os dados existentes, serao atribuidos a um workspace "default" criado automaticamente.
 
-### Etapa 4: Prevencao de duplicatas
+### Etapa 3: Funcao auxiliar de seguranca
 
-- Antes de inserir, verificar se ja existe lead com o mesmo `phone`
-- Contatos duplicados serao ignorados e reportados no resumo final
+Criar funcao `get_user_workspace_id()` (SECURITY DEFINER) que retorna o `workspace_id` ativo do usuario autenticado. Essa funcao sera usada em todas as politicas RLS.
+
+```text
+get_user_workspace_id(user_id) -> uuid
+  Busca em workspace_members o workspace do usuario
+```
+
+### Etapa 4: Atualizar todas as politicas RLS
+
+Substituir as politicas atuais (que usam apenas `true` para autenticados) por politicas que filtram pelo workspace:
+
+```text
+Antes:  USING (true)
+Depois: USING (workspace_id = get_user_workspace_id(auth.uid()))
+```
+
+Isso garante que um usuario da ECX nunca veja dados de outra empresa.
+
+### Etapa 5: Fluxo de cadastro e onboarding
+
+1. Usuario se cadastra (signup existente)
+2. Apos login, se nao tem workspace: tela de "Criar Workspace" (nome da empresa)
+3. Ao criar, vira admin do workspace automaticamente
+4. Pode convidar membros por email com role (admin/manager/seller)
+5. Membro convidado faz signup e ja entra no workspace correto
+
+Novos componentes:
+- `src/pages/CreateWorkspace.tsx` — tela de criacao
+- `src/pages/AcceptInvite.tsx` — tela para aceitar convite
+- `src/components/settings/WorkspaceSettings.tsx` — gerenciar workspace
+- `src/hooks/useWorkspace.ts` — hook com workspace ativo e contexto
+
+### Etapa 6: Contexto de Workspace no frontend
+
+- Criar `WorkspaceProvider` que carrega o workspace ativo apos login
+- Todas as queries ao banco passam a incluir `workspace_id` automaticamente
+- Sidebar mostra nome do workspace atual
+- TeamManager passa a usar `workspace_members` em vez de profiles globais
+
+### Etapa 7: Atualizar hooks existentes
+
+Todos os hooks que fazem queries ao banco precisam incluir o filtro de workspace:
+- `useLeads` — adicionar `.eq('workspace_id', workspaceId)`
+- `useTeam` — buscar de `workspace_members` em vez de `user_profiles` globais
+- `useAIAgents` — filtrar por workspace
+- `useSalesBots` — filtrar por workspace
+- `useTagRules` — filtrar por workspace
+- `useMetaChat` — filtrar por workspace
 
 ---
 
 ### Detalhes Tecnicos
 
-**Arquivos a criar:**
-- `src/components/contacts/ImportContactsDialog.tsx` — dialog com upload, preview e progresso
+**Migracao SQL**: Uma unica migracao grande que:
+1. Cria tabelas `workspaces` e `workspace_members`
+2. Cria workspace default para dados existentes
+3. Adiciona `workspace_id` em todas as tabelas
+4. Popula `workspace_id` com o workspace default
+5. Cria funcoes auxiliares (`get_user_workspace_id`)
+6. Recria todas as politicas RLS com filtro de workspace
 
-**Arquivos a modificar:**
-- `src/pages/Contacts.tsx` — conectar ao banco real via `useLeads`, adicionar onClick no botao "Importar"
+**Arquivos novos**:
+- `src/hooks/useWorkspace.ts`
+- `src/pages/CreateWorkspace.tsx`
+- `src/pages/AcceptInvite.tsx`
+- `src/components/settings/WorkspaceSettings.tsx`
 
-**Dependencias:** Nenhuma nova. O parse de CSV sera feito com logica nativa (split por linhas e virgulas, com tratamento de aspas).
+**Arquivos modificados**:
+- `src/hooks/useAuth.tsx` — integrar workspace no fluxo pos-login
+- `src/hooks/useLeads.ts` — adicionar filtro workspace
+- `src/hooks/useTeam.ts` — buscar de workspace_members
+- `src/hooks/useAIAgents.ts` — filtro workspace
+- `src/hooks/useSalesBots.ts` — filtro workspace
+- `src/hooks/useTagRules.ts` — filtro workspace
+- `src/hooks/useMetaChat.ts` — filtro workspace
+- `src/components/layout/AppSidebar.tsx` — mostrar nome do workspace
+- `src/components/layout/TopBar.tsx` — menu com troca de workspace
+- `src/components/settings/TeamManager.tsx` — usar workspace_members
+- `src/App.tsx` — adicionar rotas de onboarding e WorkspaceProvider
+- `src/components/layout/ProtectedRoute.tsx` — redirecionar para criar workspace se necessario
 
-**Banco de dados:** Nenhuma alteracao de schema necessaria. A tabela `leads` ja possui todos os campos necessarios.
+**Impacto**: Esta e a maior mudanca arquitetural do projeto. Recomendo implementar em fases, comecando pelo banco de dados e RLS, depois o onboarding, e por fim a adaptacao de cada modulo.
 
