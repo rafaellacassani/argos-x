@@ -270,8 +270,10 @@ export default function Settings() {
       name: "WhatsApp API",
       description: "API oficial da Meta",
       icon: <Phone className="w-6 h-6 text-green-600" />,
-      connected: false,
-      available: false,
+      connected: connectedCount > 0,
+      phoneNumber: connectedPhone,
+      available: true,
+      connectedCount,
     },
     {
       id: "instagram",
@@ -439,7 +441,7 @@ export default function Settings() {
                     variant={integration.connected ? "outline" : "default"}
                     disabled={(integration.id === "instagram" || integration.id === "facebook") && connectingMeta}
                     onClick={() => {
-                      if (integration.id === "whatsapp-business") {
+                      if (integration.id === "whatsapp-business" || integration.id === "whatsapp-api") {
                         setShowConnectionModal(true);
                       } else if (integration.id === "instagram" || integration.id === "facebook") {
                         handleConnectMeta();
