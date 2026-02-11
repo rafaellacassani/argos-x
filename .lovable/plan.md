@@ -1,43 +1,61 @@
 
 
-## Recuperacao de Senha - "Esqueci minha senha"
+## Importacao em Massa de Contatos para o Funil de Vendas
 
-### O que sera feito
+### Objetivo
+Permitir importar contatos via CSV e criar automaticamente um card (lead) na Etapa 1 do funil ("Leads de Entrada") para cada contato importado. Tambem conectar a pagina de Contatos ao banco de dados real.
 
-Adicionar o fluxo completo de recuperacao de senha na pagina de login, com 3 estados:
+### Capacidade
+- O banco suporta facilmente **10.000 a 50.000+ contatos** sem problemas de performance
+- Recomendacao: importar em lotes de ate **500 por vez** para evitar timeouts no navegador
+- Hoje existem 106 leads; a etapa destino sera "Leads de Entrada" (posicao 0)
 
-1. **Link "Esqueci minha senha"** na tela de login - envia um email com link de redefinicao
-2. **Pagina de redefinicao de senha** (`/auth/reset-password`) - formulario para digitar a nova senha
+---
 
-### Como funciona
+### Etapa 1: Conectar pagina de Contatos ao banco real
 
-O sistema de autenticacao do Lovable Cloud ja possui suporte nativo para reset de senha. O fluxo sera:
+Atualmente a pagina `src/pages/Contacts.tsx` usa dados mockados. Vamos substituir pelo hook `useLeads` existente para puxar os leads reais da tabela `leads`.
 
-1. Usuario clica em "Esqueci minha senha" na tela de login
-2. Digita o email e clica em "Enviar link"
-3. Recebe um email com um link de redefinicao
-4. Ao clicar no link, e redirecionado para `/auth/reset-password`
-5. Digita a nova senha e confirma
-6. Senha atualizada com sucesso, redirecionado para o app
+- Remover o array `contacts` hardcoded
+- Usar `useLeads()` para buscar leads do banco
+- Adaptar a tabela para exibir os campos reais (name, phone, email, company, source, tags, created_at)
+- Manter busca e selecao em massa funcionando
 
-### Detalhes tecnicos
+### Etapa 2: Componente de importacao CSV
 
-**Arquivo: `src/pages/Auth.tsx`**
-- Adicionar um terceiro estado na pagina: `"login" | "signup" | "forgot"` (substituindo o booleano `isLogin`)
-- No estado `"forgot"`: mostrar apenas o campo de email e um botao "Enviar link de recuperacao"
-- Chamar `supabase.auth.resetPasswordForEmail(email, { redirectTo })` com redirect para `/auth/reset-password`
-- Mostrar toast de confirmacao apos envio
+Criar um dialog `ImportContactsDialog.tsx` que:
+1. Aceita upload de arquivo CSV (ate ~10.000 linhas)
+2. Faz parse do CSV no navegador (sem precisar de backend)
+3. Mostra preview das primeiras 5 linhas para o usuario confirmar
+4. Permite mapear colunas do CSV para campos do lead (nome, telefone, email, empresa)
+5. Exibe barra de progresso durante a importacao
 
-**Arquivo: `src/pages/ResetPassword.tsx`** (novo)
-- Pagina com dois campos: "Nova senha" e "Confirmar senha"
-- Validacao com Zod (minimo 6 caracteres, senhas iguais)
-- Chamar `supabase.auth.updateUser({ password })` para salvar a nova senha
-- Apos sucesso, redirecionar para `/`
+### Etapa 3: Logica de importacao em lotes
 
-**Arquivo: `src/hooks/useAuth.tsx`**
-- Adicionar funcao `resetPassword(email: string)` ao contexto
-- Adicionar funcao `updatePassword(newPassword: string)` ao contexto
+- Processar o CSV e inserir leads em lotes de 100 registros via `supabase.from('leads').insert(batch)`
+- Cada lead sera criado com:
+  - `stage_id`: ID da etapa "Leads de Entrada"
+  - `source`: "importacao"
+  - `status`: "active"
+  - `position`: auto-incrementado
+- Ao final, exibir resumo: X importados, Y erros (duplicatas por telefone, etc.)
 
-**Arquivo: `src/App.tsx`**
-- Adicionar rota publica `/auth/reset-password` apontando para `ResetPassword`
+### Etapa 4: Prevencao de duplicatas
+
+- Antes de inserir, verificar se ja existe lead com o mesmo `phone`
+- Contatos duplicados serao ignorados e reportados no resumo final
+
+---
+
+### Detalhes Tecnicos
+
+**Arquivos a criar:**
+- `src/components/contacts/ImportContactsDialog.tsx` — dialog com upload, preview e progresso
+
+**Arquivos a modificar:**
+- `src/pages/Contacts.tsx` — conectar ao banco real via `useLeads`, adicionar onClick no botao "Importar"
+
+**Dependencias:** Nenhuma nova. O parse de CSV sera feito com logica nativa (split por linhas e virgulas, com tratamento de aspas).
+
+**Banco de dados:** Nenhuma alteracao de schema necessaria. A tabela `leads` ja possui todos os campos necessarios.
 
