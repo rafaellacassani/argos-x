@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import inboxiaIcon from "@/assets/inboxia-icon.png";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 const menuItems = [
   { icon: Home, label: "Início", path: "/" },
@@ -40,6 +41,7 @@ const menuItems = [
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { workspace } = useWorkspace();
 
   return (
     <motion.aside
@@ -68,7 +70,7 @@ export function AppSidebar() {
                 className="flex flex-col"
               >
                 <span className="font-display font-bold text-lg text-sidebar-foreground leading-tight">
-                  Inboxia
+                  {workspace?.name || "Inboxia"}
                 </span>
                 <span className="text-[10px] font-medium tracking-wide" style={{ color: '#07C3E8' }}>
                   by Mkt Boost
