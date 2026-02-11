@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Json } from '@/integrations/supabase/types';
+import { useWorkspace } from '@/hooks/useWorkspace';
 
 export interface BotNode {
   id: string;
@@ -59,6 +60,7 @@ function parseTriggerConfig(data: Json | null): Record<string, unknown> {
 export function useSalesBots() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { workspaceId } = useWorkspace();
 
   const fetchBots = useCallback(async (): Promise<SalesBot[]> => {
     setLoading(true);
@@ -118,6 +120,7 @@ export function useSalesBots() {
   }, [toast]);
 
   const createBot = useCallback(async (bot: Partial<SalesBot>): Promise<SalesBot | null> => {
+    if (!workspaceId) return null;
     setLoading(true);
     try {
       const flowData = bot.flow_data || { nodes: [], edges: [] };
@@ -132,6 +135,7 @@ export function useSalesBots() {
           trigger_config: triggerConfig as Json,
           flow_data: flowData as unknown as Json,
           is_active: bot.is_active || false,
+          workspace_id: workspaceId
         })
         .select()
         .single();

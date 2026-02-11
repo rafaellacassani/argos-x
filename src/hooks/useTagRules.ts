@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useWorkspace } from '@/hooks/useWorkspace';
 
 export interface TagRule {
   id: string;
@@ -19,6 +20,7 @@ export interface TagRule {
 export function useTagRules() {
   const [rules, setRules] = useState<TagRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const { workspaceId } = useWorkspace();
 
   // Fetch all tag rules
   const fetchRules = useCallback(async () => {
@@ -45,12 +47,14 @@ export function useTagRules() {
   // Create a new tag rule
   const createRule = useCallback(async (matchPhrase: string, tagId: string) => {
     try {
+      if (!workspaceId) throw new Error("Workspace não encontrado");
       const { data, error } = await supabase
         .from('tag_rules')
         .insert({
           match_phrase: matchPhrase,
           tag_id: tagId,
-          is_active: true
+          is_active: true,
+          workspace_id: workspaceId
         })
         .select(`
           *,

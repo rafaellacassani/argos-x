@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 interface ImportContactsDialogProps {
   open: boolean;
@@ -70,6 +71,7 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
 }
 
 export default function ImportContactsDialog({ open, onOpenChange, onImportComplete }: ImportContactsDialogProps) {
+  const { workspaceId } = useWorkspace();
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<"upload" | "mapping" | "importing" | "done">("upload");
   const [headers, setHeaders] = useState<string[]>([]);
@@ -145,6 +147,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       source: string;
       status: "active";
       position: number;
+      workspace_id: string;
     }> = [];
     let duplicates = 0;
 
@@ -169,6 +172,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
         source: "importacao",
         status: "active",
         position: nextPosition++,
+        workspace_id: workspaceId!,
       });
     }
 

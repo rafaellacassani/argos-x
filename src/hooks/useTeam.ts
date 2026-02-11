@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export type AppRole = "admin" | "manager" | "seller";
 
@@ -33,6 +34,7 @@ export function useTeam() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+  const { workspaceId } = useWorkspace();
 
   // Helper function to convert booleans to notification type
   const getNotificationType = (
@@ -147,9 +149,12 @@ export function useTeam() {
         }
 
         // Create default notification settings
-        await supabase.from("notification_settings").insert({
-          user_id: tempUserId,
-        });
+        if (workspaceId) {
+          await supabase.from("notification_settings").insert({
+            user_id: tempUserId,
+            workspace_id: workspaceId
+          });
+        }
 
         toast({
           title: "Membro adicionado",
@@ -307,9 +312,11 @@ export function useTeam() {
 
           if (error) throw error;
         } else {
+          if (!workspaceId) throw new Error("Workspace não encontrado");
           const { error } = await supabase.from("notification_settings").insert({
             user_id: userId,
             ...settings,
+            workspace_id: workspaceId
           });
 
           if (error) throw error;

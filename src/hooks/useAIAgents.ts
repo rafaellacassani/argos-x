@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 export interface AIAgent {
   id: string;
@@ -56,6 +57,7 @@ export interface CreateAgentData {
 export function useAIAgents() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { workspaceId } = useWorkspace();
 
   const { data: agents = [], isLoading, error } = useQuery({
     queryKey: ["ai-agents"],
@@ -72,6 +74,7 @@ export function useAIAgents() {
 
   const createAgent = useMutation({
     mutationFn: async (agentData: CreateAgentData) => {
+      if (!workspaceId) throw new Error("Workspace não encontrado");
       const { data, error } = await supabase
         .from("ai_agents")
         .insert({
@@ -86,7 +89,8 @@ export function useAIAgents() {
           pause_code: agentData.pause_code || "251213",
           resume_keyword: agentData.resume_keyword || "Atendimento finalizado",
           message_split_enabled: agentData.message_split_enabled ?? true,
-          message_split_length: agentData.message_split_length || 400
+          message_split_length: agentData.message_split_length || 400,
+          workspace_id: workspaceId
         })
         .select()
         .single();
