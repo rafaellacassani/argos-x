@@ -33,6 +33,8 @@ export default function Leads() {
     tags,
     loading,
     setCurrentFunnel,
+    fetchStages,
+    fetchLeads,
     createLead,
     updateLead,
     moveLead,
@@ -40,7 +42,7 @@ export default function Leads() {
     getLeadHistory,
     addTagToLead,
     removeTagFromLead,
-    refreshLeads,
+    
     createFunnel,
     updateStage,
     saveSales
@@ -93,7 +95,12 @@ export default function Leads() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refreshLeads();
+    if (currentFunnel) {
+      const stageData = await fetchStages(currentFunnel.id);
+      if (stageData && stageData.length > 0) {
+        await fetchLeads(stageData.map(s => s.id));
+      }
+    }
     setIsRefreshing(false);
   };
 

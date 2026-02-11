@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 
 type Step = "name" | "creating" | "qrcode" | "waiting" | "success" | "error";
@@ -33,6 +34,7 @@ export function ConnectionModal({
   onOpenChange,
   onSuccess,
 }: ConnectionModalProps) {
+  const { workspaceId } = useWorkspace();
   const [step, setStep] = useState<Step>("name");
   const [instanceName, setInstanceName] = useState("");
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
@@ -160,7 +162,8 @@ export function ConnectionModal({
           
           await supabase.from('whatsapp_instances').upsert({
             instance_name: sanitizedName,
-            display_name: instanceName.trim()
+            display_name: instanceName.trim(),
+            workspace_id: workspaceId!
           }, { onConflict: 'instance_name' });
           
           setStep("success");

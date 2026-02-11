@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { BotFlowData } from './useSalesBots';
+import { useWorkspace } from './useWorkspace';
 
 // Helper function to execute bot flow (standalone to avoid hook rules)
 async function executeBotFlow(botId: string, leadId: string) {
@@ -11,11 +12,12 @@ async function executeBotFlow(botId: string, leadId: string) {
     // Fetch bot
     const { data: bot } = await supabase
       .from('salesbots')
-      .select('flow_data, is_active, name')
+      .select('flow_data, is_active, name, workspace_id')
       .eq('id', botId)
       .maybeSingle();
 
     if (!bot?.is_active) return;
+    const wsId = bot.workspace_id;
 
     const flowData = bot.flow_data as unknown as BotFlowData | null;
     const nodes = flowData?.nodes || [];
@@ -42,7 +44,8 @@ async function executeBotFlow(botId: string, leadId: string) {
         bot_id: botId,
         lead_id: leadId,
         node_id: currentNode.id,
-        status: 'running'
+        status: 'running',
+        workspace_id: wsId
       });
 
       let success = true;
@@ -72,7 +75,6 @@ async function executeBotFlow(botId: string, leadId: string) {
           message = messageText ? 'Sem instância WhatsApp' : 'Mensagem não configurada';
         }
       } else if (currentNode.type === 'tag') {
-        // Apply or remove tag from lead
         const action = currentNode.data?.action as 'add' | 'remove';
         const tagId = currentNode.data?.tag_id as string;
         
@@ -82,10 +84,9 @@ async function executeBotFlow(botId: string, leadId: string) {
         } else if (action === 'add') {
           const { error } = await supabase
             .from('lead_tag_assignments')
-            .upsert({ lead_id: leadId, tag_id: tagId }, { onConflict: 'lead_id,tag_id' });
+            .upsert({ lead_id: leadId, tag_id: tagId, workspace_id: wsId }, { onConflict: 'lead_id,tag_id' });
           success = !error;
           message = success ? 'Tag aplicada ao lead' : 'Falha ao aplicar tag';
-          console.log(`[BotFlow] Tag ADD: ${tagId} -> Lead ${leadId}`, error || 'OK');
         } else if (action === 'remove') {
           const { error } = await supabase
             .from('lead_tag_assignments')
@@ -94,20 +95,17 @@ async function executeBotFlow(botId: string, leadId: string) {
             .eq('tag_id', tagId);
           success = !error;
           message = success ? 'Tag removida do lead' : 'Falha ao remover tag';
-          console.log(`[BotFlow] Tag REMOVE: ${tagId} -> Lead ${leadId}`, error || 'OK');
         } else {
           success = false;
           message = 'Ação de tag inválida (deve ser add ou remove)';
         }
       } else if (currentNode.type === 'move_stage') {
-        // Move lead to a different funnel stage
         const targetStageId = currentNode.data?.stage_id as string;
         
         if (!targetStageId) {
           success = false;
           message = 'Etapa não configurada no bloco';
         } else {
-          // Get current stage for history
           const { data: currentLeadData } = await supabase
             .from('leads')
             .select('stage_id')
@@ -116,7 +114,6 @@ async function executeBotFlow(botId: string, leadId: string) {
           
           const fromStageId = currentLeadData?.stage_id;
           
-          // Update lead's stage
           const { error } = await supabase
             .from('leads')
             .update({ stage_id: targetStageId, position: 0 })
@@ -126,23 +123,20 @@ async function executeBotFlow(botId: string, leadId: string) {
             success = false;
             message = 'Falha ao mover lead de etapa';
           } else {
-            // Record history
             await supabase.from('lead_history').insert({
               lead_id: leadId,
               action: 'stage_changed',
               from_stage_id: fromStageId,
               to_stage_id: targetStageId,
-              performed_by: 'SalesBot'
+              performed_by: 'SalesBot',
+              workspace_id: wsId
             });
             success = true;
             message = 'Lead movido para nova etapa';
-            console.log(`[BotFlow] Move Stage: ${fromStageId} -> ${targetStageId} for Lead ${leadId}`);
           }
         }
       } else {
-        // Other block types - placeholder
         message = `Bloco ${currentNode.type} executado (placeholder)`;
-        console.log(`[BotFlow] Placeholder block: ${currentNode.type}`);
       }
 
       // Update log with result
@@ -151,14 +145,12 @@ async function executeBotFlow(botId: string, leadId: string) {
         lead_id: leadId,
         node_id: currentNode.id,
         status: success ? 'success' : 'error',
-        message
+        message,
+        workspace_id: wsId
       });
-
-      console.log(`[BotFlow] Node ${currentNode.type}: ${message}`);
 
       if (!success) break;
 
-      // Get next node
       const edge = edges.find(e => e.source === currentNode!.id);
       currentNode = edge ? nodes.find(n => n.id === edge.target) : undefined;
     }
@@ -176,8 +168,6 @@ async function executeBotFlow(botId: string, leadId: string) {
         .update({ executions_count: (currentBot.executions_count || 0) + 1 })
         .eq('id', botId);
     }
-
-    console.log('[BotFlow] Execution completed');
   } catch (err) {
     console.error('[BotFlow] Execution error:', err);
   }
@@ -210,7 +200,6 @@ export interface Lead {
   created_at: string;
   updated_at: string;
   tags?: LeadTag[];
-  // Multiple sales support
   sales?: LeadSale[];
   total_sales_value?: number;
   sales_count?: number;
@@ -268,6 +257,7 @@ export function useLeads() {
   const [tags, setTags] = useState<LeadTag[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { workspaceId } = useWorkspace();
 
   // Fetch all funnels
   const fetchFunnels = useCallback(async () => {
@@ -280,7 +270,6 @@ export function useLeads() {
       if (error) throw error;
       setFunnels(data || []);
       
-      // Set default funnel as current
       const defaultFunnel = data?.find(f => f.is_default) || data?.[0];
       if (defaultFunnel && !currentFunnel) {
         setCurrentFunnel(defaultFunnel);
@@ -328,7 +317,6 @@ export function useLeads() {
 
       const leadIds = (data || []).map(l => l.id);
       
-      // Fetch tags and sales in parallel
       const [tagAssignments, salesData] = await Promise.all([
         supabase
           .from('lead_tag_assignments')
@@ -340,7 +328,6 @@ export function useLeads() {
           .in('lead_id', leadIds)
       ]);
 
-      // Map tags and sales to leads
       const leadsWithData = (data || []).map(lead => {
         const leadTags = (tagAssignments.data || [])
           .filter(t => t.lead_id === lead.id)
@@ -387,10 +374,11 @@ export function useLeads() {
 
   // Create a new tag
   const createTag = useCallback(async (name: string, color: string): Promise<LeadTag | null> => {
+    if (!workspaceId) return null;
     try {
       const { data, error } = await supabase
         .from('lead_tags')
-        .insert({ name, color })
+        .insert({ name, color, workspace_id: workspaceId })
         .select()
         .single();
 
@@ -404,7 +392,7 @@ export function useLeads() {
       toast.error('Erro ao criar tag');
       return null;
     }
-  }, []);
+  }, [workspaceId]);
 
   // Update a tag
   const updateTag = useCallback(async (tagId: string, updates: { name?: string; color?: string }): Promise<LeadTag | null> => {
@@ -431,13 +419,11 @@ export function useLeads() {
   // Delete a tag
   const deleteTag = useCallback(async (tagId: string): Promise<boolean> => {
     try {
-      // First delete all tag assignments
       await supabase
         .from('lead_tag_assignments')
         .delete()
         .eq('tag_id', tagId);
 
-      // Then delete the tag
       const { error } = await supabase
         .from('lead_tags')
         .delete()
@@ -481,14 +467,12 @@ export function useLeads() {
 
       if (tagsError) throw tagsError;
 
-      // Get counts for all tags
       const { data: countsData, error: countsError } = await supabase
         .from('lead_tag_assignments')
         .select('tag_id');
 
       if (countsError) throw countsError;
 
-      // Count occurrences
       const countMap = new Map<string, number>();
       (countsData || []).forEach(item => {
         countMap.set(item.tag_id, (countMap.get(item.tag_id) || 0) + 1);
@@ -506,8 +490,8 @@ export function useLeads() {
 
   // Create a new lead
   const createLead = useCallback(async (leadData: Partial<Lead>) => {
+    if (!workspaceId) return null;
     try {
-      // Get the first stage of the current funnel if not specified
       let stageId = leadData.stage_id;
       if (!stageId && currentFunnel) {
         const { data: firstStage } = await supabase
@@ -525,7 +509,6 @@ export function useLeads() {
         throw new Error('Nenhum estágio encontrado');
       }
 
-      // Get max position in the stage
       const { data: maxPosData } = await supabase
         .from('leads')
         .select('position')
@@ -551,22 +534,22 @@ export function useLeads() {
           instance_name: leadData.instance_name,
           responsible_user: leadData.responsible_user,
           notes: leadData.notes,
-          position: newPosition
+          position: newPosition,
+          workspace_id: workspaceId
         })
         .select()
         .single();
 
       if (error) throw error;
 
-      // Add history entry
       await supabase.from('lead_history').insert({
         lead_id: data.id,
         action: 'created',
         to_stage_id: stageId,
-        metadata: { source: leadData.source || 'manual' }
+        metadata: { source: leadData.source || 'manual' },
+        workspace_id: workspaceId
       });
 
-      // Add WhatsApp tag if from WhatsApp
       if (leadData.source === 'whatsapp') {
         const { data: whatsappTag } = await supabase
           .from('lead_tags')
@@ -577,7 +560,8 @@ export function useLeads() {
         if (whatsappTag) {
           await supabase.from('lead_tag_assignments').insert({
             lead_id: data.id,
-            tag_id: whatsappTag.id
+            tag_id: whatsappTag.id,
+            workspace_id: workspaceId
           });
         }
       }
@@ -590,7 +574,7 @@ export function useLeads() {
       toast.error('Erro ao criar lead');
       return null;
     }
-  }, [currentFunnel]);
+  }, [currentFunnel, workspaceId]);
 
   // Update a lead
   const updateLead = useCallback(async (leadId: string, updates: Partial<Lead>) => {
@@ -622,11 +606,9 @@ export function useLeads() {
     performedBy?: string
   ) => {
     try {
-      // Get current lead
       const currentLead = leads.find(l => l.id === leadId);
       const oldStageId = currentLead?.stage_id;
 
-      // Update positions of leads in old stage (if changing stages)
       if (oldStageId && oldStageId !== newStageId) {
         const leadsInOldStage = leads
           .filter(l => l.stage_id === oldStageId && l.id !== leadId)
@@ -640,30 +622,25 @@ export function useLeads() {
         }
       }
 
-      // Update the moved lead
       const { data, error } = await supabase
         .from('leads')
-        .update({ 
-          stage_id: newStageId, 
-          position: newPosition 
-        })
+        .update({ stage_id: newStageId, position: newPosition })
         .eq('id', leadId)
         .select()
         .single();
 
       if (error) throw error;
 
-      // Add history entry if stage changed
-      if (oldStageId && oldStageId !== newStageId) {
+      if (oldStageId && oldStageId !== newStageId && workspaceId) {
         await supabase.from('lead_history').insert({
           lead_id: leadId,
           action: 'stage_changed',
           from_stage_id: oldStageId,
           to_stage_id: newStageId,
-          performed_by: performedBy
+          performed_by: performedBy,
+          workspace_id: workspaceId
         });
 
-        // Trigger bot automation for new stage
         const { data: stageData } = await supabase
           .from('funnel_stages')
           .select('bot_id')
@@ -671,7 +648,6 @@ export function useLeads() {
           .maybeSingle();
 
         if (stageData?.bot_id) {
-          // Check if bot is active
           const { data: botData } = await supabase
             .from('salesbots')
             .select('is_active')
@@ -679,14 +655,11 @@ export function useLeads() {
             .maybeSingle();
 
           if (botData?.is_active) {
-            console.log(`[SalesBot] Triggering bot ${stageData.bot_id} for lead ${leadId}`);
-            // Execute bot flow in background
             executeBotFlow(stageData.bot_id!, leadId);
           }
         }
       }
 
-      // Update local state
       setLeads(prev => prev.map(l => 
         l.id === leadId 
           ? { ...l, stage_id: newStageId, position: newPosition }
@@ -699,7 +672,7 @@ export function useLeads() {
       toast.error('Erro ao mover lead');
       return null;
     }
-  }, [leads]);
+  }, [leads, workspaceId]);
 
   // Delete a lead
   const deleteLead = useCallback(async (leadId: string) => {
@@ -744,10 +717,11 @@ export function useLeads() {
 
   // Add tag to lead
   const addTagToLead = useCallback(async (leadId: string, tagId: string) => {
+    if (!workspaceId) return false;
     try {
       const { error } = await supabase
         .from('lead_tag_assignments')
-        .insert({ lead_id: leadId, tag_id: tagId });
+        .insert({ lead_id: leadId, tag_id: tagId, workspace_id: workspaceId });
 
       if (error) throw error;
 
@@ -764,7 +738,7 @@ export function useLeads() {
       console.error('Error adding tag:', err);
       return false;
     }
-  }, [tags]);
+  }, [tags, workspaceId]);
 
   // Remove tag from lead
   const removeTagFromLead = useCallback(async (leadId: string, tagId: string) => {
@@ -791,16 +765,16 @@ export function useLeads() {
 
   // Sales CRUD functions
   const addSale = useCallback(async (leadId: string, productName: string, value: number): Promise<LeadSale | null> => {
+    if (!workspaceId) return null;
     try {
       const { data, error } = await supabase
         .from('lead_sales')
-        .insert({ lead_id: leadId, product_name: productName, value })
+        .insert({ lead_id: leadId, product_name: productName, value, workspace_id: workspaceId })
         .select()
         .single();
 
       if (error) throw error;
       
-      // Update local state
       setLeads(prev => prev.map(l => {
         if (l.id === leadId) {
           const newSales = [...(l.sales || []), data as LeadSale];
@@ -820,7 +794,7 @@ export function useLeads() {
       toast.error('Erro ao adicionar venda');
       return null;
     }
-  }, []);
+  }, [workspaceId]);
 
   const updateSale = useCallback(async (saleId: string, updates: { product_name?: string; value?: number }): Promise<boolean> => {
     try {
@@ -833,7 +807,6 @@ export function useLeads() {
 
       if (error) throw error;
       
-      // Update local state
       setLeads(prev => prev.map(l => {
         const saleIndex = l.sales?.findIndex(s => s.id === saleId);
         if (saleIndex !== undefined && saleIndex >= 0 && l.sales) {
@@ -865,7 +838,6 @@ export function useLeads() {
 
       if (error) throw error;
       
-      // Update local state
       setLeads(prev => prev.map(l => {
         if (l.sales?.some(s => s.id === saleId)) {
           const newSales = l.sales.filter(s => s.id !== saleId);
@@ -892,26 +864,23 @@ export function useLeads() {
     sales: Array<{ id?: string; product_name: string; value: number }>,
     originalSales: LeadSale[]
   ): Promise<boolean> => {
+    if (!workspaceId) return false;
     try {
-      // Find deleted, updated, and new sales
       const currentIds = new Set(sales.filter(s => s.id).map(s => s.id));
       const deletedSales = originalSales.filter(s => !currentIds.has(s.id));
       const newSales = sales.filter(s => !s.id && s.product_name.trim());
       const updatedSales = sales.filter(s => s.id && s.product_name.trim());
 
-      // Delete removed sales
       for (const sale of deletedSales) {
         await supabase.from('lead_sales').delete().eq('id', sale.id);
       }
 
-      // Insert new sales
       if (newSales.length > 0) {
         await supabase.from('lead_sales').insert(
-          newSales.map(s => ({ lead_id: leadId, product_name: s.product_name, value: s.value }))
+          newSales.map(s => ({ lead_id: leadId, product_name: s.product_name, value: s.value, workspace_id: workspaceId }))
         );
       }
 
-      // Update existing sales
       for (const sale of updatedSales) {
         const original = originalSales.find(o => o.id === sale.id);
         if (original && (original.product_name !== sale.product_name || original.value !== sale.value)) {
@@ -928,7 +897,7 @@ export function useLeads() {
       toast.error('Erro ao salvar vendas');
       return false;
     }
-  }, []);
+  }, [workspaceId]);
 
   // Check if lead exists for a WhatsApp JID
   const findLeadByWhatsAppJid = useCallback(async (jid: string): Promise<Lead | null> => {
@@ -949,16 +918,16 @@ export function useLeads() {
 
   // Create funnel
   const createFunnel = useCallback(async (name: string, description?: string) => {
+    if (!workspaceId) return null;
     try {
       const { data: funnel, error: funnelError } = await supabase
         .from('funnels')
-        .insert({ name, description })
+        .insert({ name, description, workspace_id: workspaceId })
         .select()
         .single();
 
       if (funnelError) throw funnelError;
 
-      // Create default stages
       const defaultStages = [
         { name: 'Entrada', color: '#E5E7EB', position: 0 },
         { name: 'Em Andamento', color: '#0171C3', position: 1 },
@@ -968,7 +937,8 @@ export function useLeads() {
       for (const stage of defaultStages) {
         await supabase.from('funnel_stages').insert({
           funnel_id: funnel.id,
-          ...stage
+          ...stage,
+          workspace_id: workspaceId
         });
       }
 
@@ -980,7 +950,7 @@ export function useLeads() {
       toast.error('Erro ao criar funil');
       return null;
     }
-  }, []);
+  }, [workspaceId]);
 
   // Update stage
   const updateStage = useCallback(async (stageId: string, updates: Partial<FunnelStage>) => {
@@ -1008,11 +978,7 @@ export function useLeads() {
     const stats = stages.map(stage => {
       const stageLeads = leads.filter(l => l.stage_id === stage.id);
       const totalValue = stageLeads.reduce((sum, l) => sum + (l.value || 0), 0);
-      return {
-        stage,
-        count: stageLeads.length,
-        totalValue
-      };
+      return { stage, count: stageLeads.length, totalValue };
     });
 
     const totalLeads = leads.length;
@@ -1022,13 +988,7 @@ export function useLeads() {
     ).length;
     const conversionRate = totalLeads > 0 ? (wonLeads / totalLeads) * 100 : 0;
 
-    return {
-      byStage: stats,
-      totalLeads,
-      totalValue,
-      wonLeads,
-      conversionRate
-    };
+    return { byStage: stats, totalLeads, totalValue, wonLeads, conversionRate };
   }, [stages, leads]);
 
   // Initial data fetch
@@ -1085,17 +1045,23 @@ export function useLeads() {
   }, [stages]);
 
   return {
-    // State
     funnels,
     currentFunnel,
+    setCurrentFunnel,
     stages,
     leads,
     tags,
     loading,
     error,
-    
-    // Actions
-    setCurrentFunnel,
+    fetchFunnels,
+    fetchStages,
+    fetchLeads,
+    fetchTags,
+    createTag,
+    updateTag,
+    deleteTag,
+    getTagUsageCount,
+    getTagsWithCounts,
     createLead,
     updateLead,
     moveLead,
@@ -1103,25 +1069,13 @@ export function useLeads() {
     getLeadHistory,
     addTagToLead,
     removeTagFromLead,
-    findLeadByWhatsAppJid,
-    createFunnel,
-    updateStage,
-    getStatistics,
-    createTag,
-    updateTag,
-    deleteTag,
-    getTagUsageCount,
-    getTagsWithCounts,
-    fetchTags,
-    
-    // Sales
     addSale,
     updateSale,
     deleteSale,
     saveSales,
-    
-    // Refresh
-    refreshLeads: () => fetchLeads(stages.map(s => s.id)),
-    refreshFunnels: fetchFunnels
+    findLeadByWhatsAppJid,
+    createFunnel,
+    updateStage,
+    getStatistics,
   };
 }

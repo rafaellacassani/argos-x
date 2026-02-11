@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import {
   Tag,
   Plus,
@@ -55,6 +56,7 @@ const TAG_COLORS = [
 export function AutoTagRules() {
   const { rules, loading, createRule, updateRule, deleteRule } = useTagRules();
   const { tags, fetchTags } = useLeads();
+  const { workspaceId } = useWorkspace();
   
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<TagRule | null>(null);
@@ -106,7 +108,7 @@ export function AutoTagRules() {
     try {
       const { data, error } = await supabase
         .from("lead_tags")
-        .insert({ name: newTagName.trim(), color: newTagColor })
+        .insert({ name: newTagName.trim(), color: newTagColor, workspace_id: workspaceId! })
         .select()
         .single();
       
