@@ -117,6 +117,7 @@ function MemberEditor({
 
   const handleSave = async () => {
     if (!fullName.trim() || !phone.trim()) return;
+    if (isNew && !email.trim()) return;
 
     setSaving(true);
     try {
@@ -156,7 +157,7 @@ function MemberEditor({
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={!fullName.trim() || !phone.trim() || saving}
+              disabled={!fullName.trim() || !phone.trim() || (isNew && !email.trim()) || saving}
             >
               {saving ? "Salvando..." : "Salvar"}
             </Button>
@@ -199,15 +200,23 @@ function MemberEditor({
 
               {/* Email */}
               <div className="grid grid-cols-[100px_1fr] items-center gap-2">
-                <Label className="text-muted-foreground">Email</Label>
+                <Label className="text-muted-foreground">
+                  Email {isNew && <span className="text-destructive">*</span>}
+                </Label>
                 <Input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@exemplo.com"
                   className="bg-background"
+                  required={isNew}
                 />
               </div>
+              {isNew && (
+                <p className="text-xs text-muted-foreground ml-[108px]">
+                  Um convite será enviado para este email
+                </p>
+              )}
 
               {/* Phone - WhatsApp */}
               <div className="grid grid-cols-[100px_1fr] items-center gap-2">
@@ -297,7 +306,10 @@ export function TeamManager() {
     if (editingMember) {
       await updateTeamMember(editingMember.user_id, data);
     } else {
-      await createTeamMember(data);
+      await createTeamMember({
+        ...data,
+        email: data.email || "",
+      });
     }
     await fetchTeamMembers();
   };
