@@ -1,75 +1,54 @@
 
 
-## Corrigir Policies RESTRICTIVE em `workspaces` e `workspace_members`
+## Problema Identificado
 
-### Problema
+A criacao de membros na equipe falha por **dois problemas criticos** nas politicas de seguranca (RLS):
 
-O erro real e: **"new row violates row-level security policy for table workspaces"**.
+### 1. Todas as politicas sao RESTRICTIVE (sem PERMISSIVE)
+O PostgreSQL exige pelo menos uma politica PERMISSIVE para conceder acesso. As tabelas `user_profiles`, `user_roles` e `notification_settings` possuem apenas politicas RESTRICTIVE, o que bloqueia qualquer operacao.
 
-Todas as policies do projeto estao como **RESTRICTIVE** (nao PERMISSIVE). No PostgreSQL, policies RESTRICTIVE so funcionam para restringir acesso ja concedido por policies PERMISSIVE. Se nao existe nenhuma policy PERMISSIVE, o acesso e **sempre negado** — mesmo que a policy RESTRICTIVE retorne true.
+### 2. Verificacao de admin usa tabela errada
+As politicas de `user_profiles` e `user_roles` usam `has_role(auth.uid(), 'admin')`, que consulta a tabela `user_roles`. Porem, o papel de admin esta registrado na tabela `workspace_members` (sistema de workspace). Como a tabela `user_roles` esta vazia, a funcao sempre retorna `false` -- ninguem tem permissao.
 
-### Solucao
+## Solucao
 
-Recriar as policies das tabelas `workspaces` e `workspace_members` como **PERMISSIVE** (que e o padrao do PostgreSQL).
+### Passo 1 - Migracao SQL
+Recriar as politicas RLS como **PERMISSIVE** e substituir `has_role()` por `is_workspace_admin()` nas tabelas afetadas:
 
-### Migracao SQL
+**Tabela `user_profiles`:**
+- SELECT: qualquer usuario autenticado pode visualizar (necessario para listar equipe)
+- INSERT/UPDATE/DELETE: apenas admins do workspace (`is_workspace_admin`)
+- UPDATE adicional: usuario pode editar seu proprio perfil
 
-```sql
--- ===== WORKSPACES =====
-DROP POLICY IF EXISTS "Authenticated users can create workspaces" ON workspaces;
-DROP POLICY IF EXISTS "Users can view their own workspaces" ON workspaces;
-DROP POLICY IF EXISTS "Workspace admins can update" ON workspaces;
+**Tabela `user_roles`:**
+- SELECT: qualquer usuario autenticado pode visualizar
+- INSERT/UPDATE/DELETE: apenas admins do workspace
 
--- Recriar como PERMISSIVE (padrao)
-CREATE POLICY "Authenticated users can create workspaces"
-  ON workspaces FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+**Tabela `notification_settings`:**
+- Politica existente ja usa `get_user_workspace_id`, mas e RESTRICTIVE -- recriar como PERMISSIVE
 
-CREATE POLICY "Users can view their own workspaces"
-  ON workspaces FOR SELECT
-  USING (id IN (SELECT public.get_user_workspace_ids(auth.uid())));
+### Passo 2 - Criar funcao auxiliar para verificar admin pelo workspace
 
-CREATE POLICY "Workspace admins can update"
-  ON workspaces FOR UPDATE
-  USING (public.is_workspace_admin(auth.uid(), id));
+Como `is_workspace_admin` exige `workspace_id` como parametro, criaremos uma funcao `is_any_workspace_admin(_user_id uuid)` que verifica se o usuario e admin em qualquer workspace -- necessario para politicas de tabelas que nao possuem coluna `workspace_id` (como `user_profiles` e `user_roles`).
 
--- ===== WORKSPACE_MEMBERS =====
-DROP POLICY IF EXISTS "Members can view workspace members" ON workspace_members;
-DROP POLICY IF EXISTS "Users can insert themselves" ON workspace_members;
-DROP POLICY IF EXISTS "Admins can update members" ON workspace_members;
-DROP POLICY IF EXISTS "Admins can delete members" ON workspace_members;
-
-CREATE POLICY "Members can view workspace members"
-  ON workspace_members FOR SELECT
-  USING (workspace_id IN (SELECT public.get_user_workspace_ids(auth.uid())));
-
-CREATE POLICY "Users can insert themselves"
-  ON workspace_members FOR INSERT
-  WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "Admins can update members"
-  ON workspace_members FOR UPDATE
-  USING (public.is_workspace_admin(auth.uid(), workspace_id));
-
-CREATE POLICY "Admins can delete members"
-  ON workspace_members FOR DELETE
-  USING (public.is_workspace_admin(auth.uid(), workspace_id));
+```text
+Fluxo corrigido:
+Admin clica "Adicionar Membro"
+  -> INSERT user_profiles  (politica PERMISSIVE com is_any_workspace_admin)
+  -> INSERT user_roles      (politica PERMISSIVE com is_any_workspace_admin)
+  -> INSERT notification_settings (politica PERMISSIVE com get_user_workspace_id)
+  -> Sucesso!
 ```
 
-### Por que isso resolve
+### Passo 3 - Nenhuma alteracao no codigo frontend
+O hook `useTeam.ts` e o componente `TeamManager.tsx` ja estao corretos. O problema e exclusivamente nas politicas do banco de dados.
 
-- Policies criadas com `CREATE POLICY` sem especificar `AS RESTRICTIVE` sao **PERMISSIVE** por padrao
-- As policies atuais foram todas criadas como RESTRICTIVE, o que bloqueia qualquer operacao quando nao ha policy PERMISSIVE existente
-- A migracao simplesmente recria as mesmas regras, mas como PERMISSIVE
+### Resumo das alteracoes
 
-### Nenhuma mudanca no frontend
-
-O codigo do frontend esta correto. O problema e 100% nas policies do banco de dados.
-
-### Detalhes Tecnicos
-
-- No PostgreSQL, o acesso e concedido se **pelo menos uma policy PERMISSIVE** retorna true
-- Policies RESTRICTIVE so servem para **reduzir** o acesso ja concedido por policies permissivas
-- Se so existem policies RESTRICTIVE e zero PERMISSIVE, o resultado e sempre **negado**
-- As funcoes `get_user_workspace_ids` e `is_workspace_admin` ja sao SECURITY DEFINER e evitam recursao
+| Arquivo / Recurso | Acao |
+|---|---|
+| Nova funcao SQL `is_any_workspace_admin` | Criar |
+| Politicas RLS de `user_profiles` | Recriar como PERMISSIVE com nova funcao |
+| Politicas RLS de `user_roles` | Recriar como PERMISSIVE com nova funcao |
+| Politicas RLS de `notification_settings` | Recriar como PERMISSIVE |
 
