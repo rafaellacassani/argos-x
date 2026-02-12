@@ -1,54 +1,104 @@
 
 
-## Problema Identificado
+## Problema Atual
 
-A criacao de membros na equipe falha por **dois problemas criticos** nas politicas de seguranca (RLS):
+Quando um admin adiciona um membro pela aba "Equipe", o sistema:
+1. Gera um UUID aleatorio (`crypto.randomUUID()`) que nao corresponde a nenhum usuario real
+2. Insere um perfil e roles com esse UUID falso
+3. **Nao envia nenhum convite** -- o usuario adicionado nunca fica sabendo e nao consegue fazer login
 
-### 1. Todas as politicas sao RESTRICTIVE (sem PERMISSIVE)
-O PostgreSQL exige pelo menos uma politica PERMISSIVE para conceder acesso. As tabelas `user_profiles`, `user_roles` e `notification_settings` possuem apenas politicas RESTRICTIVE, o que bloqueia qualquer operacao.
+## Solucao: Fluxo de Convite por Email
 
-### 2. Verificacao de admin usa tabela errada
-As politicas de `user_profiles` e `user_roles` usam `has_role(auth.uid(), 'admin')`, que consulta a tabela `user_roles`. Porem, o papel de admin esta registrado na tabela `workspace_members` (sistema de workspace). Como a tabela `user_roles` esta vazia, a funcao sempre retorna `false` -- ninguem tem permissao.
-
-## Solucao
-
-### Passo 1 - Migracao SQL
-Recriar as politicas RLS como **PERMISSIVE** e substituir `has_role()` por `is_workspace_admin()` nas tabelas afetadas:
-
-**Tabela `user_profiles`:**
-- SELECT: qualquer usuario autenticado pode visualizar (necessario para listar equipe)
-- INSERT/UPDATE/DELETE: apenas admins do workspace (`is_workspace_admin`)
-- UPDATE adicional: usuario pode editar seu proprio perfil
-
-**Tabela `user_roles`:**
-- SELECT: qualquer usuario autenticado pode visualizar
-- INSERT/UPDATE/DELETE: apenas admins do workspace
-
-**Tabela `notification_settings`:**
-- Politica existente ja usa `get_user_workspace_id`, mas e RESTRICTIVE -- recriar como PERMISSIVE
-
-### Passo 2 - Criar funcao auxiliar para verificar admin pelo workspace
-
-Como `is_workspace_admin` exige `workspace_id` como parametro, criaremos uma funcao `is_any_workspace_admin(_user_id uuid)` que verifica se o usuario e admin em qualquer workspace -- necessario para politicas de tabelas que nao possuem coluna `workspace_id` (como `user_profiles` e `user_roles`).
+Implementar um sistema onde o admin insere o email do novo membro e o sistema envia automaticamente um convite por email com link para criar senha e acessar o workspace.
 
 ```text
-Fluxo corrigido:
-Admin clica "Adicionar Membro"
-  -> INSERT user_profiles  (politica PERMISSIVE com is_any_workspace_admin)
-  -> INSERT user_roles      (politica PERMISSIVE com is_any_workspace_admin)
-  -> INSERT notification_settings (politica PERMISSIVE com get_user_workspace_id)
-  -> Sucesso!
+Fluxo:
+Admin preenche dados (nome, email, telefone, role)
+  -> Chama Edge Function "invite-member"
+  -> Edge Function usa admin API para criar usuario com convite
+  -> Usuario recebe email com link magico
+  -> Ao clicar no link, e redirecionado para pagina de definir senha
+  -> Apos definir senha, o sistema detecta o workspace e redireciona ao Dashboard
 ```
 
-### Passo 3 - Nenhuma alteracao no codigo frontend
-O hook `useTeam.ts` e o componente `TeamManager.tsx` ja estao corretos. O problema e exclusivamente nas politicas do banco de dados.
+## Etapas de Implementacao
 
-### Resumo das alteracoes
+### 1. Criar Edge Function `invite-member`
 
-| Arquivo / Recurso | Acao |
+Uma nova funcao backend que:
+- Recebe: `email`, `full_name`, `phone`, `role`, `workspace_id`
+- Valida o JWT do admin chamador
+- Usa a Admin API do sistema de autenticacao para criar o usuario e enviar convite por email
+- Cria o `user_profile` com o `user_id` real retornado
+- Cria o `user_roles` com o role escolhido
+- Adiciona como `workspace_member` com `accepted_at = null`
+- Cria `notification_settings` padrao
+
+### 2. Atualizar o Hook `useTeam.ts`
+
+Alterar `createTeamMember` para:
+- Chamar a Edge Function `invite-member` em vez de inserir diretamente no banco
+- Exigir email como campo obrigatorio (necessario para o convite)
+- Tratar erros especificos (email ja existe, falha no envio, etc.)
+
+### 3. Atualizar o Formulario `TeamManager.tsx`
+
+- Tornar o campo **Email obrigatorio** (atualmente e opcional)
+- Adicionar feedback visual: "Convite enviado para email@exemplo.com"
+- Desabilitar botao Salvar se email estiver vazio
+
+### 4. Atualizar `useWorkspace.tsx` (Auto-aceite de convite)
+
+O fluxo existente de auto-aceite de convites por email ja esta implementado no `useWorkspace.tsx`. Quando o usuario convidado faz login pela primeira vez, o sistema:
+- Detecta o convite pendente pelo email
+- Aceita automaticamente (preenche `user_id` e `accepted_at`)
+- Redireciona para o Dashboard
+
+Apenas um ajuste: garantir que funciona corretamente com o novo fluxo onde o `user_id` ja vem preenchido desde a criacao.
+
+### 5. Pagina de Aceite do Convite
+
+Quando o usuario clica no link do email, ele e redirecionado para a pagina `/auth`. Como o usuario ja foi criado pelo convite, ele pode:
+- Definir sua senha atraves do link magico recebido por email
+- Fazer login normalmente apos definir a senha
+
+## Detalhes Tecnicos
+
+### Edge Function `invite-member`
+
+```text
+POST /invite-member
+Headers: Authorization: Bearer <admin_jwt>
+Body: {
+  email: string (obrigatorio)
+  full_name: string
+  phone: string
+  role: "admin" | "manager" | "seller"
+  workspace_id: string
+}
+
+Resposta: {
+  success: true
+  user_id: string
+  message: "Convite enviado"
+}
+```
+
+A funcao usara `supabase.auth.admin.inviteUserByEmail()` que:
+- Cria o usuario no sistema de autenticacao
+- Envia automaticamente um email com link para definir senha
+- Retorna o `user_id` real para associar ao perfil
+
+### Arquivos Alterados
+
+| Arquivo | Acao |
 |---|---|
-| Nova funcao SQL `is_any_workspace_admin` | Criar |
-| Politicas RLS de `user_profiles` | Recriar como PERMISSIVE com nova funcao |
-| Politicas RLS de `user_roles` | Recriar como PERMISSIVE com nova funcao |
-| Politicas RLS de `notification_settings` | Recriar como PERMISSIVE |
+| `supabase/functions/invite-member/index.ts` | Criar (nova Edge Function) |
+| `src/hooks/useTeam.ts` | Editar (`createTeamMember` chama a Edge Function) |
+| `src/components/settings/TeamManager.tsx` | Editar (email obrigatorio + feedback) |
 
+### Seguranca
+
+- Apenas admins do workspace podem enviar convites (validado no JWT)
+- O link de convite expira automaticamente apos o prazo padrao
+- O usuario so acessa dados do workspace apos aceitar o convite e definir senha
