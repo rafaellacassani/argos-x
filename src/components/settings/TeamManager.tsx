@@ -115,9 +115,11 @@ function MemberEditor({
     return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
   };
 
+  const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
   const handleSave = async () => {
     if (!fullName.trim() || !phone.trim()) return;
-    if (isNew && !email.trim()) return;
+    if (isNew && (!email.trim() || !isValidEmail(email.trim()))) return;
 
     setSaving(true);
     try {
@@ -157,7 +159,7 @@ function MemberEditor({
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={!fullName.trim() || !phone.trim() || (isNew && !email.trim()) || saving}
+              disabled={!fullName.trim() || !phone.trim() || (isNew && (!email.trim() || !isValidEmail(email.trim()))) || saving}
             >
               {saving ? "Salvando..." : "Salvar"}
             </Button>
