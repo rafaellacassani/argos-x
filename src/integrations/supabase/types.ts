@@ -1200,6 +1200,7 @@ export type Database = {
         Args: { agent_id_param: string }
         Returns: undefined
       }
+      is_any_workspace_admin: { Args: { _user_id: string }; Returns: boolean }
       is_workspace_admin: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
