@@ -112,68 +112,48 @@ export function useTeam() {
     async (data: {
       full_name: string;
       phone: string;
-      email?: string;
+      email: string;
       roles: AppRole[];
     }) => {
       try {
-        // For now, we create a profile without a real auth user
-        // In production, you'd send an invite email
-        const tempUserId = crypto.randomUUID();
+        if (!workspaceId) throw new Error("Workspace não encontrado");
+        if (!data.email) throw new Error("Email é obrigatório para enviar o convite");
 
-        // Create profile
-        const { data: profile, error: profileError } = await supabase
-          .from("user_profiles")
-          .insert({
-            user_id: tempUserId,
+        const { data: result, error } = await supabase.functions.invoke("invite-member", {
+          body: {
+            email: data.email,
             full_name: data.full_name,
             phone: data.phone,
-            email: data.email || null,
-          })
-          .select()
-          .single();
+            role: data.roles[0] || "seller",
+            workspace_id: workspaceId,
+          },
+        });
 
-        if (profileError) throw profileError;
+        if (error) throw error;
+        if (result?.error) throw new Error(result.error);
 
-        // Create roles
-        if (data.roles.length > 0) {
-          const roleInserts = data.roles.map((role) => ({
-            user_id: tempUserId,
-            role,
-          }));
-
-          const { error: rolesError } = await supabase
-            .from("user_roles")
-            .insert(roleInserts);
-
-          if (rolesError) throw rolesError;
-        }
-
-        // Create default notification settings
-        if (workspaceId) {
-          await supabase.from("notification_settings").insert({
-            user_id: tempUserId,
-            workspace_id: workspaceId
-          });
-        }
+        const isExisting = result?.already_registered;
 
         toast({
-          title: "Membro adicionado",
-          description: `${data.full_name} foi adicionado à equipe.`,
+          title: isExisting ? "Membro adicionado" : "Convite enviado",
+          description: isExisting
+            ? `${data.full_name} foi adicionado ao workspace.`
+            : `Um convite foi enviado para ${data.email}.`,
         });
 
         await fetchTeamMembers();
-        return profile;
-      } catch (error) {
+        return result;
+      } catch (error: any) {
         console.error("Error creating team member:", error);
         toast({
-          title: "Erro ao adicionar membro",
-          description: "Não foi possível adicionar o membro à equipe.",
+          title: "Erro ao convidar membro",
+          description: error?.message || "Não foi possível enviar o convite.",
           variant: "destructive",
         });
         return null;
       }
     },
-    [toast, fetchTeamMembers]
+    [toast, fetchTeamMembers, workspaceId]
   );
 
   const updateTeamMember = useCallback(
