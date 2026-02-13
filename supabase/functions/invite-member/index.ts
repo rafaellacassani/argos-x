@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { email, full_name, phone, role, workspace_id } = await req.json();
+    const { email, full_name, phone, role, workspace_id, resend } = await req.json();
 
     if (!email || !full_name || !workspace_id) {
       return new Response(
@@ -67,19 +67,21 @@ Deno.serve(async (req) => {
     const validRoles = ["admin", "manager", "seller"];
     const memberRole = validRoles.includes(role) ? role : "seller";
 
-    // Check if user already exists in this workspace
-    const { data: existingMember } = await supabaseAdmin
-      .from("workspace_members")
-      .select("id")
-      .eq("workspace_id", workspace_id)
-      .eq("invited_email", email)
-      .maybeSingle();
+    // Check if user already exists in this workspace (skip for resend)
+    if (!resend) {
+      const { data: existingMember } = await supabaseAdmin
+        .from("workspace_members")
+        .select("id")
+        .eq("workspace_id", workspace_id)
+        .eq("invited_email", email)
+        .maybeSingle();
 
-    if (existingMember) {
-      return new Response(
-        JSON.stringify({ error: "Este email já foi convidado para este workspace" }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      if (existingMember) {
+        return new Response(
+          JSON.stringify({ error: "Este email já foi convidado para este workspace" }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Invite user via Supabase Auth Admin API
