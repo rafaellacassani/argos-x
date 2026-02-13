@@ -333,6 +333,7 @@ export function useTeam() {
             phone: "",
             role,
             workspace_id: workspaceId,
+            resend: true,
           },
         });
 
