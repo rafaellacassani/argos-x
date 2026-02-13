@@ -407,12 +407,15 @@ export default function Chats() {
       let connectedInstances: EvolutionInstance[] = [];
       try {
         const data = await listInstances();
-        for (const instance of data) {
-          const state = await getConnectionState(instance.instanceName);
-          if (state?.instance?.state === "open") {
-            connectedInstances.push({ ...instance, connectionStatus: "open" });
-          }
-        }
+        const stateResults = await Promise.all(
+          data.map(async (instance) => {
+            const state = await getConnectionState(instance.instanceName);
+            return { instance, state };
+          })
+        );
+        connectedInstances = stateResults
+          .filter(({ state }) => state?.instance?.state === "open")
+          .map(({ instance }) => ({ ...instance, connectionStatus: "open" as const }));
       } catch (err) {
         console.warn("[Chats] Evolution API indisponível:", err);
         toast({
