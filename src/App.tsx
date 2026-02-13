@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,27 +9,47 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
-import Auth from "./pages/Auth";
-import Index from "./pages/Index";
-import Dashboard from "./pages/Dashboard";
-import Leads from "./pages/Leads";
-import Chats from "./pages/Chats";
-import AIAgents from "./pages/AIAgents";
-import SalesBots from "./pages/SalesBots";
-import SalesBotBuilder from "./pages/SalesBotBuilder";
-import CalendarPage from "./pages/CalendarPage";
-import Contacts from "./pages/Contacts";
-import Email from "./pages/Email";
-import Statistics from "./pages/Statistics";
-import Campaigns from "./pages/Campaigns";
-import Settings from "./pages/Settings";
-import Configuracoes from "./pages/Configuracoes";
-import NotFound from "./pages/NotFound";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import ResetPassword from "./pages/ResetPassword";
-import CreateWorkspace from "./pages/CreateWorkspace";
+import { Loader2 } from "lucide-react";
 
-const queryClient = new QueryClient();
+// Lazy-loaded pages
+const Auth = lazy(() => import("./pages/Auth"));
+const Index = lazy(() => import("./pages/Index"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Leads = lazy(() => import("./pages/Leads"));
+const Chats = lazy(() => import("./pages/Chats"));
+const AIAgents = lazy(() => import("./pages/AIAgents"));
+const SalesBots = lazy(() => import("./pages/SalesBots"));
+const SalesBotBuilder = lazy(() => import("./pages/SalesBotBuilder"));
+const CalendarPage = lazy(() => import("./pages/CalendarPage"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const Email = lazy(() => import("./pages/Email"));
+const Statistics = lazy(() => import("./pages/Statistics"));
+const Campaigns = lazy(() => import("./pages/Campaigns"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      gcTime: 10 * 60 * 1000,   // 10 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+    </div>
+  );
+}
 
 const App = () => (
   <HelmetProvider>
@@ -39,43 +60,47 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <WorkspaceProvider>
-              <Routes>
-                {/* Public pages */}
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/auth/reset-password" element={<ResetPassword />} />
-                <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-                <Route path="/create-workspace" element={
-                  <ProtectedRoute skipWorkspaceCheck>
-                    <CreateWorkspace />
-                  </ProtectedRoute>
-                } />
-                
-                {/* Protected app pages with layout */}
-                <Route path="/*" element={
-                  <ProtectedRoute>
-                    <AppLayout>
-                      <Routes>
-                        <Route path="/" element={<Index />} />
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/leads" element={<Leads />} />
-                        <Route path="/chats" element={<Chats />} />
-                        <Route path="/ai-agents" element={<AIAgents />} />
-                        <Route path="/salesbots" element={<SalesBots />} />
-                        <Route path="/salesbots/builder" element={<SalesBotBuilder />} />
-                        <Route path="/salesbots/builder/:id" element={<SalesBotBuilder />} />
-                        <Route path="/calendar" element={<CalendarPage />} />
-                        <Route path="/contacts" element={<Contacts />} />
-                        <Route path="/email" element={<Email />} />
-                        <Route path="/statistics" element={<Statistics />} />
-                        <Route path="/campaigns" element={<Campaigns />} />
-                        <Route path="/settings" element={<Settings />} />
-                        <Route path="/configuracoes" element={<Configuracoes />} />
-                        <Route path="*" element={<NotFound />} />
-                      </Routes>
-                    </AppLayout>
-                  </ProtectedRoute>
-                } />
-              </Routes>
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  {/* Public pages */}
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/auth/reset-password" element={<ResetPassword />} />
+                  <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                  <Route path="/create-workspace" element={
+                    <ProtectedRoute skipWorkspaceCheck>
+                      <CreateWorkspace />
+                    </ProtectedRoute>
+                  } />
+                  
+                  {/* Protected app pages with layout */}
+                  <Route path="/*" element={
+                    <ProtectedRoute>
+                      <AppLayout>
+                        <Suspense fallback={<PageLoader />}>
+                          <Routes>
+                            <Route path="/" element={<Index />} />
+                            <Route path="/dashboard" element={<Dashboard />} />
+                            <Route path="/leads" element={<Leads />} />
+                            <Route path="/chats" element={<Chats />} />
+                            <Route path="/ai-agents" element={<AIAgents />} />
+                            <Route path="/salesbots" element={<SalesBots />} />
+                            <Route path="/salesbots/builder" element={<SalesBotBuilder />} />
+                            <Route path="/salesbots/builder/:id" element={<SalesBotBuilder />} />
+                            <Route path="/calendar" element={<CalendarPage />} />
+                            <Route path="/contacts" element={<Contacts />} />
+                            <Route path="/email" element={<Email />} />
+                            <Route path="/statistics" element={<Statistics />} />
+                            <Route path="/campaigns" element={<Campaigns />} />
+                            <Route path="/settings" element={<Settings />} />
+                            <Route path="/configuracoes" element={<Configuracoes />} />
+                            <Route path="*" element={<NotFound />} />
+                          </Routes>
+                        </Suspense>
+                      </AppLayout>
+                    </ProtectedRoute>
+                  } />
+                </Routes>
+              </Suspense>
             </WorkspaceProvider>
           </AuthProvider>
         </BrowserRouter>

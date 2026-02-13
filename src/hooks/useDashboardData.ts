@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "./useWorkspace";
+import { useQuery } from "@tanstack/react-query";
 import { format, subDays, startOfDay, parseISO } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 export interface DashboardStats {
   totalMessages: number;
@@ -61,57 +61,55 @@ function timeAgo(dateStr: string): string {
   return `${days}d`;
 }
 
+function getDaysBack(period: string): number {
+  switch (period) {
+    case "today": return 1;
+    case "7d": return 7;
+    case "30d": return 30;
+    case "90d": return 90;
+    default: return 7;
+  }
+}
+
 export function useDashboardData(period: string) {
   const { workspaceId } = useWorkspace();
-  const [loading, setLoading] = useState(true);
-  const [leads, setLeads] = useState<any[]>([]);
-  const [stages, setStages] = useState<any[]>([]);
-  const [messages, setMessages] = useState<any[]>([]);
 
-  const daysBack = useMemo(() => {
-    switch (period) {
-      case "today": return 1;
-      case "7d": return 7;
-      case "30d": return 30;
-      case "90d": return 90;
-      default: return 7;
-    }
-  }, [period]);
-
+  const daysBack = useMemo(() => getDaysBack(period), [period]);
   const startDate = useMemo(() => startOfDay(subDays(new Date(), daysBack)).toISOString(), [daysBack]);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-
-    const fetchAll = async () => {
-      setLoading(true);
+  const { data: rawData, isLoading: loading } = useQuery({
+    queryKey: ["dashboard", workspaceId, startDate],
+    queryFn: async () => {
       const [leadsRes, stagesRes, messagesRes] = await Promise.all([
         supabase
           .from("leads")
           .select("*")
-          .eq("workspace_id", workspaceId)
+          .eq("workspace_id", workspaceId!)
           .gte("created_at", startDate)
           .order("created_at", { ascending: false }),
         supabase
           .from("funnel_stages")
           .select("*")
-          .eq("workspace_id", workspaceId),
+          .eq("workspace_id", workspaceId!),
         supabase
           .from("meta_conversations")
           .select("*")
-          .eq("workspace_id", workspaceId)
+          .eq("workspace_id", workspaceId!)
           .gte("created_at", startDate)
           .order("timestamp", { ascending: false }),
       ]);
+      return {
+        leads: leadsRes.data || [],
+        stages: stagesRes.data || [],
+        messages: messagesRes.data || [],
+      };
+    },
+    enabled: !!workspaceId,
+  });
 
-      setLeads(leadsRes.data || []);
-      setStages(stagesRes.data || []);
-      setMessages(messagesRes.data || []);
-      setLoading(false);
-    };
-
-    fetchAll();
-  }, [workspaceId, startDate]);
+  const leads = rawData?.leads || [];
+  const stages = rawData?.stages || [];
+  const messages = rawData?.messages || [];
 
   // Stats
   const stats: DashboardStats = useMemo(() => {
@@ -119,7 +117,6 @@ export function useDashboardData(period: string) {
     const outbound = messages.filter((m) => m.direction === "outbound");
     const uniqueSenders = new Set(inbound.map((m) => m.sender_id)).size;
 
-    // Find conversations with last message inbound (unanswered)
     const lastBySender: Record<string, any> = {};
     for (const m of messages) {
       if (!lastBySender[m.sender_id] || new Date(m.timestamp) > new Date(lastBySender[m.sender_id].timestamp)) {
