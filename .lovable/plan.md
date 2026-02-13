@@ -1,91 +1,70 @@
 
 
-## Diagnostico de Performance
+## Problema Identificado
 
-Identifiquei **5 problemas principais** que estao deixando o sistema lento:
+Quando a usuaria convidada clica no link do email e faz login, o sistema:
+1. Busca memberships com `accepted_at IS NOT NULL` -- nao encontra nada
+2. Busca convite pendente pelo email -- encontra
+3. Tenta fazer `UPDATE workspace_members SET accepted_at = now()` -- **FALHA SILENCIOSAMENTE** porque a politica RLS so permite que admins facam update
+4. Como nao tem workspace, redireciona para "Criar Workspace"
 
-### 1. QueryClient sem configuracao de cache
+Confirmacao nos dados: Natalia e Geisi ja tem `user_id` real nos registros, mas `accepted_at` continua `null`.
 
-O `QueryClient` esta instanciado sem nenhuma configuracao. Isso significa que:
-- Nao ha cache de dados entre navegacoes
-- Cada vez que voce muda de pagina e volta, todos os dados sao buscados novamente
-- Nao ha `staleTime` (tempo em que os dados sao considerados "frescos")
+## Solucao
 
-**Correcao:** Configurar `staleTime`, `gcTime` e `refetchOnWindowFocus` para evitar requisicoes desnecessarias.
+### 1. Criar Edge Function `accept-invite`
 
-### 2. Hooks nao usam React Query (fetches manuais com useEffect)
+Uma funcao backend que usa permissoes elevadas (service role) para aceitar o convite, contornando a restricao de RLS.
 
-Os hooks principais (`useLeads`, `useDashboardData`, `useWorkspace`) fazem fetch manual com `useState` + `useEffect` em vez de usar React Query (`useQuery`). Isso causa:
-- Sem cache entre paginas
-- Sem deduplicacao de requisicoes
-- Re-fetch toda vez que o componente monta
-- Sem retry automatico
+- Recebe o JWT do usuario logado
+- Busca convite pendente pelo email ou user_id
+- Atualiza `accepted_at` com service role (bypass RLS)
+- Retorna os dados do workspace
 
-**Correcao:** Migrar os hooks mais pesados para usar `useQuery` do TanStack React Query (ja instalado mas pouco usado).
+### 2. Atualizar `useWorkspace.tsx`
 
-### 3. Pagina de Chats faz chamadas sequenciais por instancia
+Substituir o `supabase.update()` direto (que falha por RLS) por uma chamada a Edge Function `accept-invite`.
 
-No `Chats.tsx`, ao carregar instancias WhatsApp:
-- Lista todas as instancias
-- Para cada uma, chama `getConnectionState` **sequencialmente** (uma apos a outra)
-- Depois carrega chats de cada instancia **sequencialmente**
+### 3. Corrigir convites existentes
 
-**Correcao:** Usar `Promise.all` para chamadas paralelas.
+As duas usuarias ja estao com user_id correto mas accepted_at = null. A correcao do fluxo vai aceitar automaticamente na proxima vez que elas fizerem login.
 
-### 4. Todas as paginas sao importadas no App.tsx (sem code splitting)
+### 4. Adicionar botao "Reenviar Convite" no TeamManager
 
-Todas as 18+ paginas sao importadas estaticamente no `App.tsx`. Isso significa que o bundle inicial carrega **todo** o codigo de todas as paginas, mesmo que o usuario so acesse o Dashboard.
+Na tabela de membros, para usuarios que ainda nao aceitaram o convite (accepted_at = null), exibir um botao "Reenviar Convite" que chama novamente `inviteUserByEmail` pelo edge function.
 
-**Correcao:** Usar `React.lazy()` + `Suspense` para carregar paginas sob demanda.
+## Arquivos Alterados
 
-### 5. Animacoes Framer Motion em listas grandes
+| Arquivo | Acao |
+|---|---|
+| `supabase/functions/accept-invite/index.ts` | Criar (nova Edge Function) |
+| `src/hooks/useWorkspace.tsx` | Editar (chamar accept-invite em vez de update direto) |
+| `src/hooks/useTeam.ts` | Editar (adicionar funcao resendInvite) |
+| `src/components/settings/TeamManager.tsx` | Editar (botao Reenviar Convite + indicador de status pendente) |
+| `supabase/config.toml` | Editar (registrar nova funcao) |
 
-As paginas de Dashboard e Leads usam `motion.div` com animacoes em varios elementos. Em dispositivos mais lentos ou com muitos dados, isso pode causar engasgos visuais.
+## Detalhes Tecnicos
 
-**Correcao:** Reduzir animacoes em listas e usar `will-change` CSS onde necessario.
-
----
-
-## Plano de Implementacao
-
-### Etapa 1 - Configurar QueryClient com cache (App.tsx)
-Adicionar configuracao de cache global:
-- `staleTime: 5 * 60 * 1000` (5 minutos -- dados ficam "frescos" por 5 min)
-- `gcTime: 10 * 60 * 1000` (10 minutos de cache)
-- `refetchOnWindowFocus: false` (nao recarregar ao focar janela)
-- `retry: 1` (apenas 1 retry em erro)
-
-### Etapa 2 - Code Splitting com React.lazy (App.tsx)
-Converter todos os imports de paginas para lazy loading:
+### Edge Function `accept-invite`
 ```text
-Antes:  import Dashboard from "./pages/Dashboard"
-Depois: const Dashboard = lazy(() => import("./pages/Dashboard"))
+POST /accept-invite
+Headers: Authorization: Bearer <user_jwt>
+Body: (vazio)
+
+Logica:
+1. Extrai user_id e email do JWT
+2. Busca workspace_member onde user_id = X e accepted_at IS NULL
+   OU invited_email = email e accepted_at IS NULL
+3. Usa service role para UPDATE accepted_at = now()
+4. Retorna { success: true, workspace_id: "..." }
 ```
-Adicionar `<Suspense>` com loading spinner.
 
-### Etapa 3 - Migrar useDashboardData para useQuery
-Substituir `useState` + `useEffect` por `useQuery` para cache automatico dos dados do dashboard.
+### Botao "Reenviar Convite"
+- Aparece apenas para membros com convite pendente (accepted_at = null)
+- Chama a funcao `invite-member` novamente com os mesmos dados
+- Feedback: "Convite reenviado para email@exemplo.com"
 
-### Etapa 4 - Paralelizar chamadas no Chats
-Usar `Promise.all` para verificar estado de conexao de todas as instancias simultaneamente em vez de sequencialmente.
-
-### Etapa 5 - Migrar useLeads para useQuery (parcial)
-Migrar as consultas iniciais (funnels, stages, leads) para `useQuery` com cache.
-
----
-
-## Resumo de Arquivos Alterados
-
-| Arquivo | Acao | Impacto |
-|---|---|---|
-| `src/App.tsx` | Configurar QueryClient + lazy imports | Alto |
-| `src/hooks/useDashboardData.ts` | Migrar para useQuery | Medio |
-| `src/pages/Chats.tsx` | Paralelizar chamadas | Medio |
-| `src/hooks/useLeads.ts` | Migrar queries iniciais para useQuery | Medio |
-
-### O que NAO e necessario
-
-- **Nao precisa de mais "memoria" ou VPS maior** para o frontend -- o problema e de otimizacao do codigo, nao de recursos de servidor
-- O backend (banco de dados) ja esta no Lovable Cloud e escala automaticamente
-- O VPS da Hostinger so afeta WhatsApp/Evolution API, nao a velocidade geral do sistema
+### Indicador visual de status
+- Membros com convite pendente terao um badge "Pendente" na tabela
+- Ao lado do badge, o botao de reenvio
 
