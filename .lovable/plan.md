@@ -1,104 +1,91 @@
 
 
-## Problema Atual
+## Diagnostico de Performance
 
-Quando um admin adiciona um membro pela aba "Equipe", o sistema:
-1. Gera um UUID aleatorio (`crypto.randomUUID()`) que nao corresponde a nenhum usuario real
-2. Insere um perfil e roles com esse UUID falso
-3. **Nao envia nenhum convite** -- o usuario adicionado nunca fica sabendo e nao consegue fazer login
+Identifiquei **5 problemas principais** que estao deixando o sistema lento:
 
-## Solucao: Fluxo de Convite por Email
+### 1. QueryClient sem configuracao de cache
 
-Implementar um sistema onde o admin insere o email do novo membro e o sistema envia automaticamente um convite por email com link para criar senha e acessar o workspace.
+O `QueryClient` esta instanciado sem nenhuma configuracao. Isso significa que:
+- Nao ha cache de dados entre navegacoes
+- Cada vez que voce muda de pagina e volta, todos os dados sao buscados novamente
+- Nao ha `staleTime` (tempo em que os dados sao considerados "frescos")
 
+**Correcao:** Configurar `staleTime`, `gcTime` e `refetchOnWindowFocus` para evitar requisicoes desnecessarias.
+
+### 2. Hooks nao usam React Query (fetches manuais com useEffect)
+
+Os hooks principais (`useLeads`, `useDashboardData`, `useWorkspace`) fazem fetch manual com `useState` + `useEffect` em vez de usar React Query (`useQuery`). Isso causa:
+- Sem cache entre paginas
+- Sem deduplicacao de requisicoes
+- Re-fetch toda vez que o componente monta
+- Sem retry automatico
+
+**Correcao:** Migrar os hooks mais pesados para usar `useQuery` do TanStack React Query (ja instalado mas pouco usado).
+
+### 3. Pagina de Chats faz chamadas sequenciais por instancia
+
+No `Chats.tsx`, ao carregar instancias WhatsApp:
+- Lista todas as instancias
+- Para cada uma, chama `getConnectionState` **sequencialmente** (uma apos a outra)
+- Depois carrega chats de cada instancia **sequencialmente**
+
+**Correcao:** Usar `Promise.all` para chamadas paralelas.
+
+### 4. Todas as paginas sao importadas no App.tsx (sem code splitting)
+
+Todas as 18+ paginas sao importadas estaticamente no `App.tsx`. Isso significa que o bundle inicial carrega **todo** o codigo de todas as paginas, mesmo que o usuario so acesse o Dashboard.
+
+**Correcao:** Usar `React.lazy()` + `Suspense` para carregar paginas sob demanda.
+
+### 5. Animacoes Framer Motion em listas grandes
+
+As paginas de Dashboard e Leads usam `motion.div` com animacoes em varios elementos. Em dispositivos mais lentos ou com muitos dados, isso pode causar engasgos visuais.
+
+**Correcao:** Reduzir animacoes em listas e usar `will-change` CSS onde necessario.
+
+---
+
+## Plano de Implementacao
+
+### Etapa 1 - Configurar QueryClient com cache (App.tsx)
+Adicionar configuracao de cache global:
+- `staleTime: 5 * 60 * 1000` (5 minutos -- dados ficam "frescos" por 5 min)
+- `gcTime: 10 * 60 * 1000` (10 minutos de cache)
+- `refetchOnWindowFocus: false` (nao recarregar ao focar janela)
+- `retry: 1` (apenas 1 retry em erro)
+
+### Etapa 2 - Code Splitting com React.lazy (App.tsx)
+Converter todos os imports de paginas para lazy loading:
 ```text
-Fluxo:
-Admin preenche dados (nome, email, telefone, role)
-  -> Chama Edge Function "invite-member"
-  -> Edge Function usa admin API para criar usuario com convite
-  -> Usuario recebe email com link magico
-  -> Ao clicar no link, e redirecionado para pagina de definir senha
-  -> Apos definir senha, o sistema detecta o workspace e redireciona ao Dashboard
+Antes:  import Dashboard from "./pages/Dashboard"
+Depois: const Dashboard = lazy(() => import("./pages/Dashboard"))
 ```
+Adicionar `<Suspense>` com loading spinner.
 
-## Etapas de Implementacao
+### Etapa 3 - Migrar useDashboardData para useQuery
+Substituir `useState` + `useEffect` por `useQuery` para cache automatico dos dados do dashboard.
 
-### 1. Criar Edge Function `invite-member`
+### Etapa 4 - Paralelizar chamadas no Chats
+Usar `Promise.all` para verificar estado de conexao de todas as instancias simultaneamente em vez de sequencialmente.
 
-Uma nova funcao backend que:
-- Recebe: `email`, `full_name`, `phone`, `role`, `workspace_id`
-- Valida o JWT do admin chamador
-- Usa a Admin API do sistema de autenticacao para criar o usuario e enviar convite por email
-- Cria o `user_profile` com o `user_id` real retornado
-- Cria o `user_roles` com o role escolhido
-- Adiciona como `workspace_member` com `accepted_at = null`
-- Cria `notification_settings` padrao
+### Etapa 5 - Migrar useLeads para useQuery (parcial)
+Migrar as consultas iniciais (funnels, stages, leads) para `useQuery` com cache.
 
-### 2. Atualizar o Hook `useTeam.ts`
+---
 
-Alterar `createTeamMember` para:
-- Chamar a Edge Function `invite-member` em vez de inserir diretamente no banco
-- Exigir email como campo obrigatorio (necessario para o convite)
-- Tratar erros especificos (email ja existe, falha no envio, etc.)
+## Resumo de Arquivos Alterados
 
-### 3. Atualizar o Formulario `TeamManager.tsx`
+| Arquivo | Acao | Impacto |
+|---|---|---|
+| `src/App.tsx` | Configurar QueryClient + lazy imports | Alto |
+| `src/hooks/useDashboardData.ts` | Migrar para useQuery | Medio |
+| `src/pages/Chats.tsx` | Paralelizar chamadas | Medio |
+| `src/hooks/useLeads.ts` | Migrar queries iniciais para useQuery | Medio |
 
-- Tornar o campo **Email obrigatorio** (atualmente e opcional)
-- Adicionar feedback visual: "Convite enviado para email@exemplo.com"
-- Desabilitar botao Salvar se email estiver vazio
+### O que NAO e necessario
 
-### 4. Atualizar `useWorkspace.tsx` (Auto-aceite de convite)
+- **Nao precisa de mais "memoria" ou VPS maior** para o frontend -- o problema e de otimizacao do codigo, nao de recursos de servidor
+- O backend (banco de dados) ja esta no Lovable Cloud e escala automaticamente
+- O VPS da Hostinger so afeta WhatsApp/Evolution API, nao a velocidade geral do sistema
 
-O fluxo existente de auto-aceite de convites por email ja esta implementado no `useWorkspace.tsx`. Quando o usuario convidado faz login pela primeira vez, o sistema:
-- Detecta o convite pendente pelo email
-- Aceita automaticamente (preenche `user_id` e `accepted_at`)
-- Redireciona para o Dashboard
-
-Apenas um ajuste: garantir que funciona corretamente com o novo fluxo onde o `user_id` ja vem preenchido desde a criacao.
-
-### 5. Pagina de Aceite do Convite
-
-Quando o usuario clica no link do email, ele e redirecionado para a pagina `/auth`. Como o usuario ja foi criado pelo convite, ele pode:
-- Definir sua senha atraves do link magico recebido por email
-- Fazer login normalmente apos definir a senha
-
-## Detalhes Tecnicos
-
-### Edge Function `invite-member`
-
-```text
-POST /invite-member
-Headers: Authorization: Bearer <admin_jwt>
-Body: {
-  email: string (obrigatorio)
-  full_name: string
-  phone: string
-  role: "admin" | "manager" | "seller"
-  workspace_id: string
-}
-
-Resposta: {
-  success: true
-  user_id: string
-  message: "Convite enviado"
-}
-```
-
-A funcao usara `supabase.auth.admin.inviteUserByEmail()` que:
-- Cria o usuario no sistema de autenticacao
-- Envia automaticamente um email com link para definir senha
-- Retorna o `user_id` real para associar ao perfil
-
-### Arquivos Alterados
-
-| Arquivo | Acao |
-|---|---|
-| `supabase/functions/invite-member/index.ts` | Criar (nova Edge Function) |
-| `src/hooks/useTeam.ts` | Editar (`createTeamMember` chama a Edge Function) |
-| `src/components/settings/TeamManager.tsx` | Editar (email obrigatorio + feedback) |
-
-### Seguranca
-
-- Apenas admins do workspace podem enviar convites (validado no JWT)
-- O link de convite expira automaticamente apos o prazo padrao
-- O usuario so acessa dados do workspace apos aceitar o convite e definir senha
