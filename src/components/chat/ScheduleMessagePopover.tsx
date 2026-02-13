@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 interface ScheduleMessagePopoverProps {
   // Channel routing
@@ -51,6 +52,7 @@ export function ScheduleMessagePopover({
   const [time, setTime] = useState("09:00");
   const [saving, setSaving] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
+  const { workspaceId } = useWorkspace();
 
   const handleSchedule = async () => {
     // Validate
@@ -91,6 +93,7 @@ export function ScheduleMessagePopover({
         sender_id: senderId || null,
         contact_name: contactName,
         status: "pending",
+        workspace_id: workspaceId,
       } as any);
 
       if (error) throw error;
