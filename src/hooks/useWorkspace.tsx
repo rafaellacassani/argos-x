@@ -89,16 +89,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
               .maybeSingle();
 
             if (invite) {
-              // Auto-accept the invite
-              const { error: acceptError } = await supabase
-                .from("workspace_members")
-                .update({ user_id: user.id, accepted_at: new Date().toISOString() })
-                .eq("id", invite.id);
+              // Auto-accept via edge function (bypasses RLS)
+              const { data: acceptData, error: acceptError } = await supabase.functions.invoke("accept-invite");
 
-              if (!acceptError) {
-                // Reload
+              if (!acceptError && acceptData?.workspace_id) {
+                // Reload with accepted workspace
                 loadWorkspace();
                 return;
+              } else {
+                console.error("Error accepting invite via edge function:", acceptError);
               }
             }
           }
