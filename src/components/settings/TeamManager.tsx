@@ -9,6 +9,7 @@ import {
   UserCog,
   BadgeCheck,
   Bell,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTeam, type AppRole, type UserProfile, type NotificationType } from "@/hooks/useTeam";
+import { useWorkspace, type WorkspaceMember } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/utils";
 
 const ROLE_LABELS: Record<AppRole, { label: string; icon: React.ElementType; color: string }> = {
@@ -280,14 +282,42 @@ export function TeamManager() {
     updateTeamMember,
     deleteTeamMember,
     updateNotificationSettings,
+    resendInvite,
   } = useTeam();
+
+  const { fetchMembers } = useWorkspace();
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<UserProfile | null>(null);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+  const [resendingFor, setResendingFor] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTeamMembers();
-  }, [fetchTeamMembers]);
+    fetchMembers().then(setWorkspaceMembers);
+  }, [fetchTeamMembers, fetchMembers]);
+
+  const getMemberStatus = (member: UserProfile): "active" | "pending" => {
+    const wm = workspaceMembers.find(
+      (m) => m.user_id === member.user_id || m.invited_email === member.email
+    );
+    if (!wm || !wm.accepted_at) return "pending";
+    return "active";
+  };
+
+  const getWorkspaceMember = (member: UserProfile): WorkspaceMember | undefined => {
+    return workspaceMembers.find(
+      (m) => m.user_id === member.user_id || m.invited_email === member.email
+    );
+  };
+
+  const handleResendInvite = async (member: UserProfile) => {
+    if (!member.email) return;
+    setResendingFor(member.user_id);
+    const wm = getWorkspaceMember(member);
+    await resendInvite(member.email, member.full_name, wm?.role || member.roles[0] || "seller");
+    setResendingFor(null);
+  };
 
   const openCreate = () => {
     setEditingMember(null);
@@ -361,10 +391,11 @@ export function TeamManager() {
         ) : (
           <div className="border rounded-lg overflow-hidden">
             {/* Table Header */}
-            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-4 px-4 py-3 bg-muted/50 border-b text-xs font-medium text-muted-foreground uppercase tracking-wider">
               <div className="w-10"></div>
               <div>Nome</div>
               <div>Função</div>
+              <div>Status</div>
               <div>WhatsApp</div>
               <div className="w-40">
                 <div className="flex items-center gap-1">
@@ -383,8 +414,8 @@ export function TeamManager() {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className={cn(
-                    "grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors",
+                    className={cn(
+                    "grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors",
                     idx !== teamMembers.length - 1 && "border-b"
                   )}
                 >
@@ -428,9 +459,36 @@ export function TeamManager() {
                         </Badge>
                       );
                     })}
+                   </div>
+
+                  {/* Status */}
+                  <div className="flex items-center gap-2">
+                    {getMemberStatus(member) === "pending" ? (
+                      <>
+                        <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-600">
+                          Pendente
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={resendingFor === member.user_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResendInvite(member);
+                          }}
+                        >
+                          <RefreshCw className={cn("h-3 w-3 mr-1", resendingFor === member.user_id && "animate-spin")} />
+                          Reenviar
+                        </Button>
+                      </>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs bg-emerald-500/20 text-emerald-600">
+                        Ativo
+                      </Badge>
+                    )}
                   </div>
 
-                  {/* Phone */}
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Phone className="h-3 w-3" />
                     {member.phone || "—"}

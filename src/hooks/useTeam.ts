@@ -321,6 +321,43 @@ export function useTeam() {
     [toast, fetchNotificationSettings]
   );
 
+  const resendInvite = useCallback(
+    async (email: string, fullName: string, role: AppRole) => {
+      try {
+        if (!workspaceId) throw new Error("Workspace não encontrado");
+
+        const { data: result, error } = await supabase.functions.invoke("invite-member", {
+          body: {
+            email,
+            full_name: fullName,
+            phone: "",
+            role,
+            workspace_id: workspaceId,
+          },
+        });
+
+        if (error) throw error;
+        if (result?.error) throw new Error(result.error);
+
+        toast({
+          title: "Convite reenviado",
+          description: `Um novo convite foi enviado para ${email}.`,
+        });
+
+        return true;
+      } catch (error: any) {
+        console.error("Error resending invite:", error);
+        toast({
+          title: "Erro ao reenviar convite",
+          description: error?.message || "Não foi possível reenviar o convite.",
+          variant: "destructive",
+        });
+        return false;
+      }
+    },
+    [toast, workspaceId]
+  );
+
   return {
     loading,
     teamMembers,
@@ -330,5 +367,6 @@ export function useTeam() {
     deleteTeamMember,
     fetchNotificationSettings,
     updateNotificationSettings,
+    resendInvite,
   };
 }
