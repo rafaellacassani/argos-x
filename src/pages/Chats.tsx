@@ -29,6 +29,7 @@ import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatTagManager } from "@/components/chat/ChatTagManager";
 import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
 import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover";
+import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 
 interface Chat {
   id: string;
@@ -324,7 +325,8 @@ export default function Chats() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
   // Load leads data for filters and auto-create leads
-  const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag } = useLeads();
+  const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead } = useLeads();
+  const [leadPanelOpen, setLeadPanelOpen] = useState(true);
   
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
@@ -1328,7 +1330,7 @@ export default function Chats() {
       </div>
 
       {/* Chat Window */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {selectedChat ? (
           <>
             {/* Chat Header */}
@@ -1392,24 +1394,6 @@ export default function Chats() {
                   </Button>
                 </div>
               </div>
-              {/* Tags Section */}
-              {(() => {
-                const currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
-                if (currentLead) {
-                  return (
-                    <div className="mt-2 pt-2 border-t border-border/50">
-                      <ChatTagManager
-                        lead={currentLead}
-                        allTags={tags}
-                        onAddTag={addTagToLead}
-                        onRemoveTag={removeTagFromLead}
-                        onCreateTag={createTag}
-                      />
-                    </div>
-                  );
-                }
-                return null;
-              })()}
             </div>
 
             {/* Messages */}
@@ -1485,6 +1469,25 @@ export default function Chats() {
           </div>
         )}
       </div>
+
+      {/* Lead Side Panel */}
+      {selectedChat && (() => {
+        const currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
+        return (
+          <LeadSidePanel
+            lead={currentLead || null}
+            stages={stages}
+            tags={tags}
+            isOpen={leadPanelOpen}
+            onToggle={() => setLeadPanelOpen((v) => !v)}
+            onUpdateLead={updateLead}
+            onMoveLead={moveLead}
+            onAddTag={addTagToLead}
+            onRemoveTag={removeTagFromLead}
+            onCreateTag={createTag}
+          />
+        );
+      })()}
     </div>
   );
 }
