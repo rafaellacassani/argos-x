@@ -160,11 +160,13 @@ export function ConnectionModal({
             .replace(/-+/g, "-")
             .replace(/^-|-$/g, "");
           
+          const { data: { user } } = await supabase.auth.getUser();
           await supabase.from('whatsapp_instances').upsert({
             instance_name: sanitizedName,
             display_name: instanceName.trim(),
-            workspace_id: workspaceId!
-          }, { onConflict: 'instance_name' });
+            workspace_id: workspaceId!,
+            created_by: user?.id
+          } as any, { onConflict: 'instance_name' });
           
           setStep("success");
 
