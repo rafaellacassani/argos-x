@@ -1233,7 +1233,35 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      meta_conversation_summary: {
+        Row: {
+          content: string | null
+          direction: string | null
+          message_type: string | null
+          meta_page_id: string | null
+          platform: string | null
+          sender_id: string | null
+          sender_name: string | null
+          timestamp: string | null
+          workspace_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_conversations_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meta_conversations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       get_my_roles: {
