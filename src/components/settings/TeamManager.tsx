@@ -14,8 +14,11 @@ import {
   Pencil,
   Send,
   Lock,
+  Globe,
 } from "lucide-react";
 import { SetPasswordDialog } from "@/components/shared/SetPasswordDialog";
+import { SessionViewer } from "@/components/settings/SessionViewer";
+import { useUserRole } from "@/hooks/useUserRole";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -305,6 +308,8 @@ export function TeamManager() {
   const [resendingFor, setResendingFor] = useState<string | null>(null);
   const [deletingMember, setDeletingMember] = useState<UserProfile | null>(null);
   const [passwordMember, setPasswordMember] = useState<UserProfile | null>(null);
+  const [sessionMember, setSessionMember] = useState<UserProfile | null>(null);
+  const { isAdmin } = useUserRole();
 
   useEffect(() => {
     fetchTeamMembers();
@@ -548,6 +553,12 @@ export function TeamManager() {
                           <Lock className="h-4 w-4 mr-2" />
                           Definir senha
                         </DropdownMenuItem>
+                        {isAdmin && (
+                          <DropdownMenuItem onClick={() => setSessionMember(member)}>
+                            <Globe className="h-4 w-4 mr-2" />
+                            Ver sessões
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => setDeletingMember(member)}
@@ -629,6 +640,15 @@ export function TeamManager() {
         targetUserId={passwordMember?.user_id}
         targetUserName={passwordMember?.full_name}
       />
+
+      {isAdmin && (
+        <SessionViewer
+          open={!!sessionMember}
+          onOpenChange={(open) => !open && setSessionMember(null)}
+          targetUserId={sessionMember?.user_id || ""}
+          targetUserName={sessionMember?.full_name || ""}
+        />
+      )}
     </Card>
   );
 }

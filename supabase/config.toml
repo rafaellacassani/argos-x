@@ -35,3 +35,9 @@ verify_jwt = false
 
 [functions.create-workspace]
 verify_jwt = false
+
+[functions.track-session]
+verify_jwt = false
+
+[functions.force-logout]
+verify_jwt = false

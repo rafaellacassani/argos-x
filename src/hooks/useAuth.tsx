@@ -26,6 +26,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
+
+        // Track session on login
+        if (event === 'SIGNED_IN' && session) {
+          setTimeout(() => {
+            supabase.functions.invoke('track-session').catch(console.error);
+          }, 1000);
+        }
       }
     );
 

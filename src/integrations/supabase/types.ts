@@ -1081,6 +1081,59 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          city: string | null
+          country: string | null
+          created_at: string
+          device_label: string | null
+          id: string
+          ip_address: string | null
+          is_active: boolean
+          last_seen_at: string
+          region: string | null
+          user_agent: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          region?: string | null
+          user_agent?: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          city?: string | null
+          country?: string | null
+          created_at?: string
+          device_label?: string | null
+          id?: string
+          ip_address?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          region?: string | null
+          user_agent?: string | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sessions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null
