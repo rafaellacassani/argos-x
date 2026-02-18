@@ -104,6 +104,8 @@ export interface EvolutionMessage {
       url?: string;
       mimetype?: string;
     };
+    templateMessage?: Record<string, unknown>;
+    [key: string]: unknown;
   };
   messageType?: string;
   messageTimestamp?: number;
