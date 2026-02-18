@@ -14,6 +14,7 @@ interface LeadKanbanProps {
   onAddLead?: (stageId: string) => void;
   onEditStage?: (stage: FunnelStage) => void;
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
+  canDelete?: boolean;
 }
 
 export const LeadKanban = memo(function LeadKanban({
@@ -25,7 +26,8 @@ export const LeadKanban = memo(function LeadKanban({
   onOpenChat,
   onAddLead,
   onEditStage,
-  onUpdateStage
+  onUpdateStage,
+  canDelete = true
 }: LeadKanbanProps) {
   
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -84,6 +86,7 @@ export const LeadKanban = memo(function LeadKanban({
               onAddLead={onAddLead}
               onEditStage={onEditStage}
               onUpdateStage={onUpdateStage}
+              canDelete={canDelete}
             />
           ))}
         </div>

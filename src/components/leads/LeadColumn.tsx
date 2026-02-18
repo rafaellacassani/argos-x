@@ -23,6 +23,7 @@ interface LeadColumnProps {
   onAddLead?: (stageId: string) => void;
   onEditStage?: (stage: FunnelStage) => void;
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
+  canDelete?: boolean;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -33,7 +34,8 @@ export const LeadColumn = memo(function LeadColumn({
   onOpenChat,
   onAddLead,
   onEditStage,
-  onUpdateStage
+  onUpdateStage,
+  canDelete = true
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
@@ -136,6 +138,7 @@ export const LeadColumn = memo(function LeadColumn({
                   onClick={onLeadClick}
                   onDelete={onLeadDelete}
                   onOpenChat={onOpenChat}
+                  canDelete={canDelete}
                 />
               ))}
             </AnimatePresence>

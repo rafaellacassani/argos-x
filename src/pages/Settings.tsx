@@ -19,6 +19,7 @@ import {
   Plus,
   Tag,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -30,6 +31,7 @@ import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { useUserRole } from "@/hooks/useUserRole";
 
 type MetaPage = Tables<"meta_pages">;
 
@@ -94,6 +96,7 @@ const formatPhoneNumber = (ownerJid: string | undefined) => {
 };
 
 export default function Settings() {
+  const { canManageIntegrations, canManageWhatsApp, isSeller } = useUserRole();
   const [activeTab, setActiveTab] = useState("integrations");
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
@@ -354,13 +357,23 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="auto-tags">
+          <TabsTrigger value="auto-tags" disabled={isSeller}>
             <Tag className="w-4 h-4 mr-1" />
             Tags Automáticas
+            {isSeller && <Lock className="w-3 h-3 ml-1" />}
           </TabsTrigger>
-          <TabsTrigger value="general">Geral</TabsTrigger>
-          <TabsTrigger value="team">Equipe</TabsTrigger>
-          <TabsTrigger value="billing">Plano & Faturamento</TabsTrigger>
+          <TabsTrigger value="general" disabled={isSeller}>
+            Geral
+            {isSeller && <Lock className="w-3 h-3 ml-1" />}
+          </TabsTrigger>
+          <TabsTrigger value="team" disabled={isSeller}>
+            Equipe
+            {isSeller && <Lock className="w-3 h-3 ml-1" />}
+          </TabsTrigger>
+          <TabsTrigger value="billing" disabled={isSeller}>
+            Plano & Faturamento
+            {isSeller && <Lock className="w-3 h-3 ml-1" />}
+          </TabsTrigger>
         </TabsList>
 
         {/* Integrations Tab */}
@@ -436,35 +449,47 @@ export default function Settings() {
                 )}
                 {!integration.phoneNumber && !integration.metaPages?.length && <div className="mb-2" />}
                 {integration.available ? (
-                  <Button
-                    className="w-full"
-                    variant={integration.connected ? "outline" : "default"}
-                    disabled={(integration.id === "instagram" || integration.id === "facebook") && connectingMeta}
-                    onClick={() => {
-                      if (integration.id === "whatsapp-business" || integration.id === "whatsapp-api") {
-                        setShowConnectionModal(true);
-                      } else if (integration.id === "instagram" || integration.id === "facebook") {
-                        handleConnectMeta();
-                      }
-                    }}
-                  >
-                    {(integration.id === "instagram" || integration.id === "facebook") && connectingMeta ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Conectando...
-                      </>
-                    ) : integration.connected ? (
-                      <>
-                        <Plus className="w-4 h-4 mr-2" />
-                        Adicionar Conexão
-                      </>
-                    ) : (
-                      <>
-                        <Link2 className="w-4 h-4 mr-2" />
-                        Conectar
-                      </>
-                    )}
-                  </Button>
+                  (() => {
+                    const isWhatsApp = integration.id === "whatsapp-business" || integration.id === "whatsapp-api";
+                    const isLocked = isSeller && !isWhatsApp;
+                    return (
+                      <Button
+                        className="w-full"
+                        variant={integration.connected ? "outline" : "default"}
+                        disabled={isLocked || ((integration.id === "instagram" || integration.id === "facebook") && connectingMeta)}
+                        onClick={() => {
+                          if (isLocked) return;
+                          if (isWhatsApp) {
+                            setShowConnectionModal(true);
+                          } else if (integration.id === "instagram" || integration.id === "facebook") {
+                            handleConnectMeta();
+                          }
+                        }}
+                      >
+                        {isLocked ? (
+                          <>
+                            <Lock className="w-4 h-4 mr-2" />
+                            Somente Admin
+                          </>
+                        ) : (integration.id === "instagram" || integration.id === "facebook") && connectingMeta ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Conectando...
+                          </>
+                        ) : integration.connected ? (
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Adicionar Conexão
+                          </>
+                        ) : (
+                          <>
+                            <Link2 className="w-4 h-4 mr-2" />
+                            Conectar
+                          </>
+                        )}
+                      </Button>
+                    );
+                  })()
                 ) : (
                   <Button className="w-full" variant="outline" disabled>
                     Em breve
