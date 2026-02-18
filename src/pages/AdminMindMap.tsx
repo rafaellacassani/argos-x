@@ -464,7 +464,7 @@ function PostItNote({ postit, onUpdate, onDelete, onDragEnd }: {
 }
 
 // ─── Main Page ───
-const ADMIN_EMAIL = "contato@mktboost.com.br";
+const ADMIN_EMAIL = "rafaellacassani@gmail.com";
 const STORAGE_KEY = "inboxia_admin_postits";
 const EXPANDED_KEY = "inboxia_admin_mindmap_expanded";
 
