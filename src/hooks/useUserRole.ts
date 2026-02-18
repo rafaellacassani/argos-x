@@ -17,6 +17,13 @@ interface UserRoleData {
   canDeleteContacts: boolean;
   canManageIntegrations: boolean;
   canManageWhatsApp: boolean;
+  canManageSalesBots: boolean;
+  canManageAutoTags: boolean;
+  canManageCampaigns: boolean;
+  canManageTeam: boolean;
+  canManageWorkspaceSettings: boolean;
+  canViewAllLeads: boolean;
+  canReassignLeads: boolean;
 }
 
 export function useUserRole(): UserRoleData {
@@ -61,9 +68,16 @@ export function useUserRole(): UserRoleData {
     isManager,
     isSeller,
     isAdminOrManager,
-    canDeleteLeads: isAdminOrManager,
-    canDeleteContacts: isAdminOrManager,
+    canDeleteLeads: isAdmin,
+    canDeleteContacts: isAdmin,
     canManageIntegrations: isAdmin,
-    canManageWhatsApp: true, // all roles can manage WhatsApp
+    canManageWhatsApp: true,
+    canManageSalesBots: isAdminOrManager,
+    canManageAutoTags: isAdminOrManager,
+    canManageCampaigns: isAdminOrManager,
+    canManageTeam: isAdmin,
+    canManageWorkspaceSettings: isAdmin,
+    canViewAllLeads: isAdminOrManager,
+    canReassignLeads: isAdminOrManager,
   };
 }

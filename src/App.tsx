@@ -8,6 +8,7 @@ import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { PermissionGuard } from "@/components/layout/PermissionGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Loader2 } from "lucide-react";
 
@@ -95,14 +96,14 @@ const App = () => (
                             <Route path="/leads" element={<Leads />} />
                             <Route path="/chats" element={<Chats />} />
                             <Route path="/ai-agents" element={<AIAgents />} />
-                            <Route path="/salesbots" element={<SalesBots />} />
-                            <Route path="/salesbots/builder" element={<SalesBotBuilder />} />
-                            <Route path="/salesbots/builder/:id" element={<SalesBotBuilder />} />
+                            <Route path="/salesbots" element={<PermissionGuard permission="canManageSalesBots"><SalesBots /></PermissionGuard>} />
+                            <Route path="/salesbots/builder" element={<PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard>} />
+                            <Route path="/salesbots/builder/:id" element={<PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard>} />
                             <Route path="/calendar" element={<CalendarPage />} />
                             <Route path="/contacts" element={<Contacts />} />
                             <Route path="/email" element={<Email />} />
                             <Route path="/statistics" element={<Statistics />} />
-                            <Route path="/campaigns" element={<Campaigns />} />
+                            <Route path="/campaigns" element={<PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard>} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/configuracoes" element={<Configuracoes />} />
                             <Route path="*" element={<NotFound />} />

@@ -17,23 +17,34 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import inboxiaIcon from "@/assets/inboxia-icon.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-const menuItems = [
+interface MenuItem {
+  icon: React.ElementType;
+  label: string;
+  path: string;
+  highlight?: boolean;
+  requiredPermission?: 'canManageSalesBots' | 'canManageCampaigns' | 'canManageIntegrations' | 'canManageWorkspaceSettings';
+}
+
+const menuItems: MenuItem[] = [
   { icon: Home, label: "Início", path: "/" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
-  { icon: Workflow, label: "SalesBots", path: "/salesbots" },
+  { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
   { icon: Calendar, label: "Calendário", path: "/calendar" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
   { icon: Mail, label: "Email", path: "/email" },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
-  { icon: Megaphone, label: "Campanhas", path: "/campaigns" },
+  { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
@@ -42,6 +53,7 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { workspace } = useWorkspace();
+  const permissions = useUserRole();
 
   return (
     <motion.aside
@@ -86,44 +98,73 @@ export function AppSidebar() {
         <ul className="space-y-2">
           {menuItems.map((item) => {
             const isActive = location.pathname === item.path;
-            return (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
-                    isActive
+            const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+
+            const linkContent = (
+              <div
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
+                  isLocked
+                    ? "text-white/40 cursor-not-allowed"
+                    : isActive
                       ? "bg-sidebar-accent text-white"
                       : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
-                    item.highlight && !isActive && "bg-sidebar-primary/20 border border-sidebar-primary/30"
-                  )}
-                >
-                  {isActive && (
-                    <motion.div
-                      layoutId="activeIndicator"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full"
-                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                    />
-                  )}
-                  <item.icon
-                    className={cn(
-                      "w-5 h-5 flex-shrink-0 transition-colors",
-                      isActive ? "text-sidebar-primary" : "text-white/80 group-hover:text-white"
-                    )}
+                  item.highlight && !isActive && !isLocked && "bg-sidebar-primary/20 border border-sidebar-primary/30"
+                )}
+              >
+                {isActive && !isLocked && (
+                  <motion.div
+                    layoutId="activeIndicator"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full"
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
-                  <AnimatePresence>
-                    {!collapsed && (
-                      <motion.span
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="font-medium text-sm"
-                      >
-                        {item.label}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
+                )}
+                <item.icon
+                  className={cn(
+                    "w-5 h-5 flex-shrink-0 transition-colors",
+                    isLocked
+                      ? "text-white/40"
+                      : isActive ? "text-sidebar-primary" : "text-white/80 group-hover:text-white"
+                  )}
+                />
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="font-medium text-sm flex-1"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                {isLocked && !collapsed && (
+                  <Lock className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
+                )}
+              </div>
+            );
+
+            if (isLocked) {
+              return (
+                <li key={item.path}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {linkContent}
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      Disponível apenas para administradores
+                    </TooltipContent>
+                  </Tooltip>
+                </li>
+              );
+            }
+
+            return (
+              <li key={item.path}>
+                <NavLink to={item.path}>
+                  {linkContent}
                 </NavLink>
               </li>
             );
