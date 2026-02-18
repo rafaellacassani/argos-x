@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Bell, Search, Moon, Sun, User, ChevronDown, LogOut } from "lucide-react";
+import { Bell, Search, Moon, Sun, User, ChevronDown, LogOut, Lock } from "lucide-react";
+import { SetPasswordDialog } from "@/components/shared/SetPasswordDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +18,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 
 export function TopBar() {
   const [isDark, setIsDark] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const { user, signOut } = useAuth();
   const { workspace } = useWorkspace();
   const navigate = useNavigate();
@@ -93,6 +95,10 @@ export function TopBar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>{workspace?.name || "Minha Conta"}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setShowPasswordDialog(true)}>
+              <Lock className="w-4 h-4 mr-2" />
+              Definir senha
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/configuracoes")}>Configurações</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
@@ -102,6 +108,7 @@ export function TopBar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <SetPasswordDialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog} />
     </header>
   );
 }
