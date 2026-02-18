@@ -35,6 +35,7 @@ interface Chat {
   remoteJid: string;
   name: string;
   avatar?: string;
+  profilePicUrl?: string;
   lastMessage: string;
   time: string;
   unread: number;
@@ -64,21 +65,26 @@ interface Message {
   localAudioBase64?: string; // For locally sent audio that can play immediately
 }
 
-// Helper to format phone from jid
+// Helper to format phone from jid - handles @s.whatsapp.net, @g.us, and @lid formats
 const formatPhoneFromJid = (jid: string): string => {
-  const number = jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "");
+  const number = jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "").replace(/@lid$/, "");
+  // Brazilian numbers
   if (number.length === 13) {
     return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 9)}-${number.slice(9)}`;
   }
   if (number.length === 12) {
     return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 8)}-${number.slice(8)}`;
   }
-  return `+${number}`;
+  // Generic international format
+  if (number.length >= 10) {
+    return `+${number}`;
+  }
+  return number;
 };
 
 // Helper to extract just the number from jid for sending
 const extractNumberFromJid = (jid: string): string => {
-  return jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "");
+  return jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "").replace(/@lid$/, "");
 };
 
 // Helper to format timestamp
@@ -271,6 +277,8 @@ export default function Chats() {
     sendText,
     sendMedia,
     sendAudio,
+    fetchProfile,
+    fetchProfilesBatch,
     loading: apiLoading 
   } = useEvolutionAPI();
 
@@ -459,23 +467,36 @@ export default function Chats() {
   const transformChatData = useCallback((chat: any, instanceName?: string, instanceLabel?: string): Chat => {
     const lastMsg = chat.lastMessage;
     const lastMsgContent = lastMsg?.message?.conversation || 
-                           lastMsg?.message?.extendedTextMessage?.text || 
-                           lastMsg?.pushName || "";
+                           lastMsg?.message?.extendedTextMessage?.text || "";
     const lastMsgTime = lastMsg?.messageTimestamp;
     const lastMsgFromMe = lastMsg?.key?.fromMe ?? false;
     
-    // Only use pushName from last message if it was sent by the CLIENT (fromMe = false)
+    // Resolve contact name: try pushName from last inbound message, then chat-level pushName, then name
     const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
+    const resolvedName = contactPushName || chat.pushName || chat.name || null;
+    const jid = chat.remoteJid || chat.id;
+    const formattedPhone = formatPhoneFromJid(jid);
+    
+    // Check if there's a matching lead with a proper name
+    const matchingLead = leadsRef.current.find((l) => l.whatsapp_jid === jid);
+    const leadName = matchingLead?.name;
+    const leadAvatar = matchingLead?.avatar_url;
+    
+    // Name priority: lead name > pushName > formatted phone (never raw JID)
+    const displayName = (leadName && leadName !== formattedPhone && !leadName.includes("@")) 
+      ? leadName 
+      : resolvedName || formattedPhone;
     
     return {
-      id: chat.id || chat.remoteJid,
-      remoteJid: chat.remoteJid || chat.id,
-      name: contactPushName || chat.pushName || chat.name || formatPhoneFromJid(chat.remoteJid || chat.id),
+      id: chat.id || jid,
+      remoteJid: jid,
+      name: displayName,
+      profilePicUrl: chat.profilePicUrl || leadAvatar || undefined,
       lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
       time: formatTime(lastMsgTime),
       unread: chat.unreadCount || 0,
       online: false,
-      phone: formatPhoneFromJid(chat.remoteJid || chat.id),
+      phone: formattedPhone,
       lastMessageFromMe: lastMsgFromMe,
       instanceName,
       instanceLabel,
@@ -646,6 +667,56 @@ export default function Chats() {
 
     loadChats();
   }, [selectedInstance, instances, metaPages, transformChatData, createLead, tagRules, checkMessageAgainstRules, addTagToLead, fetchMetaConversations]);
+
+  // Ref to track which JIDs have been enriched to avoid duplicate API calls
+  const enrichedJidsRef = useRef<Set<string>>(new Set());
+
+  // Enrich chats with profile photos asynchronously (non-blocking)
+  useEffect(() => {
+    if (chats.length === 0) return;
+    
+    // Find WhatsApp chats without profile pics (limit to first 10 for rate limiting)
+    const chatsToEnrich = chats
+      .filter((c) => !c.isMeta && !c.profilePicUrl && !enrichedJidsRef.current.has(c.remoteJid))
+      .slice(0, 10);
+    
+    if (chatsToEnrich.length === 0) return;
+
+    const enrichChats = async () => {
+      // Get the instance for the request
+      for (const chat of chatsToEnrich) {
+        const targetInstance = chat.instanceName || selectedInstance;
+        if (!targetInstance || targetInstance === "all") continue;
+        
+        enrichedJidsRef.current.add(chat.remoteJid);
+        const number = extractNumberFromJid(chat.remoteJid);
+        
+        try {
+          const profile = await fetchProfile(targetInstance, number);
+          if (profile && (profile.name || profile.profilePicUrl)) {
+            setChats((prev) =>
+              prev.map((c) =>
+                c.remoteJid === chat.remoteJid
+                  ? {
+                      ...c,
+                      profilePicUrl: profile.profilePicUrl || c.profilePicUrl,
+                      name: (!c.name || c.name === c.phone) && profile.name ? profile.name : c.name,
+                    }
+                  : c
+              )
+            );
+          }
+          // Small delay between requests
+          await new Promise((r) => setTimeout(r, 300));
+        } catch (err) {
+          console.warn(`[Chats] Failed to enrich ${chat.remoteJid}:`, err);
+        }
+      }
+    };
+
+    // Run non-blocking
+    enrichChats();
+  }, [chats.length, selectedInstance, fetchProfile]);
 
   // Load messages when chat is selected (with cache)
   useEffect(() => {
@@ -1130,7 +1201,21 @@ export default function Chats() {
                   )}
                 >
                   <div className="relative">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold">
+                    {chat.profilePicUrl ? (
+                      <img 
+                        src={chat.profilePicUrl} 
+                        alt={chat.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={cn(
+                      "w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold",
+                      chat.profilePicUrl && "hidden"
+                    )}>
                       {chat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
                     </div>
                     {chat.online && (
@@ -1178,7 +1263,21 @@ export default function Chats() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-semibold text-sm">
+                    {selectedChat.profilePicUrl ? (
+                      <img 
+                        src={selectedChat.profilePicUrl} 
+                        alt={selectedChat.name}
+                        className="w-10 h-10 rounded-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={cn(
+                      "w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold text-sm",
+                      selectedChat.profilePicUrl && "hidden"
+                    )}>
                       {selectedChat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
                     </div>
                     {selectedChat.online && (

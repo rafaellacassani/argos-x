@@ -216,4 +216,47 @@ app.post("/send-audio/:instanceName", async (c) => {
   }
 });
 
+// Fetch profile (name + picture) for a contact
+app.post("/fetch-profile/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { number } = await c.req.json();
+    if (!number || typeof number !== "string" || number.length > 30) return c.json({ error: "Invalid number" }, 400, corsHeaders);
+    const result = await evolutionRequest(`/chat/fetchProfile/${instanceName}`, "POST", { number });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to fetch profile" }, 500, corsHeaders);
+  }
+});
+
+// Batch fetch profiles for multiple contacts
+app.post("/fetch-profiles-batch/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { numbers } = await c.req.json();
+    if (!Array.isArray(numbers) || numbers.length > 50) return c.json({ error: "Invalid numbers array (max 50)" }, 400, corsHeaders);
+    
+    const results: Record<string, any> = {};
+    for (const num of numbers) {
+      if (typeof num !== "string" || num.length > 30) continue;
+      try {
+        // Add small delay between requests to respect rate limits
+        if (Object.keys(results).length > 0) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+        const profile = await evolutionRequest(`/chat/fetchProfile/${instanceName}`, "POST", { number: num });
+        results[num] = profile;
+      } catch (e) {
+        console.warn(`[evolution-api] Failed to fetch profile for ${num}:`, e);
+        results[num] = null;
+      }
+    }
+    return c.json(results, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to fetch profiles" }, 500, corsHeaders);
+  }
+});
+
 Deno.serve(app.fetch);

@@ -539,6 +539,52 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const fetchProfile = useCallback(async (instanceName: string, number: string): Promise<{ name?: string; profilePicUrl?: string } | null> => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/fetch-profile/${instanceName}`, {
+        method: "POST",
+        body: { number },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      return {
+        name: data?.name || data?.pushName || data?.fullName || undefined,
+        profilePicUrl: data?.profilePictureUrl || data?.profilePicUrl || data?.picture || undefined,
+      };
+    } catch (err) {
+      console.error("[useEvolutionAPI] fetchProfile error:", err);
+      return null;
+    }
+  }, []);
+
+  const fetchProfilesBatch = useCallback(async (instanceName: string, numbers: string[]): Promise<Record<string, { name?: string; profilePicUrl?: string } | null>> => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/fetch-profiles-batch/${instanceName}`, {
+        method: "POST",
+        body: { numbers },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      
+      const results: Record<string, { name?: string; profilePicUrl?: string } | null> = {};
+      for (const [num, profile] of Object.entries(data || {})) {
+        if (profile && typeof profile === 'object') {
+          const p = profile as any;
+          results[num] = {
+            name: p.name || p.pushName || p.fullName || undefined,
+            profilePicUrl: p.profilePictureUrl || p.profilePicUrl || p.picture || undefined,
+          };
+        } else {
+          results[num] = null;
+        }
+      }
+      return results;
+    } catch (err) {
+      console.error("[useEvolutionAPI] fetchProfilesBatch error:", err);
+      return {};
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -554,5 +600,7 @@ export function useEvolutionAPI() {
     sendText,
     sendMedia,
     sendAudio,
+    fetchProfile,
+    fetchProfilesBatch,
   };
 }
