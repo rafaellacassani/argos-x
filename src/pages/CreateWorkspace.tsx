@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Building2, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,22 @@ import inboxiaIcon from "@/assets/inboxia-icon.png";
 export default function CreateWorkspace() {
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
-  const { createWorkspace } = useWorkspace();
+  const { createWorkspace, hasWorkspace, loading: wsLoading } = useWorkspace();
   const { signOut } = useAuth();
   const navigate = useNavigate();
+
+  // If workspace loaded (e.g. invite accepted in background), redirect
+  if (wsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (hasWorkspace) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
