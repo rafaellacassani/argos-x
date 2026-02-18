@@ -24,9 +24,8 @@ async function requireAuth(c: any, next: () => Promise<void>) {
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   });
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
     return c.json({ error: "Unauthorized" }, 401, corsHeaders);
   }
   await next();
