@@ -137,6 +137,18 @@ const extractMessageContent = (msg: EvolutionMessage): {
     return { content: msg.message.extendedTextMessage.text, type: "text" };
   }
   
+  // Template messages (WA Business)
+  if (msg.message?.templateMessage) {
+    const tpl = msg.message.templateMessage as Record<string, any>;
+    const text =
+      tpl.hydratedTemplate?.hydratedContentText ||
+      tpl.hydratedFourRowTemplate?.hydratedContentText ||
+      tpl.hydratedTemplate?.hydratedTitleText ||
+      tpl.hydratedFourRowTemplate?.hydratedTitleText ||
+      "";
+    return { content: text || "📋 Mensagem de template", type: "text" };
+  }
+
   // Interactive messages (buttons, etc.)
   if (msg.message?.interactiveMessage?.body?.text) {
     const footer = msg.message.interactiveMessage.footer?.text;
@@ -189,9 +201,70 @@ const extractMessageContent = (msg: EvolutionMessage): {
       fileName: msg.message.documentMessage.fileName || undefined
     };
   }
+
+  // Sticker messages
+  if (msg.message?.stickerMessage) {
+    return { content: "🏷️ Figurinha", type: "text" };
+  }
+
+  // Friendly fallbacks for known but unrenderable types
+  const m = msg.message as Record<string, any> | undefined;
+  if (m) {
+    if (m.locationMessage) {
+      const loc = m.locationMessage;
+      const label = loc.name || loc.address || "";
+      return { content: `📍 Localização compartilhada${label ? `: ${label}` : ""}`, type: "text" };
+    }
+    if (m.contactMessage || m.contactsArrayMessage) {
+      const name = m.contactMessage?.displayName || "";
+      return { content: `👤 Contato compartilhado${name ? `: ${name}` : ""}`, type: "text" };
+    }
+    if (m.listMessage) {
+      return { content: m.listMessage.description || m.listMessage.title || "📋 Mensagem com lista de opções", type: "text" };
+    }
+    if (m.listResponseMessage) {
+      return { content: m.listResponseMessage.title || m.listResponseMessage.description || "✅ Resposta de lista", type: "text" };
+    }
+    if (m.buttonsMessage) {
+      return { content: m.buttonsMessage.contentText || "📋 Mensagem com botões", type: "text" };
+    }
+    if (m.buttonsResponseMessage) {
+      return { content: m.buttonsResponseMessage.selectedDisplayText || "✅ Resposta de botão", type: "text" };
+    }
+    if (m.reactionMessage) {
+      return { content: m.reactionMessage.text || "❤️", type: "text" };
+    }
+    if (m.liveLocationMessage) {
+      return { content: "📍 Localização em tempo real", type: "text" };
+    }
+    if (m.viewOnceMessage || m.viewOnceMessageV2) {
+      return { content: "🔒 Mensagem visualização única", type: "text" };
+    }
+    if (m.pollCreationMessage || m.pollCreationMessageV3) {
+      const poll = m.pollCreationMessage || m.pollCreationMessageV3;
+      return { content: `📊 Enquete: ${poll.name || ""}`, type: "text" };
+    }
+    if (m.pollUpdateMessage) {
+      return { content: "📊 Voto em enquete", type: "text" };
+    }
+    if (m.orderMessage) {
+      return { content: "🛒 Pedido recebido", type: "text" };
+    }
+    if (m.productMessage) {
+      return { content: "🛍️ Produto compartilhado", type: "text" };
+    }
+    if (m.protocolMessage || m.senderKeyDistributionMessage || m.messageContextInfo) {
+      // System/protocol messages — skip silently
+      return { content: "", type: "text" };
+    }
+  }
   
-  // Fallback
-  return { content: msg.messageType || "Mensagem", type: "text" };
+  // Final fallback — show friendly text instead of raw type
+  const rawType = msg.messageType || "";
+  if (rawType) {
+    return { content: `💬 ${rawType.replace(/Message$/i, "").replace(/([A-Z])/g, " $1").trim()}`, type: "text" };
+  }
+  return { content: "Mensagem", type: "text" };
 };
 
 // Helper to convert File to base64 (returns pure base64, no data: prefix)
