@@ -106,6 +106,32 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Create default funnel with 6 stages
+    const { data: funnel, error: funnelError } = await adminClient
+      .from("funnels")
+      .insert({ name: "Funil de Vendas", workspace_id: workspace.id, is_default: true })
+      .select()
+      .single();
+
+    if (!funnelError && funnel) {
+      const defaultStages = [
+        { name: "Leads de Entrada", color: "#6B7280", position: 0 },
+        { name: "Em Qualificação", color: "#0171C3", position: 1 },
+        { name: "Lixo", color: "#EF4444", position: 2, is_loss_stage: true },
+        { name: "Reunião Agendada", color: "#F59E0B", position: 3 },
+        { name: "Venda Realizada", color: "#22C55E", position: 4, is_win_stage: true },
+        { name: "No Show", color: "#8B5CF6", position: 5 },
+      ];
+
+      for (const stage of defaultStages) {
+        await adminClient.from("funnel_stages").insert({
+          funnel_id: funnel.id,
+          workspace_id: workspace.id,
+          ...stage,
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ workspace }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
