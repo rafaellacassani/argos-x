@@ -32,6 +32,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 const AdminMindMap = lazy(() => import("./pages/AdminMindMap"));
+const ProjectDocs = lazy(() => import("./pages/ProjectDocs"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,6 +70,11 @@ const App = () => (
                   <Route path="/admin/mindmap" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <AdminMindMap />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/project-docs" element={
+                    <ProtectedRoute skipWorkspaceCheck>
+                      <ProjectDocs />
                     </ProtectedRoute>
                   } />
                   <Route path="/privacy-policy" element={<PrivacyPolicy />} />
