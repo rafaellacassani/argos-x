@@ -54,14 +54,15 @@ export function useMetaChat() {
     return pages;
   }, []);
 
-  // Fetch conversations grouped by sender_id for a specific meta_page
+  // Fetch conversations using the optimized summary view
   const fetchConversations = useCallback(async (metaPageId?: string) => {
     setLoading(true);
     try {
       let query = supabase
-        .from("meta_conversations")
-        .select("*")
-        .order("timestamp", { ascending: false });
+        .from("meta_conversation_summary" as any)
+        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp")
+        .order("timestamp", { ascending: false })
+        .limit(100);
 
       if (metaPageId) {
         query = query.eq("meta_page_id", metaPageId);
@@ -73,40 +74,16 @@ export function useMetaChat() {
         return [];
       }
 
-      // Group by sender_id + meta_page_id
-      const grouped = new Map<string, MetaConversation>();
-      for (const msg of data || []) {
-        const key = `${msg.meta_page_id}:${msg.sender_id}`;
-        if (!grouped.has(key)) {
-          grouped.set(key, {
-            sender_id: msg.sender_id,
-            sender_name: msg.sender_name,
-            platform: msg.platform,
-            meta_page_id: msg.meta_page_id,
-            last_message: msg.content || (msg.message_type !== "text" ? `📎 ${msg.message_type}` : ""),
-            last_timestamp: msg.timestamp,
-            unread_count: 0,
-          });
-        }
-        // Count inbound messages as "unread" (simplified)
-        if (msg.direction === "inbound") {
-          const conv = grouped.get(key)!;
-          // Only count recent ones (within last hour as rough proxy)
-          // In production you'd track read status properly
-        }
-      }
-
-      const convList = Array.from(grouped.values());
-
-      // Enrich with page names
-      if (metaPages.length > 0) {
-        for (const conv of convList) {
-          const page = metaPages.find((p) => p.id === conv.meta_page_id);
-          if (page) {
-            conv.page_name = page.page_name;
-          }
-        }
-      }
+      const convList: MetaConversation[] = (data || []).map((row: any) => ({
+        sender_id: row.sender_id,
+        sender_name: row.sender_name,
+        platform: row.platform,
+        meta_page_id: row.meta_page_id,
+        last_message: row.content || (row.message_type !== "text" ? `📎 ${row.message_type}` : ""),
+        last_timestamp: row.timestamp,
+        unread_count: 0,
+        page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
+      }));
 
       setConversations(convList);
       return convList;
