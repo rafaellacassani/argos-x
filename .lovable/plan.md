@@ -1,70 +1,67 @@
 
 
-## Problema Identificado
+# Pagina de Documentacao Completa do Projeto Inboxia (Exportavel em PDF)
 
-Quando a usuaria convidada clica no link do email e faz login, o sistema:
-1. Busca memberships com `accepted_at IS NOT NULL` -- nao encontra nada
-2. Busca convite pendente pelo email -- encontra
-3. Tenta fazer `UPDATE workspace_members SET accepted_at = now()` -- **FALHA SILENCIOSAMENTE** porque a politica RLS so permite que admins facam update
-4. Como nao tem workspace, redireciona para "Criar Workspace"
+## Objetivo
+Criar uma pagina dedicada `/project-docs` que apresente uma documentacao completa e detalhada de todas as areas, funcionalidades e diferenciais do Inboxia CRM, com um botao para exportar em PDF. A pagina sera acessivel apenas pela administradora.
 
-Confirmacao nos dados: Natalia e Geisi ja tem `user_id` real nos registros, mas `accepted_at` continua `null`.
+## Estrutura da Pagina
 
-## Solucao
+A documentacao sera organizada em secoes com texto limpo, formatacao de facil leitura (titulos, subtitulos, listas, tabelas), otimizada para impressao/PDF.
 
-### 1. Criar Edge Function `accept-invite`
+### Secoes do Documento
 
-Uma funcao backend que usa permissoes elevadas (service role) para aceitar o convite, contornando a restricao de RLS.
+1. **Visao Geral do Inboxia** - Descricao do produto, arquitetura multi-tenant SaaS, sistema de workspaces isolados
 
-- Recebe o JWT do usuario logado
-- Busca convite pendente pelo email ou user_id
-- Atualiza `accepted_at` com service role (bypass RLS)
-- Retorna os dados do workspace
+2. **Autenticacao e Onboarding** - Fluxo de cadastro, login, reset de senha, criacao de workspace, convites de equipe com aceitacao automatica
 
-### 2. Atualizar `useWorkspace.tsx`
+3. **Dashboard** - KPIs em tempo real (mensagens, conversas ativas, chats sem resposta), graficos de evolucao, fontes de leads (pizza), leads recentes, metricas de performance, filtro por periodo
 
-Substituir o `supabase.update()` direto (que falha por RLS) por uma chamada a Edge Function `accept-invite`.
+4. **Funil de Vendas (Leads)** - Kanban drag-and-drop, multiplos funis, etapas customizaveis com cores, cards detalhados com: dados de contato, tags, vendas/produtos, historico de movimentacoes, responsavel, notas, abrir chat direto do card, mover entre etapas, estatisticas por etapa (contagem + valor total)
 
-### 3. Corrigir convites existentes
+5. **Chats Unificados** - Inbox unificado WhatsApp + Facebook + Instagram, multiplas instancias WhatsApp simultaneas, envio de texto/imagem/video/documento/audio, download de midia, visualizacao "Todas as instancias" consolidada, badges de fonte (WA/FB/IG), filtros avancados (periodo, etapa do funil, tags, fonte, responsavel, status de resposta, ultimo remetente), criacao automatica de leads ao receber mensagem
 
-As duas usuarias ja estao com user_id correto mas accepted_at = null. A correcao do fluxo vai aceitar automaticamente na proxima vez que elas fizerem login.
+6. **Agendamento de Mensagens (Follow-up)** - Agendar envio futuro para WhatsApp/Facebook/Instagram, selecao de data e hora via calendario, roteamento automatico para o canal correto, processamento automatico via Edge Function a cada minuto (pg_cron), tabela com status (pendente/enviado/falhou)
 
-### 4. Adicionar botao "Reenviar Convite" no TeamManager
+7. **Tags Automaticas por Campanha** - Sistema de regras "se a primeira mensagem contem X, aplica tag Y", cruzamento com campanhas do Meta para identificar QUAL campanha esta gerando conversao, criacao de tags personalizadas com cores, aplicacao automatica na entrada de novos leads, gestao completa no painel de configuracoes
 
-Na tabela de membros, para usuarios que ainda nao aceitaram o convite (accepted_at = null), exibir um botao "Reenviar Convite" que chama novamente `inviteUserByEmail` pelo edge function.
+8. **Gestao de Tags Manual** - CRUD completo de tags, cores personalizaveis, contador de uso por tag, aplicacao/remocao em leads e chats
 
-## Arquivos Alterados
+9. **Agentes de IA** - Templates pre-configurados (SDR, Agendamento, Follow-up, Cobranca, Custom), selecao de modelo (Gemini 3 Flash, Gemini 2.5, GPT-5, etc.), prompt de sistema personalizavel, controle de temperatura (criatividade), ferramentas habilitaveis (atualizar lead, aplicar tag, mover etapa, pausar IA), codigo de pausa e retomada humana, divisao automatica de mensagens longas, metricas por agente (execucoes, tokens, latencia)
 
-| Arquivo | Acao |
-|---|---|
-| `supabase/functions/accept-invite/index.ts` | Criar (nova Edge Function) |
-| `src/hooks/useWorkspace.tsx` | Editar (chamar accept-invite em vez de update direto) |
-| `src/hooks/useTeam.ts` | Editar (adicionar funcao resendInvite) |
-| `src/components/settings/TeamManager.tsx` | Editar (botao Reenviar Convite + indicador de status pendente) |
-| `supabase/config.toml` | Editar (registrar nova funcao) |
+10. **SalesBots (Automacoes Visuais)** - Builder visual drag-and-drop, tipos de no: enviar mensagem, condicao (if/else), mover etapa, aplicar tag, webhook n8n, triggers configuraveis (mensagem recebida, mudanca de etapa, etc.), duplicacao de bots, metricas de execucao e conversao, ativacao/desativacao
 
-## Detalhes Tecnicos
+11. **Contatos** - Tabela completa com busca, importacao em massa, exportacao, selecao em lote, acoes rapidas (enviar mensagem, ligar, email), tags por contato, fonte de origem
 
-### Edge Function `accept-invite`
-```text
-POST /accept-invite
-Headers: Authorization: Bearer <user_jwt>
-Body: (vazio)
+12. **Campanhas** - Interface para campanhas WhatsApp em massa, status (rascunho, agendada, em execucao, concluida, pausada), metricas (enviadas, entregues, lidas, respondidas), barra de progresso, acoes de pausar/retomar
 
-Logica:
-1. Extrai user_id e email do JWT
-2. Busca workspace_member onde user_id = X e accepted_at IS NULL
-   OU invited_email = email e accepted_at IS NULL
-3. Usa service role para UPDATE accepted_at = now()
-4. Retorna { success: true, workspace_id: "..." }
-```
+13. **Calendario** - Visualizacao mensal/semanal/diaria, eventos com tipos (chamada, reuniao, tarefa, lembrete), sidebar de detalhes por dia
 
-### Botao "Reenviar Convite"
-- Aparece apenas para membros com convite pendente (accepted_at = null)
-- Chama a funcao `invite-member` novamente com os mesmos dados
-- Feedback: "Convite reenviado para email@exemplo.com"
+14. **Estatisticas** - KPIs de vendas, visualizacao de funil com taxas de conversao, grafico de evolucao mensal, conversao por fonte, tabela de performance da equipe
 
-### Indicador visual de status
-- Membros com convite pendente terao um badge "Pendente" na tabela
-- Ao lado do badge, o botao de reenvio
+15. **Integracoes** - WhatsApp Business (QR Code via Evolution API), WhatsApp API oficial, Instagram (OAuth Meta), Facebook Messenger (OAuth Meta), TikTok/Google Business/Zoom/Calendly (em breve)
+
+16. **Configuracoes** - Aba Integracoes, aba WhatsApp (gerenciar conexoes), aba Tags Automaticas, aba Geral, aba Equipe (convites, reenvio, roles admin/seller/viewer), aba Plano e Faturamento
+
+17. **Equipe (Multi-tenant)** - Convite por email, roles (admin, seller, viewer), indicador de status (pendente/ativo), reenvio de convite, remocao de membro
+
+18. **Funcoes de Backend** - Edge Functions: accept-invite, check-no-response, create-workspace, evolution-api, facebook-oauth, facebook-webhook, invite-member, meta-send-message, send-scheduled-messages, weekly-report, ai-agent-chat
+
+## Implementacao Tecnica
+
+### Arquivo a criar
+- `src/pages/ProjectDocs.tsx` - Pagina completa com toda a documentacao e botao de exportar PDF
+
+### Arquivo a editar
+- `src/App.tsx` - Adicionar rota `/project-docs` protegida com verificacao de email admin
+
+### Botao de Exportar PDF
+Usaremos `window.print()` com CSS `@media print` otimizado para gerar PDF limpo pelo navegador (sem dependencias externas). A pagina tera:
+- Estilos de impressao que removem headers/navegacao
+- Tipografia otimizada para leitura
+- Quebras de pagina entre secoes
+- Botao "Exportar PDF" fixo no topo que chama `window.print()`
+
+### Restricao de Acesso
+Mesma logica do AdminMindMap: verifica `user.email === "rafaellacassani@gmail.com"`, caso contrario redireciona para `/`.
 
