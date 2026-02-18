@@ -29,3 +29,9 @@ verify_jwt = false
 
 [functions.accept-invite]
 verify_jwt = false
+
+[functions.set-user-password]
+verify_jwt = false
+
+[functions.create-workspace]
+verify_jwt = false

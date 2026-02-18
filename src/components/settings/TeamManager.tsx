@@ -13,7 +13,9 @@ import {
   MoreVertical,
   Pencil,
   Send,
+  Lock,
 } from "lucide-react";
+import { SetPasswordDialog } from "@/components/shared/SetPasswordDialog";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -302,6 +304,7 @@ export function TeamManager() {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [resendingFor, setResendingFor] = useState<string | null>(null);
   const [deletingMember, setDeletingMember] = useState<UserProfile | null>(null);
+  const [passwordMember, setPasswordMember] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     fetchTeamMembers();
@@ -541,8 +544,12 @@ export function TeamManager() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setPasswordMember(member)}>
+                          <Lock className="h-4 w-4 mr-2" />
+                          Definir senha
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
                           onClick={() => setDeletingMember(member)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
@@ -615,6 +622,13 @@ export function TeamManager() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SetPasswordDialog
+        open={!!passwordMember}
+        onOpenChange={(open) => !open && setPasswordMember(null)}
+        targetUserId={passwordMember?.user_id}
+        targetUserName={passwordMember?.full_name}
+      />
     </Card>
   );
 }
