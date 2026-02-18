@@ -10,6 +10,9 @@ import {
   BadgeCheck,
   Bell,
   RefreshCw,
+  MoreVertical,
+  Pencil,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -39,6 +42,13 @@ import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -291,6 +301,7 @@ export function TeamManager() {
   const [editingMember, setEditingMember] = useState<UserProfile | null>(null);
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [resendingFor, setResendingFor] = useState<string | null>(null);
+  const [deletingMember, setDeletingMember] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     fetchTeamMembers();
@@ -464,24 +475,9 @@ export function TeamManager() {
                   {/* Status */}
                   <div className="flex items-center gap-2">
                     {getMemberStatus(member) === "pending" ? (
-                      <>
-                        <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-600">
-                          Pendente
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          disabled={resendingFor === member.user_id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleResendInvite(member);
-                          }}
-                        >
-                          <RefreshCw className={cn("h-3 w-3 mr-1", resendingFor === member.user_id && "animate-spin")} />
-                          Reenviar
-                        </Button>
-                      </>
+                      <Badge variant="secondary" className="text-xs bg-amber-500/20 text-amber-600">
+                        Pendente
+                      </Badge>
                     ) : (
                       <Badge variant="secondary" className="text-xs bg-emerald-500/20 text-emerald-600">
                         Ativo
@@ -522,37 +518,38 @@ export function TeamManager() {
                     </Select>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center justify-center">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
+                  {/* Actions Dropdown */}
+                  <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="bg-background">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Remover membro?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            {member.full_name} será removido da equipe e não receberá mais
-                            notificações.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteTeamMember(member.user_id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-popover w-48">
+                        <DropdownMenuItem onClick={() => openEdit(member)}>
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Editar
+                        </DropdownMenuItem>
+                        {getMemberStatus(member) === "pending" && (
+                          <DropdownMenuItem
+                            disabled={resendingFor === member.user_id}
+                            onClick={() => handleResendInvite(member)}
                           >
-                            Remover
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            <Send className="h-4 w-4 mr-2" />
+                            Reenviar convite
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setDeletingMember(member)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </motion.div>
               ))}
@@ -594,6 +591,30 @@ export function TeamManager() {
         onSave={handleSave}
         isNew={!editingMember}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingMember} onOpenChange={(open) => !open && setDeletingMember(null)}>
+        <AlertDialogContent className="bg-background">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover membro?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingMember?.full_name} será removido da equipe e não receberá mais notificações.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingMember) deleteTeamMember(deletingMember.user_id);
+                setDeletingMember(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
