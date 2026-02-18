@@ -235,8 +235,14 @@ export default function Chats() {
   const [loadingInstances, setLoadingInstances] = useState(true);
   const [loadingChats, setLoadingChats] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
+  
+  // Message cache: stores messages per chat ID to avoid re-fetching
+  const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag } = useLeads();
@@ -292,7 +298,11 @@ export default function Chats() {
           read: false,
           type: "text",
         };
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => {
+          const updated = [...prev, newMessage];
+          messageCacheRef.current.set(selectedChat.id, updated);
+          return updated;
+        });
       } else {
         toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
       }
@@ -315,7 +325,11 @@ export default function Chats() {
         read: false,
         type: "text",
       };
-      setMessages((prev) => [...prev, newMessage]);
+      setMessages((prev) => {
+        const updated = [...prev, newMessage];
+        if (selectedChat) messageCacheRef.current.set(selectedChat.id, updated);
+        return updated;
+      });
     } else {
       toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
@@ -633,14 +647,26 @@ export default function Chats() {
     loadChats();
   }, [selectedInstance, instances, metaPages, transformChatData, createLead, tagRules, checkMessageAgainstRules, addTagToLead, fetchMetaConversations]);
 
-  // Load messages when chat is selected
+  // Load messages when chat is selected (with cache)
   useEffect(() => {
     if (!selectedChat) return;
+
+    const chatId = selectedChat.id;
+    
+    // Check cache first
+    const cached = messageCacheRef.current.get(chatId);
+    if (cached && cached.length > 0) {
+      setMessages(cached);
+      setHasMoreMessages(cached.length >= 30);
+      setLoadingMessages(false);
+      return;
+    }
 
     // Meta chat - load from meta_conversations
     if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
       const loadMetaMsgs = async () => {
         setLoadingMessages(true);
+        setHasMoreMessages(false);
         try {
           const msgs = await fetchMetaMessages(selectedChat.metaPageId!, selectedChat.metaSenderId!);
           const transformed: Message[] = (msgs || []).map((msg) => {
@@ -656,6 +682,7 @@ export default function Chats() {
             };
           });
           setMessages(transformed);
+          messageCacheRef.current.set(chatId, transformed);
         } catch (err) {
           console.error("[Chats] Error loading Meta messages:", err);
         } finally {
@@ -666,14 +693,14 @@ export default function Chats() {
       return;
     }
     
-    // WhatsApp chat - load via Evolution API
+    // WhatsApp chat - load via Evolution API (only 30 initially)
     const targetInstance = selectedChat.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all") return;
 
     const loadMessages = async () => {
       setLoadingMessages(true);
       try {
-        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 100);
+        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 30);
         const transformedMessages: Message[] = data
           .map((msg) => {
             const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
@@ -694,6 +721,8 @@ export default function Chats() {
           })
           .reverse();
         setMessages(transformedMessages);
+        setHasMoreMessages(data.length >= 30);
+        messageCacheRef.current.set(chatId, transformedMessages);
       } catch (err) {
         console.error("[Chats] Error loading messages:", err);
       } finally {
@@ -702,6 +731,62 @@ export default function Chats() {
     };
     loadMessages();
   }, [selectedInstance, selectedChat?.id, selectedChat?.instanceName, selectedChat?.isMeta, fetchMetaMessages]);
+
+  // Infinite scroll: load older messages when scrolling up
+  const loadOlderMessages = useCallback(async () => {
+    if (!selectedChat || loadingOlderMessages || !hasMoreMessages || selectedChat.isMeta) return;
+    
+    const targetInstance = selectedChat.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all") return;
+
+    setLoadingOlderMessages(true);
+    try {
+      // Fetch more messages with a higher limit offset
+      const currentCount = messages.length;
+      const data = await fetchMessages(targetInstance, selectedChat.remoteJid, currentCount + 30);
+      
+      if (data.length <= currentCount) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      const allTransformed: Message[] = data
+        .map((msg) => {
+          const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
+          const timestamp = msg.messageTimestamp;
+          const date = timestamp ? new Date(timestamp * 1000) : new Date();
+          return {
+            id: msg.key?.id || Math.random().toString(),
+            content,
+            time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            sent: msg.key?.fromMe || false,
+            read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
+            type,
+            mediaUrl,
+            thumbnailBase64,
+            fileName,
+            duration,
+          };
+        })
+        .reverse();
+
+      setMessages(allTransformed);
+      setHasMoreMessages(data.length >= currentCount + 30);
+      messageCacheRef.current.set(selectedChat.id, allTransformed);
+    } catch (err) {
+      console.error("[Chats] Error loading older messages:", err);
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [selectedChat, selectedInstance, messages.length, loadingOlderMessages, hasMoreMessages, fetchMessages]);
+
+  // Handle scroll to detect when user scrolls to top
+  const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollTop < 100 && hasMoreMessages && !loadingOlderMessages) {
+      loadOlderMessages();
+    }
+  }, [hasMoreMessages, loadingOlderMessages, loadOlderMessages]);
 
   // Subscribe to Meta realtime updates
   useEffect(() => {
@@ -976,6 +1061,7 @@ export default function Chats() {
                 setChats([]);
                 setSelectedChat(null);
                 setChatError(null);
+                messageCacheRef.current.clear();
               }}
               className="w-full mb-3 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm"
             >
@@ -1033,11 +1119,8 @@ export default function Chats() {
           ) : (
             <div className="p-2">
               {filteredChats.map((chat, index) => (
-                <motion.div
+                <div
                   key={chat.id}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.02 }}
                   onClick={() => setSelectedChat(chat)}
                   className={cn(
                     "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
@@ -1079,7 +1162,7 @@ export default function Chats() {
                       <span className="text-xs text-white font-medium">{chat.unread}</span>
                     </div>
                   )}
-                </motion.div>
+                </div>
               ))}
             </div>
           )}
@@ -1158,7 +1241,11 @@ export default function Chats() {
             </div>
 
             {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <div 
+              className="flex-1 overflow-y-auto p-4"
+              ref={messagesContainerRef}
+              onScroll={handleMessagesScroll}
+            >
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-full">
                   <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -1172,12 +1259,20 @@ export default function Chats() {
                 </div>
               ) : (
                 <div className="space-y-4 max-w-3xl mx-auto">
-                  {/* Date Divider */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1 h-px bg-border" />
-                    <span className="text-xs text-muted-foreground bg-card px-2">Mensagens recentes</span>
-                    <div className="flex-1 h-px bg-border" />
-                  </div>
+                  {/* Load more indicator */}
+                  {loadingOlderMessages && (
+                    <div className="flex items-center justify-center py-2">
+                      <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground ml-2">Carregando anteriores...</span>
+                    </div>
+                  )}
+                  {!hasMoreMessages && messages.length > 30 && (
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-xs text-muted-foreground bg-card px-2">Início da conversa</span>
+                      <div className="flex-1 h-px bg-border" />
+                    </div>
+                  )}
 
                   {messages.map((msg, index) => (
                     <MessageBubble
@@ -1199,7 +1294,7 @@ export default function Chats() {
                   ))}
                 </div>
               )}
-            </ScrollArea>
+            </div>
 
             {/* Chat Input */}
             <ChatInput
