@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   Search,
   Plus,
@@ -39,6 +40,7 @@ interface ContactRow {
 }
 
 export default function Contacts() {
+  const { canDeleteContacts } = useUserRole();
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -173,7 +175,9 @@ export default function Contacts() {
               <Tag className="w-4 h-4 mr-2" />
               Adicionar Tag
             </Button>
-            <Button variant="outline" size="sm" className="text-destructive">Excluir</Button>
+            <Button variant="outline" size="sm" className="text-destructive" disabled={!canDeleteContacts}>
+              Excluir
+            </Button>
           </div>
         </motion.div>
       )}
@@ -276,7 +280,7 @@ export default function Contacts() {
                           <DropdownMenuItem><Phone className="w-4 h-4 mr-2" />Ligar</DropdownMenuItem>
                           <DropdownMenuItem><Mail className="w-4 h-4 mr-2" />Enviar email</DropdownMenuItem>
                           <DropdownMenuItem>Editar</DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">Excluir</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive" disabled={!canDeleteContacts}>Excluir</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

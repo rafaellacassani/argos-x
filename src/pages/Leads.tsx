@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, RefreshCw } from 'lucide-react';
+import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,14 +17,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
 import { useLeads, Lead, LeadHistory } from '@/hooks/useLeads';
 import { LeadKanban } from '@/components/leads/LeadKanban';
 import { LeadDetailSheet } from '@/components/leads/LeadDetailSheet';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { LeadStats } from '@/components/leads/LeadStats';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Leads() {
   const navigate = useNavigate();
+  const { role, userProfileId, isSeller, canDeleteLeads, isAdminOrManager } = useUserRole();
   const {
     funnels,
     currentFunnel,
@@ -42,7 +48,6 @@ export default function Leads() {
     getLeadHistory,
     addTagToLead,
     removeTagFromLead,
-    
     createFunnel,
     updateStage,
     saveSales
@@ -54,6 +59,24 @@ export default function Leads() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogStageId, setCreateDialogStageId] = useState<string | undefined>();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [myWalletActive, setMyWalletActive] = useState(false);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
+
+  // Filter leads based on role and wallet filter
+  const filteredLeads = useMemo(() => {
+    let result = leads;
+    
+    if (isSeller && myWalletActive && userProfileId) {
+      // Show only leads assigned to this seller
+      result = result.filter(l => l.responsible_user === userProfileId);
+    } else if (isSeller && !myWalletActive) {
+      // Sellers see: unassigned leads (imported by admin) + their own leads
+      result = result.filter(l => !l.responsible_user || l.responsible_user === userProfileId);
+    }
+    // Admin/manager see all leads
+    
+    return result;
+  }, [leads, isSeller, myWalletActive, userProfileId]);
 
   useEffect(() => {
     if (selectedLead) {
@@ -67,22 +90,37 @@ export default function Leads() {
   }, []);
 
   const handleLeadDelete = useCallback(async (leadId: string) => {
+    if (!canDeleteLeads) return;
     await deleteLead(leadId);
     if (selectedLead?.id === leadId) {
       setDetailSheetOpen(false);
       setSelectedLead(null);
     }
-  }, [deleteLead, selectedLead]);
+  }, [deleteLead, selectedLead, canDeleteLeads]);
 
   const handleLeadMove = useCallback(async (leadId: string, newStageId: string, newPosition: number) => {
+    // Auto-assign responsible_user if seller and lead is unassigned
+    if (isSeller && userProfileId) {
+      const lead = leads.find(l => l.id === leadId);
+      if (lead && !lead.responsible_user) {
+        await updateLead(leadId, { responsible_user: userProfileId });
+      }
+    }
     await moveLead(leadId, newStageId, newPosition);
-  }, [moveLead]);
+  }, [moveLead, isSeller, userProfileId, leads, updateLead]);
 
   const handleMoveFromSheet = useCallback(async (leadId: string, stageId: string) => {
+    // Auto-assign if seller
+    if (isSeller && userProfileId) {
+      const lead = leads.find(l => l.id === leadId);
+      if (lead && !lead.responsible_user) {
+        await updateLead(leadId, { responsible_user: userProfileId });
+      }
+    }
     const stageLeads = leads.filter(l => l.stage_id === stageId);
     const maxPosition = stageLeads.length > 0 ? Math.max(...stageLeads.map(l => l.position)) + 1 : 0;
     await moveLead(leadId, stageId, maxPosition);
-  }, [leads, moveLead]);
+  }, [leads, moveLead, isSeller, userProfileId, updateLead]);
 
   const handleAddLead = useCallback((stageId: string) => {
     setCreateDialogStageId(stageId);
@@ -102,6 +140,10 @@ export default function Leads() {
       }
     }
     setIsRefreshing(false);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   };
 
   if (loading) {
@@ -154,20 +196,57 @@ export default function Leads() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Minha Carteira toggle */}
+            <Button
+              variant={myWalletActive ? 'default' : 'outline'}
+              onClick={() => setMyWalletActive(!myWalletActive)}
+              className="gap-2"
+            >
+              <Briefcase className="h-4 w-4" />
+              Minha Carteira
+              {myWalletActive && (
+                <Badge variant="secondary" className="ml-1 text-xs">
+                  {filteredLeads.length}
+                </Badge>
+              )}
+            </Button>
+
+            {/* View mode toggle */}
+            <div className="flex border rounded-md">
+              <Button
+                variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+                size="icon"
+                className="rounded-r-none"
+                onClick={() => setViewMode('kanban')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="icon"
+                className="rounded-l-none"
+                onClick={() => setViewMode('list')}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+
             <Button variant="outline" size="icon" onClick={handleRefresh} disabled={isRefreshing}>
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon"><Settings className="h-4 w-4" /></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => {
-                  const name = prompt('Nome do novo funil:');
-                  if (name) createFunnel(name);
-                }}>Criar Novo Funil</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isAdminOrManager && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon"><Settings className="h-4 w-4" /></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => {
+                    const name = prompt('Nome do novo funil:');
+                    if (name) createFunnel(name);
+                  }}>Criar Novo Funil</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <Button onClick={() => { setCreateDialogStageId(stages[0]?.id); setCreateDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-2" />Novo Lead
             </Button>
@@ -176,20 +255,98 @@ export default function Leads() {
       </div>
 
       <div className="p-4 lg:px-6">
-        <LeadStats stages={stages} leads={leads} />
+        <LeadStats stages={stages} leads={filteredLeads} />
       </div>
 
       <div className="flex-1 overflow-hidden">
-        <LeadKanban
-          stages={stages}
-          leads={leads}
-          onLeadClick={handleLeadClick}
-          onLeadDelete={handleLeadDelete}
-          onLeadMove={handleLeadMove}
-          onOpenChat={handleOpenChat}
-          onAddLead={handleAddLead}
-          onUpdateStage={updateStage}
-        />
+        {viewMode === 'kanban' ? (
+          <LeadKanban
+            stages={stages}
+            leads={filteredLeads}
+            onLeadClick={handleLeadClick}
+            onLeadDelete={handleLeadDelete}
+            onLeadMove={handleLeadMove}
+            onOpenChat={handleOpenChat}
+            onAddLead={handleAddLead}
+            onUpdateStage={updateStage}
+            canDelete={canDeleteLeads}
+          />
+        ) : (
+          <div className="p-4 lg:px-6 overflow-auto h-full">
+            <div className="rounded-lg border bg-card">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Lead</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead>Etapa</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Tags</TableHead>
+                    <TableHead>Fonte</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredLeads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                        Nenhum lead encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredLeads.map(lead => {
+                      const stage = stages.find(s => s.id === lead.stage_id);
+                      return (
+                        <TableRow 
+                          key={lead.id} 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleLeadClick(lead)}
+                        >
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{lead.name}</p>
+                              {lead.company && <p className="text-xs text-muted-foreground">{lead.company}</p>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm">{lead.phone}</TableCell>
+                          <TableCell>
+                            {stage && (
+                              <Badge variant="outline" style={{ borderColor: stage.color, color: stage.color }}>
+                                {stage.name}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium text-emerald-600">
+                            {(lead.total_sales_value || lead.value || 0) > 0 
+                              ? formatCurrency(lead.total_sales_value || lead.value || 0) 
+                              : '-'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {(lead.tags || []).slice(0, 2).map(tag => (
+                                <span
+                                  key={tag.id}
+                                  className="text-xs px-2 py-0.5 rounded-full border"
+                                  style={{
+                                    backgroundColor: `${tag.color}15`,
+                                    color: tag.color,
+                                    borderColor: `${tag.color}30`,
+                                  }}
+                                >
+                                  {tag.name}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{lead.source || '-'}</TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        )}
       </div>
 
       <LeadDetailSheet
@@ -206,6 +363,7 @@ export default function Leads() {
         onRemoveTag={removeTagFromLead}
         onOpenChat={handleOpenChat}
         onSaveSales={saveSales}
+        canDelete={canDeleteLeads}
       />
 
       <CreateLeadDialog

@@ -19,6 +19,7 @@ interface LeadCardProps {
   onClick: (lead: Lead) => void;
   onDelete: (leadId: string) => void;
   onOpenChat?: (jid: string) => void;
+  canDelete?: boolean;
 }
 
 export const LeadCard = memo(function LeadCard({ 
@@ -26,7 +27,8 @@ export const LeadCard = memo(function LeadCard({
   index, 
   onClick, 
   onDelete,
-  onOpenChat 
+  onOpenChat,
+  canDelete = true
 }: LeadCardProps) {
   const initials = lead.name
     .split(' ')
@@ -96,15 +98,17 @@ export const LeadCard = memo(function LeadCard({
                     Abrir Chat
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(lead.id);
-                  }}
-                  className="text-destructive"
-                >
-                  Excluir Lead
-                </DropdownMenuItem>
+                {canDelete && (
+                  <DropdownMenuItem 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(lead.id);
+                    }}
+                    className="text-destructive"
+                  >
+                    Excluir Lead
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
