@@ -929,9 +929,12 @@ export function useLeads() {
       if (funnelError) throw funnelError;
 
       const defaultStages = [
-        { name: 'Entrada', color: '#E5E7EB', position: 0 },
-        { name: 'Em Andamento', color: '#0171C3', position: 1 },
-        { name: 'Concluído', color: '#22C55E', position: 2, is_win_stage: true }
+        { name: 'Leads de Entrada', color: '#6B7280', position: 0 },
+        { name: 'Em Qualificação', color: '#0171C3', position: 1 },
+        { name: 'Lixo', color: '#EF4444', position: 2, is_loss_stage: true },
+        { name: 'Reunião Agendada', color: '#F59E0B', position: 3 },
+        { name: 'Venda Realizada', color: '#22C55E', position: 4, is_win_stage: true },
+        { name: 'No Show', color: '#8B5CF6', position: 5 },
       ];
 
       for (const stage of defaultStages) {
