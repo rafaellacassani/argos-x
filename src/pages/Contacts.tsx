@@ -1,12 +1,15 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
+import { toast } from "@/hooks/use-toast";
 import {
   Search,
   Plus,
   Download,
   Upload,
   MoreHorizontal,
+  RefreshCw,
   Phone,
   Mail,
   MessageCircle,
@@ -41,11 +44,99 @@ interface ContactRow {
 
 export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
+  const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enriching, setEnriching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+
+  // Batch enrich contacts: fetch WhatsApp profile name/photo for contacts with only numbers
+  const handleBatchEnrich = useCallback(async () => {
+    setEnriching(true);
+    try {
+      // Get connected instances
+      const allInstances = await listInstances();
+      const stateResults = await Promise.all(
+        allInstances.map(async (inst) => {
+          const state = await getConnectionState(inst.instanceName);
+          return { inst, connected: state?.instance?.state === "open" };
+        })
+      );
+      const connectedInstance = stateResults.find((r) => r.connected)?.inst;
+      if (!connectedInstance) {
+        toast({ title: "Nenhuma instância conectada", description: "Conecte o WhatsApp primeiro.", variant: "destructive" });
+        return;
+      }
+
+      // Find leads with only phone numbers (no proper names)
+      const { data: leads } = await supabase
+        .from("leads")
+        .select("id, name, phone, whatsapp_jid, avatar_url")
+        .not("whatsapp_jid", "is", null);
+
+      if (!leads || leads.length === 0) {
+        toast({ title: "Nenhum contato para enriquecer" });
+        return;
+      }
+
+      // Filter leads that need enrichment (name looks like a number or has @lid)
+      const needsEnrichment = leads.filter((l) => {
+        const nameIsNumber = /^\+?\d[\d\s()-]*$/.test(l.name.trim());
+        const nameHasLid = l.name.includes("@lid") || l.name.includes("@s.whatsapp");
+        return (nameIsNumber || nameHasLid || !l.avatar_url) && l.whatsapp_jid;
+      });
+
+      if (needsEnrichment.length === 0) {
+        toast({ title: "Todos os contatos já estão enriquecidos!" });
+        return;
+      }
+
+      // Process in batches of 10
+      let updated = 0;
+      for (let i = 0; i < needsEnrichment.length; i += 10) {
+        const batch = needsEnrichment.slice(i, i + 10);
+        const numbers = batch.map((l) => 
+          l.whatsapp_jid!.replace(/@s\.whatsapp\.net$/, "").replace(/@lid$/, "").replace(/@g\.us$/, "")
+        );
+
+        const profiles = await fetchProfilesBatch(connectedInstance.instanceName, numbers);
+
+        for (let j = 0; j < batch.length; j++) {
+          const lead = batch[j];
+          const profile = profiles[numbers[j]];
+          if (!profile) continue;
+
+          const updates: Record<string, string> = {};
+          if (profile.name && (lead.name.includes("@") || /^\+?\d[\d\s()-]*$/.test(lead.name.trim()))) {
+            updates.name = profile.name;
+          }
+          if (profile.profilePicUrl && !lead.avatar_url) {
+            updates.avatar_url = profile.profilePicUrl;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await supabase.from("leads").update(updates).eq("id", lead.id);
+            updated++;
+          }
+        }
+
+        // Pause between batches
+        if (i + 10 < needsEnrichment.length) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+
+      toast({ title: "Enriquecimento concluído", description: `${updated} contatos atualizados de ${needsEnrichment.length} processados.` });
+      fetchContacts();
+    } catch (err) {
+      console.error("[Contacts] Batch enrich error:", err);
+      toast({ title: "Erro no enriquecimento", description: "Tente novamente.", variant: "destructive" });
+    } finally {
+      setEnriching(false);
+    }
+  }, [listInstances, getConnectionState, fetchProfilesBatch]);
 
   const fetchContacts = async () => {
     setLoading(true);
@@ -117,6 +208,15 @@ export default function Contacts() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            className="gap-2" 
+            onClick={handleBatchEnrich}
+            disabled={enriching}
+          >
+            <RefreshCw className={`w-4 h-4 ${enriching ? "animate-spin" : ""}`} />
+            {enriching ? "Enriquecendo..." : "Enriquecer Perfis"}
+          </Button>
           <Button variant="outline" className="gap-2" onClick={() => setImportOpen(true)}>
             <Upload className="w-4 h-4" />
             Importar
