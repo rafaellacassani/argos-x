@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter } from 'lucide-react';
+import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { useLeads, Lead } from '@/hooks/useLeads';
 import { useStageAutomations } from '@/hooks/useStageAutomations';
+import { FunnelAutomationsPage } from '@/components/leads/FunnelAutomationsPage';
 import { LeadKanban } from '@/components/leads/LeadKanban';
 import { LeadDetailModal } from '@/components/leads/LeadDetailModal';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
@@ -64,6 +65,7 @@ export default function Leads() {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<LeadFiltersData>(() => loadSessionFilters() || DEFAULT_FILTERS);
+  const [automationsPageOpen, setAutomationsPageOpen] = useState(false);
 
   // Load team members on mount
   useEffect(() => { fetchTeamMembers(); }, [fetchTeamMembers]);
@@ -289,6 +291,13 @@ export default function Leads() {
               </Button>
             </div>
 
+            {isAdminOrManager && (
+              <Button variant="outline" onClick={() => setAutomationsPageOpen(true)} className="gap-2">
+                <Zap className="h-4 w-4 text-amber-500" />
+                Automações
+              </Button>
+            )}
+
             {/* Filter button */}
             <Button variant="outline" onClick={() => setFiltersOpen(true)} className="gap-2">
               <Filter className="h-4 w-4" />
@@ -465,6 +474,14 @@ export default function Leads() {
         onOpenChange={setCreateDialogOpen}
         onCreate={createLead}
         defaultStageId={createDialogStageId}
+      />
+      <FunnelAutomationsPage
+        open={automationsPageOpen}
+        onOpenChange={setAutomationsPageOpen}
+        stages={stages}
+        tags={tags}
+        teamMembers={teamMembers}
+        funnelName={currentFunnel?.name}
       />
     </motion.div>
   );

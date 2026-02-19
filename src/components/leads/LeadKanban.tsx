@@ -54,17 +54,9 @@ export const LeadKanban = memo(function LeadKanban({
   
   const handleDragEnd = useCallback((result: DropResult) => {
     const { destination, source, draggableId } = result;
-
-    // Dropped outside a droppable
     if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
 
-    // Dropped in the same place
-    if (
-      destination.droppableId === source.droppableId &&
-      destination.index === source.index
-    ) return;
-
-    // Calculate new position based on destination
     const destinationLeads = leads
       .filter(l => l.stage_id === destination.droppableId)
       .sort((a, b) => a.position - b.position);
@@ -85,7 +77,6 @@ export const LeadKanban = memo(function LeadKanban({
     onLeadMove(draggableId, destination.droppableId, newPosition);
   }, [leads, onLeadMove]);
 
-  // Group leads by stage
   const leadsByStage = stages.reduce((acc, stage) => {
     acc[stage.id] = leads
       .filter(lead => lead.stage_id === stage.id)
@@ -111,9 +102,8 @@ export const LeadKanban = memo(function LeadKanban({
                 onUpdateStage={onUpdateStage}
                 canDelete={canDelete}
                 teamMembers={teamMembers}
-                automationCount={automationCounts[stage.id] || 0}
+                hasActiveAutomations={(automationCounts[stage.id] || 0) > 0}
                 tags={tags}
-                onAutomationCountChange={loadCounts}
               />
             ))}
           </div>

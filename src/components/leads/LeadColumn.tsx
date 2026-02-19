@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Plus, Bot, Zap } from 'lucide-react';
+import { MoreHorizontal, Plus, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,7 +13,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils';
 import { LeadCard } from './LeadCard';
 import { StageSettingsDialog } from './StageSettingsDialog';
-import { StageAutomationsDialog } from './StageAutomationsDialog';
 import type { Lead, FunnelStage, LeadTag } from '@/hooks/useLeads';
 
 interface TeamMember {
@@ -32,9 +31,8 @@ interface LeadColumnProps {
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
-  automationCount?: number;
+  hasActiveAutomations?: boolean;
   tags?: LeadTag[];
-  onAutomationCountChange?: () => void;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -48,12 +46,10 @@ export const LeadColumn = memo(function LeadColumn({
   onUpdateStage,
   canDelete = true,
   teamMembers = [],
-  automationCount = 0,
+  hasActiveAutomations = false,
   tags = [],
-  onAutomationCountChange,
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [automationsOpen, setAutomationsOpen] = useState(false);
   const totalValue = leads.reduce((sum, lead) => sum + (lead.total_sales_value || lead.value || 0), 0);
   
   const formatCurrency = (value: number) => {
@@ -73,32 +69,26 @@ export const LeadColumn = memo(function LeadColumn({
         style={{ backgroundColor: `${stage.color}15` }}
       >
         <div className="flex items-center gap-2">
-          <div 
-            className="w-3 h-3 rounded-full" 
-            style={{ backgroundColor: stage.color }}
-          />
+          <div className="relative">
+            <div 
+              className="w-3 h-3 rounded-full" 
+              style={{ backgroundColor: stage.color }}
+            />
+            {hasActiveAutomations && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span 
+                    className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border border-background"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>Automações ativas — clique em Automações para gerenciar</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           <h3 className="font-semibold text-foreground">{stage.name}</h3>
           <span className="text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
             {leads.length}
           </span>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 relative"
-                onClick={() => setAutomationsOpen(true)}
-              >
-                <Zap className="h-3.5 w-3.5 text-amber-500" />
-                {automationCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
-                    {automationCount}
-                  </span>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Automações desta etapa</TooltipContent>
-          </Tooltip>
         </div>
         
         <div className="flex items-center gap-1">
@@ -204,15 +194,6 @@ export const LeadColumn = memo(function LeadColumn({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onUpdate={onUpdateStage || (() => {})}
-      />
-
-      <StageAutomationsDialog
-        stage={stage}
-        open={automationsOpen}
-        onOpenChange={setAutomationsOpen}
-        tags={tags}
-        teamMembers={teamMembers}
-        onCountChange={onAutomationCountChange}
       />
     </div>
   );
