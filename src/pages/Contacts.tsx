@@ -42,6 +42,25 @@ interface ContactRow {
   tags?: { id: string; name: string; color: string }[];
 }
 
+// Format phone: remove JID suffixes and format for display
+const formatContactPhone = (phone: string): string => {
+  const digits = phone
+    .replace(/@s\.whatsapp\.net$/i, "")
+    .replace(/@g\.us$/i, "")
+    .replace(/@lid$/i, "")
+    .replace(/@c\.us$/i, "")
+    .replace(/[^0-9]/g, "");
+  if (!digits || digits.length < 4) return phone;
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length === 9) return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+    if (rest.length === 8) return `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+  }
+  if (digits.length >= 10) return `+${digits}`;
+  return phone;
+};
+
 export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
   const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
@@ -345,7 +364,7 @@ export default function Contacts() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{contact.phone}</TableCell>
+                    <TableCell className="text-sm">{formatContactPhone(contact.phone)}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{contact.email || "-"}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">

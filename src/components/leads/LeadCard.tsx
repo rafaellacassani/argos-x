@@ -45,10 +45,19 @@ export const LeadCard = memo(function LeadCard({
   };
 
   const formatPhone = (phone: string) => {
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`;
+    const digits = phone
+      .replace(/@s\.whatsapp\.net$/i, "")
+      .replace(/@g\.us$/i, "")
+      .replace(/@lid$/i, "")
+      .replace(/@c\.us$/i, "")
+      .replace(/[^0-9]/g, "");
+    if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+      const ddd = digits.slice(2, 4);
+      const rest = digits.slice(4);
+      if (rest.length === 9) return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+      if (rest.length === 8) return `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
     }
+    if (digits.length >= 10) return `+${digits}`;
     return phone;
   };
 

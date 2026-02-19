@@ -66,21 +66,41 @@ interface Message {
   localAudioBase64?: string; // For locally sent audio that can play immediately
 }
 
+// Helper to clean phone string: remove JID suffixes and non-digit chars
+const cleanPhoneNumber = (phone: string): string => {
+  return phone
+    .replace(/@s\.whatsapp\.net$/i, "")
+    .replace(/@g\.us$/i, "")
+    .replace(/@lid$/i, "")
+    .replace(/@c\.us$/i, "")
+    .replace(/[^0-9]/g, "");
+};
+
+// Helper to format a cleaned numeric phone string for display
+const formatPhoneDisplay = (digits: string): string => {
+  if (!digits || digits.length < 4) return digits;
+  // Brazilian numbers (country code 55)
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length === 9) {
+      return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+    }
+    if (rest.length === 8) {
+      return `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+    }
+  }
+  // Generic international
+  if (digits.length >= 10) {
+    return `+${digits}`;
+  }
+  return digits;
+};
+
 // Helper to format phone from jid - handles @s.whatsapp.net, @g.us, and @lid formats
 const formatPhoneFromJid = (jid: string): string => {
-  const number = jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "").replace(/@lid$/, "");
-  // Brazilian numbers
-  if (number.length === 13) {
-    return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 9)}-${number.slice(9)}`;
-  }
-  if (number.length === 12) {
-    return `+${number.slice(0, 2)} (${number.slice(2, 4)}) ${number.slice(4, 8)}-${number.slice(8)}`;
-  }
-  // Generic international format
-  if (number.length >= 10) {
-    return `+${number}`;
-  }
-  return number;
+  const digits = cleanPhoneNumber(jid);
+  return formatPhoneDisplay(digits);
 };
 
 // Helper to extract just the number from jid for sending
@@ -562,12 +582,18 @@ export default function Chats() {
     const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
     const resolvedName = contactPushName || chat.pushName || chat.name || null;
     const jid = chat.remoteJid || chat.id;
-    const formattedPhone = formatPhoneFromJid(jid);
     
     // Check if there's a matching lead with a proper name
     const matchingLead = leadsRef.current.find((l) => l.whatsapp_jid === jid);
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
+    
+    // For phone display: prefer lead's cleaned phone, then format from JID
+    // This avoids showing @lid internal IDs as phone numbers
+    const leadPhone = matchingLead?.phone ? cleanPhoneNumber(matchingLead.phone) : null;
+    const jidPhone = jid.endsWith("@lid") ? null : cleanPhoneNumber(jid);
+    const bestPhone = leadPhone || jidPhone || "";
+    const formattedPhone = formatPhoneDisplay(bestPhone);
     
     // Name priority: lead name > pushName > formatted phone (never raw JID)
     const displayName = (leadName && leadName !== formattedPhone && !leadName.includes("@")) 

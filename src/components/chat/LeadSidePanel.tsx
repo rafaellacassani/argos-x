@@ -109,6 +109,25 @@ function InlineEditField({
   );
 }
 
+// Format phone: remove JID suffixes and format for display
+const formatLeadPhone = (phone: string): string => {
+  const digits = phone
+    .replace(/@s\.whatsapp\.net$/i, "")
+    .replace(/@g\.us$/i, "")
+    .replace(/@lid$/i, "")
+    .replace(/@c\.us$/i, "")
+    .replace(/[^0-9]/g, "");
+  if (!digits || digits.length < 4) return phone;
+  if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length === 9) return `+55 (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+    if (rest.length === 8) return `+55 (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+  }
+  if (digits.length >= 10) return `+${digits}`;
+  return phone;
+};
+
 const TAG_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#6B7280"];
 
 export function LeadSidePanel({
@@ -410,7 +429,7 @@ export function LeadSidePanel({
                 />
                 <InlineEditField
                   label="Celular"
-                  value={lead.phone}
+                  value={formatLeadPhone(lead.phone)}
                   icon={Phone}
                   type="tel"
                   onSave={(val) => onUpdateLead(lead.id, { phone: val })}
