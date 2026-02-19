@@ -30,6 +30,7 @@ export interface LeadFiltersData {
   dateTo: Date | null;
   visibleStageIds: string[];
   sources: string[];
+  unassigned: boolean;
 }
 
 export const DEFAULT_FILTERS: LeadFiltersData = {
@@ -44,6 +45,7 @@ export const DEFAULT_FILTERS: LeadFiltersData = {
   dateTo: null,
   visibleStageIds: [],
   sources: [],
+  unassigned: false,
 };
 
 const DATE_PRESETS = [
@@ -92,7 +94,8 @@ export function getDateRange(preset: string): { from: Date; to: Date } {
 
 export function countActiveFilters(filters: LeadFiltersData, allStageIds: string[]): number {
   let count = 0;
-  if (filters.responsibleUserIds.length > 0) count++;
+  if (filters.unassigned) count++;
+  if (!filters.unassigned && filters.responsibleUserIds.length > 0) count++;
   if (filters.tagIds.length > 0) count++;
   if (filters.valueMin !== null || filters.valueMax !== null) count++;
   if (filters.product.trim()) count++;
@@ -160,14 +163,34 @@ export function LeadFilters({
           <div className="space-y-4 py-4">
             {/* ===== LEAD PROPERTIES ===== */}
             <FilterSection title="PROPRIEDADES DO LEAD" defaultOpen>
+              {/* Sem responsável */}
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-sm py-1">
+                  <Checkbox
+                    checked={draft.unassigned}
+                    onCheckedChange={(checked) =>
+                      setDraft(d => ({
+                        ...d,
+                        unassigned: !!checked,
+                        responsibleUserIds: checked ? [] : d.responsibleUserIds,
+                      }))
+                    }
+                  />
+                  Apenas leads sem responsável
+                </label>
+              </div>
+
+              <Separator className="my-3" />
+
               {/* Responsável */}
               <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Responsável</Label>
-                <div className="space-y-1 max-h-40 overflow-y-auto">
+                <Label className={cn("text-xs font-medium text-muted-foreground", draft.unassigned && "opacity-50")}>Responsável</Label>
+                <div className={cn("space-y-1 max-h-40 overflow-y-auto", draft.unassigned && "opacity-50 pointer-events-none")}>
                   {sellers.map(s => (
                     <label key={s.id} className="flex items-center gap-2 cursor-pointer text-sm py-1">
                       <Checkbox
                         checked={draft.responsibleUserIds.includes(s.id)}
+                        disabled={draft.unassigned}
                         onCheckedChange={() =>
                           setDraft(d => ({ ...d, responsibleUserIds: toggleArray(d.responsibleUserIds, s.id) }))
                         }

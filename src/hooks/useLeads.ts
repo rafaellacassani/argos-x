@@ -313,6 +313,7 @@ export function useLeads() {
     dateTo?: string | null;
     dateType?: 'created_at' | 'sale_date';
     sources?: string[];
+    unassigned?: boolean;
   }) => {
     if (stageIds.length === 0) return [];
     
@@ -325,7 +326,9 @@ export function useLeads() {
 
       // Apply server-side filters
       if (filters) {
-        if (filters.responsibleUserIds && filters.responsibleUserIds.length > 0) {
+        if (filters.unassigned) {
+          query = query.is('responsible_user', null);
+        } else if (filters.responsibleUserIds && filters.responsibleUserIds.length > 0) {
           query = query.in('responsible_user', filters.responsibleUserIds);
         }
         if (filters.valueMin !== null && filters.valueMin !== undefined) {
