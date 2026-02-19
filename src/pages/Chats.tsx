@@ -34,6 +34,7 @@ import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 interface Chat {
   id: string;
   remoteJid: string;
+  remoteJidAlt?: string; // Real phone JID when remoteJid is a @lid
   name: string;
   avatar?: string;
   profilePicUrl?: string;
@@ -111,11 +112,18 @@ const extractNumberFromJid = (jid: string): string => {
 // Helper to resolve the best phone number for sending messages
 // Prefers the lead's phone over extracting from JID (which may be a LID, not a real number)
 const resolveRecipientNumber = (chat: Chat): string => {
-  // If JID is a @lid type, the number extracted won't be a real phone - use chat.phone instead
   if (chat.remoteJid.endsWith("@lid")) {
-    // Clean the phone field: remove formatting chars, keep only digits
+    // 1) Try chat.phone (from lead data)
     const cleaned = chat.phone.replace(/[^0-9]/g, "");
     if (cleaned.length >= 10) return cleaned;
+    // 2) Try remoteJidAlt (real phone JID from message key)
+    if (chat.remoteJidAlt) {
+      const altCleaned = extractNumberFromJid(chat.remoteJidAlt);
+      if (altCleaned.length >= 10) return altCleaned;
+    }
+    // 3) No valid phone found — return empty to prevent sending to LID
+    console.warn("[resolveRecipientNumber] No valid phone for LID chat:", chat.remoteJid);
+    return "";
   }
   return extractNumberFromJid(chat.remoteJid);
 };
@@ -429,6 +437,10 @@ export default function Chats() {
     if (!targetInstance || targetInstance === "all") return false;
     
     const number = resolveRecipientNumber(selectedChat);
+    if (!number) {
+      toast({ title: "Número não encontrado", description: "Não foi possível identificar o número de telefone deste contato.", variant: "destructive" });
+      return false;
+    }
     const success = await sendText(targetInstance, number, text);
     
     if (success) {
@@ -582,17 +594,20 @@ export default function Chats() {
     const contactPushName = (lastMsgFromMe === false) ? lastMsg?.pushName : undefined;
     const resolvedName = contactPushName || chat.pushName || chat.name || null;
     const jid = chat.remoteJid || chat.id;
+    // Extract remoteJidAlt from last message key (real phone for @lid chats)
+    const remoteJidAlt = lastMsg?.key?.remoteJidAlt || chat.remoteJidAlt || undefined;
     
     // Check if there's a matching lead with a proper name
     const matchingLead = leadsRef.current.find((l) => l.whatsapp_jid === jid);
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
     
-    // For phone display: prefer lead's cleaned phone, then format from JID
+    // For phone display: prefer lead's cleaned phone, then remoteJidAlt, then format from JID
     // This avoids showing @lid internal IDs as phone numbers
     const leadPhone = matchingLead?.phone ? cleanPhoneNumber(matchingLead.phone) : null;
+    const altPhone = (jid.endsWith("@lid") && remoteJidAlt) ? cleanPhoneNumber(remoteJidAlt) : null;
     const jidPhone = jid.endsWith("@lid") ? null : cleanPhoneNumber(jid);
-    const bestPhone = leadPhone || jidPhone || "";
+    const bestPhone = leadPhone || altPhone || jidPhone || "";
     const formattedPhone = formatPhoneDisplay(bestPhone);
     
     // Name priority: lead name > pushName > formatted phone (never raw JID)
@@ -603,6 +618,7 @@ export default function Chats() {
     return {
       id: instanceName ? `${instanceName}:${jid}` : (chat.id || jid),
       remoteJid: jid,
+      remoteJidAlt,
       name: displayName || formatPhoneDisplay(cleanPhoneNumber(jid)) || jid,
       profilePicUrl: chat.profilePicUrl || leadAvatar || undefined,
       lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
