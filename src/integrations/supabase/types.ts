@@ -1625,27 +1625,54 @@ export type Database = {
       workspaces: {
         Row: {
           alert_instance_name: string | null
+          blocked_at: string | null
           created_at: string
           created_by: string
           id: string
           name: string
+          onboarding_completed: boolean | null
+          onboarding_step: number | null
+          plan_type: string
           slug: string
+          stripe_customer_id: string | null
+          stripe_price_id: string | null
+          stripe_subscription_id: string | null
+          subscription_status: string
+          trial_end: string | null
         }
         Insert: {
           alert_instance_name?: string | null
+          blocked_at?: string | null
           created_at?: string
           created_by: string
           id?: string
           name: string
+          onboarding_completed?: boolean | null
+          onboarding_step?: number | null
+          plan_type?: string
           slug: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string
+          trial_end?: string | null
         }
         Update: {
           alert_instance_name?: string | null
+          blocked_at?: string | null
           created_at?: string
           created_by?: string
           id?: string
           name?: string
+          onboarding_completed?: boolean | null
+          onboarding_step?: number | null
+          plan_type?: string
           slug?: string
+          stripe_customer_id?: string | null
+          stripe_price_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_status?: string
+          trial_end?: string | null
         }
         Relationships: []
       }
