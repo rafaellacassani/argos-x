@@ -543,18 +543,23 @@ export function useEvolutionAPI() {
 
   const fetchProfile = useCallback(async (instanceName: string, number: string): Promise<{ name?: string; profilePicUrl?: string } | null> => {
     try {
+      // Skip invalid numbers (too short, too long, or non-numeric)
+      const cleanNum = number.replace(/\D/g, "");
+      if (!cleanNum || cleanNum.length < 8 || cleanNum.length > 15 || cleanNum === "0") {
+        return null;
+      }
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/fetch-profile/${instanceName}`, {
         method: "POST",
-        body: { number },
+        body: { number: cleanNum },
       });
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error) throw new Error(data.error);
+      if (fnError || data?.error) {
+        return null;
+      }
       return {
         name: data?.name || data?.pushName || data?.fullName || undefined,
         profilePicUrl: data?.profilePictureUrl || data?.profilePicUrl || data?.picture || undefined,
       };
-    } catch (err) {
-      console.error("[useEvolutionAPI] fetchProfile error:", err);
+    } catch {
       return null;
     }
   }, []);
