@@ -71,7 +71,8 @@ export function AgentCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 * index }}
-      className="inboxia-card p-6"
+      className="inboxia-card p-6 cursor-pointer"
+      onClick={() => onEdit(agent)}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-4">

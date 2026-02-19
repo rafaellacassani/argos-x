@@ -27,6 +27,10 @@ function splitMessage(text: string, maxLength: number = 400): string[] {
   return chunks;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function getToolDefinitions(enabledTools: string[]) {
   const allTools = [
     {
@@ -34,7 +38,7 @@ function getToolDefinitions(enabledTools: string[]) {
       function: {
         name: "atualizar_lead",
         description: "Atualiza dados de um lead no CRM",
-        parameters: { type: "object", properties: { lead_id: { type: "string" }, name: { type: "string" }, email: { type: "string" }, phone: { type: "string" }, notes: { type: "string" }, value: { type: "number" } }, required: ["lead_id"] }
+        parameters: { type: "object", properties: { lead_id: { type: "string" }, name: { type: "string" }, email: { type: "string" }, phone: { type: "string" }, notes: { type: "string" }, value: { type: "number" }, company: { type: "string" } }, required: ["lead_id"] }
       }
     },
     {
@@ -66,9 +70,40 @@ function getToolDefinitions(enabledTools: string[]) {
   return allTools.filter(t => enabledTools.includes(t.function.name));
 }
 
-// Validate UUID format
 function isValidUUID(str: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+function buildKnowledgeBlock(agent: any): string {
+  const parts: string[] = [];
+
+  if (agent.knowledge_products) {
+    parts.push("PRODUTOS/SERVIÇOS:\n" + agent.knowledge_products);
+  }
+
+  const faq = agent.knowledge_faq || [];
+  if (faq.length > 0) {
+    const faqText = faq.map((f: any) => `P: ${f.question}\nR: ${f.answer}`).join("\n\n");
+    parts.push("FAQ:\n" + faqText);
+  }
+
+  if (agent.knowledge_rules) {
+    parts.push("REGRAS:\n" + agent.knowledge_rules);
+  }
+
+  if (agent.knowledge_extra) {
+    parts.push(agent.knowledge_extra);
+  }
+
+  return parts.length > 0 ? "\n\nCONHECIMENTO BASE:\n" + parts.join("\n\n") : "";
+}
+
+function getResponseLengthInstruction(length: string): string {
+  switch (length) {
+    case "short": return "\nResponda sempre em no máximo 2 frases curtas.";
+    case "long": return "\nPode ser detalhado e completo nas respostas.";
+    default: return "\nResponda de forma objetiva, em no máximo 1 parágrafo.";
+  }
 }
 
 serve(async (req) => {
@@ -79,7 +114,6 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    // --- AUTH CHECK ---
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -92,7 +126,6 @@ serve(async (req) => {
 
     if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
-    // Verify JWT
     const authClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -102,7 +135,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // --- INPUT VALIDATION ---
     const body = await req.json();
     const { agent_id, session_id, message, lead_id } = body;
 
@@ -122,7 +154,6 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid lead_id format" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Use service role for DB operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { data: agent, error: agentError } = await supabase
@@ -133,6 +164,32 @@ serve(async (req) => {
     }
     if (!agent.is_active) {
       return new Response(JSON.stringify({ error: "Agent is not active", paused: true }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- respond_to check ---
+    if (agent.respond_to === "new_leads" && lead_id) {
+      const { data: existingMemories } = await supabase
+        .from("agent_memories").select("id").eq("agent_id", agent_id).eq("lead_id", lead_id);
+      if (existingMemories && existingMemories.length > 0) {
+        // Check if this is the same session
+        const sameSession = existingMemories.some((m: any) => false); // we check by session below
+        const { data: existingBySession } = await supabase
+          .from("agent_memories").select("id").eq("agent_id", agent_id).eq("session_id", session_id);
+        if (!existingBySession || existingBySession.length === 0) {
+          // There's a previous session for this lead — don't respond
+          return new Response(JSON.stringify({ response: null, skipped: true, reason: "not_new_lead" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+    }
+
+    if (agent.respond_to === "specific_stages" && lead_id) {
+      const stages = agent.respond_to_stages || [];
+      if (stages.length > 0) {
+        const { data: lead } = await supabase.from("leads").select("stage_id").eq("id", lead_id).single();
+        if (lead && !stages.includes(lead.stage_id)) {
+          return new Response(JSON.stringify({ response: null, skipped: true, reason: "stage_not_matched" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
     }
 
     let { data: memory, error: memoryError } = await supabase
@@ -154,111 +211,172 @@ serve(async (req) => {
       if (memory) {
         await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
       }
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: null, status: "paused", latency_ms: Date.now() - startTime });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
       return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // --- Qualification flow ---
+    const qualificationEnabled = agent.qualification_enabled || false;
+    const qualificationFields = agent.qualification_fields || [];
+    const activeQFields = qualificationFields.filter((f: any) => f.active).sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+    let qualificationStep = memory?.summary ? JSON.parse(memory.summary || "{}").qualification_step : undefined;
+    let qualificationData = memory?.summary ? JSON.parse(memory.summary || "{}").qualification_data : {};
+    let isQualifying = false;
+
+    if (qualificationEnabled && activeQFields.length > 0 && qualificationStep !== "completed") {
+      isQualifying = true;
+      if (qualificationStep === undefined) {
+        qualificationStep = 0;
+      } else {
+        // Save the user's answer to the current field
+        const currentField = activeQFields[qualificationStep];
+        if (currentField) {
+          qualificationData[currentField.field_type === "custom" ? currentField.label : currentField.field_type] = message;
+
+          // Update lead data if applicable
+          if (lead_id && isValidUUID(lead_id)) {
+            const fieldMap: Record<string, string> = { name: "name", company: "company", email: "email", phone: "phone" };
+            const leadField = fieldMap[currentField.field_type];
+            if (leadField) {
+              await supabase.from("leads").update({ [leadField]: message }).eq("id", lead_id);
+            }
+          }
+
+          qualificationStep++;
+        }
+      }
+
+      // Check if qualification is complete
+      if (qualificationStep >= activeQFields.length) {
+        qualificationStep = "completed";
+        isQualifying = false;
+      }
+    }
+
+    let responseContent = "";
     const messages: ChatMessage[] = memory?.messages || [];
     messages.push({ role: "user", content: message, timestamp: new Date().toISOString() });
 
-    const contextWindow = memory?.context_window || agent.max_tokens || 50;
-    const recentMessages = messages.slice(-contextWindow);
-    const aiMessages = [
-      { role: "system", content: agent.system_prompt },
-      ...recentMessages.map(m => ({ role: m.role, content: m.content }))
-    ];
+    if (isQualifying && qualificationStep !== "completed") {
+      // Ask the next qualification question
+      const nextField = activeQFields[qualificationStep];
+      responseContent = nextField.question || `Pode me informar seu ${nextField.label}?`;
+    } else {
+      // Normal AI conversation
+      const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium");
 
-    const tools = getToolDefinitions(agent.tools || []);
+      const contextWindow = memory?.context_window || agent.max_tokens || 50;
+      const recentMessages = messages.slice(-contextWindow);
+      const aiMessages = [
+        { role: "system", content: systemPrompt },
+        ...recentMessages.map(m => ({ role: m.role, content: m.content }))
+      ];
 
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: agent.model || "google/gemini-3-flash-preview",
-        messages: aiMessages,
-        temperature: agent.temperature || 0.7,
-        max_tokens: agent.max_tokens || 2048,
-        tools: tools.length > 0 ? tools : undefined,
-        tool_choice: tools.length > 0 ? "auto" : undefined
-      })
-    });
+      const tools = getToolDefinitions(agent.tools || []);
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      if (aiResponse.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      throw new Error(`AI Gateway error: ${aiResponse.status}`);
-    }
+      // Response delay
+      const delay = agent.response_delay_seconds || 0;
+      if (delay > 0) {
+        await sleep(delay * 1000);
+      } else if (delay === -1) {
+        await sleep(30000 + Math.random() * 90000);
+      }
 
-    const aiData = await aiResponse.json();
-    const aiChoice = aiData.choices?.[0];
-    if (!aiChoice) throw new Error("No response from AI");
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: agent.model || "google/gemini-3-flash-preview",
+          messages: aiMessages,
+          temperature: agent.temperature || 0.7,
+          max_tokens: agent.max_tokens || 2048,
+          tools: tools.length > 0 ? tools : undefined,
+          tool_choice: tools.length > 0 ? "auto" : undefined
+        })
+      });
 
-    let responseContent = aiChoice.message?.content || "";
-    const toolCalls = aiChoice.message?.tool_calls || [];
-    const toolsUsed: string[] = [];
+      if (!aiResponse.ok) {
+        if (aiResponse.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        if (aiResponse.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        throw new Error(`AI Gateway error: ${aiResponse.status}`);
+      }
 
-    for (const toolCall of toolCalls) {
-      const toolName = toolCall.function?.name;
-      const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
-      toolsUsed.push(toolName);
+      const aiData = await aiResponse.json();
+      const aiChoice = aiData.choices?.[0];
+      if (!aiChoice) throw new Error("No response from AI");
 
-      switch (toolName) {
-        case "atualizar_lead": {
-          const targetLeadId = lead_id || toolArgs.lead_id;
-          if (targetLeadId && isValidUUID(targetLeadId)) {
-            const updateData: Record<string, unknown> = {};
-            if (typeof toolArgs.name === "string" && toolArgs.name.length <= 200) updateData.name = toolArgs.name;
-            if (typeof toolArgs.email === "string" && toolArgs.email.length <= 255) updateData.email = toolArgs.email;
-            if (typeof toolArgs.phone === "string" && toolArgs.phone.length <= 30) updateData.phone = toolArgs.phone;
-            if (typeof toolArgs.notes === "string" && toolArgs.notes.length <= 2000) updateData.notes = toolArgs.notes;
-            if (typeof toolArgs.value === "number") updateData.value = toolArgs.value;
-            if (Object.keys(updateData).length > 0) {
-              await supabase.from("leads").update(updateData).eq("id", targetLeadId);
+      responseContent = aiChoice.message?.content || "";
+      const toolCalls = aiChoice.message?.tool_calls || [];
+      const toolsUsed: string[] = [];
+
+      for (const toolCall of toolCalls) {
+        const toolName = toolCall.function?.name;
+        const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
+        toolsUsed.push(toolName);
+
+        switch (toolName) {
+          case "atualizar_lead": {
+            const targetLeadId = lead_id || toolArgs.lead_id;
+            if (targetLeadId && isValidUUID(targetLeadId)) {
+              const updateData: Record<string, unknown> = {};
+              if (typeof toolArgs.name === "string" && toolArgs.name.length <= 200) updateData.name = toolArgs.name;
+              if (typeof toolArgs.email === "string" && toolArgs.email.length <= 255) updateData.email = toolArgs.email;
+              if (typeof toolArgs.phone === "string" && toolArgs.phone.length <= 30) updateData.phone = toolArgs.phone;
+              if (typeof toolArgs.notes === "string" && toolArgs.notes.length <= 2000) updateData.notes = toolArgs.notes;
+              if (typeof toolArgs.value === "number") updateData.value = toolArgs.value;
+              if (typeof toolArgs.company === "string" && toolArgs.company.length <= 200) updateData.company = toolArgs.company;
+              if (Object.keys(updateData).length > 0) {
+                await supabase.from("leads").update(updateData).eq("id", targetLeadId);
+              }
             }
+            break;
           }
-          break;
+          case "aplicar_tag": {
+            const targetLeadId = lead_id || toolArgs.lead_id;
+            if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.tag_name === "string" && toolArgs.tag_name.length <= 100) {
+              let { data: tag } = await supabase.from("lead_tags").select("id").eq("name", toolArgs.tag_name).eq("workspace_id", agent.workspace_id).single();
+              if (!tag) {
+                const { data: newTag } = await supabase.from("lead_tags").insert({ name: toolArgs.tag_name, color: "#6B7280", workspace_id: agent.workspace_id }).select("id").single();
+                tag = newTag;
+              }
+              if (tag) {
+                await supabase.from("lead_tag_assignments").upsert({ lead_id: targetLeadId, tag_id: tag.id, workspace_id: agent.workspace_id }, { onConflict: "lead_id,tag_id" });
+              }
+            }
+            break;
+          }
+          case "mover_etapa": {
+            const targetLeadId = lead_id || toolArgs.lead_id;
+            if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.stage_name === "string" && toolArgs.stage_name.length <= 100) {
+              const { data: stage } = await supabase.from("funnel_stages").select("id").ilike("name", `%${toolArgs.stage_name}%`).eq("workspace_id", agent.workspace_id).single();
+              if (stage) {
+                await supabase.from("leads").update({ stage_id: stage.id }).eq("id", targetLeadId);
+              }
+            }
+            break;
+          }
+          case "pausar_ia":
+            if (memory) {
+              await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+            }
+            responseContent += `\n\n[Atendimento transferido para humano. Motivo: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}]`;
+            break;
         }
-        case "aplicar_tag": {
-          const targetLeadId = lead_id || toolArgs.lead_id;
-          if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.tag_name === "string" && toolArgs.tag_name.length <= 100) {
-            let { data: tag } = await supabase.from("lead_tags").select("id").eq("name", toolArgs.tag_name).single();
-            if (!tag) {
-              const { data: newTag } = await supabase.from("lead_tags").insert({ name: toolArgs.tag_name, color: "#6B7280" }).select("id").single();
-              tag = newTag;
-            }
-            if (tag) {
-              await supabase.from("lead_tag_assignments").upsert({ lead_id: targetLeadId, tag_id: tag.id }, { onConflict: "lead_id,tag_id" });
-            }
-          }
-          break;
-        }
-        case "mover_etapa": {
-          const targetLeadId = lead_id || toolArgs.lead_id;
-          if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.stage_name === "string" && toolArgs.stage_name.length <= 100) {
-            // Use parameterized ilike - Supabase SDK handles escaping
-            const { data: stage } = await supabase.from("funnel_stages").select("id").ilike("name", `%${toolArgs.stage_name}%`).single();
-            if (stage) {
-              await supabase.from("leads").update({ stage_id: stage.id }).eq("id", targetLeadId);
-            }
-          }
-          break;
-        }
-        case "pausar_ia":
-          if (memory) {
-            await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
-          }
-          responseContent += `\n\n[Atendimento transferido para humano. Motivo: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}]`;
-          break;
-        // chamar_n8n removed - SSRF risk from arbitrary webhook URLs
       }
     }
 
     messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
 
+    // Save qualification state in summary field
+    const summaryData = {
+      qualification_step: qualificationStep,
+      qualification_data: qualificationData,
+    };
+
     if (memory) {
-      await supabase.from("agent_memories").update({ messages, lead_id: lead_id || memory.lead_id }).eq("id", memory.id);
+      await supabase.from("agent_memories").update({ messages, lead_id: lead_id || memory.lead_id, summary: JSON.stringify(summaryData) }).eq("id", memory.id);
     } else {
-      await supabase.from("agent_memories").insert({ agent_id, session_id, lead_id, messages });
+      await supabase.from("agent_memories").insert({ agent_id, session_id, lead_id, messages, summary: JSON.stringify(summaryData), workspace_id: agent.workspace_id });
     }
 
     let responseChunks = [responseContent];
@@ -267,12 +385,11 @@ serve(async (req) => {
     }
 
     const latencyMs = Date.now() - startTime;
-    const tokensUsed = aiData.usage?.total_tokens || 0;
+    const tokensUsed = 0;
 
-    await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: responseContent, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: "success" });
-    await supabase.rpc("increment_agent_executions", { agent_id_param: agent_id });
+    await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
 
-    return new Response(JSON.stringify({ response: responseContent, chunks: responseChunks, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ response: responseContent, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     console.error("Agent chat error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -2,9 +2,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Bot, Plus, MessageCircle, Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAIAgents, useAgentStats } from "@/hooks/useAIAgents";
+import { useAIAgents, useAgentStats, AIAgent } from "@/hooks/useAIAgents";
 import { AgentCard } from "@/components/agents/AgentCard";
 import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
+import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +22,7 @@ export default function AIAgents() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
 
   const activeAgents = agents.filter((a) => a.is_active).length;
   const totalConversations = 0; // Will be calculated from executions
@@ -30,9 +32,8 @@ export default function AIAgents() {
     toggleAgent.mutate({ id, is_active });
   };
 
-  const handleEdit = (agent: any) => {
-    // TODO: Implement edit dialog
-    console.log("Edit agent:", agent);
+  const handleEdit = (agent: AIAgent) => {
+    setSelectedAgent(agent);
   };
 
   const handleDelete = (id: string) => {
@@ -166,6 +167,13 @@ export default function AIAgents() {
           setCreateDialogOpen(false);
         }}
         isLoading={createAgent.isPending}
+      />
+
+      {/* Agent Detail Dialog */}
+      <AgentDetailDialog
+        agent={selectedAgent}
+        open={!!selectedAgent}
+        onOpenChange={(open) => { if (!open) setSelectedAgent(null); }}
       />
 
       {/* Delete Confirmation Dialog */}
