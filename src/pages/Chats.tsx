@@ -1046,6 +1046,24 @@ export default function Chats() {
                 setChats((prev) => prev.map((c) =>
                   c.remoteJid === selectedChat.remoteJid ? { ...c, phone: formatted, remoteJidAlt: alt } : c
                 ));
+                // Persist phone (and name if placeholder) to database
+                const matchingLeadForUpdate = leadsRef.current.find(
+                  (l) => l.whatsapp_jid === selectedChat.remoteJid ||
+                         l.whatsapp_jid === alt
+                );
+                if (matchingLeadForUpdate) {
+                  const updates: Record<string, string> = { phone: formatted };
+                  // Find pushName from loaded messages
+                  const pushNameMsg = data.find((m: any) => m.pushName && typeof m.pushName === "string" && m.pushName.trim().length > 1);
+                  const pushName = (pushNameMsg as any)?.pushName;
+                  if (
+                    matchingLeadForUpdate.name === "Contato WhatsApp" &&
+                    pushName
+                  ) {
+                    updates.name = pushName.trim();
+                  }
+                  updateLead(matchingLeadForUpdate.id, updates);
+                }
               }
               break;
             }
