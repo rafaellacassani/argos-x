@@ -447,25 +447,37 @@ export type Database = {
       lead_sales: {
         Row: {
           created_at: string | null
+          created_by: string | null
           id: string
           lead_id: string
+          link: string | null
           product_name: string
+          sale_date: string
+          updated_at: string
           value: number
           workspace_id: string
         }
         Insert: {
           created_at?: string | null
+          created_by?: string | null
           id?: string
           lead_id: string
+          link?: string | null
           product_name: string
+          sale_date?: string
+          updated_at?: string
           value?: number
           workspace_id: string
         }
         Update: {
           created_at?: string | null
+          created_by?: string | null
           id?: string
           lead_id?: string
+          link?: string | null
           product_name?: string
+          sale_date?: string
+          updated_at?: string
           value?: number
           workspace_id?: string
         }

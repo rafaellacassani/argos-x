@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { type Lead, type FunnelStage, type LeadTag, type LeadSale } from "@/hooks/useLeads";
 import { supabase } from "@/integrations/supabase/client";
 import { LeadStatsTab } from "./LeadStatsTab";
+import { LeadSalesTab } from "./LeadSalesTab";
 
 interface LeadSidePanelProps {
   lead: Lead | null;
@@ -473,26 +474,12 @@ export function LeadSidePanel({
 
         {/* Sales Tab */}
         <TabsContent value="sales" className="flex-1 m-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            <div className="p-4 space-y-3">
-              {lead.sales && lead.sales.length > 0 ? (
-                <>
-                  <div className="bg-muted/30 rounded-lg px-3 py-2 text-center">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total em vendas</p>
-                    <p className="text-lg font-bold text-foreground">{formatCurrency(lead.total_sales_value || 0)}</p>
-                  </div>
-                  {lead.sales.map((sale) => (
-                    <div key={sale.id} className="flex items-center justify-between bg-muted/20 rounded-lg px-3 py-2">
-                      <span className="text-sm">{sale.product_name}</span>
-                      <span className="text-sm font-semibold">{formatCurrency(sale.value)}</span>
-                    </div>
-                  ))}
-                </>
-              ) : (
-                <p className="text-sm text-center text-muted-foreground">Nenhuma venda registrada.</p>
-              )}
-            </div>
-          </ScrollArea>
+          <LeadSalesTab
+            lead={lead}
+            onLeadValueChanged={(leadId, newValue) => {
+              onUpdateLead(leadId, { value: newValue });
+            }}
+          />
         </TabsContent>
 
         {/* Follow-ups Tab */}
