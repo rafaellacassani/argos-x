@@ -876,6 +876,72 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string | null
+          daily_report_enabled: boolean | null
+          daily_report_time: string | null
+          id: string
+          manager_report_day_of_week: number | null
+          manager_report_enabled: boolean | null
+          manager_report_frequency: string | null
+          manager_report_time: string | null
+          new_lead_alert_enabled: boolean | null
+          no_response_enabled: boolean | null
+          no_response_minutes: number | null
+          updated_at: string | null
+          user_profile_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          daily_report_enabled?: boolean | null
+          daily_report_time?: string | null
+          id?: string
+          manager_report_day_of_week?: number | null
+          manager_report_enabled?: boolean | null
+          manager_report_frequency?: string | null
+          manager_report_time?: string | null
+          new_lead_alert_enabled?: boolean | null
+          no_response_enabled?: boolean | null
+          no_response_minutes?: number | null
+          updated_at?: string | null
+          user_profile_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          daily_report_enabled?: boolean | null
+          daily_report_time?: string | null
+          id?: string
+          manager_report_day_of_week?: number | null
+          manager_report_enabled?: boolean | null
+          manager_report_frequency?: string | null
+          manager_report_time?: string | null
+          new_lead_alert_enabled?: boolean | null
+          no_response_enabled?: boolean | null
+          no_response_minutes?: number | null
+          updated_at?: string | null
+          user_profile_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notification_settings: {
         Row: {
           created_at: string | null
@@ -1103,6 +1169,7 @@ export type Database = {
           email: string | null
           full_name: string
           id: string
+          personal_whatsapp: string | null
           phone: string | null
           updated_at: string | null
           user_id: string
@@ -1113,6 +1180,7 @@ export type Database = {
           email?: string | null
           full_name: string
           id?: string
+          personal_whatsapp?: string | null
           phone?: string | null
           updated_at?: string | null
           user_id: string
@@ -1123,6 +1191,7 @@ export type Database = {
           email?: string | null
           full_name?: string
           id?: string
+          personal_whatsapp?: string | null
           phone?: string | null
           updated_at?: string | null
           user_id?: string
@@ -1207,6 +1276,7 @@ export type Database = {
           display_name: string | null
           id: string
           instance_name: string
+          instance_type: string
           updated_at: string | null
           workspace_id: string
         }
@@ -1216,6 +1286,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           instance_name: string
+          instance_type?: string
           updated_at?: string | null
           workspace_id: string
         }
@@ -1225,6 +1296,7 @@ export type Database = {
           display_name?: string | null
           id?: string
           instance_name?: string
+          instance_type?: string
           updated_at?: string | null
           workspace_id?: string
         }
@@ -1278,6 +1350,7 @@ export type Database = {
       }
       workspaces: {
         Row: {
+          alert_instance_name: string | null
           created_at: string
           created_by: string
           id: string
@@ -1285,6 +1358,7 @@ export type Database = {
           slug: string
         }
         Insert: {
+          alert_instance_name?: string | null
           created_at?: string
           created_by: string
           id?: string
@@ -1292,6 +1366,7 @@ export type Database = {
           slug: string
         }
         Update: {
+          alert_instance_name?: string | null
           created_at?: string
           created_by?: string
           id?: string

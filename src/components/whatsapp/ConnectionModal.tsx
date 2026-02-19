@@ -27,12 +27,14 @@ interface ConnectionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  instanceType?: "commercial" | "alerts";
 }
 
 export function ConnectionModal({
   open,
   onOpenChange,
   onSuccess,
+  instanceType = "commercial",
 }: ConnectionModalProps) {
   const { workspaceId } = useWorkspace();
   const [step, setStep] = useState<Step>("name");
@@ -165,7 +167,8 @@ export function ConnectionModal({
             instance_name: sanitizedName,
             display_name: instanceName.trim(),
             workspace_id: workspaceId!,
-            created_by: user?.id
+            created_by: user?.id,
+            instance_type: instanceType,
           } as any, { onConflict: 'instance_name' });
           
           setStep("success");

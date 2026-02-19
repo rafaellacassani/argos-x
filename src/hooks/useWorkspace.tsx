@@ -8,6 +8,7 @@ export interface Workspace {
   slug: string;
   created_by: string;
   created_at: string;
+  alert_instance_name?: string | null;
 }
 
 export interface WorkspaceMember {
