@@ -63,19 +63,6 @@ async function wasRecentlyExecuted(
 
   const since = new Date(Date.now() - minutesWindow * 60 * 1000).toISOString();
 
-  // Check by looking at bot_execution_logs for the first node of this bot+lead combo
-  const { data: logs } = await supabase
-    .from("bot_execution_logs")
-    .select("id")
-    .eq("bot_id", botId)
-    .eq("workspace_id", workspaceId)
-    .eq("status", "success")
-    .gte("executed_at", since)
-    .limit(1);
-
-  // We need to also match by lead — check if any log exists for this bot recently
-  // A more precise check would require lead_id, but we check at bot level per jid
-  // We'll use a message field to store remoteJid for matching
   const { data: jidLogs } = await supabase
     .from("bot_execution_logs")
     .select("id")
@@ -275,7 +262,6 @@ async function executeNode(
 
         if (!members || members.length === 0) return { success: false };
 
-        // Find last assigned user for this bot
         const { data: lastLog } = await supabase
           .from("bot_execution_logs")
           .select("message")
@@ -291,7 +277,6 @@ async function executeNode(
         const nextIndex = (lastIndex + 1) % userIds.length;
         const nextUserId = userIds[nextIndex];
 
-        // Get user_profile id for this user
         const { data: profile } = await supabase
           .from("user_profiles")
           .select("id")
@@ -366,7 +351,6 @@ async function executeNode(
           });
           await logExecution(supabase, botId, lead.id, node.id, "success", note.substring(0, 200), workspaceId);
         } else if (actionType === "webhook") {
-          // External webhook call
           const webhookUrl = node.data?.url || node.data?.webhook_url || "";
           if (webhookUrl && webhookUrl.startsWith("https://")) {
             try {
@@ -451,7 +435,6 @@ async function executeFlow(
 
   // Increment executions count
   await supabase.rpc("increment_bot_executions_count", { bot_id_param: botId }).catch(() => {
-    // Fallback: direct update
     supabase.from("salesbots").update({ executions_count: (bot as any).executions_count + 1 }).eq("id", botId).then(() => {});
   });
 }
@@ -465,7 +448,7 @@ app.post("/", async (c) => {
     // Validate apikey header
     const apiKey = c.req.header("apikey");
     if (!apiKey || apiKey !== EVOLUTION_API_KEY) {
-      console.warn("[whatsapp-webhook] Invalid apikey");
+      console.warn("[whatsapp-webhook] ❌ Invalid apikey");
       return c.json({ error: "Unauthorized" }, 401, corsHeaders);
     }
 
@@ -499,11 +482,6 @@ app.post("/", async (c) => {
       return c.json({ received: true, skipped: "group" }, 200, corsHeaders);
     }
 
-    // Skip @lid contacts (anonymous internal IDs)
-    if (remoteJid.endsWith("@lid")) {
-      return c.json({ received: true, skipped: "lid" }, 200, corsHeaders);
-    }
-
     // Extract message text
     const messageText =
       data.message?.conversation ||
@@ -511,7 +489,28 @@ app.post("/", async (c) => {
       "";
 
     const pushName = data.pushName || "";
-    const phoneNumber = jidToNumber(remoteJid);
+
+    // FIX: For @lid contacts, try to resolve real phone from message metadata
+    let resolvedRemoteJid = remoteJid;
+    let phoneNumber = "";
+    
+    if (remoteJid.endsWith("@lid")) {
+      // Try to get the real number from participant or other metadata
+      const participant = data.participant || data.key?.participant || "";
+      if (participant && !participant.endsWith("@lid")) {
+        resolvedRemoteJid = participant;
+        phoneNumber = jidToNumber(participant);
+        console.log(`[whatsapp-webhook] 🔄 @lid resolved: ${remoteJid} → ${participant}`);
+      } else {
+        // Use the lid as identifier — don't skip anymore
+        phoneNumber = jidToNumber(remoteJid);
+        console.log(`[whatsapp-webhook] ⚠️ @lid contact, using as-is: ${remoteJid}`);
+      }
+    } else {
+      phoneNumber = jidToNumber(remoteJid);
+    }
+
+    console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
 
     const supabase = getSupabase();
 
@@ -524,87 +523,133 @@ app.post("/", async (c) => {
       .single();
 
     if (!instanceRecord) {
-      console.warn(`[whatsapp-webhook] Instance ${instanceName} not found in DB`);
+      console.warn(`[whatsapp-webhook] ❌ Instance "${instanceName}" not found in DB`);
       return c.json({ received: true, skipped: "no_workspace" }, 200, corsHeaders);
     }
 
     const workspaceId = instanceRecord.workspace_id;
+    console.log(`[whatsapp-webhook] ✅ Workspace found: ${workspaceId}`);
 
     // --- STEP 1: Check for active AI Agent ---
+    // FIX: Select instance_name from ai_agents directly (not trigger_config)
     const { data: agents } = await supabase
       .from("ai_agents")
-      .select("id, trigger_config")
+      .select("id, instance_name, respond_to, respond_to_stages")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true);
 
+    console.log(`[whatsapp-webhook] 🤖 Active agents found: ${agents?.length || 0}`);
+
     if (agents && agents.length > 0) {
-      // Find agent matching this instance (or any instance)
+      // FIX: Match using agent.instance_name column (not trigger_config)
       const matchingAgent = agents.find((a: any) => {
-        const cfg = a.trigger_config || {};
-        return !cfg.instance_name || cfg.instance_name === instanceName;
+        // Empty or null instance_name means "all instances"
+        return !a.instance_name || a.instance_name === "" || a.instance_name === instanceName;
       });
 
+      if (matchingAgent) {
+        console.log(`[whatsapp-webhook] 🎯 Agent matched: ${matchingAgent.id} (instance filter: "${matchingAgent.instance_name || 'all'}")`);
+      } else {
+        console.log(`[whatsapp-webhook] ⚠️ No agent matched for instance "${instanceName}". Agent instances: ${agents.map((a: any) => a.instance_name || 'all').join(', ')}`);
+      }
+
       if (matchingAgent && messageText) {
+        // Check respond_to filter
+        let shouldRespond = true;
+        
         // Find or create lead for agent context
         let leadId: string | null = null;
         const { data: existingLead } = await supabase
           .from("leads")
-          .select("id")
+          .select("id, stage_id")
           .eq("workspace_id", workspaceId)
-          .eq("whatsapp_jid", remoteJid)
+          .or(`whatsapp_jid.eq.${remoteJid}${resolvedRemoteJid !== remoteJid ? `,whatsapp_jid.eq.${resolvedRemoteJid}` : ''}`)
           .limit(1)
           .single();
         leadId = existingLead?.id || null;
 
-        // Call ai-agent-chat internally
-        try {
-          const agentUrl = `${SUPABASE_URL}/functions/v1/ai-agent-chat`;
-          const agentRes = await fetch(agentUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-            },
-            body: JSON.stringify({
-              agent_id: matchingAgent.id,
-              session_id: remoteJid,
-              message: messageText,
-              lead_id: leadId,
-            }),
-          });
-
-          const agentData = await agentRes.json();
-
-          // If agent responded, send the chunks via Evolution API
-          if (agentData.chunks && Array.isArray(agentData.chunks)) {
-            for (const chunk of agentData.chunks) {
-              if (chunk && chunk.trim()) {
-                await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                  number: phoneNumber,
-                  text: chunk,
-                  delay: 0,
-                  linkPreview: false,
-                });
-                // Small delay between chunks
-                if (agentData.chunks.length > 1) {
-                  await new Promise((r) => setTimeout(r, 1000));
-                }
-              }
-            }
-          } else if (agentData.response) {
-            await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-              number: phoneNumber,
-              text: agentData.response,
-              delay: 0,
-              linkPreview: false,
-            });
+        // Check respond_to rules
+        if (matchingAgent.respond_to === "specific_stages" && existingLead) {
+          const stages = matchingAgent.respond_to_stages || [];
+          if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
+            shouldRespond = false;
+            console.log(`[whatsapp-webhook] ⏭️ Agent skipped: lead stage ${existingLead.stage_id} not in ${JSON.stringify(stages)}`);
           }
-        } catch (err) {
-          console.error("[whatsapp-webhook] AI Agent call error:", err);
         }
 
-        // AI Agent handled it — don't continue to SalesBots
-        return c.json({ received: true, handler: "ai_agent" }, 200, corsHeaders);
+        if (shouldRespond) {
+          // Call ai-agent-chat internally
+          try {
+            const agentUrl = `${SUPABASE_URL}/functions/v1/ai-agent-chat`;
+            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}`);
+            
+            const agentRes = await fetch(agentUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+              },
+              body: JSON.stringify({
+                agent_id: matchingAgent.id,
+                session_id: remoteJid,
+                message: messageText,
+                lead_id: leadId,
+                _internal_webhook: true, // Flag to bypass auth in ai-agent-chat
+              }),
+            });
+
+            const agentData = await agentRes.json();
+            console.log(`[whatsapp-webhook] 📤 Agent response status: ${agentRes.status}, has chunks: ${!!agentData.chunks}, skipped: ${agentData.skipped || false}, error: ${agentData.error || 'none'}`);
+
+            if (agentData.error) {
+              console.error(`[whatsapp-webhook] ❌ Agent error: ${agentData.error}`);
+            }
+
+            // If agent responded, send the chunks via Evolution API
+            if (agentData.chunks && Array.isArray(agentData.chunks)) {
+              console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${phoneNumber}`);
+              for (const chunk of agentData.chunks) {
+                if (chunk && chunk.trim()) {
+                  const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                    number: phoneNumber,
+                    text: chunk,
+                    delay: 0,
+                    linkPreview: false,
+                  });
+                  if (!sendResult) {
+                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${phoneNumber}`);
+                  }
+                  // Small delay between chunks
+                  if (agentData.chunks.length > 1) {
+                    await new Promise((r) => setTimeout(r, 1000));
+                  }
+                }
+              }
+              console.log(`[whatsapp-webhook] ✅ Agent response sent successfully`);
+            } else if (agentData.response) {
+              const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                number: phoneNumber,
+                text: agentData.response,
+                delay: 0,
+                linkPreview: false,
+              });
+              if (sendResult) {
+                console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
+              } else {
+                console.error(`[whatsapp-webhook] ❌ Failed to send agent response`);
+              }
+            } else if (agentData.skipped) {
+              console.log(`[whatsapp-webhook] ⏭️ Agent skipped: ${agentData.reason || 'unknown reason'}`);
+            } else if (agentData.paused) {
+              console.log(`[whatsapp-webhook] ⏸️ Agent paused for this session`);
+            }
+          } catch (err) {
+            console.error("[whatsapp-webhook] ❌ AI Agent call exception:", err);
+          }
+
+          // AI Agent handled it — don't continue to SalesBots
+          return c.json({ received: true, handler: "ai_agent" }, 200, corsHeaders);
+        }
       }
     }
 
@@ -617,6 +662,7 @@ app.post("/", async (c) => {
       .order("created_at", { ascending: true });
 
     if (!bots || bots.length === 0) {
+      console.log(`[whatsapp-webhook] ℹ️ No active bots for workspace ${workspaceId}`);
       return c.json({ received: true, no_bots: true }, 200, corsHeaders);
     }
 
@@ -625,7 +671,7 @@ app.post("/", async (c) => {
       .from("leads")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .eq("whatsapp_jid", remoteJid)
+      .or(`whatsapp_jid.eq.${remoteJid}${resolvedRemoteJid !== remoteJid ? `,whatsapp_jid.eq.${resolvedRemoteJid}` : ''}`)
       .limit(1)
       .single();
 
@@ -644,7 +690,6 @@ app.post("/", async (c) => {
       }
 
       if (triggerType === "message_received") {
-        // Anti-loop check
         const recent = await wasRecentlyExecuted(supabase, bot.id, remoteJid, triggerType, workspaceId);
         if (!recent) {
           matchedBot = bot;
@@ -668,7 +713,6 @@ app.post("/", async (c) => {
           }
         }
       }
-      // stage_change, scheduled, webhook — not handled here
     }
 
     if (!matchedBot) {
@@ -677,7 +721,6 @@ app.post("/", async (c) => {
 
     // --- STEP 3: Ensure lead exists ---
     if (!existingLead) {
-      // Get default funnel stage
       const { data: defaultFunnel } = await supabase
         .from("funnels")
         .select("id")
@@ -699,7 +742,6 @@ app.post("/", async (c) => {
       }
 
       if (!stageId) {
-        // Fallback: any stage in workspace
         const { data: anyStage } = await supabase
           .from("funnel_stages")
           .select("id")
@@ -745,7 +787,7 @@ app.post("/", async (c) => {
 
     return c.json({ received: true, bot_executed: matchedBot.id }, 200, corsHeaders);
   } catch (err) {
-    console.error("[whatsapp-webhook] Unhandled error:", err);
+    console.error("[whatsapp-webhook] ❌ Unhandled error:", err);
     return c.json({ received: true, error: "internal" }, 200, corsHeaders);
   }
 });
