@@ -222,6 +222,7 @@ export function BotBuilderCanvas({
             executionStatus={executionStatuses[node.id]}
             onTestNode={handleTestNode}
             testLeads={testLeads}
+            allNodes={nodes}
           />
         ))}
 
@@ -281,6 +282,16 @@ function getDefaultNodeData(type: string): Record<string, unknown> {
       return { tagId: '', action: 'add' };
     case 'move_stage':
       return { stageId: '' };
+    case 'validate':
+      return { validation_type: 'any', };
+    case 'goto':
+      return { target_node_id: '' };
+    case 'stop':
+      return {};
+    case 'change_responsible':
+      return { user_id: '', mode: 'specific' };
+    case 'add_note':
+      return { note: '' };
     default:
       return {};
   }
