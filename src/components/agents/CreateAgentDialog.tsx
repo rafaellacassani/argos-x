@@ -159,7 +159,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
   const [responseDelay, setResponseDelay] = useState(-1);
   const [respondTo, setRespondTo] = useState("all");
   const [respondToStages, setRespondToStages] = useState<string[]>([]);
-  const [instanceName, setInstanceName] = useState("");
+  const [instanceName, setInstanceName] = useState("__all__");
   const [qualificationEnabled, setQualificationEnabled] = useState(false);
   const [qualificationFields, setQualificationFields] = useState(defaultQualificationFields);
 
@@ -221,7 +221,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
     setResponseDelay(-1);
     setRespondTo("all");
     setRespondToStages([]);
-    setInstanceName("");
+    setInstanceName("__all__");
     setQualificationEnabled(false);
     setQualificationFields(defaultQualificationFields);
     setActivateOnCreate(false);
@@ -282,7 +282,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       response_delay_seconds: responseDelay,
       respond_to: respondTo,
       respond_to_stages: respondToStages,
-      instance_name: instanceName,
+      instance_name: instanceName === "__all__" ? "" : instanceName,
       qualification_enabled: qualificationEnabled,
       qualification_fields: qualificationFields.filter(f => f.active),
       is_active: activateOnCreate,
@@ -595,7 +595,7 @@ function Step4({ respondTo, setRespondTo, respondToStages, toggleStage, stages, 
         <Select value={instanceName} onValueChange={setInstanceName}>
           <SelectTrigger><SelectValue placeholder="Todas as instâncias" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todas as instâncias</SelectItem>
+            <SelectItem value="__all__">Todas as instâncias</SelectItem>
             {instances.map((i: any) => (
               <SelectItem key={i.instance_name} value={i.instance_name}>
                 {i.display_name || i.instance_name}
