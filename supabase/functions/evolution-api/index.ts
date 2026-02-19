@@ -237,7 +237,6 @@ app.post("/fetch-profiles-batch/:instanceName", async (c) => {
     for (const num of numbers) {
       if (typeof num !== "string" || num.length > 30) continue;
       try {
-        // Add small delay between requests to respect rate limits
         if (Object.keys(results).length > 0) {
           await new Promise(r => setTimeout(r, 200));
         }
@@ -251,6 +250,25 @@ app.post("/fetch-profiles-batch/:instanceName", async (c) => {
     return c.json(results, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to fetch profiles" }, 500, corsHeaders);
+  }
+});
+
+// Setup webhook for an instance
+app.post("/setup-webhook/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || SUPABASE_URL;
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
+    const result = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", {
+      url: webhookUrl,
+      webhook_by_events: false,
+      webhook_base64: false,
+      events: ["MESSAGES_UPSERT"],
+    });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to setup webhook" }, 500, corsHeaders);
   }
 });
 
