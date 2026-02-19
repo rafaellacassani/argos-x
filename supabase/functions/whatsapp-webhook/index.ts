@@ -452,9 +452,8 @@ app.post("/", async (c) => {
       return c.json({ error: "Unauthorized" }, 401, corsHeaders);
     }
 
-    console.log("[whatsapp-webhook] 📩 Webhook received from instance:", payload.instance, "event:", payload.event);
-
     const payload = await c.req.json();
+    console.log("[whatsapp-webhook] 📩 Webhook received from instance:", payload.instance, "event:", payload.event);
     const event = payload.event;
 
     // Only process MESSAGES_UPSERT
