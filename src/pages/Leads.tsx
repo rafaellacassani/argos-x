@@ -58,7 +58,7 @@ export default function Leads() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogStageId, setCreateDialogStageId] = useState<string | undefined>();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [myWalletActive, setMyWalletActive] = useState(false);
+  const [myWalletActive, setMyWalletActive] = useState(() => sessionStorage.getItem('myWalletActive') === 'true');
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<LeadFiltersData>(() => loadSessionFilters() || DEFAULT_FILTERS);
@@ -156,9 +156,10 @@ export default function Leads() {
   }, []);
 
   const handleLeadClick = useCallback((lead: Lead) => {
+    if (teamMembers.length === 0) fetchTeamMembers();
     setSelectedLead(lead);
     setDetailSheetOpen(true);
-  }, []);
+  }, [teamMembers.length, fetchTeamMembers]);
 
   const handleLeadDelete = useCallback(async (leadId: string) => {
     if (!canDeleteLeads) return;
@@ -170,22 +171,22 @@ export default function Leads() {
   }, [deleteLead, selectedLead, canDeleteLeads]);
 
   const handleLeadMove = useCallback(async (leadId: string, newStageId: string, newPosition: number) => {
-    if (isSeller && userProfileId) {
+    if (userProfileId) {
       const lead = leads.find(l => l.id === leadId);
       if (lead && !lead.responsible_user) await updateLead(leadId, { responsible_user: userProfileId });
     }
     await moveLead(leadId, newStageId, newPosition);
-  }, [moveLead, isSeller, userProfileId, leads, updateLead]);
+  }, [moveLead, userProfileId, leads, updateLead]);
 
   const handleMoveFromSheet = useCallback(async (leadId: string, stageId: string) => {
-    if (isSeller && userProfileId) {
+    if (userProfileId) {
       const lead = leads.find(l => l.id === leadId);
       if (lead && !lead.responsible_user) await updateLead(leadId, { responsible_user: userProfileId });
     }
     const stageLeads = leads.filter(l => l.stage_id === stageId);
     const maxPosition = stageLeads.length > 0 ? Math.max(...stageLeads.map(l => l.position)) + 1 : 0;
     await moveLead(leadId, stageId, maxPosition);
-  }, [leads, moveLead, isSeller, userProfileId, updateLead]);
+  }, [leads, moveLead, userProfileId, updateLead]);
 
   const handleAddLead = useCallback((stageId: string) => {
     setCreateDialogStageId(stageId);
@@ -261,7 +262,7 @@ export default function Leads() {
           <div className="flex items-center gap-2">
             <Button
               variant={myWalletActive ? 'default' : 'outline'}
-              onClick={() => setMyWalletActive(!myWalletActive)}
+              onClick={() => { const next = !myWalletActive; setMyWalletActive(next); sessionStorage.setItem('myWalletActive', String(next)); }}
               className="gap-2"
             >
               <Briefcase className="h-4 w-4" />

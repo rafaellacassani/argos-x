@@ -376,9 +376,9 @@ export default function Chats() {
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
 
-  // Auto-assign lead to seller on first interaction
+  // Auto-assign lead to current user on first interaction
   const autoAssignLead = useCallback(async (chat: Chat | null) => {
-    if (!chat || !isSeller || !userProfileId) return;
+    if (!chat || !userProfileId) return;
     const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
     const chatDigits = stripDigits(chat.phone || "");
     const matchingLead = leadsRef.current.find((l) => {
@@ -393,7 +393,7 @@ export default function Chats() {
     if (matchingLead && !matchingLead.responsible_user) {
       await updateLead(matchingLead.id, { responsible_user: userProfileId });
     }
-  }, [isSeller, userProfileId, updateLead]);
+  }, [userProfileId, updateLead]);
 
   // Meta chat hook
   const {
