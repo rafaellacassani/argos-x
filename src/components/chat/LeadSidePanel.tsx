@@ -37,6 +37,7 @@ import { type Lead, type FunnelStage, type LeadTag, type LeadSale } from "@/hook
 import { supabase } from "@/integrations/supabase/client";
 import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
+import { LeadFollowupsTab } from "./LeadFollowupsTab";
 
 interface LeadSidePanelProps {
   lead: Lead | null;
@@ -483,10 +484,8 @@ export function LeadSidePanel({
         </TabsContent>
 
         {/* Follow-ups Tab */}
-        <TabsContent value="followups" className="flex-1 m-0">
-          <div className="p-4 text-center text-muted-foreground">
-            <p className="text-sm">Follow-ups em breve.</p>
-          </div>
+        <TabsContent value="followups" className="flex-1 m-0 overflow-hidden">
+          <LeadFollowupsTab lead={lead} />
         </TabsContent>
       </Tabs>
     </div>
