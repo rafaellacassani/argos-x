@@ -59,6 +59,7 @@ interface LeadSidePanelProps {
   onCreateTag: (name: string, color: string) => Promise<LeadTag | null>;
   chatContact?: ChatContactInfo;
   onCreateLead?: () => Promise<boolean>;
+  onOpenDetailModal?: () => void;
 }
 
 // Inline editable field
@@ -152,6 +153,7 @@ export function LeadSidePanel({
   onCreateTag,
   chatContact,
   onCreateLead,
+  onOpenDetailModal,
 }: LeadSidePanelProps) {
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
@@ -314,9 +316,16 @@ export function LeadSidePanel({
             <h3 className="font-bold text-lg text-foreground truncate">{lead.name}</h3>
             <span className="text-xs text-muted-foreground font-mono">{shortId}</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-1" onClick={onToggle}>
-            <PanelRightClose className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            {onOpenDetailModal && (
+              <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={onOpenDetailModal}>
+                Ver detalhes
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-1" onClick={onToggle}>
+              <PanelRightClose className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Tags */}

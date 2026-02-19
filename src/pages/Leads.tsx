@@ -14,9 +14,9 @@ import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { useLeads, Lead, LeadHistory } from '@/hooks/useLeads';
+import { useLeads, Lead } from '@/hooks/useLeads';
 import { LeadKanban } from '@/components/leads/LeadKanban';
-import { LeadDetailSheet } from '@/components/leads/LeadDetailSheet';
+import { LeadDetailModal } from '@/components/leads/LeadDetailModal';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
 import { LeadStats } from '@/components/leads/LeadStats';
 import { LeadFilters, LeadFiltersData, DEFAULT_FILTERS, countActiveFilters, getDateRange } from '@/components/leads/LeadFilters';
@@ -48,13 +48,12 @@ export default function Leads() {
   const {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
-    moveLead, deleteLead, getLeadHistory, addTagToLead, removeTagFromLead,
+    moveLead, deleteLead, addTagToLead, removeTagFromLead,
     createFunnel, updateStage, saveSales
   } = useLeads();
   const { teamMembers, fetchTeamMembers } = useTeam();
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [leadHistory, setLeadHistory] = useState<LeadHistory[]>([]);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogStageId, setCreateDialogStageId] = useState<string | undefined>();
@@ -146,9 +145,7 @@ export default function Leads() {
     [filters, stages]
   );
 
-  useEffect(() => {
-    if (selectedLead) getLeadHistory(selectedLead.id).then(setLeadHistory);
-  }, [selectedLead, getLeadHistory]);
+
 
   const handleApplyFilters = useCallback((newFilters: LeadFiltersData) => {
     setFilters(newFilters);
@@ -433,21 +430,20 @@ export default function Leads() {
         products={products}
       />
 
-      <LeadDetailSheet
+      <LeadDetailModal
         lead={selectedLead}
         open={detailSheetOpen}
         onOpenChange={setDetailSheetOpen}
         stages={stages}
         tags={tags}
-        history={leadHistory}
         onUpdate={updateLead}
         onMove={handleMoveFromSheet}
         onDelete={handleLeadDelete}
         onAddTag={addTagToLead}
         onRemoveTag={removeTagFromLead}
         onOpenChat={handleOpenChat}
-        onSaveSales={saveSales}
         canDelete={canDeleteLeads}
+        teamMembers={teamMembers}
       />
 
       <CreateLeadDialog
