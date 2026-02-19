@@ -40,7 +40,7 @@ export function StatCard({ title, value, icon, change, className, delay = 0 }: S
                   change.type === "increase" ? "text-success" : "text-destructive"
                 )}
               >
-                {change.value}%
+                {change.type === "increase" ? "+" : ""}{change.value}%
               </span>
               <span className="text-sm text-muted-foreground">vs último período</span>
             </div>

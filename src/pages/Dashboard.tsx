@@ -148,6 +148,7 @@ export default function Dashboard() {
           title="Tempo Médio Resposta"
           value={stats.avgResponseTime}
           icon={<Clock className="w-6 h-6" />}
+          change={stats.responseTimeChange !== 0 ? { value: Math.abs(stats.responseTimeChange), type: stats.responseTimeChange >= 0 ? "increase" : "decrease" } : undefined}
           delay={0.15}
         />
         <StatCard

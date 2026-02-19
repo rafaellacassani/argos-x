@@ -1131,7 +1131,7 @@ export default function Chats() {
                 push_name: (msg as any).pushName || null,
               };
             });
-            supabase.from('whatsapp_messages').upsert(rows, { onConflict: 'message_id', ignoreDuplicates: true }).then(() => {});
+            Promise.resolve(supabase.from('whatsapp_messages').insert(rows)).catch(() => {});
           }
         }
       } catch (err) {

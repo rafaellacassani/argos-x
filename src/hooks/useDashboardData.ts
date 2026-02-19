@@ -206,12 +206,14 @@ export function useDashboardData(period: string, userId: string | null = null) {
         leadsRes,
         prevLeadsRes,
         stagesRes,
-        messagesRes,
-        prevMessagesRes,
+        metaMessagesRes,
+        prevMetaMessagesRes,
         activeLeadsRes,
         membersRes,
         profilesRes,
         salesRes,
+        waMessagesRes,
+        prevWaMessagesRes,
       ] = await Promise.all([
         leadsQuery,
         prevLeadsQuery,
@@ -240,14 +242,43 @@ export function useDashboardData(period: string, userId: string | null = null) {
           .select("id, lead_id, created_at, value")
           .eq("workspace_id", workspaceId!)
           .gte("created_at", startISO),
+        supabase
+          .from("whatsapp_messages")
+          .select("id, direction, remote_jid, timestamp, content, message_type")
+          .eq("workspace_id", workspaceId!)
+          .gte("timestamp", startISO)
+          .order("timestamp", { ascending: false }),
+        supabase
+          .from("whatsapp_messages")
+          .select("id, direction, remote_jid, timestamp")
+          .eq("workspace_id", workspaceId!)
+          .gte("timestamp", prevStartISO)
+          .lt("timestamp", startISO),
       ]);
+
+      // Combine meta + whatsapp messages with normalized fields
+      const metaMsgs = (metaMessagesRes.data || []);
+      const waMsgs = (waMessagesRes.data || []).map((m: any) => ({
+        ...m,
+        sender_id: m.remote_jid,
+        created_at: m.timestamp,
+      }));
+      const allMessages = [...metaMsgs, ...waMsgs];
+
+      const prevMetaMsgs = (prevMetaMessagesRes.data || []);
+      const prevWaMsgs = (prevWaMessagesRes.data || []).map((m: any) => ({
+        ...m,
+        sender_id: m.remote_jid,
+        created_at: m.timestamp,
+      }));
+      const allPrevMessages = [...prevMetaMsgs, ...prevWaMsgs];
 
       return {
         leads: leadsRes.data || [],
         prevLeads: prevLeadsRes.data || [],
         stages: stagesRes.data || [],
-        messages: messagesRes.data || [],
-        prevMessages: prevMessagesRes.data || [],
+        messages: allMessages,
+        prevMessages: allPrevMessages,
         activeLeads: activeLeadsRes.data || [],
         members: membersRes.data || [],
         profiles: profilesRes.data || [],
@@ -277,15 +308,32 @@ export function useDashboardData(period: string, userId: string | null = null) {
     const prevUnanswered = calcUnanswered(prevMessages);
     const pipelineValue = activeLeads.reduce((sum: number, l: any) => sum + (Number(l.value) || 0), 0);
 
+    // Calculate response time change
+    const currentAvgStr = calcAvgResponseTime(messages);
+    const prevAvgStr = calcAvgResponseTime(prevMessages);
+    const parseAvgMin = (s: string): number | null => {
+      if (s === "N/A") return null;
+      const hMatch = s.match(/^(\d+)h(\d+)?m?$/);
+      if (hMatch) return parseInt(hMatch[1]) * 60 + (parseInt(hMatch[2]) || 0);
+      const mMatch = s.match(/^(\d+)min$/);
+      if (mMatch) return parseInt(mMatch[1]);
+      return null;
+    };
+    const currentAvgMin = parseAvgMin(currentAvgStr);
+    const prevAvgMin = parseAvgMin(prevAvgStr);
+    const rtChange = currentAvgMin !== null && prevAvgMin !== null
+      ? calcChange(prevAvgMin, currentAvgMin) // Inverted: lower is better
+      : 0;
+
     return {
       totalMessages: inbound.length,
       activeConversations: uniqueSenders,
       unansweredChats: unanswered,
-      avgResponseTime: calcAvgResponseTime(messages),
+      avgResponseTime: currentAvgStr,
       messagesChange: calcChange(inbound.length, prevInbound.length),
       conversationsChange: calcChange(uniqueSenders, prevUniqueSenders),
       unansweredChange: calcChange(unanswered, prevUnanswered),
-      responseTimeChange: 0,
+      responseTimeChange: rtChange,
       leadsInPeriod: leads.length,
       leadsChange: calcChange(leads.length, prevLeads.length),
       pipelineValue,
