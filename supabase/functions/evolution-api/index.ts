@@ -36,14 +36,18 @@ async function evolutionRequest(endpoint: string, method: string = "GET", body?:
   const headers: Record<string, string> = { "Content-Type": "application/json", "apikey": EVOLUTION_API_KEY! };
   const options: RequestInit = { method, headers };
   if (body) options.body = JSON.stringify(body);
+  console.log(`[evolution-api] ${method} ${url}`);
   const response = await fetch(url, options);
   const contentType = response.headers.get("content-type");
   if (!contentType || !contentType.includes("application/json")) {
     const text = await response.text();
+    console.error(`[evolution-api] Non-JSON response (${response.status}): ${text.substring(0, 300)}`);
+    if (!throwOnError) return null;
     throw new Error(`Evolution API returned non-JSON response (status: ${response.status})`);
   }
   const data = await response.json();
   if (!response.ok) {
+    console.error(`[evolution-api] Error ${response.status}:`, JSON.stringify(data).substring(0, 500));
     if (!throwOnError) return null;
     throw new Error(data.message || data.error || "Evolution API error");
   }
@@ -259,16 +263,55 @@ app.post("/setup-webhook/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || SUPABASE_URL;
-    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook`;
-    const result = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", {
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") || "";
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?apikey=${encodeURIComponent(evolutionApiKey)}`;
+    console.log("[evolution-api] Setting webhook for", instanceName, "→", webhookUrl);
+    
+    // Evolution API v2 expects "webhook" wrapper property
+    const webhookBody = {
+      webhook: {
+        enabled: true,
+        url: webhookUrl,
+        webhook_by_events: false,
+        webhook_base64: false,
+        events: ["MESSAGES_UPSERT"],
+      }
+    };
+    // Also try flat format as fallback
+    const flatBody = {
       url: webhookUrl,
       webhook_by_events: false,
       webhook_base64: false,
       events: ["MESSAGES_UPSERT"],
-    });
-    return c.json(result, 200, corsHeaders);
+    };
+    
+    let lastResult = null;
+    // Try wrapped format first (v2)
+    lastResult = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", webhookBody, false);
+    if (!lastResult) {
+      // Try flat format (v1)
+      lastResult = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", flatBody as any, false);
+    }
+    
+    if (!lastResult) {
+      console.error("[evolution-api] ❌ All webhook endpoints failed");
+      return c.json({ error: "Failed to set webhook on Evolution API", url: webhookUrl }, 500, corsHeaders);
+    }
+    return c.json(lastResult, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to setup webhook" }, 500, corsHeaders);
+  }
+});
+
+// Find current webhook for an instance
+app.get("/find-webhook/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const result = await evolutionRequest(`/webhook/find/${instanceName}`, "GET", undefined, false);
+    return c.json(result || { error: "Not found" }, result ? 200 : 404, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed" }, 500, corsHeaders);
   }
 });
 

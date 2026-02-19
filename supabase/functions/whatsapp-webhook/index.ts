@@ -445,12 +445,14 @@ app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 // --- Main webhook endpoint ---
 app.post("/", async (c) => {
   try {
-    // Validate apikey header
-    const apiKey = c.req.header("apikey");
+    // Validate apikey from header OR query parameter (Evolution API sends via query param)
+    const apiKey = c.req.header("apikey") || c.req.query("apikey");
     if (!apiKey || apiKey !== EVOLUTION_API_KEY) {
-      console.warn("[whatsapp-webhook] ❌ Invalid apikey");
+      console.warn("[whatsapp-webhook] ❌ Invalid apikey - header:", !!c.req.header("apikey"), "query:", !!c.req.query("apikey"));
       return c.json({ error: "Unauthorized" }, 401, corsHeaders);
     }
+
+    console.log("[whatsapp-webhook] 📩 Webhook received from instance:", payload.instance, "event:", payload.event);
 
     const payload = await c.req.json();
     const event = payload.event;
