@@ -8,7 +8,8 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
+const rawEvolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") || "";
+const evolutionApiUrl = rawEvolutionApiUrl.replace(/\/manager\/?$/, "");
 const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
 Deno.serve(async (req) => {
