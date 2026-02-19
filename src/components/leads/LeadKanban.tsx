@@ -1,8 +1,10 @@
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { LeadColumn } from './LeadColumn';
-import type { Lead, FunnelStage } from '@/hooks/useLeads';
+import { useStageAutomations } from '@/hooks/useStageAutomations';
+import type { Lead, FunnelStage, LeadTag } from '@/hooks/useLeads';
 
 interface TeamMember {
   id: string;
@@ -21,6 +23,7 @@ interface LeadKanbanProps {
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
+  tags?: LeadTag[];
 }
 
 export const LeadKanban = memo(function LeadKanban({
@@ -34,8 +37,20 @@ export const LeadKanban = memo(function LeadKanban({
   onEditStage,
   onUpdateStage,
   canDelete = true,
-  teamMembers = []
+  teamMembers = [],
+  tags = [],
 }: LeadKanbanProps) {
+  const { fetchAutomationCounts } = useStageAutomations();
+  const [automationCounts, setAutomationCounts] = useState<Record<string, number>>({});
+
+  const loadCounts = useCallback(async () => {
+    if (stages.length > 0) {
+      const counts = await fetchAutomationCounts(stages.map(s => s.id));
+      setAutomationCounts(counts);
+    }
+  }, [stages, fetchAutomationCounts]);
+
+  useEffect(() => { loadCounts(); }, [loadCounts]);
   
   const handleDragEnd = useCallback((result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -80,26 +95,31 @@ export const LeadKanban = memo(function LeadKanban({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <ScrollArea className="w-full h-full">
-        <div className="flex gap-4 p-4 min-h-full">
-          {stages.map(stage => (
-            <LeadColumn
-              key={stage.id}
-              stage={stage}
-              leads={leadsByStage[stage.id] || []}
-              onLeadClick={onLeadClick}
-              onLeadDelete={onLeadDelete}
-              onOpenChat={onOpenChat}
-              onAddLead={onAddLead}
-              onEditStage={onEditStage}
-              onUpdateStage={onUpdateStage}
-              canDelete={canDelete}
-              teamMembers={teamMembers}
-            />
-          ))}
-        </div>
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
+      <TooltipProvider>
+        <ScrollArea className="w-full h-full">
+          <div className="flex gap-4 p-4 min-h-full">
+            {stages.map(stage => (
+              <LeadColumn
+                key={stage.id}
+                stage={stage}
+                leads={leadsByStage[stage.id] || []}
+                onLeadClick={onLeadClick}
+                onLeadDelete={onLeadDelete}
+                onOpenChat={onOpenChat}
+                onAddLead={onAddLead}
+                onEditStage={onEditStage}
+                onUpdateStage={onUpdateStage}
+                canDelete={canDelete}
+                teamMembers={teamMembers}
+                automationCount={automationCounts[stage.id] || 0}
+                tags={tags}
+                onAutomationCountChange={loadCounts}
+              />
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </TooltipProvider>
     </DragDropContext>
   );
 });
