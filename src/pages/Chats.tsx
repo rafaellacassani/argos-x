@@ -638,53 +638,71 @@ export default function Chats() {
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
     
+    // Helper: clean a JID into a display-safe string
+    const cleanDisplayJid = (rawJid: string): string => {
+      const stripped = rawJid.replace(/@lid$/i, "").replace(/@s\.whatsapp\.net$/i, "").replace(/@c\.us$/i, "").replace(/[^0-9]/g, "");
+      if (stripped.length > 13) return "Contato WhatsApp";
+      if (stripped.length >= 8) return formatPhoneDisplay(stripped) || "Contato WhatsApp";
+      return "Contato WhatsApp";
+    };
+
     // For phone display: prefer lead's cleaned phone, then remoteJidAlt, then format from JID
-    // This avoids showing @lid internal IDs as phone numbers
     const leadPhone = matchingLead?.phone ? cleanPhoneNumber(matchingLead.phone) : null;
+    const leadPhoneValid = leadPhone && leadPhone.length <= 13 && leadPhone.length >= 8 ? leadPhone : null;
     const altPhone = (jid.endsWith("@lid") && remoteJidAlt) ? cleanPhoneNumber(remoteJidAlt) : null;
     const jidPhone = jid.endsWith("@lid") ? null : cleanPhoneNumber(jid);
-    const bestPhone = leadPhone || altPhone || jidPhone || "";
+    const bestPhone = leadPhoneValid || altPhone || jidPhone || "";
     const formattedPhone = formatPhoneDisplay(bestPhone);
     
-    // Helper: check if a string looks like a raw number (not a real name)
+    // Helper: check if a string looks like a raw number or JID (not a real name)
     const isNumericName = (n: string | undefined | null): boolean => {
       if (!n) return true;
+      if (n.includes("@")) return true;
       const stripped = n.replace(/[+\-\s()]/g, "");
       return /^\d{8,}$/.test(stripped);
     };
     
-    // Name priority: pushName (resolvedName) > leadName (if not a number) > formattedPhone
+    const isLidJid = jid.endsWith("@lid");
+
+    // Name priority: pushName > leadName (if real name) > "Contato WhatsApp" for @lid > formattedPhone
     let displayName: string;
     if (resolvedName && !isNumericName(resolvedName)) {
       displayName = resolvedName;
-    } else if (leadName && !isNumericName(leadName) && !leadName.includes("@")) {
+    } else if (leadName && !isNumericName(leadName)) {
       displayName = leadName;
+    } else if (isLidJid) {
+      displayName = resolvedName || "Contato WhatsApp";
     } else {
-      displayName = resolvedName || formattedPhone;
+      displayName = resolvedName || formattedPhone || cleanDisplayJid(jid);
     }
 
-    // P1: Auto-fix leads with bad numeric names when we have a real pushName
-    if (matchingLead && isNumericName(matchingLead.name) && resolvedName && !isNumericName(resolvedName)) {
-      const fixPayload: Record<string, any> = { name: resolvedName };
-      // Also fix phone if lead has an invalid long number
-      const leadDigits = cleanPhoneNumber(matchingLead.phone || "");
-      if (leadDigits.length > 13) {
-        fixPayload.phone = formattedPhone || null;
+    // Auto-fix leads with bad names ("Contato WhatsApp" or numeric) when real pushName arrives
+    if (matchingLead && resolvedName && !isNumericName(resolvedName)) {
+      const needsFix = isNumericName(matchingLead.name) || matchingLead.name === "Contato WhatsApp";
+      if (needsFix) {
+        const fixPayload: Record<string, any> = { name: resolvedName };
+        const leadDigits = cleanPhoneNumber(matchingLead.phone || "");
+        if (leadDigits.length > 13 || leadDigits.length === 0) {
+          fixPayload.phone = formattedPhone || "";
+        }
+        updateLead(matchingLead.id, fixPayload).catch(() => {});
       }
-      updateLead(matchingLead.id, fixPayload).catch(() => {});
     }
     
+    // For @lid without a valid phone, ensure phone is empty (not the internal ID)
+    const finalPhone = isLidJid && !formattedPhone ? "" : formattedPhone;
+
     return {
       id: instanceName ? `${instanceName}:${jid}` : (chat.id || jid),
       remoteJid: jid,
       remoteJidAlt,
-      name: displayName || formatPhoneDisplay(cleanPhoneNumber(jid)) || jid,
+      name: displayName,
       profilePicUrl: chat.profilePicUrl || leadAvatar || undefined,
       lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
       time: formatTime(lastMsgTime),
       unread: chat.unreadCount || 0,
       online: false,
-      phone: formattedPhone,
+      phone: finalPhone,
       lastMessageFromMe: lastMsgFromMe,
       instanceName,
       instanceLabel,
@@ -852,8 +870,13 @@ export default function Chats() {
                 // Use a valid phone: if digits > 13 it's an internal JID, not a real number
                 const phoneDigits = cleanPhoneNumber(chat.phone || "");
                 const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
+                // For name: never use raw JID or long numeric IDs
+                const isLidChat = chat.remoteJid?.endsWith("@lid");
+                const rawName = chat.name || "";
+                const nameIsJid = rawName.includes("@") || /^\d{14,}$/.test(rawName.replace(/[^0-9]/g, ""));
+                const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (validPhone || "Contato WhatsApp")) : (rawName || validPhone || "Contato WhatsApp");
                 const newLead = await createLead({
-                  name: chat.name || validPhone || chat.remoteJid,
+                  name: leadName,
                   phone: validPhone,
                   whatsapp_jid: chat.remoteJid,
                   instance_name: chat.instanceName,
