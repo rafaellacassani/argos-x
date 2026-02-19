@@ -8,6 +8,8 @@ import {
   Filter,
   Calendar,
   Loader2,
+  UserPlus,
+  DollarSign,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
@@ -86,7 +88,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Mensagens Recebidas"
           value={stats.totalMessages.toString()}
@@ -98,22 +100,34 @@ export default function Dashboard() {
           title="Conversas Ativas"
           value={stats.activeConversations.toString()}
           icon={<Users className="w-6 h-6" />}
-          change={{ value: stats.conversationsChange, type: "increase" }}
+          change={{ value: stats.conversationsChange, type: stats.conversationsChange >= 0 ? "increase" : "decrease" }}
           delay={0.1}
         />
         <StatCard
           title="Chats sem Resposta"
           value={stats.unansweredChats.toString()}
           icon={<AlertCircle className="w-6 h-6" />}
-          change={{ value: stats.unansweredChange, type: "decrease" }}
+          change={{ value: stats.unansweredChange, type: stats.unansweredChange <= 0 ? "decrease" : "increase" }}
           delay={0.2}
         />
         <StatCard
           title="Tempo Médio Resposta"
           value={stats.avgResponseTime}
           icon={<Clock className="w-6 h-6" />}
-          change={{ value: stats.responseTimeChange, type: "decrease" }}
           delay={0.3}
+        />
+        <StatCard
+          title="Leads no Período"
+          value={stats.leadsInPeriod.toString()}
+          icon={<UserPlus className="w-6 h-6" />}
+          change={{ value: stats.leadsChange, type: stats.leadsChange >= 0 ? "increase" : "decrease" }}
+          delay={0.4}
+        />
+        <StatCard
+          title="Valor em Pipeline"
+          value={`R$ ${stats.pipelineValue.toLocaleString("pt-BR")}`}
+          icon={<DollarSign className="w-6 h-6" />}
+          delay={0.5}
         />
       </div>
 
@@ -142,6 +156,7 @@ export default function Dashboard() {
                 />
                 <Line type="monotone" dataKey="recebidas" stroke="hsl(var(--secondary))" strokeWidth={2} dot={{ fill: "hsl(var(--secondary))", strokeWidth: 0 }} name="Recebidas" />
                 <Line type="monotone" dataKey="enviadas" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: "hsl(var(--primary))", strokeWidth: 0 }} name="Enviadas" />
+                <Line type="monotone" dataKey="leads" stroke="hsl(var(--warning))" strokeWidth={2} dot={{ fill: "hsl(var(--warning))", strokeWidth: 0 }} name="Novos Leads" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
