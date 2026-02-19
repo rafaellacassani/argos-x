@@ -31,7 +31,7 @@ async function requireAuth(c: any, next: () => Promise<void>) {
   await next();
 }
 
-async function evolutionRequest(endpoint: string, method: string = "GET", body?: Record<string, unknown>) {
+async function evolutionRequest(endpoint: string, method: string = "GET", body?: Record<string, unknown>, throwOnError = true) {
   const url = `${EVOLUTION_API_URL}${endpoint}`;
   const headers: Record<string, string> = { "Content-Type": "application/json", "apikey": EVOLUTION_API_KEY! };
   const options: RequestInit = { method, headers };
@@ -43,7 +43,10 @@ async function evolutionRequest(endpoint: string, method: string = "GET", body?:
     throw new Error(`Evolution API returned non-JSON response (status: ${response.status})`);
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.message || data.error || "Evolution API error");
+  if (!response.ok) {
+    if (!throwOnError) return null;
+    throw new Error(data.message || data.error || "Evolution API error");
+  }
   return data;
 }
 
@@ -214,10 +217,11 @@ app.post("/fetch-profile/:instanceName", async (c) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const { number } = await c.req.json();
     if (!number || typeof number !== "string" || number.length > 30) return c.json({ error: "Invalid number" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/chat/fetchProfile/${instanceName}`, "POST", { number });
+    const result = await evolutionRequest(`/chat/fetchProfile/${instanceName}`, "POST", { number }, false);
+    if (!result) return c.json({ name: null, profilePicUrl: null }, 200, corsHeaders);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to fetch profile" }, 500, corsHeaders);
+    return c.json({ name: null, profilePicUrl: null }, 200, corsHeaders);
   }
 });
 
