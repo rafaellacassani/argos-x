@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter, User, Calendar } from 'lucide-react';
+import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
@@ -205,25 +205,6 @@ export default function Leads() {
     setIsRefreshing(false);
   };
 
-  // Quick filter handlers
-  const handleQuickResponsible = useCallback((userId: string) => {
-    const updated: LeadFiltersData = {
-      ...filters,
-      responsibleUserIds: userId === 'all' ? [] : [userId],
-    };
-    handleApplyFilters(updated);
-  }, [filters, handleApplyFilters]);
-
-  const handleQuickPeriod = useCallback((preset: string) => {
-    const updated: LeadFiltersData = {
-      ...filters,
-      datePreset: preset === 'all' ? null : preset,
-      dateFrom: null,
-      dateTo: null,
-    };
-    handleApplyFilters(updated);
-  }, [filters, handleApplyFilters]);
-
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -330,47 +311,6 @@ export default function Leads() {
           </div>
         </div>
 
-        {/* Quick filters row */}
-        <div className="flex items-center gap-3 mt-3">
-          <div className="flex items-center gap-1.5">
-            <User className="h-3.5 w-3.5 text-muted-foreground" />
-            <Select
-              value={filters.responsibleUserIds.length === 1 ? filters.responsibleUserIds[0] : 'all'}
-              onValueChange={handleQuickResponsible}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue placeholder="Responsável" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {teamMembers.map(m => (
-                  <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-            <Select
-              value={filters.datePreset || 'all'}
-              onValueChange={handleQuickPeriod}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todo período</SelectItem>
-                <SelectItem value="today">Hoje</SelectItem>
-                <SelectItem value="yesterday">Ontem</SelectItem>
-                <SelectItem value="last7">Últimos 7 dias</SelectItem>
-                <SelectItem value="last30">Últimos 30 dias</SelectItem>
-                <SelectItem value="this_month">Este mês</SelectItem>
-                <SelectItem value="this_year">Este ano</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
       </div>
 
       {/* Active filter chips */}
