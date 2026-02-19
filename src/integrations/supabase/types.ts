@@ -1531,6 +1531,59 @@ export type Database = {
           },
         ]
       }
+      whatsapp_messages: {
+        Row: {
+          content: string | null
+          created_at: string
+          direction: string
+          from_me: boolean | null
+          id: string
+          instance_name: string
+          message_id: string | null
+          message_type: string | null
+          push_name: string | null
+          remote_jid: string
+          timestamp: string
+          workspace_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          direction: string
+          from_me?: boolean | null
+          id?: string
+          instance_name: string
+          message_id?: string | null
+          message_type?: string | null
+          push_name?: string | null
+          remote_jid: string
+          timestamp?: string
+          workspace_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          direction?: string
+          from_me?: boolean | null
+          id?: string
+          instance_name?: string
+          message_id?: string | null
+          message_type?: string | null
+          push_name?: string | null
+          remote_jid?: string
+          timestamp?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_members: {
         Row: {
           accepted_at: string | null

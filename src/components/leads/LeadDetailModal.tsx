@@ -261,7 +261,7 @@ export function LeadDetailModal({
                 <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <ChevronRight className="w-3.5 h-3.5" /> Fase do Lead
                 </p>
-                <Select value={lead.stage_id} onValueChange={(v) => onMove(lead.id, v)}>
+                <Select value={lead.stage_id || ""} onValueChange={(v) => { if (v) onMove(lead.id, v); }}>
                   <SelectTrigger className="h-9 text-sm">
                     <div className="flex items-center gap-2">
                       {currentStage && <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: currentStage.color }} />}
@@ -269,6 +269,9 @@ export function LeadDetailModal({
                     </div>
                   </SelectTrigger>
                   <SelectContent>
+                    {!lead.stage_id && (
+                      <SelectItem value="" disabled>Sem etapa definida</SelectItem>
+                    )}
                     {sortedStages.filter(s => s.id).map(s => (
                       <SelectItem key={s.id} value={s.id}>
                         <div className="flex items-center gap-2">
