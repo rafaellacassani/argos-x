@@ -169,6 +169,7 @@ export type Database = {
           model: string
           name: string
           niche: string | null
+          on_start_actions: Json | null
           pause_code: string | null
           qualification_enabled: boolean | null
           qualification_fields: Json | null
@@ -208,6 +209,7 @@ export type Database = {
           model?: string
           name: string
           niche?: string | null
+          on_start_actions?: Json | null
           pause_code?: string | null
           qualification_enabled?: boolean | null
           qualification_fields?: Json | null
@@ -247,6 +249,7 @@ export type Database = {
           model?: string
           name?: string
           niche?: string | null
+          on_start_actions?: Json | null
           pause_code?: string | null
           qualification_enabled?: boolean | null
           qualification_fields?: Json | null
