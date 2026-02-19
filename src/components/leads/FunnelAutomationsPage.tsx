@@ -250,9 +250,6 @@ export function FunnelAutomationsPage({
                 Automações do Funil {funnelName ? `— ${funnelName}` : ''}
               </h2>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-              <X className="h-5 w-5" />
-            </Button>
           </div>
 
           {/* Body: horizontal scroll with stage columns */}
