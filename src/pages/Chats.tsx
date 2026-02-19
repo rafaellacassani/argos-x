@@ -31,6 +31,7 @@ import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/com
 import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover";
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
+import { useUserRole } from "@/hooks/useUserRole";
 
 interface Chat {
   id: string;
@@ -367,12 +368,32 @@ export default function Chats() {
   
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
+  const { isSeller, userProfileId } = useUserRole();
   const [leadPanelOpen, setLeadPanelOpen] = useState(true);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
+
+  // Auto-assign lead to seller on first interaction
+  const autoAssignLead = useCallback(async (chat: Chat | null) => {
+    if (!chat || !isSeller || !userProfileId) return;
+    const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
+    const chatDigits = stripDigits(chat.phone || "");
+    const matchingLead = leadsRef.current.find((l) => {
+      if (l.whatsapp_jid === chat.remoteJid) return true;
+      if (chat.remoteJidAlt && l.whatsapp_jid === chat.remoteJidAlt) return true;
+      if (chatDigits.length >= 10) {
+        const leadDigits = stripDigits(l.phone || "");
+        if (leadDigits.length >= 10 && (leadDigits.endsWith(chatDigits.slice(-10)) || chatDigits.endsWith(leadDigits.slice(-10)))) return true;
+      }
+      return false;
+    });
+    if (matchingLead && !matchingLead.responsible_user) {
+      await updateLead(matchingLead.id, { responsible_user: userProfileId });
+    }
+  }, [isSeller, userProfileId, updateLead]);
 
   // Meta chat hook
   const {
@@ -464,8 +485,9 @@ export default function Chats() {
       toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
     
+    if (success) autoAssignLead(selectedChat);
     return success;
-  }, [selectedInstance, selectedChat, sendText, sendMetaMessage]);
+  }, [selectedInstance, selectedChat, sendText, sendMetaMessage, autoAssignLead]);
 
   // Handler for sending media
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
@@ -503,8 +525,9 @@ export default function Chats() {
       });
     }
     
+    if (success) autoAssignLead(selectedChat);
     return success;
-  }, [selectedInstance, selectedChat, sendMedia]);
+  }, [selectedInstance, selectedChat, sendMedia, autoAssignLead]);
 
   // Handler for sending audio
   const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
@@ -548,8 +571,9 @@ export default function Chats() {
       });
     }
     
+    if (success) autoAssignLead(selectedChat);
     return success;
-  }, [selectedInstance, selectedChat, sendAudio]);
+  }, [selectedInstance, selectedChat, sendAudio, autoAssignLead]);
 
   // Load connected instances on mount (WhatsApp + Meta)
   useEffect(() => {

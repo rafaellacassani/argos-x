@@ -4,6 +4,11 @@ import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { LeadColumn } from './LeadColumn';
 import type { Lead, FunnelStage } from '@/hooks/useLeads';
 
+interface TeamMember {
+  id: string;
+  full_name: string;
+}
+
 interface LeadKanbanProps {
   stages: FunnelStage[];
   leads: Lead[];
@@ -15,6 +20,7 @@ interface LeadKanbanProps {
   onEditStage?: (stage: FunnelStage) => void;
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
   canDelete?: boolean;
+  teamMembers?: TeamMember[];
 }
 
 export const LeadKanban = memo(function LeadKanban({
@@ -27,7 +33,8 @@ export const LeadKanban = memo(function LeadKanban({
   onAddLead,
   onEditStage,
   onUpdateStage,
-  canDelete = true
+  canDelete = true,
+  teamMembers = []
 }: LeadKanbanProps) {
   
   const handleDragEnd = useCallback((result: DropResult) => {
@@ -87,6 +94,7 @@ export const LeadKanban = memo(function LeadKanban({
               onEditStage={onEditStage}
               onUpdateStage={onUpdateStage}
               canDelete={canDelete}
+              teamMembers={teamMembers}
             />
           ))}
         </div>

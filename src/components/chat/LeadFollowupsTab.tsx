@@ -23,6 +23,8 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
 import type { Lead } from "@/hooks/useLeads";
 
@@ -58,6 +60,8 @@ function StatusBadge({ status, scheduledAt }: { status: string; scheduledAt: str
 
 export function LeadFollowupsTab({ lead }: LeadFollowupsTabProps) {
   const { workspaceId } = useWorkspace();
+  const { isSeller, userProfileId } = useUserRole();
+  const { updateLead } = useLeads();
   const [followups, setFollowups] = useState<ScheduledMsg[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -123,6 +127,10 @@ export function LeadFollowupsTab({ lead }: LeadFollowupsTabProps) {
         workspace_id: workspaceId,
       } as any);
       toast({ title: "Follow-up agendado!" });
+      // Auto-assign lead to seller if unassigned
+      if (isSeller && userProfileId && !lead.responsible_user) {
+        await updateLead(lead.id, { responsible_user: userProfileId });
+      }
       setShowNew(false); setNewMsg(""); setNewDate(undefined); setNewTime("09:00");
       await fetchFollowups();
     } catch {
