@@ -444,6 +444,60 @@ export type Database = {
           },
         ]
       }
+      lead_proposals: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          lead_id: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+          valid_until: string | null
+          value: number
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: string
+          lead_id: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          valid_until?: string | null
+          value?: number
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          lead_id?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          valid_until?: string | null
+          value?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_proposals_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_proposals_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_sales: {
         Row: {
           created_at: string | null

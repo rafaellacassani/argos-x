@@ -30,6 +30,7 @@ import { ChatTagManager } from "@/components/chat/ChatTagManager";
 import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
 import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover";
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
+import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 
 interface Chat {
   id: string;
@@ -365,8 +366,10 @@ export default function Chats() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   
   // Load leads data for filters and auto-create leads
-  const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead } = useLeads();
+  const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const [leadPanelOpen, setLeadPanelOpen] = useState(true);
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [leadModalLead, setLeadModalLead] = useState<any>(null);
   
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
@@ -1635,9 +1638,26 @@ export default function Chats() {
               });
               return !!newLead;
             } : undefined}
+            onOpenDetailModal={currentLead ? () => {
+              setLeadModalLead(currentLead);
+              setLeadModalOpen(true);
+            } : undefined}
           />
         );
       })()}
+      <LeadDetailModal
+        lead={leadModalLead}
+        open={leadModalOpen}
+        onOpenChange={setLeadModalOpen}
+        stages={stages}
+        tags={tags}
+        onUpdate={updateLead}
+        onMove={(leadId, stageId) => moveLead(leadId, stageId, 0)}
+        onDelete={deleteLead}
+        onAddTag={addTagToLead}
+        onRemoveTag={removeTagFromLead}
+        canDelete={true}
+      />
     </div>
   );
 }
