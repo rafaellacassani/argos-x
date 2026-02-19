@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import {
   ArrowLeft,
   Save,
@@ -56,6 +58,7 @@ export default function SalesBotBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { loading, fetchBot, createBot, updateBot, deleteBot, duplicateBot } = useSalesBots();
+  const { workspaceId } = useWorkspace();
   
   const [botName, setBotName] = useState('Novo Bot');
   const [triggerType, setTriggerType] = useState('message_received');
@@ -66,8 +69,22 @@ export default function SalesBotBuilder() {
   const [hasChanges, setHasChanges] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [whatsappInstances, setWhatsappInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
 
   const isEditing = !!id;
+
+  // Fetch WhatsApp instances for the trigger config
+  useEffect(() => {
+    if (!workspaceId) return;
+    supabase
+      .from('whatsapp_instances')
+      .select('instance_name, display_name')
+      .eq('workspace_id', workspaceId)
+      .eq('instance_type', 'commercial')
+      .then(({ data }) => {
+        setWhatsappInstances(data || []);
+      });
+  }, [workspaceId]);
 
   useEffect(() => {
     if (id) {
@@ -252,6 +269,38 @@ export default function SalesBotBuilder() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Instance selector — shown for message_received, keyword, new_lead */}
+                {['message_received', 'keyword', 'new_lead'].includes(triggerType) && (
+                  <div className="space-y-2">
+                    <Label>Instância WhatsApp</Label>
+                    <Select
+                      value={(triggerConfig.instance_name as string) || '__all__'}
+                      onValueChange={(value) => {
+                        setTriggerConfig({
+                          ...triggerConfig,
+                          instance_name: value === '__all__' ? '' : value,
+                        });
+                        setHasChanges(true);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a instância" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">Todas as instâncias</SelectItem>
+                        {whatsappInstances.map((inst) => (
+                          <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                            {inst.display_name || inst.instance_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Deixe "Todas" para o bot escutar qualquer instância
+                    </p>
+                  </div>
+                )}
 
                 {triggerType === 'keyword' && (
                   <div className="space-y-2">

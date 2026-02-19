@@ -171,6 +171,20 @@ export function ConnectionModal({
             instance_type: instanceType,
           } as any, { onConflict: 'instance_name' });
           
+          // Auto-setup webhook for this instance
+          try {
+            await supabase.functions.invoke(`evolution-api/setup-webhook/${sanitizedName}`, {
+              method: "POST",
+            });
+            console.log("[ConnectionModal] Webhook configured for", sanitizedName);
+            toast({
+              title: "Webhook configurado ✓",
+              description: "Automações serão disparadas automaticamente.",
+            });
+          } catch (webhookErr) {
+            console.error("[ConnectionModal] Webhook setup error:", webhookErr);
+          }
+          
           setStep("success");
 
           toast({
