@@ -38,6 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
 import { LeadFollowupsTab } from "./LeadFollowupsTab";
+import { LeadProposalsTab } from "@/components/leads/LeadProposalsTab";
 
 interface ChatContactInfo {
   name: string;
@@ -481,6 +482,12 @@ export function LeadSidePanel({
             Vendas
           </TabsTrigger>
           <TabsTrigger
+            value="proposals"
+            className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2 text-xs"
+          >
+            Orçamentos
+          </TabsTrigger>
+          <TabsTrigger
             value="followups"
             className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2 text-xs"
           >
@@ -585,6 +592,11 @@ export function LeadSidePanel({
               onUpdateLead(leadId, { value: newValue });
             }}
           />
+        </TabsContent>
+
+        {/* Proposals Tab */}
+        <TabsContent value="proposals" className="flex-1 m-0 overflow-hidden">
+          <LeadProposalsTab lead={lead} />
         </TabsContent>
 
         {/* Follow-ups Tab */}

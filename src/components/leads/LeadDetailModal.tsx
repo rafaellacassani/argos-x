@@ -269,7 +269,7 @@ export function LeadDetailModal({
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    {sortedStages.map(s => (
+                    {sortedStages.filter(s => s.id).map(s => (
                       <SelectItem key={s.id} value={s.id}>
                         <div className="flex items-center gap-2">
                           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }} />
@@ -322,13 +322,13 @@ export function LeadDetailModal({
                   <User className="w-3.5 h-3.5" /> Responsável
                 </p>
                 {teamMembers.length > 0 ? (
-                  <Select value={lead.responsible_user || ""} onValueChange={(v) => onUpdate(lead.id, { responsible_user: v || null })}>
+                  <Select value={lead.responsible_user || "__none__"} onValueChange={(v) => onUpdate(lead.id, { responsible_user: v === "__none__" ? null : v })}>
                     <SelectTrigger className="h-9 text-sm">
                       <SelectValue placeholder="Não atribuído" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Não atribuído</SelectItem>
-                      {teamMembers.map(m => (
+                      <SelectItem value="__none__">Não atribuído</SelectItem>
+                      {teamMembers.filter(m => m.id).map(m => (
                         <SelectItem key={m.id} value={m.id}>{m.full_name}</SelectItem>
                       ))}
                     </SelectContent>
