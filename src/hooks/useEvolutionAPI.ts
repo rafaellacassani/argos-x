@@ -213,7 +213,8 @@ export function useEvolutionAPI() {
       // 1. Buscar instâncias registradas no banco de dados local (CRM)
       const { data: localInstances, error: dbError } = await supabase
         .from('whatsapp_instances')
-        .select('*');
+        .select('*')
+        .neq('instance_type', 'alerts');
 
       if (dbError) {
         console.error("[useEvolutionAPI] Error fetching local instances:", dbError);

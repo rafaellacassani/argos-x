@@ -250,6 +250,9 @@ function MemberEditor({
                   className="bg-background"
                 />
               </div>
+              <p className="text-xs text-muted-foreground ml-[108px]">
+                WhatsApp pessoal para receber alertas do sistema
+              </p>
             </div>
           </div>
         </div>
