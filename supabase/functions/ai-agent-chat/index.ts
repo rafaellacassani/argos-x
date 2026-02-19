@@ -114,11 +114,6 @@ serve(async (req) => {
   const startTime = Date.now();
 
   try {
-    const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -126,17 +121,38 @@ serve(async (req) => {
 
     if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const body = await req.json();
+    const { agent_id, session_id, message, lead_id, _internal_webhook } = body;
+
+    // FIX: Auth check — allow internal webhook calls with service role key
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const body = await req.json();
-    const { agent_id, session_id, message, lead_id } = body;
+    const token = authHeader.replace("Bearer ", "");
+    let isAuthenticated = false;
+
+    if (_internal_webhook && token === supabaseServiceKey) {
+      // Internal call from whatsapp-webhook using service role key — trust it
+      isAuthenticated = true;
+      console.log("[ai-agent-chat] ✅ Internal webhook call authenticated via service role");
+    } else {
+      // Normal user call — validate via Supabase auth
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userError } = await authClient.auth.getUser();
+      if (userError || !user) {
+        console.error("[ai-agent-chat] ❌ Auth failed:", userError?.message);
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      isAuthenticated = true;
+    }
+
+    if (!isAuthenticated) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     if (!agent_id || !session_id || !message) {
       return new Response(JSON.stringify({ error: "agent_id, session_id and message are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -160,23 +176,25 @@ serve(async (req) => {
       .from("ai_agents").select("*").eq("id", agent_id).single();
 
     if (agentError || !agent) {
+      console.error("[ai-agent-chat] ❌ Agent not found:", agent_id);
       return new Response(JSON.stringify({ error: "Agent not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!agent.is_active) {
+      console.log("[ai-agent-chat] ⏸️ Agent is inactive:", agent_id);
       return new Response(JSON.stringify({ error: "Agent is not active", paused: true }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    console.log(`[ai-agent-chat] 🤖 Processing: agent=${agent.name}, session=${session_id}, lead=${lead_id}`);
 
     // --- respond_to check ---
     if (agent.respond_to === "new_leads" && lead_id) {
       const { data: existingMemories } = await supabase
         .from("agent_memories").select("id").eq("agent_id", agent_id).eq("lead_id", lead_id);
       if (existingMemories && existingMemories.length > 0) {
-        // Check if this is the same session
-        const sameSession = existingMemories.some((m: any) => false); // we check by session below
         const { data: existingBySession } = await supabase
           .from("agent_memories").select("id").eq("agent_id", agent_id).eq("session_id", session_id);
         if (!existingBySession || existingBySession.length === 0) {
-          // There's a previous session for this lead — don't respond
+          console.log("[ai-agent-chat] ⏭️ Skipped: not_new_lead");
           return new Response(JSON.stringify({ response: null, skipped: true, reason: "not_new_lead" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }
@@ -187,6 +205,7 @@ serve(async (req) => {
       if (stages.length > 0) {
         const { data: lead } = await supabase.from("leads").select("stage_id").eq("id", lead_id).single();
         if (lead && !stages.includes(lead.stage_id)) {
+          console.log("[ai-agent-chat] ⏭️ Skipped: stage_not_matched");
           return new Response(JSON.stringify({ response: null, skipped: true, reason: "stage_not_matched" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }
@@ -195,14 +214,16 @@ serve(async (req) => {
     let { data: memory, error: memoryError } = await supabase
       .from("agent_memories").select("*").eq("agent_id", agent_id).eq("session_id", session_id).single();
     if (memoryError && memoryError.code !== "PGRST116") {
-      console.error("Memory fetch error:", memoryError);
+      console.error("[ai-agent-chat] Memory fetch error:", memoryError);
     }
 
     if (memory?.is_paused) {
       if (message.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
         await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);
         memory.is_paused = false;
+        console.log("[ai-agent-chat] ▶️ Session resumed");
       } else {
+        console.log("[ai-agent-chat] ⏸️ Session paused, ignoring message");
         return new Response(JSON.stringify({ response: null, paused: true, message: "Conversa pausada." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
@@ -212,6 +233,7 @@ serve(async (req) => {
         await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
       }
       await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+      console.log("[ai-agent-chat] ⏸️ Paused by code");
       return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -228,12 +250,10 @@ serve(async (req) => {
       if (qualificationStep === undefined) {
         qualificationStep = 0;
       } else {
-        // Save the user's answer to the current field
         const currentField = activeQFields[qualificationStep];
         if (currentField) {
           qualificationData[currentField.field_type === "custom" ? currentField.label : currentField.field_type] = message;
 
-          // Update lead data if applicable
           if (lead_id && isValidUUID(lead_id)) {
             const fieldMap: Record<string, string> = { name: "name", company: "company", email: "email", phone: "phone" };
             const leadField = fieldMap[currentField.field_type];
@@ -246,7 +266,6 @@ serve(async (req) => {
         }
       }
 
-      // Check if qualification is complete
       if (qualificationStep >= activeQFields.length) {
         qualificationStep = "completed";
         isQualifying = false;
@@ -258,9 +277,9 @@ serve(async (req) => {
     messages.push({ role: "user", content: message, timestamp: new Date().toISOString() });
 
     if (isQualifying && qualificationStep !== "completed") {
-      // Ask the next qualification question
       const nextField = activeQFields[qualificationStep];
       responseContent = nextField.question || `Pode me informar seu ${nextField.label}?`;
+      console.log(`[ai-agent-chat] 📋 Qualification step ${qualificationStep}: asking "${responseContent.substring(0, 50)}"`);
     } else {
       // Normal AI conversation
       const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium");
@@ -282,6 +301,8 @@ serve(async (req) => {
         await sleep(30000 + Math.random() * 90000);
       }
 
+      console.log(`[ai-agent-chat] 🧠 Calling AI model: ${agent.model}, messages: ${aiMessages.length}, tools: ${tools.length}`);
+
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
@@ -296,6 +317,7 @@ serve(async (req) => {
       });
 
       if (!aiResponse.ok) {
+        console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status}`);
         if (aiResponse.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         if (aiResponse.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         throw new Error(`AI Gateway error: ${aiResponse.status}`);
@@ -313,6 +335,7 @@ serve(async (req) => {
         const toolName = toolCall.function?.name;
         const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
         toolsUsed.push(toolName);
+        console.log(`[ai-agent-chat] 🔧 Tool call: ${toolName}`);
 
         switch (toolName) {
           case "atualizar_lead": {
@@ -367,7 +390,6 @@ serve(async (req) => {
 
     messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
 
-    // Save qualification state in summary field
     const summaryData = {
       qualification_step: qualificationStep,
       qualification_data: qualificationData,
@@ -389,9 +411,11 @@ serve(async (req) => {
 
     await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
 
+    console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
+
     return new Response(JSON.stringify({ response: responseContent, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
-    console.error("Agent chat error:", error);
+    console.error("[ai-agent-chat] ❌ Agent chat error:", error);
     return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
