@@ -88,6 +88,18 @@ const extractNumberFromJid = (jid: string): string => {
   return jid.replace(/@s\.whatsapp\.net$/, "").replace(/@g\.us$/, "").replace(/@lid$/, "");
 };
 
+// Helper to resolve the best phone number for sending messages
+// Prefers the lead's phone over extracting from JID (which may be a LID, not a real number)
+const resolveRecipientNumber = (chat: Chat): string => {
+  // If JID is a @lid type, the number extracted won't be a real phone - use chat.phone instead
+  if (chat.remoteJid.endsWith("@lid")) {
+    // Clean the phone field: remove formatting chars, keep only digits
+    const cleaned = chat.phone.replace(/[^0-9]/g, "");
+    if (cleaned.length >= 10) return cleaned;
+  }
+  return extractNumberFromJid(chat.remoteJid);
+};
+
 // Helper to format timestamp
 const formatTime = (timestamp: number | undefined): string => {
   if (!timestamp) return "";
@@ -396,7 +408,7 @@ export default function Chats() {
     const targetInstance = selectedChat.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all") return false;
     
-    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const number = resolveRecipientNumber(selectedChat);
     const success = await sendText(targetInstance, number, text);
     
     if (success) {
@@ -426,7 +438,7 @@ export default function Chats() {
     const targetInstance = selectedChat?.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
-    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const number = resolveRecipientNumber(selectedChat);
     const mediatype = getMediaType(file);
     const base64 = await fileToBase64(file);
     
@@ -462,7 +474,7 @@ export default function Chats() {
     const targetInstance = selectedChat?.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
-    const number = extractNumberFromJid(selectedChat.remoteJid);
+    const number = resolveRecipientNumber(selectedChat);
     const base64 = await blobToBase64(audioBlob);
     
     // Create data URL for local playback (with proper prefix)
