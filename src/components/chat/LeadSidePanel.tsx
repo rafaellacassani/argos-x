@@ -39,6 +39,13 @@ import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
 import { LeadFollowupsTab } from "./LeadFollowupsTab";
 
+interface ChatContactInfo {
+  name: string;
+  phone: string;
+  remoteJid: string;
+  instanceName?: string;
+}
+
 interface LeadSidePanelProps {
   lead: Lead | null;
   stages: FunnelStage[];
@@ -50,6 +57,8 @@ interface LeadSidePanelProps {
   onAddTag: (leadId: string, tagId: string) => Promise<boolean>;
   onRemoveTag: (leadId: string, tagId: string) => Promise<boolean>;
   onCreateTag: (name: string, color: string) => Promise<LeadTag | null>;
+  chatContact?: ChatContactInfo;
+  onCreateLead?: () => Promise<boolean>;
 }
 
 // Inline editable field
@@ -141,11 +150,14 @@ export function LeadSidePanel({
   onAddTag,
   onRemoveTag,
   onCreateTag,
+  chatContact,
+  onCreateLead,
 }: LeadSidePanelProps) {
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
   const [responsibleName, setResponsibleName] = useState<string | null>(null);
+  const [creatingLead, setCreatingLead] = useState(false);
 
   // Fetch responsible user name
   useEffect(() => {
@@ -210,7 +222,71 @@ export function LeadSidePanel({
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-  if (!lead) return null;
+  if (!lead && !chatContact) return null;
+
+  // No lead but have chat contact — show basic panel with "Create Lead" button
+  if (!lead && chatContact) {
+    if (!isOpen) {
+      return (
+        <div className="flex items-start border-l border-border bg-card">
+          <Button variant="ghost" size="icon" className="m-2" onClick={onToggle} title="Abrir painel do lead">
+            <PanelRightOpen className="w-5 h-5" />
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <div className="w-80 border-l border-border bg-card flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-border bg-gradient-to-br from-[hsl(var(--primary)/0.08)] to-transparent">
+          <div className="flex items-start justify-between mb-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-lg text-foreground truncate">{chatContact.name || "Contato"}</h3>
+              <span className="text-xs text-muted-foreground">Sem lead vinculado</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 -mt-1" onClick={onToggle}>
+              <PanelRightClose className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="p-4 space-y-4">
+          <div className="space-y-0.5">
+            <p className="text-xs font-semibold text-foreground mb-2">Dados do contato</p>
+            <div className="flex items-center gap-2 py-1.5">
+              <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Celular</p>
+                <span className="text-sm">{formatLeadPhone(chatContact.phone) || "Não identificado"}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 py-1.5">
+              <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Nome</p>
+                <span className="text-sm">{chatContact.name || "Desconhecido"}</span>
+              </div>
+            </div>
+          </div>
+          {onCreateLead && (
+            <Button
+              className="w-full"
+              onClick={async () => {
+                setCreatingLead(true);
+                try {
+                  await onCreateLead();
+                } finally {
+                  setCreatingLead(false);
+                }
+              }}
+              disabled={creatingLead}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {creatingLead ? "Criando..." : "Criar Lead"}
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Collapse toggle button (always visible)
   if (!isOpen) {
