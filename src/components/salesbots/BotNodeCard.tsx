@@ -14,12 +14,20 @@ import {
   GripVertical,
   Circle,
   Trash2,
+  ShieldCheck,
+  CornerDownRight,
+  StopCircle,
+  UserCheck,
+  StickyNote,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
 import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
 import { Button } from '@/components/ui/button';
 import { SendMessageNodeContent } from './SendMessageNodeContent';
+import { WaitNodeContent } from './WaitNodeContent';
+import { ConditionNodeContent } from './ConditionNodeContent';
+import { NewNodeContents } from './NewNodeContents';
 
 interface BotNodeCardProps {
   node: BotNode;
@@ -34,6 +42,7 @@ interface BotNodeCardProps {
   executionStatus?: ExecutionStatus;
   onTestNode?: (nodeId: string, leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
+  allNodes?: BotNode[];
 }
 
 const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; color: string }> = {
@@ -47,6 +56,11 @@ const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; co
   wait: { icon: Clock, label: 'Aguardar', color: 'border-indigo-500 bg-indigo-500/10' },
   tag: { icon: Tag, label: 'Aplicar Tag', color: 'border-teal-500 bg-teal-500/10' },
   move_stage: { icon: ArrowRight, label: 'Mover Etapa', color: 'border-cyan-500 bg-cyan-500/10' },
+  validate: { icon: ShieldCheck, label: 'Validação', color: 'border-emerald-500 bg-emerald-500/10' },
+  goto: { icon: CornerDownRight, label: 'Ir para etapa', color: 'border-slate-500 bg-slate-500/10' },
+  stop: { icon: StopCircle, label: 'Parar bot', color: 'border-red-500 bg-red-500/10' },
+  change_responsible: { icon: UserCheck, label: 'Mudar Responsável', color: 'border-violet-500 bg-violet-500/10' },
+  add_note: { icon: StickyNote, label: 'Adicionar Nota', color: 'border-amber-500 bg-amber-500/10' },
 };
 
 export function BotNodeCard({
@@ -62,6 +76,7 @@ export function BotNodeCard({
   executionStatus,
   onTestNode,
   testLeads = [],
+  allNodes = [],
 }: BotNodeCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -72,38 +87,24 @@ export function BotNodeCard({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('.no-drag')) return;
-    
     e.preventDefault();
     setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - node.position.x,
-      y: e.clientY - node.position.y,
-    });
+    setDragOffset({ x: e.clientX - node.position.x, y: e.clientY - node.position.y });
     onSelect();
   };
 
   useEffect(() => {
     if (!isDragging) return;
-
     const handleMouseMove = (e: MouseEvent) => {
-      onMove({
-        x: Math.max(0, e.clientX - dragOffset.x),
-        y: Math.max(0, e.clientY - dragOffset.y),
-      });
+      onMove({ x: Math.max(0, e.clientX - dragOffset.x), y: Math.max(0, e.clientY - dragOffset.y) });
     };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
+    const handleMouseUp = () => setIsDragging(false);
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+    return () => { window.removeEventListener('mousemove', handleMouseMove); window.removeEventListener('mouseup', handleMouseUp); };
   }, [isDragging, dragOffset, onMove]);
+
+  const hasDualOutputs = node.type === 'condition' || node.type === 'validate';
 
   return (
     <motion.div
@@ -116,68 +117,35 @@ export function BotNodeCard({
         isSelected && 'ring-2 ring-primary ring-offset-2',
         isDragging && 'shadow-xl z-50'
       )}
-      style={{
-        left: node.position.x,
-        top: node.position.y,
-      }}
+      style={{ left: node.position.x, top: node.position.y }}
       onMouseDown={handleMouseDown}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
+      onClick={(e) => { e.stopPropagation(); onSelect(); }}
     >
       {/* Header */}
       <div className="flex items-center gap-2 p-3 border-b border-border/50">
         <GripVertical className="w-4 h-4 text-muted-foreground" />
         <Icon className="w-4 h-4" />
         <span className="font-medium text-sm flex-1">{config.label}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 no-drag text-muted-foreground hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-        >
+        <Button variant="ghost" size="icon" className="h-6 w-6 no-drag text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
           <Trash2 className="w-3 h-3" />
         </Button>
       </div>
 
       {/* Content */}
       <div className="p-3 no-drag">
-        <NodeContent
-          node={node}
-          onUpdate={onUpdate}
-          executionStatus={executionStatus}
-          onTestNode={onTestNode}
-          testLeads={testLeads}
-        />
+        <NodeContent node={node} onUpdate={onUpdate} executionStatus={executionStatus} onTestNode={onTestNode} testLeads={testLeads} allNodes={allNodes} />
       </div>
 
       {/* Connection Points */}
-      {/* Input (top) */}
-      <div
-        className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-background border-2 border-primary cursor-pointer hover:scale-125 transition-transform no-drag"
-        onMouseUp={() => onEndConnect(node.id)}
-      />
+      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-background border-2 border-primary cursor-pointer hover:scale-125 transition-transform no-drag" onMouseUp={() => onEndConnect(node.id)} />
 
-      {/* Output (bottom) */}
-      <div
-        className={cn(
-          'absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary cursor-pointer hover:scale-125 transition-transform no-drag',
-          isConnecting && 'animate-pulse'
-        )}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-          onStartConnect();
-        }}
-      >
-        <Circle className="w-full h-full text-primary-foreground" />
-      </div>
+      {!hasDualOutputs && (
+        <div className={cn('absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary cursor-pointer hover:scale-125 transition-transform no-drag', isConnecting && 'animate-pulse')} onMouseDown={(e) => { e.stopPropagation(); onStartConnect(); }}>
+          <Circle className="w-full h-full text-primary-foreground" />
+        </div>
+      )}
 
-      {/* Condition branches */}
-      {node.type === 'condition' && (
+      {hasDualOutputs && (
         <>
           <div className="absolute -bottom-2 left-1/4 -translate-x-1/2 w-4 h-4 rounded-full bg-green-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center">
             S
@@ -197,9 +165,10 @@ interface NodeContentProps {
   executionStatus?: ExecutionStatus;
   onTestNode?: (nodeId: string, leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
+  allNodes?: BotNode[];
 }
 
-function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = [] }: NodeContentProps) {
+function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = [], allNodes = [] }: NodeContentProps) {
   switch (node.type) {
     case 'send_message':
       return (
@@ -210,9 +179,7 @@ function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = 
           testLeads={testLeads}
           isTestingAvailable={!!onTestNode}
           onTest={(leadId, instanceName, forceWithoutConversation) => {
-            if (onTestNode) {
-              onTestNode(node.id, leadId, instanceName, forceWithoutConversation);
-            }
+            if (onTestNode) onTestNode(node.id, leadId, instanceName, forceWithoutConversation);
           }}
         />
       );
@@ -221,14 +188,7 @@ function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = 
       return (
         <div className="flex gap-2 flex-wrap">
           {['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '✅'].map(emoji => (
-            <button
-              key={emoji}
-              className={cn(
-                'text-xl p-1 rounded hover:bg-accent',
-                node.data.emoji === emoji && 'bg-accent ring-2 ring-primary'
-              )}
-              onClick={() => onUpdate({ emoji })}
-            >
+            <button key={emoji} className={cn('text-xl p-1 rounded hover:bg-accent', node.data.emoji === emoji && 'bg-accent ring-2 ring-primary')} onClick={() => onUpdate({ emoji })}>
               {emoji}
             </button>
           ))}
@@ -236,165 +196,57 @@ function NodeContent({ node, onUpdate, executionStatus, onTestNode, testLeads = 
       );
 
     case 'comment':
-      return (
-        <textarea
-          className="w-full p-2 text-sm bg-background border rounded resize-none"
-          placeholder="Nota interna..."
-          rows={2}
-          value={(node.data.text as string) || ''}
-          onChange={(e) => onUpdate({ text: e.target.value })}
-        />
-      );
+      return <textarea className="w-full p-2 text-sm bg-background border rounded resize-none" placeholder="Nota interna..." rows={2} value={(node.data.text as string) || ''} onChange={(e) => onUpdate({ text: e.target.value })} />;
 
     case 'condition':
-      return (
-        <div className="space-y-2">
-          <select
-            className="w-full p-2 text-sm bg-background border rounded"
-            value={(node.data.field as string) || 'message'}
-            onChange={(e) => onUpdate({ field: e.target.value })}
-          >
-            <option value="message">Mensagem</option>
-            <option value="tag">Tag</option>
-            <option value="stage">Etapa do funil</option>
-            <option value="value">Valor do lead</option>
-          </select>
-          <select
-            className="w-full p-2 text-sm bg-background border rounded"
-            value={(node.data.operator as string) || 'contains'}
-            onChange={(e) => onUpdate({ operator: e.target.value })}
-          >
-            <option value="contains">Contém</option>
-            <option value="equals">É igual a</option>
-            <option value="starts_with">Começa com</option>
-            <option value="ends_with">Termina com</option>
-            <option value="not_contains">Não contém</option>
-          </select>
-          <input
-            type="text"
-            className="w-full p-2 text-sm bg-background border rounded"
-            placeholder="Valor..."
-            value={(node.data.value as string) || ''}
-            onChange={(e) => onUpdate({ value: e.target.value })}
-          />
-        </div>
-      );
+      return <ConditionNodeContent node={node} onUpdate={onUpdate} />;
 
     case 'action':
       return (
         <div className="space-y-2">
-          <select
-            className="w-full p-2 text-sm bg-background border rounded"
-            value={(node.data.actionType as string) || 'webhook'}
-            onChange={(e) => onUpdate({ actionType: e.target.value })}
-          >
+          <select className="w-full p-2 text-sm bg-background border rounded" value={(node.data.actionType as string) || 'webhook'} onChange={(e) => onUpdate({ actionType: e.target.value })}>
             <option value="webhook">Webhook n8n</option>
             <option value="api">API externa</option>
           </select>
-          <input
-            type="url"
-            className="w-full p-2 text-sm bg-background border rounded"
-            placeholder="URL do webhook..."
-            value={(node.data.webhookUrl as string) || ''}
-            onChange={(e) => onUpdate({ webhookUrl: e.target.value })}
-          />
-          <textarea
-            className="w-full p-2 text-sm bg-background border rounded resize-none font-mono text-xs"
-            placeholder='{"lead": "{{lead}}"}'
-            rows={2}
-            value={typeof node.data.payload === 'object' ? JSON.stringify(node.data.payload, null, 2) : ''}
-            onChange={(e) => {
-              try {
-                const payload = JSON.parse(e.target.value);
-                onUpdate({ payload });
-              } catch {
-                // Invalid JSON, don't update
-              }
-            }}
-          />
+          <input type="url" className="w-full p-2 text-sm bg-background border rounded" placeholder="URL do webhook..." value={(node.data.webhookUrl as string) || ''} onChange={(e) => onUpdate({ webhookUrl: e.target.value })} />
+          <textarea className="w-full p-2 text-sm bg-background border rounded resize-none font-mono text-xs" placeholder='{"lead": "{{lead}}"}' rows={2} value={typeof node.data.payload === 'object' ? JSON.stringify(node.data.payload, null, 2) : ''} onChange={(e) => { try { onUpdate({ payload: JSON.parse(e.target.value) }); } catch { /* noop */ } }} />
         </div>
       );
 
     case 'wait':
-      return (
-        <div className="flex gap-2">
-          <input
-            type="number"
-            className="w-20 p-2 text-sm bg-background border rounded"
-            min={1}
-            value={(node.data.duration as number) || 1}
-            onChange={(e) => onUpdate({ duration: parseInt(e.target.value) || 1 })}
-          />
-          <select
-            className="flex-1 p-2 text-sm bg-background border rounded"
-            value={(node.data.unit as string) || 'hours'}
-            onChange={(e) => onUpdate({ unit: e.target.value })}
-          >
-            <option value="minutes">Minutos</option>
-            <option value="hours">Horas</option>
-            <option value="days">Dias</option>
-          </select>
-        </div>
-      );
+      return <WaitNodeContent node={node} onUpdate={onUpdate} />;
 
     case 'whatsapp_list':
       return (
         <div className="space-y-2">
-          <input
-            type="text"
-            className="w-full p-2 text-sm bg-background border rounded"
-            placeholder="Título da lista..."
-            value={(node.data.title as string) || ''}
-            onChange={(e) => onUpdate({ title: e.target.value })}
-          />
-          <input
-            type="text"
-            className="w-full p-2 text-sm bg-background border rounded"
-            placeholder="Texto do botão..."
-            value={(node.data.buttonText as string) || 'Ver opções'}
-            onChange={(e) => onUpdate({ buttonText: e.target.value })}
-          />
+          <input type="text" className="w-full p-2 text-sm bg-background border rounded" placeholder="Título da lista..." value={(node.data.title as string) || ''} onChange={(e) => onUpdate({ title: e.target.value })} />
+          <input type="text" className="w-full p-2 text-sm bg-background border rounded" placeholder="Texto do botão..." value={(node.data.buttonText as string) || 'Ver opções'} onChange={(e) => onUpdate({ buttonText: e.target.value })} />
         </div>
       );
 
     case 'round_robin':
-      return (
-        <div className="text-sm text-muted-foreground">
-          <p>Distribui leads entre os membros da equipe de forma rotativa.</p>
-        </div>
-      );
+      return <div className="text-sm text-muted-foreground"><p>Distribui leads entre os membros da equipe de forma rotativa.</p></div>;
 
     case 'tag':
       return (
         <div className="space-y-2">
-          <select
-            className="w-full p-2 text-sm bg-background border rounded"
-            value={(node.data.action as string) || 'add'}
-            onChange={(e) => onUpdate({ action: e.target.value })}
-          >
+          <select className="w-full p-2 text-sm bg-background border rounded" value={(node.data.action as string) || 'add'} onChange={(e) => onUpdate({ action: e.target.value })}>
             <option value="add">Adicionar tag</option>
             <option value="remove">Remover tag</option>
           </select>
-          <input
-            type="text"
-            className="w-full p-2 text-sm bg-background border rounded"
-            placeholder="Nome da tag..."
-            value={(node.data.tagName as string) || ''}
-            onChange={(e) => onUpdate({ tagName: e.target.value })}
-          />
+          <input type="text" className="w-full p-2 text-sm bg-background border rounded" placeholder="Nome da tag..." value={(node.data.tagName as string) || ''} onChange={(e) => onUpdate({ tagName: e.target.value })} />
         </div>
       );
 
     case 'move_stage':
-      return (
-        <input
-          type="text"
-          className="w-full p-2 text-sm bg-background border rounded"
-          placeholder="Nome da etapa..."
-          value={(node.data.stageName as string) || ''}
-          onChange={(e) => onUpdate({ stageName: e.target.value })}
-        />
-      );
+      return <input type="text" className="w-full p-2 text-sm bg-background border rounded" placeholder="Nome da etapa..." value={(node.data.stageName as string) || ''} onChange={(e) => onUpdate({ stageName: e.target.value })} />;
+
+    case 'validate':
+    case 'goto':
+    case 'stop':
+    case 'change_responsible':
+    case 'add_note':
+      return <NewNodeContents node={node} onUpdate={onUpdate} allNodes={allNodes} />;
 
     default:
       return null;

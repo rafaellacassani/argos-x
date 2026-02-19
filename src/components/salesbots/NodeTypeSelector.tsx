@@ -11,6 +11,11 @@ import {
   Tag,
   ArrowRight,
   X,
+  ShieldCheck,
+  CornerDownRight,
+  StopCircle,
+  UserCheck,
+  StickyNote,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -90,6 +95,41 @@ const nodeTypes = [
     label: 'Mover Etapa',
     description: 'Move lead no funil',
     color: 'bg-cyan-500',
+  },
+  {
+    type: 'validate',
+    icon: ShieldCheck,
+    label: 'Validação',
+    description: 'Verifica formato da resposta',
+    color: 'bg-emerald-500',
+  },
+  {
+    type: 'goto',
+    icon: CornerDownRight,
+    label: 'Ir para etapa',
+    description: 'Salta para outro nó (loop)',
+    color: 'bg-slate-500',
+  },
+  {
+    type: 'stop',
+    icon: StopCircle,
+    label: 'Parar bot',
+    description: 'Encerra a execução do fluxo',
+    color: 'bg-red-500',
+  },
+  {
+    type: 'change_responsible',
+    icon: UserCheck,
+    label: 'Mudar Responsável',
+    description: 'Atribui lead a um vendedor',
+    color: 'bg-violet-500',
+  },
+  {
+    type: 'add_note',
+    icon: StickyNote,
+    label: 'Adicionar Nota',
+    description: 'Registra nota interna no lead',
+    color: 'bg-amber-500',
   },
 ];
 

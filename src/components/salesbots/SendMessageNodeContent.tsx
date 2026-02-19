@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2, Link2, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
 import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
@@ -44,9 +44,13 @@ export function SendMessageNodeContent({
   const [isSending, setIsSending] = useState(false);
   const { listInstances } = useEvolutionAPI();
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const message = (node.data.message as string) || '';
   const instanceName = (node.data.instanceName as string) || '';
   const forceWithoutConversation = (node.data.forceWithoutConversation as boolean) || false;
+  const urlButton = (node.data.url_button as { label: string; url: string } | null) || null;
+  const [showUrlButton, setShowUrlButton] = useState(!!urlButton);
 
   useEffect(() => {
     const loadInstances = async () => {
@@ -115,16 +119,82 @@ export function SendMessageNodeContent({
     }
   };
 
+  const insertVariable = (variable: string) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const newMsg = message.slice(0, start) + variable + message.slice(end);
+    onUpdate({ message: newMsg });
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(start + variable.length, start + variable.length);
+    }, 0);
+  };
+
+  const variables = [
+    { label: 'Nome', value: '{{lead.name}}' },
+    { label: 'Telefone', value: '{{lead.phone}}' },
+    { label: 'Empresa', value: '{{lead.company}}' },
+  ];
+
   return (
     <div className="space-y-3">
       {/* Message Input */}
       <textarea
+        ref={textareaRef}
         className="w-full p-2 text-sm bg-background border rounded resize-none focus:ring-2 focus:ring-primary/50"
         placeholder="Digite a mensagem..."
         rows={3}
         value={message}
         onChange={(e) => onUpdate({ message: e.target.value })}
       />
+
+      {/* Variable Chips */}
+      <div className="flex flex-wrap gap-1">
+        {variables.map(v => (
+          <button
+            key={v.value}
+            type="button"
+            className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+            onClick={() => insertVariable(v.value)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {/* URL Button */}
+      {!showUrlButton ? (
+        <button
+          type="button"
+          className="flex items-center gap-1 text-xs text-primary hover:underline"
+          onClick={() => setShowUrlButton(true)}
+        >
+          <Plus className="w-3 h-3" /> Botão de URL
+        </button>
+      ) : (
+        <div className="space-y-1.5 p-2 bg-muted/50 rounded border">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium flex items-center gap-1"><Link2 className="w-3 h-3" /> Botão de URL</span>
+            <button type="button" className="text-[10px] text-destructive hover:underline" onClick={() => { setShowUrlButton(false); onUpdate({ url_button: null }); }}>Remover</button>
+          </div>
+          <input
+            type="text"
+            className="w-full p-1.5 text-xs bg-background border rounded"
+            placeholder="Texto do botão..."
+            value={urlButton?.label || ''}
+            onChange={(e) => onUpdate({ url_button: { label: e.target.value, url: urlButton?.url || '' } })}
+          />
+          <input
+            type="url"
+            className="w-full p-1.5 text-xs bg-background border rounded"
+            placeholder="https://..."
+            value={urlButton?.url || ''}
+            onChange={(e) => onUpdate({ url_button: { label: urlButton?.label || '', url: e.target.value } })}
+          />
+        </div>
+      )}
 
       {/* Instance Selection */}
       <div className="space-y-2">

@@ -12,6 +12,7 @@ import {
   Pause,
   Settings,
   ChevronDown,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +45,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useSalesBots, BotNode, BotEdge, SalesBot } from '@/hooks/useSalesBots';
 import { BotBuilderCanvas } from '@/components/salesbots/BotBuilderCanvas';
+import { BotPreviewDialog } from '@/components/salesbots/BotPreviewDialog';
 
 const triggerTypes = [
   { value: 'message_received', label: 'Mensagem recebida' },
@@ -69,6 +71,7 @@ export default function SalesBotBuilder() {
   const [hasChanges, setHasChanges] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [whatsappInstances, setWhatsappInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
 
   const isEditing = !!id;
@@ -232,6 +235,10 @@ export default function SalesBotBuilder() {
           )}
 
           <Sheet>
+            <Button variant="outline" size="sm" onClick={() => setShowPreview(true)}>
+              <Eye className="w-4 h-4 mr-1" />
+              Pré-visualizar
+            </Button>
             <SheetTrigger asChild>
               <Button variant="outline" size="sm">
                 <Settings className="w-4 h-4 mr-1" />
@@ -384,6 +391,14 @@ export default function SalesBotBuilder() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Preview Dialog */}
+      <BotPreviewDialog
+        open={showPreview}
+        onOpenChange={setShowPreview}
+        nodes={nodes}
+        edges={edges}
+      />
     </div>
   );
 }
