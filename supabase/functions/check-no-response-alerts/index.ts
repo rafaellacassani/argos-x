@@ -248,7 +248,295 @@ Deno.serve(async (req) => {
     }
 
     console.log(`[no-response-alerts] Total alerts sent: ${totalSent}`);
-    return new Response(JSON.stringify({ alerts_sent: totalSent }), {
+
+    // ========================================
+    // PROCESSAR FILA DE AUTOMAÇÕES TEMPORIZADAS
+    // ========================================
+    let automationsProcessed = 0;
+
+    const { data: queueItems, error: queueErr } = await supabase
+      .from("stage_automation_queue")
+      .select("id, automation_id, lead_id, workspace_id")
+      .eq("status", "pending")
+      .lte("execute_at", new Date().toISOString())
+      .limit(50);
+
+    if (queueErr) {
+      console.error("[automations-queue] Error fetching queue:", queueErr);
+    }
+
+    if (queueItems?.length) {
+      // Fetch automation details and lead details for each queue item
+      const automationIds = [...new Set(queueItems.map((q: any) => q.automation_id))];
+      const leadIds = [...new Set(queueItems.map((q: any) => q.lead_id))];
+
+      const [automationsRes, leadsRes] = await Promise.all([
+        supabase.from("stage_automations").select("id, action_type, action_config, conditions, stage_id").in("id", automationIds),
+        supabase.from("leads").select("id, name, phone, responsible_user, whatsapp_jid, instance_name, workspace_id, source, value, stage_id").in("id", leadIds),
+      ]);
+
+      const automationMap = new Map<string, any>();
+      (automationsRes.data || []).forEach((a: any) => automationMap.set(a.id, a));
+
+      const leadMap = new Map<string, any>();
+      (leadsRes.data || []).forEach((l: any) => leadMap.set(l.id, l));
+
+      // Fetch stage names for variable substitution
+      const stageIdsForQueue = [...new Set([
+        ...(automationsRes.data || []).map((a: any) => a.stage_id),
+        ...(leadsRes.data || []).map((l: any) => l.stage_id),
+      ].filter(Boolean))];
+
+      const { data: stagesForQueue } = await supabase
+        .from("funnel_stages")
+        .select("id, name")
+        .in("id", stageIdsForQueue);
+
+      const stageNameMapQueue = new Map<string, string>();
+      (stagesForQueue || []).forEach((s: any) => stageNameMapQueue.set(s.id, s.name));
+
+      // Fetch lead tags for condition checks
+      const { data: leadTagAssignments } = await supabase
+        .from("lead_tag_assignments")
+        .select("lead_id, tag_id")
+        .in("lead_id", leadIds);
+
+      const leadTagsMap = new Map<string, Set<string>>();
+      (leadTagAssignments || []).forEach((lta: any) => {
+        if (!leadTagsMap.has(lta.lead_id)) leadTagsMap.set(lta.lead_id, new Set());
+        leadTagsMap.get(lta.lead_id)!.add(lta.tag_id);
+      });
+
+      // Helper: check conditions
+      function checkConditions(conditions: any[], lead: any): boolean {
+        if (!conditions || !Array.isArray(conditions) || conditions.length === 0) return true;
+        return conditions.every((c: any) => {
+          const { field, operator, value } = c;
+          if (field === "source") {
+            if (operator === "equals") return lead.source === value;
+            if (operator === "not_equals") return lead.source !== value;
+          }
+          if (field === "value") {
+            const leadVal = Number(lead.value) || 0;
+            const condVal = Number(value) || 0;
+            if (operator === "greater_than") return leadVal > condVal;
+            if (operator === "less_than") return leadVal < condVal;
+            if (operator === "equals") return leadVal === condVal;
+          }
+          if (field === "tag") {
+            const tags = leadTagsMap.get(lead.id) || new Set();
+            if (operator === "contains") return tags.has(value);
+            if (operator === "not_contains") return !tags.has(value);
+          }
+          return true;
+        });
+      }
+
+      for (const item of queueItems) {
+        const automation = automationMap.get(item.automation_id);
+        const lead = leadMap.get(item.lead_id);
+
+        if (!automation || !lead) {
+          await supabase.from("stage_automation_queue").update({ status: "error", executed_at: new Date().toISOString() }).eq("id", item.id);
+          continue;
+        }
+
+        // Check conditions
+        if (!checkConditions(automation.conditions, lead)) {
+          await supabase.from("stage_automation_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
+          automationsProcessed++;
+          continue;
+        }
+
+        try {
+          const config = automation.action_config || {};
+
+          switch (automation.action_type) {
+            case "run_bot": {
+              if (config.skip_if_executed && config.bot_id) {
+                const { data: existingLogs } = await supabase
+                  .from("bot_execution_logs")
+                  .select("id")
+                  .eq("bot_id", config.bot_id)
+                  .eq("lead_id", lead.id)
+                  .limit(1);
+                if (existingLogs?.length) break;
+              }
+
+              if (config.bot_id) {
+                const { data: bot } = await supabase
+                  .from("salesbots")
+                  .select("id, flow_data")
+                  .eq("id", config.bot_id)
+                  .eq("is_active", true)
+                  .single();
+
+                if (bot?.flow_data) {
+                  const flowData = bot.flow_data as any;
+                  const nodes = flowData.nodes || [];
+                  const edges = flowData.edges || [];
+
+                  // Find start node and execute send_message nodes in sequence
+                  const startNode = nodes.find((n: any) => n.type === "trigger" || n.data?.nodeType === "trigger");
+                  if (startNode) {
+                    let currentNodeId = startNode.id;
+                    let executedNodes = 0;
+                    const maxNodes = 20;
+
+                    while (currentNodeId && executedNodes < maxNodes) {
+                      const outEdge = edges.find((e: any) => e.source === currentNodeId);
+                      if (!outEdge) break;
+
+                      const nextNode = nodes.find((n: any) => n.id === outEdge.target);
+                      if (!nextNode) break;
+
+                      currentNodeId = nextNode.id;
+                      executedNodes++;
+
+                      if (nextNode.data?.nodeType === "send_message" && nextNode.data?.message) {
+                        const instanceName = lead.instance_name;
+                        const phone = lead.phone || lead.whatsapp_jid;
+                        if (instanceName && phone) {
+                          await sendWhatsApp(instanceName, phone, nextNode.data.message);
+                          await supabase.from("bot_execution_logs").insert({
+                            bot_id: bot.id,
+                            lead_id: lead.id,
+                            node_id: nextNode.id,
+                            status: "sent",
+                            message: nextNode.data.message?.slice(0, 500),
+                            workspace_id: lead.workspace_id,
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              break;
+            }
+
+            case "notify_responsible": {
+              let message = config.message || "Notificação automática";
+              const stageName = stageNameMapQueue.get(lead.stage_id) || "";
+              message = message
+                .replace(/\{\{lead\.name\}\}/g, lead.name || "")
+                .replace(/\{\{stage\.name\}\}/g, stageName);
+
+              // Get responsible profile
+              if (lead.responsible_user) {
+                const { data: respProfile } = await supabase
+                  .from("user_profiles")
+                  .select("id, full_name, personal_whatsapp")
+                  .eq("id", lead.responsible_user)
+                  .single();
+
+                if (respProfile) {
+                  message = message.replace(/\{\{responsible\.name\}\}/g, respProfile.full_name || "");
+
+                  if (respProfile.personal_whatsapp) {
+                    // Get workspace alert instance
+                    const { data: wsData } = await supabase
+                      .from("workspaces")
+                      .select("alert_instance_name")
+                      .eq("id", lead.workspace_id)
+                      .single();
+
+                    if (wsData?.alert_instance_name) {
+                      await sendWhatsApp(wsData.alert_instance_name, respProfile.personal_whatsapp, message);
+                    }
+                  }
+                }
+              }
+              break;
+            }
+
+            case "change_responsible": {
+              let newResponsible = config.user_id;
+
+              if (config.round_robin) {
+                const { data: members } = await supabase
+                  .from("workspace_members")
+                  .select("user_id")
+                  .eq("workspace_id", lead.workspace_id)
+                  .eq("role", "seller")
+                  .not("accepted_at", "is", null)
+                  .order("user_id");
+
+                if (members?.length) {
+                  // Get user_profile ids for these members
+                  const memberUserIds = members.map((m: any) => m.user_id);
+                  const { data: memberProfiles } = await supabase
+                    .from("user_profiles")
+                    .select("id, user_id")
+                    .in("user_id", memberUserIds);
+
+                  if (memberProfiles?.length) {
+                    const profileIds = memberProfiles.map((p: any) => p.id);
+                    const currentIdx = profileIds.indexOf(lead.responsible_user);
+                    const nextIdx = (currentIdx + 1) % profileIds.length;
+                    newResponsible = profileIds[nextIdx];
+                  }
+                }
+              }
+
+              if (newResponsible) {
+                await supabase.from("leads").update({ responsible_user: newResponsible }).eq("id", lead.id);
+              }
+              break;
+            }
+
+            case "add_tag": {
+              const tagId = config.tag_id;
+              if (tagId) {
+                const existingTags = leadTagsMap.get(lead.id) || new Set();
+                if (!existingTags.has(tagId)) {
+                  await supabase.from("lead_tag_assignments").insert({
+                    lead_id: lead.id,
+                    tag_id: tagId,
+                    workspace_id: lead.workspace_id,
+                  });
+                }
+              }
+              break;
+            }
+
+            case "remove_tag": {
+              const tagId = config.tag_id;
+              if (tagId) {
+                await supabase.from("lead_tag_assignments").delete().eq("lead_id", lead.id).eq("tag_id", tagId);
+              }
+              break;
+            }
+
+            case "create_task": {
+              await supabase.from("lead_history").insert({
+                lead_id: lead.id,
+                workspace_id: lead.workspace_id,
+                action: "task_created",
+                metadata: {
+                  title: config.title || "Tarefa automática",
+                  due_days: config.due_days || 0,
+                  assignee_id: config.assignee_id || lead.responsible_user,
+                },
+                performed_by: "system",
+              });
+              break;
+            }
+          }
+
+          await supabase.from("stage_automation_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
+          automationsProcessed++;
+        } catch (execError) {
+          console.error(`[automations-queue] Error processing item ${item.id}:`, execError);
+          await supabase.from("stage_automation_queue").update({ status: "error", executed_at: new Date().toISOString() }).eq("id", item.id);
+          automationsProcessed++;
+        }
+      }
+    }
+
+    console.log(`[automations-queue] Processed: ${automationsProcessed}`);
+
+    return new Response(JSON.stringify({ alerts_sent: totalSent, automations_processed: automationsProcessed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
