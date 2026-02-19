@@ -634,7 +634,11 @@ export default function Chats() {
     const remoteJidAlt = lastMsg?.key?.remoteJidAlt || chat.remoteJidAlt || undefined;
     
     // Check if there's a matching lead with a proper name
-    const matchingLead = leadsRef.current.find((l) => l.whatsapp_jid === jid);
+    const matchingLead = leadsRef.current.find((l) => {
+      if (l.whatsapp_jid === jid) return true;
+      if (remoteJidAlt && l.whatsapp_jid === remoteJidAlt) return true;
+      return false;
+    });
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
     
@@ -676,15 +680,21 @@ export default function Chats() {
       displayName = resolvedName || formattedPhone || cleanDisplayJid(jid);
     }
 
-    // Auto-fix leads with bad names ("Contato WhatsApp" or numeric) when real pushName arrives
-    if (matchingLead && resolvedName && !isNumericName(resolvedName)) {
-      const needsFix = isNumericName(matchingLead.name) || matchingLead.name === "Contato WhatsApp";
-      if (needsFix) {
-        const fixPayload: Record<string, any> = { name: resolvedName };
-        const leadDigits = cleanPhoneNumber(matchingLead.phone || "");
-        if (leadDigits.length > 13 || leadDigits.length === 0) {
-          fixPayload.phone = formattedPhone || "";
-        }
+    // Auto-fix leads: update phone when empty and update name when "Contato WhatsApp" or numeric
+    if (matchingLead) {
+      const fixPayload: Record<string, any> = {};
+      // Fix phone: update if lead has no valid phone and we have a valid bestPhone
+      const currentPhoneDigits = cleanPhoneNumber(matchingLead.phone || "");
+      const isPhoneMissing = currentPhoneDigits.length === 0 || currentPhoneDigits.length > 13;
+      if (isPhoneMissing && bestPhone.length >= 8 && bestPhone.length <= 13) {
+        fixPayload.phone = bestPhone;
+      }
+      // Fix name: update if lead name is placeholder and we have a real pushName
+      const needsNameFix = matchingLead.name === "Contato WhatsApp" || isNumericName(matchingLead.name);
+      if (needsNameFix && resolvedName && !isNumericName(resolvedName)) {
+        fixPayload.name = resolvedName;
+      }
+      if (Object.keys(fixPayload).length > 0) {
         updateLead(matchingLead.id, fixPayload).catch(() => {});
       }
     }
