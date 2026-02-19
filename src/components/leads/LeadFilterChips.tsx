@@ -26,6 +26,14 @@ const SOURCE_LABELS: Record<string, string> = {
 export function LeadFilterChips({ filters, stages, tags, teamMembers, onRemove }: LeadFilterChipsProps) {
   const chips: { label: string; onRemove: () => void }[] = [];
 
+  // Unassigned
+  if (filters.unassigned) {
+    chips.push({
+      label: 'Sem responsável',
+      onRemove: () => onRemove({ ...filters, unassigned: false }),
+    });
+  }
+
   // Responsible users
   filters.responsibleUserIds.forEach(id => {
     const member = teamMembers.find(m => m.id === id);

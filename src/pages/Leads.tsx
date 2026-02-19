@@ -116,6 +116,7 @@ export default function Leads() {
       dateFrom,
       dateTo,
       sources: f.sources,
+      unassigned: f.unassigned,
     };
   }, []);
 
