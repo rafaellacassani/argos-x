@@ -438,7 +438,7 @@ export default function Chats() {
     
     const number = resolveRecipientNumber(selectedChat);
     if (!number) {
-      toast({ title: "Número não encontrado", description: "Não foi possível identificar o número de telefone deste contato.", variant: "destructive" });
+      toast({ title: "Número não encontrado", description: "Não foi possível identificar o número deste contato. Atualize o telefone no painel do lead.", variant: "destructive" });
       return false;
     }
     const success = await sendText(targetInstance, number, text);
@@ -470,10 +470,13 @@ export default function Chats() {
     const targetInstance = selectedChat?.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
-    const number = resolveRecipientNumber(selectedChat);
     const mediatype = getMediaType(file);
     const base64 = await fileToBase64(file);
-    
+    const number = resolveRecipientNumber(selectedChat);
+    if (!number) {
+      toast({ title: "Número não encontrado", description: "Não foi possível identificar o número deste contato. Atualize o telefone no painel do lead.", variant: "destructive" });
+      return false;
+    }
     const success = await sendMedia(targetInstance, number, mediatype, base64, caption, file.name);
     
     if (success) {
@@ -507,6 +510,10 @@ export default function Chats() {
     if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
     
     const number = resolveRecipientNumber(selectedChat);
+    if (!number) {
+      toast({ title: "Número não encontrado", description: "Não foi possível identificar o número deste contato. Atualize o telefone no painel do lead.", variant: "destructive" });
+      return false;
+    }
     const base64 = await blobToBase64(audioBlob);
     
     // Create data URL for local playback (with proper prefix)
@@ -914,6 +921,31 @@ export default function Chats() {
       setLoadingMessages(true);
       try {
         const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 30);
+        
+        // Extract remoteJidAlt from loaded messages if chat doesn't have one yet
+        if (!selectedChat.remoteJidAlt && selectedChat.remoteJid.endsWith("@lid")) {
+          for (const msg of data) {
+            const alt = (msg.key as any)?.remoteJidAlt;
+            if (alt && alt.endsWith("@s.whatsapp.net")) {
+              // Update the selected chat and the chats list with the discovered real JID
+              setSelectedChat((prev) => prev ? { ...prev, remoteJidAlt: alt } : prev);
+              setChats((prev) => prev.map((c) => 
+                c.remoteJid === selectedChat.remoteJid ? { ...c, remoteJidAlt: alt } : c
+              ));
+              // Also update the phone if it was empty
+              const altDigits = alt.replace(/@s\.whatsapp\.net$/, "");
+              if ((!selectedChat.phone || selectedChat.phone.length < 4) && altDigits.length >= 10) {
+                const formatted = formatPhoneDisplay(altDigits);
+                setSelectedChat((prev) => prev ? { ...prev, phone: formatted, remoteJidAlt: alt } : prev);
+                setChats((prev) => prev.map((c) =>
+                  c.remoteJid === selectedChat.remoteJid ? { ...c, phone: formatted, remoteJidAlt: alt } : c
+                ));
+              }
+              break;
+            }
+          }
+        }
+        
         const transformedMessages: Message[] = data
           .map((msg) => {
             const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
