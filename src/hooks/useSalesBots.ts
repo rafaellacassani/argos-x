@@ -64,11 +64,13 @@ export function useSalesBots() {
   const { workspaceId } = useWorkspace();
 
   const fetchBots = useCallback(async (): Promise<SalesBot[]> => {
+    if (!workspaceId) return [];
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('salesbots')
         .select('*')
+        .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -89,7 +91,7 @@ export function useSalesBots() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, workspaceId]);
 
   const fetchBot = useCallback(async (id: string): Promise<SalesBot | null> => {
     setLoading(true);

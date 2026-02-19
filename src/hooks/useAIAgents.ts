@@ -75,16 +75,19 @@ export function useAIAgents() {
   const { workspaceId } = useWorkspace();
 
   const { data: agents = [], isLoading, error } = useQuery({
-    queryKey: ["ai-agents"],
+    queryKey: ["ai-agents", workspaceId],
     queryFn: async () => {
+      if (!workspaceId) return [];
       const { data, error } = await supabase
         .from("ai_agents")
         .select("*")
+        .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as AIAgent[];
-    }
+    },
+    enabled: !!workspaceId
   });
 
   const createAgent = useMutation({
