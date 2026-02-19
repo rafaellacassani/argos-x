@@ -454,10 +454,11 @@ app.post("/", async (c) => {
 
     const payload = await c.req.json();
     console.log("[whatsapp-webhook] 📩 Webhook received from instance:", payload.instance, "event:", payload.event);
-    const event = payload.event;
+    const event = (payload.event || "").toUpperCase().replace(/\./g, "_");
 
-    // Only process MESSAGES_UPSERT
+    // Only process MESSAGES_UPSERT (Evolution API v2 sends "messages.upsert")
     if (event !== "MESSAGES_UPSERT") {
+      console.log("[whatsapp-webhook] ⏭️ Skipping event:", payload.event, "→ normalized:", event);
       return c.json({ received: true, skipped: true }, 200, corsHeaders);
     }
 
