@@ -769,37 +769,55 @@ export default function Chats() {
           setSelectedChat(allChats[0]);
         }
         
-        // Auto-create leads for new WhatsApp conversations (skip Meta for now)
+        // Auto-create leads for ALL WhatsApp conversations (including outbound/prospecting)
         const currentLeads = leadsRef.current;
+        const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
         const chatsNeedingLeads = allChats.filter((chat) => {
-          if (chat.isMeta) return false; // Skip Meta chats for auto-lead
+          if (chat.isMeta) return false;
           if (processedJidsRef.current.has(chat.remoteJid)) return false;
-          if (chat.lastMessageFromMe) return false;
-          const existingLead = currentLeads.find((lead) => lead.whatsapp_jid === chat.remoteJid);
+          // Match by exact JID, remoteJidAlt, or phone digits
+          const chatDigits = stripDigits(chat.phone || "");
+          const existingLead = currentLeads.find((lead) => {
+            if (lead.whatsapp_jid === chat.remoteJid) return true;
+            if (chat.remoteJidAlt && lead.whatsapp_jid === chat.remoteJidAlt) return true;
+            if (chatDigits.length >= 10) {
+              const leadDigits = stripDigits(lead.phone || "");
+              if (leadDigits.length >= 10 && (leadDigits.endsWith(chatDigits.slice(-10)) || chatDigits.endsWith(leadDigits.slice(-10)))) return true;
+            }
+            return false;
+          });
           return !existingLead;
         });
         
         if (chatsNeedingLeads.length > 0) {
           console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads`);
-          for (const chat of chatsNeedingLeads) {
-            try {
-              processedJidsRef.current.add(chat.remoteJid);
-              const newLead = await createLead({
-                name: chat.name,
-                phone: chat.phone,
-                whatsapp_jid: chat.remoteJid,
-                instance_name: chat.instanceName,
-                source: 'whatsapp',
-              });
-              if (newLead && chat.lastMessage && tagRules.length > 0) {
-                const matchingTagIds = checkMessageAgainstRules(chat.lastMessage);
-                for (const tagId of matchingTagIds) {
-                  await addTagToLead(newLead.id, tagId);
+          const BATCH_SIZE = 20;
+          for (let i = 0; i < chatsNeedingLeads.length; i += BATCH_SIZE) {
+            const batch = chatsNeedingLeads.slice(i, i + BATCH_SIZE);
+            for (const chat of batch) {
+              try {
+                processedJidsRef.current.add(chat.remoteJid);
+                const newLead = await createLead({
+                  name: chat.name,
+                  phone: chat.phone,
+                  whatsapp_jid: chat.remoteJid,
+                  instance_name: chat.instanceName,
+                  source: 'whatsapp',
+                });
+                if (newLead && chat.lastMessage && tagRules.length > 0) {
+                  const matchingTagIds = checkMessageAgainstRules(chat.lastMessage);
+                  for (const tagId of matchingTagIds) {
+                    await addTagToLead(newLead.id, tagId);
+                  }
                 }
+              } catch (err) {
+                console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
+                processedJidsRef.current.delete(chat.remoteJid);
               }
-            } catch (err) {
-              console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
-              processedJidsRef.current.delete(chat.remoteJid);
+            }
+            // Delay between batches to avoid rate limiting
+            if (i + BATCH_SIZE < chatsNeedingLeads.length) {
+              await new Promise((r) => setTimeout(r, 1000));
             }
           }
         }
