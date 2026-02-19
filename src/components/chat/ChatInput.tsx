@@ -13,7 +13,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import EmojiPicker from "./EmojiPicker";
 
@@ -38,7 +37,7 @@ export function ChatInput({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -57,6 +56,8 @@ export function ChatInput({
           setSelectedFile(null);
           setFilePreview(null);
           setMessage("");
+          // Reset textarea height
+          if (inputRef.current) inputRef.current.style.height = "auto";
         }
       } finally {
         setIsSending(false);
@@ -73,19 +74,30 @@ export function ChatInput({
       const success = await onSendMessage(text);
       if (success) {
         setMessage("");
+        if (inputRef.current) inputRef.current.style.height = "auto";
       }
     } finally {
       setIsSending(false);
     }
   };
 
-  // Handle keyboard Enter
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  // Handle keyboard: Enter sends, Shift+Enter adds newline
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = inputRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    const lineHeight = 20; // approx line height in px
+    const maxHeight = lineHeight * 6; // 6 lines max
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+  }, []);
 
   // Handle emoji selection
   const handleEmojiSelect = (emoji: string) => {
@@ -339,13 +351,20 @@ export function ChatInput({
 
           {/* Text Input */}
           <div className="flex-1">
-            <Input
+            <textarea
               ref={inputRef}
               placeholder={selectedFile ? "Adicione uma legenda..." : "Digite sua mensagem..."}
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                adjustTextareaHeight();
+              }}
               onKeyDown={handleKeyDown}
-              className="bg-muted/50 border-transparent focus:border-secondary"
+              rows={1}
+              className={cn(
+                "flex w-full rounded-md border border-transparent bg-muted/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 focus:border-secondary resize-none overflow-y-auto",
+              )}
+              style={{ minHeight: "36px", maxHeight: "120px" }}
               disabled={disabled}
             />
           </div>
