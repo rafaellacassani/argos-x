@@ -150,66 +150,120 @@ export type Database = {
       }
       ai_agents: {
         Row: {
+          agent_role: string | null
+          company_info: Json | null
           created_at: string
           description: string | null
           fallback_config: Json | null
           id: string
+          instance_name: string | null
           is_active: boolean | null
+          knowledge_extra: string | null
+          knowledge_faq: Json | null
+          knowledge_products: string | null
+          knowledge_rules: string | null
+          main_objective: string | null
           max_tokens: number | null
           message_split_enabled: boolean | null
           message_split_length: number | null
           model: string
           name: string
+          niche: string | null
           pause_code: string | null
+          qualification_enabled: boolean | null
+          qualification_fields: Json | null
+          respond_to: string | null
+          respond_to_stages: Json | null
+          response_delay_seconds: number | null
+          response_length: string | null
           resume_keyword: string | null
           system_prompt: string
           temperature: number | null
+          tone_of_voice: string | null
           tools: Json | null
+          trainer_phone: string | null
           trigger_config: Json | null
           type: string
           updated_at: string
+          use_emojis: boolean | null
           workspace_id: string
         }
         Insert: {
+          agent_role?: string | null
+          company_info?: Json | null
           created_at?: string
           description?: string | null
           fallback_config?: Json | null
           id?: string
+          instance_name?: string | null
           is_active?: boolean | null
+          knowledge_extra?: string | null
+          knowledge_faq?: Json | null
+          knowledge_products?: string | null
+          knowledge_rules?: string | null
+          main_objective?: string | null
           max_tokens?: number | null
           message_split_enabled?: boolean | null
           message_split_length?: number | null
           model?: string
           name: string
+          niche?: string | null
           pause_code?: string | null
+          qualification_enabled?: boolean | null
+          qualification_fields?: Json | null
+          respond_to?: string | null
+          respond_to_stages?: Json | null
+          response_delay_seconds?: number | null
+          response_length?: string | null
           resume_keyword?: string | null
           system_prompt: string
           temperature?: number | null
+          tone_of_voice?: string | null
           tools?: Json | null
+          trainer_phone?: string | null
           trigger_config?: Json | null
           type?: string
           updated_at?: string
+          use_emojis?: boolean | null
           workspace_id: string
         }
         Update: {
+          agent_role?: string | null
+          company_info?: Json | null
           created_at?: string
           description?: string | null
           fallback_config?: Json | null
           id?: string
+          instance_name?: string | null
           is_active?: boolean | null
+          knowledge_extra?: string | null
+          knowledge_faq?: Json | null
+          knowledge_products?: string | null
+          knowledge_rules?: string | null
+          main_objective?: string | null
           max_tokens?: number | null
           message_split_enabled?: boolean | null
           message_split_length?: number | null
           model?: string
           name?: string
+          niche?: string | null
           pause_code?: string | null
+          qualification_enabled?: boolean | null
+          qualification_fields?: Json | null
+          respond_to?: string | null
+          respond_to_stages?: Json | null
+          response_delay_seconds?: number | null
+          response_length?: string | null
           resume_keyword?: string | null
           system_prompt?: string
           temperature?: number | null
+          tone_of_voice?: string | null
           tools?: Json | null
+          trainer_phone?: string | null
           trigger_config?: Json | null
           type?: string
           updated_at?: string
+          use_emojis?: boolean | null
           workspace_id?: string
         }
         Relationships: [
