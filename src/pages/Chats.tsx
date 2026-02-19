@@ -801,7 +801,9 @@ export default function Chats() {
     
     // Find WhatsApp chats without profile pics (limit to first 10 for rate limiting)
     const chatsToEnrich = chats
-      .filter((c) => !c.isMeta && !c.profilePicUrl && !enrichedJidsRef.current.has(c.remoteJid))
+      .filter((c) => !c.isMeta && !c.profilePicUrl && !enrichedJidsRef.current.has(c.remoteJid)
+        && c.remoteJid.includes("@s.whatsapp.net") // Only enrich real phone JIDs, skip @lid and @g.us
+      )
       .slice(0, 10);
     
     if (chatsToEnrich.length === 0) return;
