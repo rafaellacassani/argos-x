@@ -1397,7 +1397,7 @@ export default function Chats() {
       </div>
 
       {/* Chat Window */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {selectedChat ? (
           <>
             {/* Chat Header */}
@@ -1465,13 +1465,14 @@ export default function Chats() {
 
             {/* Messages */}
             <div 
-              className="flex-1 overflow-y-auto p-4"
+              className="flex-1 overflow-y-auto p-4 min-h-0 w-full"
               ref={messagesContainerRef}
               onScroll={handleMessagesScroll}
             >
               {loadingMessages ? (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center justify-center h-full w-full">
                   <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground mt-2">Carregando mensagens...</p>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -1539,7 +1540,22 @@ export default function Chats() {
 
       {/* Lead Side Panel */}
       {selectedChat && (() => {
-        const currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
+        // Try matching by whatsapp_jid first, then by phone number
+        let currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
+        if (!currentLead && selectedChat.remoteJidAlt) {
+          currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJidAlt);
+        }
+        if (!currentLead && selectedChat.phone) {
+          const chatPhoneDigits = selectedChat.phone.replace(/[^0-9]/g, "");
+          if (chatPhoneDigits.length >= 10) {
+            currentLead = leads.find((l) => {
+              const leadDigits = l.phone.replace(/[^0-9]/g, "");
+              return leadDigits === chatPhoneDigits || 
+                     leadDigits.endsWith(chatPhoneDigits) || 
+                     chatPhoneDigits.endsWith(leadDigits);
+            });
+          }
+        }
         return (
           <LeadSidePanel
             lead={currentLead || null}
@@ -1552,6 +1568,23 @@ export default function Chats() {
             onAddTag={addTagToLead}
             onRemoveTag={removeTagFromLead}
             onCreateTag={createTag}
+            chatContact={!currentLead ? {
+              name: selectedChat.name,
+              phone: selectedChat.phone,
+              remoteJid: selectedChat.remoteJid,
+              instanceName: selectedChat.instanceName,
+            } : undefined}
+            onCreateLead={!currentLead ? async () => {
+              const phoneDigits = selectedChat.phone.replace(/[^0-9]/g, "");
+              const newLead = await createLead({
+                name: selectedChat.name || phoneDigits || "Contato",
+                phone: phoneDigits || selectedChat.remoteJid,
+                whatsapp_jid: selectedChat.remoteJid,
+                instance_name: selectedChat.instanceName,
+                source: "whatsapp",
+              });
+              return !!newLead;
+            } : undefined}
           />
         );
       })()}
