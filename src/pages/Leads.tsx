@@ -126,11 +126,14 @@ export default function Leads() {
   // Filter leads based on role and wallet filter
   const filteredLeads = useMemo(() => {
     let result = leads;
-    if (isSeller && myWalletActive && userProfileId) {
+    if (myWalletActive && userProfileId) {
+      // All roles: "Minha Carteira" ON → only my leads
       result = result.filter(l => l.responsible_user === userProfileId);
     } else if (isSeller && !myWalletActive) {
+      // Seller without wallet: see unassigned + own leads
       result = result.filter(l => !l.responsible_user || l.responsible_user === userProfileId);
     }
+    // Admin/Manager without wallet: see ALL leads (no filter)
     return result;
   }, [leads, isSeller, myWalletActive, userProfileId]);
 
@@ -339,6 +342,7 @@ export default function Leads() {
             onAddLead={handleAddLead}
             onUpdateStage={updateStage}
             canDelete={canDeleteLeads}
+            teamMembers={teamMembers}
           />
         ) : (
           <div className="p-4 lg:px-6 overflow-auto h-full">

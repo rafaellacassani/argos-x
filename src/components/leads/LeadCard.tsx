@@ -13,6 +13,11 @@ import {
 import { cn } from '@/lib/utils';
 import type { Lead } from '@/hooks/useLeads';
 
+interface TeamMember {
+  id: string;
+  full_name: string;
+}
+
 interface LeadCardProps {
   lead: Lead;
   index: number;
@@ -20,6 +25,7 @@ interface LeadCardProps {
   onDelete: (leadId: string) => void;
   onOpenChat?: (jid: string) => void;
   canDelete?: boolean;
+  teamMembers?: TeamMember[];
 }
 
 export const LeadCard = memo(function LeadCard({ 
@@ -28,7 +34,8 @@ export const LeadCard = memo(function LeadCard({
   onClick, 
   onDelete,
   onOpenChat,
-  canDelete = true
+  canDelete = true,
+  teamMembers = []
 }: LeadCardProps) {
   const initials = lead.name
     .split(' ')
@@ -128,12 +135,19 @@ export const LeadCard = memo(function LeadCard({
               <Phone className="h-3.5 w-3.5" />
               <span className="truncate">{formatPhone(lead.phone)}</span>
             </div>
-            {lead.responsible_user && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-3.5 w-3.5" />
-                <span className="truncate">{lead.responsible_user}</span>
-              </div>
-            )}
+            {lead.responsible_user && (() => {
+              const member = teamMembers.find(m => m.id === lead.responsible_user);
+              const responsibleName = member?.full_name || 'Atribuído';
+              const responsibleInitials = responsibleName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+              return (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="h-5 w-5 rounded-full bg-primary/15 text-primary flex items-center justify-center text-[10px] font-medium shrink-0">
+                    {responsibleInitials}
+                  </div>
+                  <span className="truncate">{responsibleName}</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Value */}

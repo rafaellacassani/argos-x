@@ -14,6 +14,11 @@ import { LeadCard } from './LeadCard';
 import { StageSettingsDialog } from './StageSettingsDialog';
 import type { Lead, FunnelStage } from '@/hooks/useLeads';
 
+interface TeamMember {
+  id: string;
+  full_name: string;
+}
+
 interface LeadColumnProps {
   stage: FunnelStage;
   leads: Lead[];
@@ -24,6 +29,7 @@ interface LeadColumnProps {
   onEditStage?: (stage: FunnelStage) => void;
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
   canDelete?: boolean;
+  teamMembers?: TeamMember[];
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -35,7 +41,8 @@ export const LeadColumn = memo(function LeadColumn({
   onAddLead,
   onEditStage,
   onUpdateStage,
-  canDelete = true
+  canDelete = true,
+  teamMembers = []
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const totalValue = leads.reduce((sum, lead) => sum + (lead.total_sales_value || lead.value || 0), 0);
@@ -139,6 +146,7 @@ export const LeadColumn = memo(function LeadColumn({
                   onDelete={onLeadDelete}
                   onOpenChat={onOpenChat}
                   canDelete={canDelete}
+                  teamMembers={teamMembers}
                 />
               ))}
             </AnimatePresence>
