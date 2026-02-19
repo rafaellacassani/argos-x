@@ -50,3 +50,12 @@ verify_jwt = false
 
 [functions.send-daily-reports]
 verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.check-workspace-access]
+verify_jwt = false
