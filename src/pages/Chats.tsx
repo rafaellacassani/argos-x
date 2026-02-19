@@ -32,6 +32,8 @@ import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Chat {
   id: string;
@@ -371,6 +373,7 @@ export default function Chats() {
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
+  const { workspaceId } = useWorkspace();
   const [leadPanelOpen, setLeadPanelOpen] = useState(true);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
@@ -487,9 +490,24 @@ export default function Chats() {
       toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
     
-    if (success) autoAssignLead(selectedChat);
+    if (success) {
+      autoAssignLead(selectedChat);
+      // Fire-and-forget: persist outbound WA message for dashboard metrics
+      if (workspaceId && !selectedChat.isMeta) {
+        supabase.from('whatsapp_messages').insert({
+          workspace_id: workspaceId,
+          instance_name: selectedChat.instanceName || selectedInstance || '',
+          remote_jid: selectedChat.remoteJid,
+          from_me: true,
+          direction: 'outbound',
+          content: text,
+          message_type: 'text',
+          timestamp: new Date().toISOString(),
+        }).then(() => {});
+      }
+    }
     return success;
-  }, [selectedInstance, selectedChat, sendText, sendMetaMessage, autoAssignLead]);
+  }, [selectedInstance, selectedChat, sendText, sendMetaMessage, autoAssignLead, workspaceId]);
 
   // Handler for sending media
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
@@ -1092,6 +1110,30 @@ export default function Chats() {
         setMessages(transformedMessages);
         setHasMoreMessages(data.length >= 30);
         messageCacheRef.current.set(chatId, transformedMessages);
+
+        // Fire-and-forget: persist inbound WA messages for dashboard metrics
+        if (workspaceId && !selectedChat.isMeta) {
+          const inboundMsgs = data.filter((msg) => !msg.key?.fromMe);
+          if (inboundMsgs.length > 0) {
+            const rows = inboundMsgs.map((msg) => {
+              const { content } = extractMessageContent(msg);
+              const ts = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+              return {
+                workspace_id: workspaceId,
+                instance_name: selectedChat.instanceName || selectedInstance || '',
+                remote_jid: selectedChat.remoteJid,
+                from_me: false,
+                direction: 'inbound' as const,
+                content: content || '',
+                message_type: 'text',
+                timestamp: ts,
+                message_id: msg.key?.id || null,
+                push_name: (msg as any).pushName || null,
+              };
+            });
+            supabase.from('whatsapp_messages').upsert(rows, { onConflict: 'message_id', ignoreDuplicates: true }).then(() => {});
+          }
+        }
       } catch (err) {
         console.error("[Chats] Error loading messages:", err);
       } finally {

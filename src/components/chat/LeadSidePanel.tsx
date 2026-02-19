@@ -425,9 +425,9 @@ export function LeadSidePanel({
           </span>
         </div>
         <Select
-          value={lead.stage_id}
+          value={lead.stage_id || ""}
           onValueChange={(newStageId) => {
-            if (newStageId !== lead.stage_id) {
+            if (newStageId && newStageId !== lead.stage_id) {
               onMoveLead(lead.id, newStageId, 0);
             }
           }}
@@ -441,6 +441,9 @@ export function LeadSidePanel({
             </div>
           </SelectTrigger>
           <SelectContent>
+            {!lead.stage_id && (
+              <SelectItem value="" disabled>Sem etapa definida</SelectItem>
+            )}
             {sortedStages.map((stage) => (
               <SelectItem key={stage.id} value={stage.id}>
                 <div className="flex items-center gap-2">

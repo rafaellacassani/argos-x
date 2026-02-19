@@ -218,13 +218,16 @@ export function LeadDetailSheet({
                 Fase do Lead
               </Label>
               <Select
-                value={lead.stage_id}
-                onValueChange={(value) => onMove(lead.id, value)}
+                value={lead.stage_id || ""}
+                onValueChange={(value) => { if (value) onMove(lead.id, value); }}
               >
                 <SelectTrigger className="bg-white/10 border-white/20 text-white hover:bg-white/20 focus:ring-white/30">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {!lead.stage_id && (
+                    <SelectItem value="" disabled>Sem etapa definida</SelectItem>
+                  )}
                   {stages.map(stage => (
                     <SelectItem key={stage.id} value={stage.id}>
                       <div className="flex items-center gap-2">
