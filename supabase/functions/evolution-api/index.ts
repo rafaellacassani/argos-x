@@ -126,23 +126,15 @@ app.post("/chats/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const result = await evolutionRequest(`/chat/findChats/${instanceName}`, "POST", {});
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-    const todayTimestamp = Math.floor(today.getTime() / 1000);
-    const todayISO = today.toISOString().split('T')[0];
-    const filteredChats = Array.isArray(result) ? result.filter((chat: any) => {
-      const updatedAtStr = chat.updatedAt;
-      const windowStart = chat.windowStart;
-      const lastMsgTimestamp = chat.lastMessage?.messageTimestamp;
-      if (updatedAtStr && updatedAtStr.split('T')[0] === todayISO) return true;
-      if (windowStart && windowStart.split('T')[0] === todayISO) return true;
-      if (lastMsgTimestamp) {
-        const ts = lastMsgTimestamp > 9999999999 ? Math.floor(lastMsgTimestamp / 1000) : lastMsgTimestamp;
-        if (ts >= todayTimestamp) return true;
-      }
-      return false;
-    }) : [];
-    return c.json(filteredChats, 200, corsHeaders);
+    // Return all chats sorted by most recent, limited to 200
+    const chats = Array.isArray(result) ? result : [];
+    // Sort by lastMessage timestamp descending
+    chats.sort((a: any, b: any) => {
+      const tsA = a.lastMessage?.messageTimestamp || 0;
+      const tsB = b.lastMessage?.messageTimestamp || 0;
+      return tsB - tsA;
+    });
+    return c.json(chats.slice(0, 200), 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to fetch chats" }, 500, corsHeaders);
   }
