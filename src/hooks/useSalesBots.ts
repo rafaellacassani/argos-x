@@ -37,6 +37,7 @@ export interface SalesBot {
   conversions_count: number;
   created_at: string;
   updated_at: string;
+  template_name?: string | null;
 }
 
 function parseFlowData(data: Json | null): BotFlowData {
@@ -119,24 +120,29 @@ export function useSalesBots() {
     }
   }, [toast]);
 
-  const createBot = useCallback(async (bot: Partial<SalesBot>): Promise<SalesBot | null> => {
+  const createBot = useCallback(async (bot: Partial<SalesBot> & { template_name?: string }): Promise<SalesBot | null> => {
     if (!workspaceId) return null;
     setLoading(true);
     try {
       const flowData = bot.flow_data || { nodes: [], edges: [] };
       const triggerConfig = bot.trigger_config || {};
       
+      const insertData: Record<string, unknown> = {
+        name: bot.name || 'Novo Bot',
+        description: bot.description || null,
+        trigger_type: bot.trigger_type || 'message_received',
+        trigger_config: triggerConfig as Json,
+        flow_data: flowData as unknown as Json,
+        is_active: bot.is_active || false,
+        workspace_id: workspaceId,
+      };
+      if (bot.template_name) {
+        insertData.template_name = bot.template_name;
+      }
+
       const { data, error } = await supabase
         .from('salesbots')
-        .insert({
-          name: bot.name || 'Novo Bot',
-          description: bot.description || null,
-          trigger_type: bot.trigger_type || 'message_received',
-          trigger_config: triggerConfig as Json,
-          flow_data: flowData as unknown as Json,
-          is_active: bot.is_active || false,
-          workspace_id: workspaceId
-        })
+        .insert(insertData as any)
         .select()
         .single();
 

@@ -1,0 +1,1 @@
+ALTER TABLE public.salesbots ADD COLUMN IF NOT EXISTS template_name TEXT;
