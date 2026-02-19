@@ -82,6 +82,8 @@ const cleanPhoneNumber = (phone: string): string => {
 // Helper to format a cleaned numeric phone string for display
 const formatPhoneDisplay = (digits: string): string => {
   if (!digits || digits.length < 4) return digits;
+  // Reject internal WhatsApp IDs (JIDs with >13 digits are not real phone numbers)
+  if (digits.length > 13) return "";
   // Brazilian numbers (country code 55)
   if (digits.startsWith("55") && (digits.length === 12 || digits.length === 13)) {
     const ddd = digits.slice(2, 4);
@@ -644,10 +646,33 @@ export default function Chats() {
     const bestPhone = leadPhone || altPhone || jidPhone || "";
     const formattedPhone = formatPhoneDisplay(bestPhone);
     
-    // Name priority: lead name > pushName > formatted phone (never raw JID)
-    const displayName = (leadName && leadName !== formattedPhone && !leadName.includes("@")) 
-      ? leadName 
-      : resolvedName || formattedPhone;
+    // Helper: check if a string looks like a raw number (not a real name)
+    const isNumericName = (n: string | undefined | null): boolean => {
+      if (!n) return true;
+      const stripped = n.replace(/[+\-\s()]/g, "");
+      return /^\d{8,}$/.test(stripped);
+    };
+    
+    // Name priority: pushName (resolvedName) > leadName (if not a number) > formattedPhone
+    let displayName: string;
+    if (resolvedName && !isNumericName(resolvedName)) {
+      displayName = resolvedName;
+    } else if (leadName && !isNumericName(leadName) && !leadName.includes("@")) {
+      displayName = leadName;
+    } else {
+      displayName = resolvedName || formattedPhone;
+    }
+
+    // P1: Auto-fix leads with bad numeric names when we have a real pushName
+    if (matchingLead && isNumericName(matchingLead.name) && resolvedName && !isNumericName(resolvedName)) {
+      const fixPayload: Record<string, any> = { name: resolvedName };
+      // Also fix phone if lead has an invalid long number
+      const leadDigits = cleanPhoneNumber(matchingLead.phone || "");
+      if (leadDigits.length > 13) {
+        fixPayload.phone = formattedPhone || null;
+      }
+      updateLead(matchingLead.id, fixPayload).catch(() => {});
+    }
     
     return {
       id: instanceName ? `${instanceName}:${jid}` : (chat.id || jid),
@@ -666,7 +691,7 @@ export default function Chats() {
       // Store raw timestamp for sorting
       _timestamp: lastMsgTime || 0,
     } as Chat & { _timestamp: number };
-  }, []);
+  }, [updateLead]);
 
   // Ref to track leads for auto-creation without causing re-renders
   const leadsRef = useRef(leads);
@@ -824,9 +849,12 @@ export default function Chats() {
             for (const chat of batch) {
               try {
                 processedJidsRef.current.add(chat.remoteJid);
+                // Use a valid phone: if digits > 13 it's an internal JID, not a real number
+                const phoneDigits = cleanPhoneNumber(chat.phone || "");
+                const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
                 const newLead = await createLead({
-                  name: chat.name,
-                  phone: chat.phone,
+                  name: chat.name || validPhone || chat.remoteJid,
+                  phone: validPhone,
                   whatsapp_jid: chat.remoteJid,
                   instance_name: chat.instanceName,
                   source: 'whatsapp',
