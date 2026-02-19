@@ -38,7 +38,7 @@ export const LeadColumn = memo(function LeadColumn({
   canDelete = true
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const totalValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
+  const totalValue = leads.reduce((sum, lead) => sum + (lead.total_sales_value || lead.value || 0), 0);
   
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
