@@ -47,3 +47,6 @@ verify_jwt = false
 
 [functions.notify-new-lead]
 verify_jwt = false
+
+[functions.send-daily-reports]
+verify_jwt = false
