@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Filter, X, Calendar as CalendarIcon } from 'lucide-react';
 import { format, startOfDay, endOfDay, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths, startOfQuarter, startOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -150,14 +150,14 @@ export function LeadFilters({
   );
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
-        <SheetHeader className="p-4 pb-2 border-b">
-          <SheetTitle className="flex items-center gap-2">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg flex flex-col p-0 gap-0 max-h-[85vh]">
+        <DialogHeader className="p-4 pb-2 border-b">
+          <DialogTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
             Filtros Avançados
-          </SheetTitle>
-        </SheetHeader>
+          </DialogTitle>
+        </DialogHeader>
 
         <ScrollArea className="flex-1 px-4">
           <div className="space-y-4 py-4">
@@ -403,16 +403,16 @@ export function LeadFilters({
           </div>
         </ScrollArea>
 
-        <SheetFooter className="p-4 border-t flex gap-2">
+        <DialogFooter className="p-4 border-t flex gap-2">
           <Button variant="outline" onClick={handleClear} className="flex-1">
             Limpar filtros
           </Button>
           <Button onClick={handleApply} className="flex-1">
             Aplicar filtros
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
