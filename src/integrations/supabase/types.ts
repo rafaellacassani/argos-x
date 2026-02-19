@@ -222,6 +222,58 @@ export type Database = {
           },
         ]
       }
+      alert_log: {
+        Row: {
+          alert_type: string
+          id: string
+          lead_id: string | null
+          message_preview: string | null
+          sent_at: string
+          user_profile_id: string
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          id?: string
+          lead_id?: string | null
+          message_preview?: string | null
+          sent_at?: string
+          user_profile_id: string
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          id?: string
+          lead_id?: string | null
+          message_preview?: string | null
+          sent_at?: string
+          user_profile_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_log_user_profile_id_fkey"
+            columns: ["user_profile_id"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bot_execution_logs: {
         Row: {
           bot_id: string
