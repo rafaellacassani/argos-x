@@ -601,9 +601,9 @@ export default function Chats() {
       : resolvedName || formattedPhone;
     
     return {
-      id: chat.id || jid,
+      id: instanceName ? `${instanceName}:${jid}` : (chat.id || jid),
       remoteJid: jid,
-      name: displayName,
+      name: displayName || formatPhoneDisplay(cleanPhoneNumber(jid)) || jid,
       profilePicUrl: chat.profilePicUrl || leadAvatar || undefined,
       lastMessage: lastMsgContent.substring(0, 50) + (lastMsgContent.length > 50 ? "..." : ""),
       time: formatTime(lastMsgTime),
@@ -709,6 +709,17 @@ export default function Chats() {
             }
           }
           
+          // Deduplicate by remoteJid — keep the most recent conversation per contact
+          const deduped = new Map<string, (Chat & { _timestamp?: number })>();
+          for (const c of allChats) {
+            const key = c.remoteJid;
+            const existing = deduped.get(key);
+            if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
+              deduped.set(key, c);
+            }
+          }
+          allChats = Array.from(deduped.values());
+
           // Sort by timestamp (most recent first)
           allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
           allChats = allChats.slice(0, 100);
@@ -1329,7 +1340,7 @@ export default function Chats() {
                       "w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold",
                       chat.profilePicUrl && "hidden"
                     )}>
-                      {chat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+                      {(chat.name || "?").split(" ").slice(0, 2).map((n) => n[0] || "").join("").toUpperCase() || "?"}
                     </div>
                     {chat.online && (
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
@@ -1391,7 +1402,7 @@ export default function Chats() {
                       "w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold text-sm",
                       selectedChat.profilePicUrl && "hidden"
                     )}>
-                      {selectedChat.name.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase()}
+                      {(selectedChat.name || "?").split(" ").slice(0, 2).map((n) => n[0] || "").join("").toUpperCase() || "?"}
                     </div>
                     {selectedChat.online && (
                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-card" />
