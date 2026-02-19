@@ -302,33 +302,63 @@ export function useLeads() {
     }
   }, []);
 
-  // Fetch leads for current funnel
-  const fetchLeads = useCallback(async (stageIds: string[]) => {
+  // Fetch leads for current funnel with optional server-side filters
+  const fetchLeads = useCallback(async (stageIds: string[], filters?: {
+    responsibleUserIds?: string[];
+    tagIds?: string[];
+    valueMin?: number | null;
+    valueMax?: number | null;
+    product?: string;
+    dateFrom?: string | null;
+    dateTo?: string | null;
+    dateType?: 'created_at' | 'sale_date';
+    sources?: string[];
+  }) => {
     if (stageIds.length === 0) return [];
     
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('leads')
         .select('*')
         .in('stage_id', stageIds)
         .order('position', { ascending: true });
 
+      // Apply server-side filters
+      if (filters) {
+        if (filters.responsibleUserIds && filters.responsibleUserIds.length > 0) {
+          query = query.in('responsible_user', filters.responsibleUserIds);
+        }
+        if (filters.valueMin !== null && filters.valueMin !== undefined) {
+          query = query.gte('value', filters.valueMin);
+        }
+        if (filters.valueMax !== null && filters.valueMax !== undefined) {
+          query = query.lte('value', filters.valueMax);
+        }
+        if (filters.sources && filters.sources.length > 0) {
+          query = query.in('source', filters.sources);
+        }
+        if (filters.dateType === 'created_at' || !filters.dateType) {
+          if (filters.dateFrom) query = query.gte('created_at', filters.dateFrom);
+          if (filters.dateTo) query = query.lte('created_at', filters.dateTo);
+        }
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
 
-      const leadIds = (data || []).map(l => l.id);
+      let leadIds = (data || []).map(l => l.id);
       
       const [tagAssignments, salesData] = await Promise.all([
-        supabase
-          .from('lead_tag_assignments')
-          .select('lead_id, tag_id, lead_tags(*)')
-          .in('lead_id', leadIds),
-        supabase
-          .from('lead_sales')
-          .select('*')
-          .in('lead_id', leadIds)
+        leadIds.length > 0
+          ? supabase.from('lead_tag_assignments').select('lead_id, tag_id, lead_tags(*)').in('lead_id', leadIds)
+          : Promise.resolve({ data: [] as any[] }),
+        leadIds.length > 0
+          ? supabase.from('lead_sales').select('*').in('lead_id', leadIds)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
 
-      const leadsWithData = (data || []).map(lead => {
+      let leadsWithData = (data || []).map(lead => {
         const leadTags = (tagAssignments.data || [])
           .filter(t => t.lead_id === lead.id)
           .map(t => t.lead_tags)
@@ -345,6 +375,33 @@ export function useLeads() {
           sales_count: leadSales.length
         };
       });
+
+      // Client-side filters that require joined data
+      if (filters?.tagIds && filters.tagIds.length > 0) {
+        leadsWithData = leadsWithData.filter(lead =>
+          (lead.tags || []).some((t: any) => filters.tagIds!.includes(t.id))
+        );
+      }
+      if (filters?.product && filters.product.trim()) {
+        const search = filters.product.trim().toLowerCase();
+        leadsWithData = leadsWithData.filter(lead =>
+          (lead.sales || []).some((s: any) => s.product_name?.toLowerCase().includes(search))
+        );
+      }
+      // Sale date filter (needs sales data)
+      if (filters?.dateType === 'sale_date') {
+        if (filters.dateFrom || filters.dateTo) {
+          leadsWithData = leadsWithData.filter(lead => {
+            return (lead.sales || []).some((s: any) => {
+              const sd = s.sale_date;
+              if (!sd) return false;
+              if (filters.dateFrom && sd < filters.dateFrom) return false;
+              if (filters.dateTo && sd > filters.dateTo) return false;
+              return true;
+            });
+          });
+        }
+      }
       
       setLeads(leadsWithData as Lead[]);
       return leadsWithData;
