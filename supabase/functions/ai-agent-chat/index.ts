@@ -217,6 +217,41 @@ serve(async (req) => {
       console.error("[ai-agent-chat] Memory fetch error:", memoryError);
     }
 
+    // --- on_start_actions: execute on first message only ---
+    const isFirstMessage = !memory || !memory.messages || (Array.isArray(memory.messages) && memory.messages.length === 0);
+    const onStartActions = agent.on_start_actions || [];
+    if (isFirstMessage && lead_id && isValidUUID(lead_id) && onStartActions.length > 0) {
+      console.log(`[ai-agent-chat] ⚡ Executing ${onStartActions.length} on_start_actions for lead: ${lead_id}`);
+      for (const action of onStartActions) {
+        try {
+          switch (action.type) {
+            case "move_stage":
+              await supabase.from("leads").update({ stage_id: action.value }).eq("id", lead_id);
+              console.log("⚡ on_start_action:", action.type, action.value, "lead:", lead_id);
+              break;
+            case "add_tag":
+              await supabase.from("lead_tag_assignments").upsert(
+                { lead_id, tag_id: action.value, workspace_id: agent.workspace_id },
+                { onConflict: "lead_id,tag_id" }
+              );
+              console.log("⚡ on_start_action:", action.type, action.value, "lead:", lead_id);
+              break;
+            case "remove_tag":
+              await supabase.from("lead_tag_assignments").delete()
+                .eq("lead_id", lead_id).eq("tag_id", action.value);
+              console.log("⚡ on_start_action:", action.type, action.value, "lead:", lead_id);
+              break;
+            case "assign_responsible":
+              await supabase.from("leads").update({ responsible_user: action.value }).eq("id", lead_id);
+              console.log("⚡ on_start_action:", action.type, action.value, "lead:", lead_id);
+              break;
+          }
+        } catch (actionErr) {
+          console.error("⚡ on_start_action error:", action.type, actionErr);
+        }
+      }
+    }
+
     if (memory?.is_paused) {
       if (message.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
         await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);
