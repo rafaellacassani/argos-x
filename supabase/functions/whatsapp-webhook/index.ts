@@ -439,6 +439,16 @@ async function executeFlow(
   });
 }
 
+// --- Follow-up delay calculator ---
+function getFollowupDelayMs(value: number, unit: string): number {
+  switch (unit) {
+    case "minutes": return value * 60 * 1000;
+    case "hours": return value * 3600 * 1000;
+    case "days": return value * 86400 * 1000;
+    default: return value * 60 * 1000;
+  }
+}
+
 // --- CORS ---
 app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 
@@ -580,6 +590,17 @@ app.post("/", async (c) => {
         }
 
         if (shouldRespond) {
+          // --- Cancel any pending follow-ups for this session ---
+          try {
+            await supabase.from("agent_followup_queue")
+              .update({ status: "canceled", canceled_reason: "lead_responded" })
+              .eq("session_id", remoteJid)
+              .eq("status", "pending");
+            console.log(`[whatsapp-webhook] 📅 Canceled pending follow-ups for session ${remoteJid}`);
+          } catch (fErr) {
+            console.error("[whatsapp-webhook] Follow-up cancel error:", fErr);
+          }
+
           // Call ai-agent-chat internally
           try {
             const agentUrl = `${SUPABASE_URL}/functions/v1/ai-agent-chat`;
@@ -644,6 +665,36 @@ app.post("/", async (c) => {
               console.log(`[whatsapp-webhook] ⏭️ Agent skipped: ${agentData.reason || 'unknown reason'}`);
             } else if (agentData.paused) {
               console.log(`[whatsapp-webhook] ⏸️ Agent paused for this session`);
+            }
+
+            // --- Schedule follow-up if agent has followup_enabled ---
+            if (!agentData.paused && !agentData.skipped && leadId) {
+              try {
+                const { data: agentFull } = await supabase
+                  .from("ai_agents")
+                  .select("followup_enabled, followup_sequence")
+                  .eq("id", matchingAgent.id)
+                  .single();
+
+                if (agentFull?.followup_enabled && agentFull.followup_sequence?.length > 0) {
+                  const firstStep = agentFull.followup_sequence[0];
+                  const delayMs = getFollowupDelayMs(firstStep.delay_value, firstStep.delay_unit);
+                  const executeAt = new Date(Date.now() + delayMs).toISOString();
+
+                  await supabase.from("agent_followup_queue").insert({
+                    agent_id: matchingAgent.id,
+                    lead_id: leadId,
+                    session_id: remoteJid,
+                    workspace_id: workspaceId,
+                    step_index: 0,
+                    execute_at: executeAt,
+                    status: "pending",
+                  });
+                  console.log(`[whatsapp-webhook] 📅 Follow-up scheduled: step 0, execute_at ${executeAt}`);
+                }
+              } catch (fErr) {
+                console.error("[whatsapp-webhook] Follow-up schedule error:", fErr);
+              }
             }
           } catch (err) {
             console.error("[whatsapp-webhook] ❌ AI Agent call exception:", err);

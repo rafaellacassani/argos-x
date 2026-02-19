@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
-import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical } from "lucide-react";
+import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
 import { KnowledgeTab } from "./tabs/KnowledgeTab";
@@ -13,6 +13,7 @@ import { FaqTab } from "./tabs/FaqTab";
 import { BehaviorTab } from "./tabs/BehaviorTab";
 import { QualificationTab } from "./tabs/QualificationTab";
 import { ToolsTab } from "./tabs/ToolsTab";
+import { FollowupTab } from "./tabs/FollowupTab";
 import { AdvancedTab } from "./tabs/AdvancedTab";
 
 interface AgentDetailDialogProps {
@@ -29,6 +30,7 @@ const tabs = [
   { id: "behavior", label: "Comportamento", icon: Settings },
   { id: "qualification", label: "Qualificação", icon: Target },
   { id: "tools", label: "Ferramentas", icon: Wrench },
+  { id: "followup", label: "Follow-up", icon: CalendarClock },
   { id: "advanced", label: "Avançado", icon: FlaskConical },
 ];
 
@@ -67,6 +69,9 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         tools: agent.tools || [],
         on_start_actions: (agent as any).on_start_actions || [],
         trainer_phone: (agent as any).trainer_phone || "",
+        followup_enabled: (agent as any).followup_enabled ?? false,
+        followup_sequence: (agent as any).followup_sequence || [],
+        followup_end_stage_id: (agent as any).followup_end_stage_id || "",
         model: agent.model || "google/gemini-3-flash-preview",
         temperature: agent.temperature ?? 0.7,
         max_tokens: agent.max_tokens ?? 2048,
@@ -154,6 +159,9 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
       tools: formData.tools,
       on_start_actions: formData.on_start_actions,
       trainer_phone: formData.trainer_phone,
+      followup_enabled: formData.followup_enabled,
+      followup_sequence: formData.followup_sequence,
+      followup_end_stage_id: formData.followup_end_stage_id || null,
       model: formData.model,
       temperature: formData.temperature,
       max_tokens: formData.max_tokens,
@@ -246,6 +254,9 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
             )}
             {activeTab === "tools" && (
               <ToolsTab formData={formData} updateField={updateField} />
+            )}
+            {activeTab === "followup" && (
+              <FollowupTab formData={formData} updateField={updateField} />
             )}
             {activeTab === "advanced" && (
               <AdvancedTab formData={formData} updateField={updateField} />

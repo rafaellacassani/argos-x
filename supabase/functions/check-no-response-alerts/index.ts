@@ -37,6 +37,15 @@ async function sendWhatsApp(instanceName: string, phone: string, text: string): 
   }
 }
 
+function getFollowupDelayMs(value: number, unit: string): number {
+  switch (unit) {
+    case "minutes": return value * 60 * 1000;
+    case "hours": return value * 3600 * 1000;
+    case "days": return value * 86400 * 1000;
+    default: return value * 60 * 1000;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -536,7 +545,151 @@ Deno.serve(async (req) => {
 
     console.log(`[automations-queue] Processed: ${automationsProcessed}`);
 
-    return new Response(JSON.stringify({ alerts_sent: totalSent, automations_processed: automationsProcessed }), {
+    // ========================================
+    // PROCESSAR FILA DE FOLLOW-UP DE AGENTES IA
+    // ========================================
+    let followupsProcessed = 0;
+
+    const { data: followupItems, error: followupErr } = await supabase
+      .from("agent_followup_queue")
+      .select("*")
+      .eq("status", "pending")
+      .lte("execute_at", new Date().toISOString())
+      .limit(20);
+
+    if (followupErr) {
+      console.error("[followup-queue] Error fetching queue:", followupErr);
+    }
+
+    if (followupItems?.length) {
+      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+
+      // Fetch agent details
+      const agentIds = [...new Set(followupItems.map((q: any) => q.agent_id))];
+      const leadIds = [...new Set(followupItems.map((q: any) => q.lead_id))];
+
+      const [agentsRes, leadsRes] = await Promise.all([
+        supabase.from("ai_agents").select("id, name, agent_role, system_prompt, model, tone_of_voice, use_emojis, response_length, followup_sequence, followup_end_stage_id, instance_name, is_active, workspace_id").in("id", agentIds),
+        supabase.from("leads").select("id, name, phone, whatsapp_jid, instance_name, workspace_id, stage_id").in("id", leadIds),
+      ]);
+
+      const agentMap = new Map<string, any>();
+      (agentsRes.data || []).forEach((a: any) => agentMap.set(a.id, a));
+      const leadMapFollowup = new Map<string, any>();
+      (leadsRes.data || []).forEach((l: any) => leadMapFollowup.set(l.id, l));
+
+      for (const item of followupItems) {
+        const agent = agentMap.get(item.agent_id);
+        const lead = leadMapFollowup.get(item.lead_id);
+
+        if (!agent || !lead) {
+          await supabase.from("agent_followup_queue").update({ status: "error" }).eq("id", item.id);
+          followupsProcessed++;
+          continue;
+        }
+
+        // Skip if agent is inactive
+        if (!agent.is_active) {
+          await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "agent_disabled" }).eq("id", item.id);
+          followupsProcessed++;
+          continue;
+        }
+
+        // Check if lead responded since this was queued — look at agent_memories
+        const { data: memory } = await supabase
+          .from("agent_memories")
+          .select("messages")
+          .eq("agent_id", agent.id)
+          .eq("session_id", item.session_id)
+          .single();
+
+        if (memory?.messages && Array.isArray(memory.messages) && memory.messages.length > 0) {
+          const lastMsg = memory.messages[memory.messages.length - 1];
+          if (lastMsg.role === "user") {
+            // Lead responded — cancel
+            await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "lead_responded" }).eq("id", item.id);
+            followupsProcessed++;
+            console.log(`[followup-queue] ⏭️ Canceled — lead responded: ${lead.name}`);
+            continue;
+          }
+        }
+
+        // Generate follow-up message via AI
+        const sequence = agent.followup_sequence || [];
+        const stepNum = item.step_index + 1;
+        const totalSteps = sequence.length;
+
+        const followupPrompt = `Você é ${agent.agent_role || "Atendente"}, ${agent.name}. O lead "${lead.name}" parou de responder. Esta é a tentativa ${stepNum} de ${totalSteps} de recontato. Crie uma mensagem CURTA, criativa e natural de reativação. Não seja repetitivo — seja diferente das tentativas anteriores. Tom: ${agent.tone_of_voice || "consultivo"}. ${agent.use_emojis ? "Pode usar emojis." : "Não use emojis."} Máximo 2 frases. Retorne apenas a mensagem, sem explicações.`;
+
+        let followupMessage = `Oi ${lead.name}, tudo bem? Vi que ficou alguma dúvida, posso ajudar? 😊`;
+
+        if (lovableApiKey) {
+          try {
+            const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: agent.model || "google/gemini-3-flash-preview",
+                messages: [{ role: "user", content: followupPrompt }],
+                temperature: 0.9,
+                max_tokens: 200,
+              }),
+            });
+            if (aiRes.ok) {
+              const aiData = await aiRes.json();
+              const content = aiData.choices?.[0]?.message?.content;
+              if (content) followupMessage = content.trim();
+            }
+          } catch (aiErr) {
+            console.error("[followup-queue] AI generation error:", aiErr);
+          }
+        }
+
+        // Send via Evolution API
+        const instanceName = lead.instance_name || agent.instance_name;
+        const phoneNumber = (lead.phone || "").replace(/\D/g, "") || (lead.whatsapp_jid || "").replace(/@.*$/, "");
+
+        if (instanceName && phoneNumber) {
+          const sent = await sendWhatsApp(instanceName, phoneNumber, followupMessage);
+          if (sent) {
+            console.log(`[followup-queue] ✅ Follow-up sent: step ${stepNum}, lead: ${lead.name}`);
+          } else {
+            console.error(`[followup-queue] ❌ Failed to send follow-up to ${lead.name}`);
+          }
+        }
+
+        // Mark as executed
+        await supabase.from("agent_followup_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
+        followupsProcessed++;
+
+        // Schedule next step or execute end action
+        const nextStepIndex = item.step_index + 1;
+        if (nextStepIndex < sequence.length) {
+          const nextStep = sequence[nextStepIndex];
+          const delayMs = getFollowupDelayMs(nextStep.delay_value, nextStep.delay_unit);
+          const executeAt = new Date(Date.now() + delayMs).toISOString();
+
+          await supabase.from("agent_followup_queue").insert({
+            agent_id: agent.id,
+            lead_id: lead.id,
+            session_id: item.session_id,
+            workspace_id: item.workspace_id,
+            step_index: nextStepIndex,
+            execute_at: executeAt,
+            status: "pending",
+          });
+          console.log(`[followup-queue] 📅 Next follow-up scheduled: step ${nextStepIndex + 1}, at ${executeAt}`);
+        } else if (agent.followup_end_stage_id) {
+          // Last step — move lead to end stage
+          await supabase.from("leads").update({ stage_id: agent.followup_end_stage_id }).eq("id", lead.id);
+          console.log(`[followup-queue] 🏁 Sequence ended for lead ${lead.name} — moved to stage ${agent.followup_end_stage_id}`);
+        }
+      }
+    }
+
+    console.log(`[followup-queue] Processed: ${followupsProcessed}`);
+
+    return new Response(JSON.stringify({ alerts_sent: totalSent, automations_processed: automationsProcessed, followups_processed: followupsProcessed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
