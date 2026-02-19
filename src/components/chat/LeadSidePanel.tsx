@@ -35,6 +35,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from "@/lib/utils";
 import { type Lead, type FunnelStage, type LeadTag, type LeadSale } from "@/hooks/useLeads";
 import { supabase } from "@/integrations/supabase/client";
+import { LeadStatsTab } from "./LeadStatsTab";
 
 interface LeadSidePanelProps {
   lead: Lead | null;
@@ -466,11 +467,8 @@ export function LeadSidePanel({
           </ScrollArea>
         </TabsContent>
 
-        {/* Stats Tab */}
-        <TabsContent value="stats" className="flex-1 m-0">
-          <div className="p-4 text-center text-muted-foreground">
-            <p className="text-sm">Estatísticas do lead em breve.</p>
-          </div>
+        <TabsContent value="stats" className="flex-1 m-0 overflow-hidden">
+          <LeadStatsTab lead={lead} stages={stages} />
         </TabsContent>
 
         {/* Sales Tab */}
