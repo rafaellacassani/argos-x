@@ -138,17 +138,30 @@ export function SendMessageNodeContent({
     { label: 'Empresa', value: '{{lead.company}}' },
   ];
 
+  const hasBracketText = /\[.*?\]/.test(message);
+
   return (
     <div className="space-y-3">
       {/* Message Input */}
-      <textarea
-        ref={textareaRef}
-        className="w-full p-2 text-sm bg-background border rounded resize-none focus:ring-2 focus:ring-primary/50"
-        placeholder="Digite a mensagem..."
-        rows={3}
-        value={message}
-        onChange={(e) => onUpdate({ message: e.target.value })}
-      />
+      <div className="relative">
+        <textarea
+          ref={textareaRef}
+          className={cn(
+            "w-full p-2 text-sm bg-background border rounded resize-none focus:ring-2 focus:ring-primary/50",
+            hasBracketText && "border-amber-400 bg-amber-50/30 dark:bg-amber-950/20"
+          )}
+          placeholder="Digite a mensagem..."
+          rows={3}
+          value={message}
+          onChange={(e) => onUpdate({ message: e.target.value })}
+        />
+        {hasBracketText && (
+          <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            Edite os textos entre [colchetes] para personalizar
+          </p>
+        )}
+      </div>
 
       {/* Variable Chips */}
       <div className="flex flex-wrap gap-1">
