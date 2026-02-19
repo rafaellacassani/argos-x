@@ -19,6 +19,7 @@ interface AgentDetailDialogProps {
   agent: AIAgent | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialTab?: string;
 }
 
 const tabs = [
@@ -31,8 +32,8 @@ const tabs = [
   { id: "advanced", label: "Avançado", icon: FlaskConical },
 ];
 
-export function AgentDetailDialog({ agent, open, onOpenChange }: AgentDetailDialogProps) {
-  const [activeTab, setActiveTab] = useState("personality");
+export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: AgentDetailDialogProps) {
+  const [activeTab, setActiveTab] = useState(initialTab || "personality");
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [isDirty, setIsDirty] = useState(false);
   const { updateAgent, toggleAgent } = useAIAgents();
@@ -40,6 +41,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange }: AgentDetailDial
 
   useEffect(() => {
     if (agent) {
+      setActiveTab(initialTab || "personality");
       setFormData({
         name: agent.name || "",
         description: agent.description || "",
@@ -74,7 +76,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange }: AgentDetailDial
       });
       setIsDirty(false);
     }
-  }, [agent]);
+  }, [agent, initialTab]);
 
   const updateField = (key: string, value: any) => {
     setFormData(prev => ({ ...prev, [key]: value }));

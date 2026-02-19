@@ -4,7 +4,7 @@ import { Bot, Plus, MessageCircle, Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAIAgents, useAgentStats, AIAgent } from "@/hooks/useAIAgents";
 import { AgentCard } from "@/components/agents/AgentCard";
-import { CreateAgentDialog } from "@/components/agents/CreateAgentDialog";
+import { CreateAgentDialog, CreateAgentWizardData } from "@/components/agents/CreateAgentDialog";
 import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ export default function AIAgents() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AIAgent | null>(null);
+  const [detailInitialTab, setDetailInitialTab] = useState("personality");
 
   const activeAgents = agents.filter((a) => a.is_active).length;
   const totalConversations = 0; // Will be calculated from executions
@@ -33,6 +34,7 @@ export default function AIAgents() {
   };
 
   const handleEdit = (agent: AIAgent) => {
+    setDetailInitialTab("personality");
     setSelectedAgent(agent);
   };
 
@@ -162,9 +164,14 @@ export default function AIAgents() {
       <CreateAgentDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onSubmit={(data) => {
-          createAgent.mutate(data);
-          setCreateDialogOpen(false);
+        onSubmit={(data: CreateAgentWizardData) => {
+          createAgent.mutate(data as any, {
+            onSuccess: (newAgent) => {
+              setCreateDialogOpen(false);
+              setDetailInitialTab("knowledge");
+              setSelectedAgent(newAgent as AIAgent);
+            },
+          });
         }}
         isLoading={createAgent.isPending}
       />
@@ -174,6 +181,7 @@ export default function AIAgents() {
         agent={selectedAgent}
         open={!!selectedAgent}
         onOpenChange={(open) => { if (!open) setSelectedAgent(null); }}
+        initialTab={detailInitialTab}
       />
 
       {/* Delete Confirmation Dialog */}

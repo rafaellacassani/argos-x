@@ -52,6 +52,21 @@ export interface CreateAgentData {
   resume_keyword?: string;
   message_split_enabled?: boolean;
   message_split_length?: number;
+  // New wizard fields
+  main_objective?: string;
+  company_info?: Record<string, any>;
+  niche?: string;
+  agent_role?: string;
+  tone_of_voice?: string;
+  use_emojis?: boolean;
+  response_length?: string;
+  response_delay_seconds?: number;
+  respond_to?: string;
+  respond_to_stages?: string[];
+  instance_name?: string;
+  qualification_enabled?: boolean;
+  qualification_fields?: any[];
+  is_active?: boolean;
 }
 
 export function useAIAgents() {
@@ -90,7 +105,22 @@ export function useAIAgents() {
           resume_keyword: agentData.resume_keyword || "Atendimento finalizado",
           message_split_enabled: agentData.message_split_enabled ?? true,
           message_split_length: agentData.message_split_length || 400,
-          workspace_id: workspaceId
+          workspace_id: workspaceId,
+          // New wizard fields
+          main_objective: agentData.main_objective || "atendimento",
+          company_info: agentData.company_info || {},
+          niche: agentData.niche || "",
+          agent_role: agentData.agent_role || "",
+          tone_of_voice: agentData.tone_of_voice || "consultivo",
+          use_emojis: agentData.use_emojis ?? true,
+          response_length: agentData.response_length || "medium",
+          response_delay_seconds: agentData.response_delay_seconds ?? 0,
+          respond_to: agentData.respond_to || "all",
+          respond_to_stages: agentData.respond_to_stages || [],
+          instance_name: agentData.instance_name || null,
+          qualification_enabled: agentData.qualification_enabled ?? false,
+          qualification_fields: agentData.qualification_fields || [],
+          is_active: agentData.is_active ?? false,
         })
         .select()
         .single();
