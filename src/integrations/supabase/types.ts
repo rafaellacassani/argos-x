@@ -1172,6 +1172,118 @@ export type Database = {
           },
         ]
       }
+      stage_automation_queue: {
+        Row: {
+          automation_id: string
+          created_at: string
+          execute_at: string
+          executed_at: string | null
+          id: string
+          lead_id: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          automation_id: string
+          created_at?: string
+          execute_at: string
+          executed_at?: string | null
+          id?: string
+          lead_id: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          automation_id?: string
+          created_at?: string
+          execute_at?: string
+          executed_at?: string | null
+          id?: string
+          lead_id?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_automation_queue_automation_id_fkey"
+            columns: ["automation_id"]
+            isOneToOne: false
+            referencedRelation: "stage_automations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_automation_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_automation_queue_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stage_automations: {
+        Row: {
+          action_config: Json
+          action_type: string
+          conditions: Json | null
+          created_at: string
+          id: string
+          is_active: boolean
+          position: number
+          stage_id: string
+          trigger: string
+          trigger_delay_hours: number | null
+          workspace_id: string
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          conditions?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          position?: number
+          stage_id: string
+          trigger?: string
+          trigger_delay_hours?: number | null
+          workspace_id: string
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          conditions?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          position?: number
+          stage_id?: string
+          trigger?: string
+          trigger_delay_hours?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stage_automations_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "funnel_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stage_automations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tag_rules: {
         Row: {
           created_at: string

@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Plus, Bot } from 'lucide-react';
+import { MoreHorizontal, Plus, Bot, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -9,10 +9,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { LeadCard } from './LeadCard';
 import { StageSettingsDialog } from './StageSettingsDialog';
-import type { Lead, FunnelStage } from '@/hooks/useLeads';
+import { StageAutomationsDialog } from './StageAutomationsDialog';
+import type { Lead, FunnelStage, LeadTag } from '@/hooks/useLeads';
 
 interface TeamMember {
   id: string;
@@ -30,6 +32,9 @@ interface LeadColumnProps {
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
+  automationCount?: number;
+  tags?: LeadTag[];
+  onAutomationCountChange?: () => void;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -42,9 +47,13 @@ export const LeadColumn = memo(function LeadColumn({
   onEditStage,
   onUpdateStage,
   canDelete = true,
-  teamMembers = []
+  teamMembers = [],
+  automationCount = 0,
+  tags = [],
+  onAutomationCountChange,
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [automationsOpen, setAutomationsOpen] = useState(false);
   const totalValue = leads.reduce((sum, lead) => sum + (lead.total_sales_value || lead.value || 0), 0);
   
   const formatCurrency = (value: number) => {
@@ -72,6 +81,24 @@ export const LeadColumn = memo(function LeadColumn({
           <span className="text-sm text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
             {leads.length}
           </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 relative"
+                onClick={() => setAutomationsOpen(true)}
+              >
+                <Zap className="h-3.5 w-3.5 text-amber-500" />
+                {automationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {automationCount}
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Automações desta etapa</TooltipContent>
+          </Tooltip>
         </div>
         
         <div className="flex items-center gap-1">
@@ -177,6 +204,15 @@ export const LeadColumn = memo(function LeadColumn({
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
         onUpdate={onUpdateStage || (() => {})}
+      />
+
+      <StageAutomationsDialog
+        stage={stage}
+        open={automationsOpen}
+        onOpenChange={setAutomationsOpen}
+        tags={tags}
+        teamMembers={teamMembers}
+        onCountChange={onAutomationCountChange}
       />
     </div>
   );

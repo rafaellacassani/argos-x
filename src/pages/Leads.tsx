@@ -15,6 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { useLeads, Lead } from '@/hooks/useLeads';
+import { useStageAutomations } from '@/hooks/useStageAutomations';
 import { LeadKanban } from '@/components/leads/LeadKanban';
 import { LeadDetailModal } from '@/components/leads/LeadDetailModal';
 import { CreateLeadDialog } from '@/components/leads/CreateLeadDialog';
@@ -52,6 +53,7 @@ export default function Leads() {
     createFunnel, updateStage, saveSales
   } = useLeads();
   const { teamMembers, fetchTeamMembers } = useTeam();
+  const { executeStageAutomations } = useStageAutomations();
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
@@ -171,12 +173,18 @@ export default function Leads() {
   }, [deleteLead, selectedLead, canDeleteLeads]);
 
   const handleLeadMove = useCallback(async (leadId: string, newStageId: string, newPosition: number) => {
+    const lead = leads.find(l => l.id === leadId);
+    const oldStageId = lead?.stage_id;
     if (userProfileId) {
-      const lead = leads.find(l => l.id === leadId);
       if (lead && !lead.responsible_user) await updateLead(leadId, { responsible_user: userProfileId });
     }
     await moveLead(leadId, newStageId, newPosition);
-  }, [moveLead, userProfileId, leads, updateLead]);
+    // Trigger stage automations
+    if (oldStageId && oldStageId !== newStageId) {
+      executeStageAutomations(oldStageId, leadId, 'on_exit');
+      executeStageAutomations(newStageId, leadId, 'on_enter');
+    }
+  }, [moveLead, userProfileId, leads, updateLead, executeStageAutomations]);
 
   const handleMoveFromSheet = useCallback(async (leadId: string, stageId: string) => {
     if (userProfileId) {
@@ -344,6 +352,7 @@ export default function Leads() {
             onUpdateStage={updateStage}
             canDelete={canDeleteLeads}
             teamMembers={teamMembers}
+            tags={tags}
           />
         ) : (
           <div className="p-4 lg:px-6 overflow-auto h-full">
