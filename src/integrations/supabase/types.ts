@@ -84,6 +84,70 @@ export type Database = {
           },
         ]
       }
+      agent_followup_queue: {
+        Row: {
+          agent_id: string
+          canceled_reason: string | null
+          created_at: string
+          execute_at: string
+          executed_at: string | null
+          id: string
+          lead_id: string
+          session_id: string
+          status: string
+          step_index: number
+          workspace_id: string
+        }
+        Insert: {
+          agent_id: string
+          canceled_reason?: string | null
+          created_at?: string
+          execute_at: string
+          executed_at?: string | null
+          id?: string
+          lead_id: string
+          session_id: string
+          status?: string
+          step_index?: number
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string
+          canceled_reason?: string | null
+          created_at?: string
+          execute_at?: string
+          executed_at?: string | null
+          id?: string
+          lead_id?: string
+          session_id?: string
+          status?: string
+          step_index?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_followup_queue_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_followup_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_followup_queue_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_memories: {
         Row: {
           agent_id: string
@@ -155,6 +219,9 @@ export type Database = {
           created_at: string
           description: string | null
           fallback_config: Json | null
+          followup_enabled: boolean | null
+          followup_end_stage_id: string | null
+          followup_sequence: Json | null
           id: string
           instance_name: string | null
           is_active: boolean | null
@@ -195,6 +262,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           fallback_config?: Json | null
+          followup_enabled?: boolean | null
+          followup_end_stage_id?: string | null
+          followup_sequence?: Json | null
           id?: string
           instance_name?: string | null
           is_active?: boolean | null
@@ -235,6 +305,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           fallback_config?: Json | null
+          followup_enabled?: boolean | null
+          followup_end_stage_id?: string | null
+          followup_sequence?: Json | null
           id?: string
           instance_name?: string | null
           is_active?: boolean | null
