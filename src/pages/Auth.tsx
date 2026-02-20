@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Mail, Lock, User } from "lucide-react";
+import argosLogoLight from "@/assets/argos-logo-light.png";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Email inválido").max(255),
@@ -89,7 +90,7 @@ export default function Auth() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="font-display text-3xl font-bold text-foreground">Argos X</h1>
+          <img src={argosLogoLight} alt="Argos X" className="h-24 mx-auto mb-2" />
           <p className="text-muted-foreground mt-2">
             {mode === "login" ? "Entre na sua conta" : mode === "signup" ? "Crie sua conta" : "Recupere sua senha"}
           </p>
