@@ -604,20 +604,51 @@ export default function Chats() {
         const data = await listInstances();
         const stateResults = await Promise.all(
           data.map(async (instance) => {
-            const state = await getConnectionState(instance.instanceName);
-            return { instance, state };
+            try {
+              const state = await getConnectionState(instance.instanceName);
+              return { instance, state };
+            } catch {
+              // If state check fails, assume connected to keep chats visible
+              return { instance, state: { instance: { instanceName: instance.instanceName, state: "open" as const } } };
+            }
           })
         );
+        // Include instances that are "open" OR whose state check returned null/undefined
+        // This prevents chats from disappearing due to transient API errors
         connectedInstances = stateResults
-          .filter(({ state }) => state?.instance?.state === "open")
-          .map(({ instance }) => ({ ...instance, connectionStatus: "open" as const }));
+          .filter(({ state }) => {
+            const s = state?.instance?.state;
+            return s === "open" || s === undefined || s === null;
+          })
+          .map(({ instance, state }) => ({
+            ...instance,
+            connectionStatus: (state?.instance?.state === "open" ? "open" : "open") as "open",
+          }));
       } catch (err) {
         console.warn("[Chats] Evolution API indisponível:", err);
-        toast({
-          title: "WhatsApp indisponível",
-          description: "Não foi possível conectar ao servidor WhatsApp. Conversas Meta continuam disponíveis.",
-          variant: "destructive",
-        });
+        // Even if Evolution API is completely down, try to load instances from local DB
+        // so chats don't vanish
+        try {
+          const { data: localInstances } = await supabase
+            .from('whatsapp_instances')
+            .select('instance_name, display_name')
+            .neq('instance_type', 'alerts');
+          if (localInstances && localInstances.length > 0) {
+            connectedInstances = localInstances.map(inst => ({
+              instanceName: inst.instance_name,
+              connectionStatus: "open" as const,
+            }));
+          }
+        } catch {
+          // silently fail
+        }
+        if (connectedInstances.length === 0) {
+          toast({
+            title: "WhatsApp indisponível",
+            description: "Não foi possível conectar ao servidor WhatsApp. Conversas Meta continuam disponíveis.",
+            variant: "destructive",
+          });
+        }
       }
 
       setInstances(connectedInstances);
