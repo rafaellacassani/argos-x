@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -26,8 +26,7 @@ type FieldMapping = {
   company: string;
 };
 
-const BATCH_SIZE = 100;
-const FIRST_STAGE_ID = "23bf8b24-38c3-44fa-9afb-9754331333ca";
+const BATCH_SIZE = 500;
 
 function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -79,6 +78,23 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
   const [mapping, setMapping] = useState<FieldMapping>({ name: "", phone: "", email: "", company: "" });
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState({ imported: 0, duplicates: 0, errors: 0 });
+  const [firstStageId, setFirstStageId] = useState<string | null>(null);
+
+  // Fetch first stage dynamically when dialog opens
+  useEffect(() => {
+    if (!open || !workspaceId) return;
+    const fetchFirstStage = async () => {
+      const { data } = await supabase
+        .from("funnel_stages")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .order("position", { ascending: true })
+        .limit(1)
+        .single();
+      setFirstStageId(data?.id ?? null);
+    };
+    fetchFirstStage();
+  }, [open, workspaceId]);
 
   const reset = () => {
     setStep("upload");
@@ -102,7 +118,6 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       }
       setHeaders(h);
       setRows(r);
-      // Auto-map common column names
       const autoMap: FieldMapping = { name: "", phone: "", email: "", company: "" };
       h.forEach((col) => {
         const lower = col.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -122,22 +137,14 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       toast.error("Mapeie pelo menos Nome e Telefone");
       return;
     }
+    if (!firstStageId) {
+      toast.error("Crie um funil antes de importar contatos.");
+      return;
+    }
     setStep("importing");
     setProgress(0);
 
-    // Fetch existing phones for duplicate detection
-    const { data: existingLeads } = await supabase.from("leads").select("phone");
-    const existingPhones = new Set((existingLeads || []).map((l) => l.phone.replace(/\D/g, "")));
-
-    // Get max position
-    const { data: maxPosData } = await supabase
-      .from("leads")
-      .select("position")
-      .eq("stage_id", FIRST_STAGE_ID)
-      .order("position", { ascending: false })
-      .limit(1);
-    let nextPosition = (maxPosData?.[0]?.position ?? -1) + 1;
-
+    // Build valid rows without loading existing leads into memory
     const validRows: Array<{
       name: string;
       phone: string;
@@ -149,26 +156,25 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       position: number;
       workspace_id: string;
     }> = [];
-    let duplicates = 0;
+
+    const seenPhones = new Set<string>();
+    let nextPosition = 0;
 
     for (const row of rows) {
       const name = row[mapping.name]?.trim();
       const phone = row[mapping.phone]?.trim();
       if (!name || !phone) continue;
 
-      const normalizedPhone = phone.replace(/\D/g, "");
-      if (existingPhones.has(normalizedPhone)) {
-        duplicates++;
-        continue;
-      }
-      existingPhones.add(normalizedPhone);
+      // Deduplicate within the CSV itself
+      if (seenPhones.has(phone)) continue;
+      seenPhones.add(phone);
 
       validRows.push({
         name,
         phone,
         email: mapping.email ? row[mapping.email]?.trim() || undefined : undefined,
         company: mapping.company ? row[mapping.company]?.trim() || undefined : undefined,
-        stage_id: FIRST_STAGE_ID,
+        stage_id: firstStageId,
         source: "importacao",
         status: "active",
         position: nextPosition++,
@@ -177,17 +183,23 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
     }
 
     let imported = 0;
+    let duplicates = 0;
     let errors = 0;
     const total = validRows.length;
 
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const batch = validRows.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase.from("leads").insert(batch);
+      const { data, error } = await supabase
+        .from("leads")
+        .upsert(batch, { onConflict: "phone,workspace_id", ignoreDuplicates: true })
+        .select("id");
       if (error) {
-        console.error("Batch insert error:", error);
+        console.error("Batch upsert error:", error);
         errors += batch.length;
       } else {
-        imported += batch.length;
+        const insertedCount = data?.length ?? 0;
+        imported += insertedCount;
+        duplicates += batch.length - insertedCount;
       }
       setProgress(Math.round(((i + batch.length) / total) * 100));
     }
@@ -195,7 +207,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
     setResult({ imported, duplicates, errors });
     setStep("done");
     if (imported > 0) onImportComplete();
-  }, [rows, mapping, onImportComplete]);
+  }, [rows, mapping, onImportComplete, firstStageId, workspaceId]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
