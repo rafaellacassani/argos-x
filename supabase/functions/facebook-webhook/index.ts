@@ -52,7 +52,7 @@ app.get("/", (c) => {
 async function findMetaPage(pageId: string) {
   const { data, error } = await supabase
     .from("meta_pages")
-    .select("id, page_access_token, platform")
+    .select("id, page_access_token, platform, workspace_id")
     .eq("page_id", pageId)
     .eq("is_active", true)
     .limit(1)
@@ -78,6 +78,7 @@ async function saveMessage(msg: {
   direction: string;
   timestamp: string;
   raw_payload: any;
+  workspace_id: string;
 }) {
   const { error } = await supabase
     .from("meta_conversations")
@@ -164,6 +165,7 @@ async function processMessengerEvent(pageId: string, event: any) {
     direction,
     timestamp,
     raw_payload: event,
+    workspace_id: metaPage.workspace_id,
   });
 }
 
@@ -173,7 +175,7 @@ async function processInstagramEvent(igUserId: string, event: any) {
   // We need to find by instagram_account_id
   const { data: metaPage, error } = await supabase
     .from("meta_pages")
-    .select("id, page_access_token, platform, page_id")
+    .select("id, page_access_token, platform, page_id, workspace_id")
     .or(`instagram_account_id.eq.${igUserId},page_id.eq.${igUserId}`)
     .eq("is_active", true)
     .limit(1)
@@ -216,7 +218,7 @@ async function processInstagramEvent(igUserId: string, event: any) {
     meta_page_id: metaPage.id,
     platform: "instagram",
     sender_id: contactId || senderId,
-    sender_name: undefined, // IG doesn't easily expose names via webhook
+    sender_name: undefined,
     message_id: messageId,
     content,
     message_type: messageType,
@@ -224,6 +226,7 @@ async function processInstagramEvent(igUserId: string, event: any) {
     direction,
     timestamp,
     raw_payload: event,
+    workspace_id: metaPage.workspace_id,
   });
 }
 
@@ -241,7 +244,7 @@ async function processWhatsAppBusinessEvent(entry: any) {
     // Find meta_page by phone_number_id stored in page_id field
     const { data: metaPage, error } = await supabase
       .from("meta_pages")
-      .select("id, page_access_token")
+      .select("id, page_access_token, workspace_id")
       .eq("page_id", phoneNumberId)
       .eq("is_active", true)
       .limit(1)
@@ -289,6 +292,7 @@ async function processWhatsAppBusinessEvent(entry: any) {
         direction: "inbound",
         timestamp,
         raw_payload: msg,
+        workspace_id: metaPage.workspace_id,
       });
     }
 
