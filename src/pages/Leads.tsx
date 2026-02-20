@@ -1,19 +1,28 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter, Zap } from 'lucide-react';
+import { Plus, Settings, RefreshCw, Briefcase, LayoutGrid, List, Filter, Zap, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Tooltip, TooltipContent, TooltipTrigger, TooltipProvider,
+} from '@/components/ui/tooltip';
 import { useLeads, Lead } from '@/hooks/useLeads';
 import { useStageAutomations } from '@/hooks/useStageAutomations';
 import { FunnelAutomationsPage } from '@/components/leads/FunnelAutomationsPage';
@@ -33,7 +42,6 @@ function loadSessionFilters(): LeadFiltersData | null {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    // Restore Date objects
     if (parsed.dateFrom) parsed.dateFrom = new Date(parsed.dateFrom);
     if (parsed.dateTo) parsed.dateTo = new Date(parsed.dateTo);
     return parsed;
@@ -51,7 +59,8 @@ export default function Leads() {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
     moveLead, deleteLead, addTagToLead, removeTagFromLead,
-    createFunnel, updateStage, saveSales, createStage, deleteStage
+    createFunnel, updateStage, saveSales, createStage, deleteStage,
+    deleteFunnel, bulkMoveLeads, bulkDeleteLeads
   } = useLeads();
   const { teamMembers, fetchTeamMembers } = useTeam();
   const { executeStageAutomations } = useStageAutomations();
@@ -66,6 +75,11 @@ export default function Leads() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<LeadFiltersData>(() => loadSessionFilters() || DEFAULT_FILTERS);
   const [automationsPageOpen, setAutomationsPageOpen] = useState(false);
+
+  // Funnel delete state
+  const [funnelDeleteOpen, setFunnelDeleteOpen] = useState(false);
+  const [funnelDeleteInfo, setFunnelDeleteInfo] = useState<{ hasLeads: boolean; count: number }>({ hasLeads: false, count: 0 });
+  const [funnelDeleteConfirmText, setFunnelDeleteConfirmText] = useState('');
 
   // Load team members on mount
   useEffect(() => { fetchTeamMembers(); }, [fetchTeamMembers]);
@@ -217,6 +231,28 @@ export default function Leads() {
     setIsRefreshing(false);
   };
 
+  const handleDeleteFunnelClick = useCallback(async () => {
+    if (!currentFunnel) return;
+    if (currentFunnel.is_default) return;
+    const result = await deleteFunnel(currentFunnel.id);
+    if (result.error === 'has_leads') {
+      setFunnelDeleteInfo({ hasLeads: true, count: result.count || 0 });
+      setFunnelDeleteOpen(true);
+    } else if (result.error === 'is_default') {
+      // shouldn't happen, UI blocks it
+    } else if (!result.success) {
+      // error toast already shown
+    }
+    // if success, funnel already deleted
+  }, [currentFunnel, deleteFunnel]);
+
+  const handleDeleteFunnelConfirm = useCallback(async () => {
+    if (!currentFunnel) return;
+    await deleteFunnel(currentFunnel.id);
+    setFunnelDeleteOpen(false);
+    setFunnelDeleteConfirmText('');
+  }, [currentFunnel, deleteFunnel]);
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -321,6 +357,26 @@ export default function Leads() {
                     const name = prompt('Nome do novo funil:');
                     if (name) createFunnel(name);
                   }}>Criar Novo Funil</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            disabled={!!currentFunnel?.is_default}
+                            onClick={handleDeleteFunnelClick}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir funil atual
+                          </DropdownMenuItem>
+                        </div>
+                      </TooltipTrigger>
+                      {currentFunnel?.is_default && (
+                        <TooltipContent>O funil padrão não pode ser excluído</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
@@ -362,6 +418,8 @@ export default function Leads() {
             onUpdateStage={updateStage}
             onDeleteStage={deleteStage}
             onAddStage={createStage}
+            onBulkMove={bulkMoveLeads}
+            onBulkDelete={bulkDeleteLeads}
             currentFunnelId={currentFunnel?.id}
             canDelete={canDeleteLeads}
             teamMembers={teamMembers}
@@ -487,6 +545,56 @@ export default function Leads() {
         teamMembers={teamMembers}
         funnelName={currentFunnel?.name}
       />
+
+      {/* Funnel delete dialog */}
+      <AlertDialog open={funnelDeleteOpen} onOpenChange={(open) => {
+        setFunnelDeleteOpen(open);
+        if (!open) { setFunnelDeleteConfirmText(''); setFunnelDeleteInfo({ hasLeads: false, count: 0 }); }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {funnelDeleteInfo.hasLeads
+                ? 'Funil com leads'
+                : `Excluir funil "${currentFunnel?.name}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {funnelDeleteInfo.hasLeads
+                ? `Este funil possui ${funnelDeleteInfo.count} lead(s). Mova todos os leads para outro funil antes de excluir.`
+                : 'Esta ação não pode ser desfeita. Todas as etapas deste funil serão permanentemente removidas.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {funnelDeleteInfo.hasLeads ? (
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setFunnelDeleteOpen(false)}>Entendido</AlertDialogAction>
+            </AlertDialogFooter>
+          ) : (
+            <>
+              <div className="px-6 pb-2">
+                <Label className="text-sm text-muted-foreground">
+                  Para confirmar, digite <span className="font-semibold text-foreground">excluir</span> abaixo:
+                </Label>
+                <Input
+                  className="mt-2"
+                  placeholder="excluir"
+                  value={funnelDeleteConfirmText}
+                  onChange={(e) => setFunnelDeleteConfirmText(e.target.value)}
+                />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={funnelDeleteConfirmText.toLowerCase().trim() !== 'excluir'}
+                  onClick={handleDeleteFunnelConfirm}
+                >
+                  Excluir permanentemente
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </motion.div>
   );
 }

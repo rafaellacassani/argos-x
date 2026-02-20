@@ -1169,6 +1169,100 @@ export function useLeads() {
     }
   }, [workspaceId, currentFunnel, fetchStages]);
 
+  // Delete a funnel (must not be default, must have no leads)
+  const deleteFunnel = useCallback(async (funnelId: string): Promise<{ success: boolean; error?: string; count?: number }> => {
+    if (!workspaceId) return { success: false, error: 'no_workspace' };
+    try {
+      const funnel = funnels.find(f => f.id === funnelId);
+      if (funnel?.is_default) return { success: false, error: 'is_default' };
+
+      // Count leads in this funnel's stages
+      const { data: funnelStages } = await supabase
+        .from('funnel_stages')
+        .select('id')
+        .eq('funnel_id', funnelId);
+
+      const stageIds = (funnelStages || []).map(s => s.id);
+      if (stageIds.length > 0) {
+        const { count, error: countErr } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .in('stage_id', stageIds)
+          .eq('workspace_id', workspaceId);
+
+        if (countErr) throw countErr;
+        if ((count || 0) > 0) return { success: false, error: 'has_leads', count: count || 0 };
+      }
+
+      // Delete stages first
+      if (stageIds.length > 0) {
+        await supabase.from('funnel_stages').delete().eq('funnel_id', funnelId);
+      }
+
+      const { error } = await supabase
+        .from('funnels')
+        .delete()
+        .eq('id', funnelId)
+        .eq('is_default', false);
+
+      if (error) throw error;
+
+      if (currentFunnel?.id === funnelId) {
+        const remaining = funnels.filter(f => f.id !== funnelId);
+        setCurrentFunnel(remaining[0] || null);
+      }
+      await fetchFunnels();
+      toast.success('Funil excluído com sucesso!');
+      return { success: true };
+    } catch (err) {
+      console.error('Error deleting funnel:', err);
+      toast.error('Erro ao excluir funil');
+      return { success: false, error: 'unknown' };
+    }
+  }, [workspaceId, funnels, currentFunnel, fetchFunnels, setCurrentFunnel]);
+
+  // Bulk move leads
+  const bulkMoveLeads = useCallback(async (leadIds: string[], targetStageId: string) => {
+    if (!workspaceId || leadIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({ stage_id: targetStageId })
+        .in('id', leadIds)
+        .eq('workspace_id', workspaceId);
+
+      if (error) throw error;
+
+      setLeads(prev => prev.map(l =>
+        leadIds.includes(l.id) ? { ...l, stage_id: targetStageId } : l
+      ));
+      toast.success(`${leadIds.length} lead(s) movidos!`);
+    } catch (err) {
+      console.error('Error bulk moving leads:', err);
+      toast.error('Erro ao mover leads');
+    }
+  }, [workspaceId]);
+
+  // Bulk delete leads
+  const bulkDeleteLeads = useCallback(async (leadIds: string[]) => {
+    if (!workspaceId || leadIds.length === 0) return;
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .delete()
+        .in('id', leadIds)
+        .eq('workspace_id', workspaceId);
+
+      if (error) throw error;
+
+      setLeads(prev => prev.filter(l => !leadIds.includes(l.id)));
+      toast.success(`${leadIds.length} lead(s) excluídos!`);
+    } catch (err) {
+      console.error('Error bulk deleting leads:', err);
+      toast.error('Erro ao excluir leads');
+    }
+  }, [workspaceId]);
+
   return {
     funnels,
     currentFunnel,
@@ -1203,6 +1297,9 @@ export function useLeads() {
     updateStage,
     createStage,
     deleteStage,
+    deleteFunnel,
+    bulkMoveLeads,
+    bulkDeleteLeads,
     getStatistics,
   };
 }
