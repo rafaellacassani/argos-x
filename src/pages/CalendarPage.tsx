@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ChevronLeft,
@@ -124,6 +125,7 @@ export default function CalendarPage() {
     googleEmail,
   } = useCalendar();
 
+  const navigate = useNavigate();
   const { workspaceId } = useWorkspace();
 
   // Fetch events when month changes
@@ -494,7 +496,7 @@ export default function CalendarPage() {
                 variant="ghost"
                 size="sm"
                 className="text-xs gap-1.5 text-muted-foreground"
-                onClick={() => window.location.href = "/settings"}
+                onClick={() => navigate("/settings")}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 Conectar Google Calendar
