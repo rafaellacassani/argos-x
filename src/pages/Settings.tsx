@@ -33,7 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type MetaPage = Tables<"meta_pages">;
+type MetaPage = Pick<Tables<"meta_pages">, "id" | "page_id" | "page_name" | "platform" | "instagram_username" | "is_active" | "meta_account_id" | "workspace_id">;
 
 interface Integration {
   id: string;
