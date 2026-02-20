@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     // Fetch page info
     const { data: page, error: pageError } = await supabase
       .from("meta_pages")
-      .select("id, page_id, page_access_token, platform, instagram_account_id")
+      .select("id, page_id, page_access_token, platform, instagram_account_id, workspace_id")
       .eq("id", metaPageId)
       .eq("is_active", true)
       .single();
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     const platform = page.instagram_account_id ? "instagram" : "facebook";
 
     await supabase.from("meta_conversations").insert({
-      meta_page_id: page.id, platform, sender_id: recipientId, message_id: outboundMessageId, content: message, message_type: messageType, media_url: mediaUrl, direction: "outbound", timestamp: new Date().toISOString(), raw_payload: graphData,
+      meta_page_id: page.id, platform, sender_id: recipientId, message_id: outboundMessageId, content: message, message_type: messageType, media_url: mediaUrl, direction: "outbound", timestamp: new Date().toISOString(), raw_payload: graphData, workspace_id: page.workspace_id,
     });
 
     return new Response(JSON.stringify({ success: true, message_id: outboundMessageId }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

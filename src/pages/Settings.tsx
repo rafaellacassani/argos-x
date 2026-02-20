@@ -31,6 +31,7 @@ import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
 
 type MetaPage = Pick<Tables<"meta_pages">, "id" | "page_id" | "page_name" | "platform" | "instagram_username" | "is_active" | "meta_account_id" | "workspace_id">;
@@ -97,6 +98,7 @@ const formatPhoneNumber = (ownerJid: string | undefined) => {
 
 export default function Settings() {
   const { canManageIntegrations, canManageWhatsApp, isSeller } = useUserRole();
+  const { workspaceId } = useWorkspace();
   const [activeTab, setActiveTab] = useState("integrations");
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
@@ -136,6 +138,7 @@ export default function Settings() {
     try {
       const { data, error } = await supabase.functions.invoke("facebook-oauth/url", {
         method: "POST",
+        body: { workspaceId },
       });
 
       if (error) throw error;

@@ -23,11 +23,11 @@ const APP_URL = Deno.env.get("APP_URL") || "https://inboxia-prime-ai.lovable.app
 // Create Supabase client with service role for database operations
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-// CSRF state token helpers using HMAC-SHA256
-async function generateState(): Promise<string> {
+// CSRF state token helpers using HMAC-SHA256 — now includes workspace_id
+async function generateState(workspaceId: string): Promise<string> {
   const timestamp = Date.now().toString();
   const nonce = crypto.randomUUID();
-  const payload = `${timestamp}:${nonce}`;
+  const payload = `${timestamp}:${nonce}:${workspaceId}`;
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     "raw", encoder.encode(FACEBOOK_APP_SECRET),
@@ -38,15 +38,15 @@ async function generateState(): Promise<string> {
   return btoa(`${payload}:${hmac}`);
 }
 
-async function validateState(state: string): Promise<boolean> {
+async function validateState(state: string): Promise<{ valid: boolean; workspaceId: string | null }> {
   try {
     const decoded = atob(state);
     const parts = decoded.split(":");
-    if (parts.length !== 3) return false;
-    const [timestamp, nonce, hmac] = parts;
+    if (parts.length !== 4) return { valid: false, workspaceId: null };
+    const [timestamp, nonce, workspaceId, hmac] = parts;
     // Reject tokens older than 10 minutes
-    if (Date.now() - parseInt(timestamp) > 600_000) return false;
-    const payload = `${timestamp}:${nonce}`;
+    if (Date.now() - parseInt(timestamp) > 600_000) return { valid: false, workspaceId: null };
+    const payload = `${timestamp}:${nonce}:${workspaceId}`;
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw", encoder.encode(FACEBOOK_APP_SECRET),
@@ -54,9 +54,9 @@ async function validateState(state: string): Promise<boolean> {
     );
     const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
     const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
-    return expected === hmac;
+    return { valid: expected === hmac, workspaceId: expected === hmac ? workspaceId : null };
   } catch {
-    return false;
+    return { valid: false, workspaceId: null };
   }
 }
 
@@ -70,11 +70,19 @@ app.get("/", async (c) => {
   console.log("[Facebook OAuth] Callback received");
   console.log(`[Facebook OAuth] Code: ${code ? "present" : "missing"}`);
 
-  // Validate CSRF state parameter
-  if (!state || !(await validateState(state))) {
-    console.error("[Facebook OAuth] Invalid or missing state parameter");
+  // Validate CSRF state parameter and extract workspace_id
+  if (!state) {
+    console.error("[Facebook OAuth] Missing state parameter");
     return c.redirect(`${APP_URL}/settings?error=invalid_state`);
   }
+
+  const { valid, workspaceId } = await validateState(state);
+  if (!valid || !workspaceId) {
+    console.error("[Facebook OAuth] Invalid state parameter or missing workspace_id");
+    return c.redirect(`${APP_URL}/settings?error=invalid_state`);
+  }
+
+  console.log(`[Facebook OAuth] workspace_id from state: ${workspaceId}`);
 
   // Handle OAuth errors
   if (error) {
@@ -105,14 +113,14 @@ app.get("/", async (c) => {
     }
 
     const userAccessToken = tokenData.access_token;
-    const expiresIn = tokenData.expires_in; // seconds
+    const expiresIn = tokenData.expires_in;
     const tokenExpiresAt = expiresIn 
       ? new Date(Date.now() + expiresIn * 1000).toISOString() 
       : null;
 
     console.log("[Facebook OAuth] ✅ Access token obtained");
 
-    // Step 2: Get long-lived token (optional but recommended)
+    // Step 2: Get long-lived token
     console.log("[Facebook OAuth] Exchanging for long-lived token...");
     const longLivedUrl = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
     longLivedUrl.searchParams.set("grant_type", "fb_exchange_token");
@@ -130,12 +138,13 @@ app.get("/", async (c) => {
 
     console.log("[Facebook OAuth] ✅ Long-lived token obtained");
 
-    // Step 3: Save meta_account to database
+    // Step 3: Save meta_account to database WITH workspace_id
     const { data: metaAccount, error: accountError } = await supabase
       .from("meta_accounts")
       .insert({
         user_access_token: finalUserToken,
         token_expires_at: finalExpiresAt,
+        workspace_id: workspaceId,
       })
       .select()
       .single();
@@ -164,17 +173,15 @@ app.get("/", async (c) => {
     const pages = pagesData.data || [];
     console.log(`[Facebook OAuth] Found ${pages.length} pages`);
 
-    // Step 5: Save each page and check for Instagram accounts
+    // Step 5: Save each page WITH workspace_id
     for (const page of pages) {
       let instagramAccountId = null;
       let instagramUsername = null;
       let platform: "facebook" | "instagram" | "both" = "facebook";
 
-      // Check if page has Instagram Business Account
       if (page.instagram_business_account?.id) {
         instagramAccountId = page.instagram_business_account.id;
         
-        // Get Instagram username
         const igUrl = new URL(`https://graph.facebook.com/v18.0/${instagramAccountId}`);
         igUrl.searchParams.set("fields", "username");
         igUrl.searchParams.set("access_token", page.access_token);
@@ -189,7 +196,6 @@ app.get("/", async (c) => {
         }
       }
 
-      // Save page to database
       const { error: pageError } = await supabase
         .from("meta_pages")
         .insert({
@@ -200,6 +206,7 @@ app.get("/", async (c) => {
           instagram_account_id: instagramAccountId,
           instagram_username: instagramUsername,
           platform: platform,
+          workspace_id: workspaceId,
         });
 
       if (pageError) {
@@ -210,8 +217,6 @@ app.get("/", async (c) => {
     }
 
     console.log("[Facebook OAuth] 🎉 OAuth flow completed successfully!");
-    
-    // Redirect back to app with success
     return c.redirect(`${APP_URL}/settings?meta_connected=true&pages=${pages.length}`);
     
   } catch (err) {
@@ -224,6 +229,16 @@ app.get("/", async (c) => {
 app.post("/url", async (c) => {
   console.log("[Facebook OAuth] Generating OAuth URL...");
   
+  // Extract workspace_id from request body
+  let workspaceId: string;
+  try {
+    const body = await c.req.json();
+    workspaceId = body.workspaceId;
+    if (!workspaceId) throw new Error("Missing workspaceId");
+  } catch {
+    return c.json({ error: "workspaceId is required" }, 400, corsHeaders);
+  }
+
   const scopes = [
     "pages_show_list",
     "pages_messaging",
@@ -234,7 +249,7 @@ app.post("/url", async (c) => {
     "business_management",
   ];
 
-  const state = await generateState();
+  const state = await generateState(workspaceId);
 
   const oauthUrl = new URL("https://www.facebook.com/v18.0/dialog/oauth");
   oauthUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
@@ -243,7 +258,7 @@ app.post("/url", async (c) => {
   oauthUrl.searchParams.set("response_type", "code");
   oauthUrl.searchParams.set("state", state);
 
-  console.log("[Facebook OAuth] OAuth URL generated with CSRF state");
+  console.log("[Facebook OAuth] OAuth URL generated with workspace_id in state");
 
   return c.json({ url: oauthUrl.toString() }, 200, corsHeaders);
 });
