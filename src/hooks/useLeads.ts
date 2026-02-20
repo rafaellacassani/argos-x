@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { BotFlowData } from './useSalesBots';
 import { useWorkspace } from './useWorkspace';
+import { usePlanLimits } from './usePlanLimits';
 
 // Helper function to execute bot flow (standalone to avoid hook rules)
 async function executeBotFlow(botId: string, leadId: string) {
@@ -258,6 +259,7 @@ export function useLeads() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { workspaceId } = useWorkspace();
+  const planLimits = usePlanLimits();
 
   // Fetch all funnels
   const fetchFunnels = useCallback(async () => {
@@ -549,8 +551,12 @@ export function useLeads() {
   }, []);
 
   // Create a new lead
-  const createLead = useCallback(async (leadData: Partial<Lead>) => {
+  const createLead = useCallback(async (leadData: Partial<Lead>): Promise<Lead | null> => {
     if (!workspaceId) return null;
+    if (!planLimits.canAddLead) {
+      toast.error('Limite de leads atingido. Acesse Configurações > Planos para adicionar mais.');
+      return null;
+    }
     try {
       let stageId = leadData.stage_id;
       if (!stageId && currentFunnel) {
@@ -634,7 +640,7 @@ export function useLeads() {
       toast.error('Erro ao criar lead');
       return null;
     }
-  }, [currentFunnel, workspaceId]);
+  }, [currentFunnel, workspaceId, planLimits.canAddLead]);
 
   // Update a lead
   const updateLead = useCallback(async (leadId: string, updates: Partial<Lead>) => {

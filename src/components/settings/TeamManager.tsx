@@ -17,6 +17,7 @@ import {
   Globe,
 } from "lucide-react";
 import { SetPasswordDialog } from "@/components/shared/SetPasswordDialog";
+import { toast } from "@/hooks/use-toast";
 import { SessionViewer } from "@/components/settings/SessionViewer";
 import { useUserRole } from "@/hooks/useUserRole";
 import { motion, AnimatePresence } from "framer-motion";
@@ -65,6 +66,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTeam, type AppRole, type UserProfile, type NotificationType } from "@/hooks/useTeam";
 import { useWorkspace, type WorkspaceMember } from "@/hooks/useWorkspace";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const ROLE_LABELS: Record<AppRole, { label: string; icon: React.ElementType; color: string }> = {
@@ -313,6 +316,8 @@ export function TeamManager() {
   const [passwordMember, setPasswordMember] = useState<UserProfile | null>(null);
   const [sessionMember, setSessionMember] = useState<UserProfile | null>(null);
   const { isAdmin } = useUserRole();
+  const planLimits = usePlanLimits();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchTeamMembers();
@@ -342,6 +347,11 @@ export function TeamManager() {
   };
 
   const openCreate = () => {
+    if (!planLimits.canAddUser(teamMembers.length)) {
+      toast({ title: `Seu plano permite ${planLimits.userLimit} usuário(s). Faça upgrade para adicionar mais.` });
+      navigate("/planos");
+      return;
+    }
     setEditingMember(null);
     setIsEditorOpen(true);
   };
