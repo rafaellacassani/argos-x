@@ -155,8 +155,11 @@ export type Database = {
           created_at: string
           id: string
           is_paused: boolean | null
+          is_processing: boolean | null
+          last_message_id: string | null
           lead_id: string | null
           messages: Json
+          processing_started_at: string | null
           session_id: string
           summary: string | null
           updated_at: string
@@ -168,8 +171,11 @@ export type Database = {
           created_at?: string
           id?: string
           is_paused?: boolean | null
+          is_processing?: boolean | null
+          last_message_id?: string | null
           lead_id?: string | null
           messages?: Json
+          processing_started_at?: string | null
           session_id: string
           summary?: string | null
           updated_at?: string
@@ -181,8 +187,11 @@ export type Database = {
           created_at?: string
           id?: string
           is_paused?: boolean | null
+          is_processing?: boolean | null
+          last_message_id?: string | null
           lead_id?: string | null
           messages?: Json
+          processing_started_at?: string | null
           session_id?: string
           summary?: string | null
           updated_at?: string
@@ -1712,6 +1721,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      webhook_message_log: {
+        Row: {
+          id: string
+          message_id: string
+          processed_at: string | null
+          session_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          processed_at?: string | null
+          session_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          processed_at?: string | null
+          session_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: []
       }
       whatsapp_instances: {
         Row: {
