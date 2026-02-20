@@ -773,6 +773,91 @@ export default function Chats() {
   // Ref to track which JIDs we've already processed for lead creation
   const processedJidsRef = useRef<Set<string>>(new Set());
 
+  // Helper: load chat list from local whatsapp_messages DB (fallback when Evolution API has no data)
+  const loadChatsFromDB = useCallback(async (instanceName?: string): Promise<(Chat & { _timestamp?: number })[]> => {
+    try {
+      // Query whatsapp_messages grouped by remote_jid to build a chat list
+      let query = supabase
+        .from('whatsapp_messages')
+        .select('remote_jid, push_name, content, direction, timestamp, instance_name, from_me')
+        .order('timestamp', { ascending: false })
+        .limit(1000);
+      
+      if (instanceName && instanceName !== 'all') {
+        query = query.eq('instance_name', instanceName);
+      }
+
+      const { data: msgs, error } = await query;
+      if (error || !msgs || msgs.length === 0) return [];
+
+      // Group by remote_jid, keep last message info
+      const chatMap = new Map<string, {
+        remoteJid: string;
+        name: string;
+        lastMessage: string;
+        timestamp: string;
+        fromMe: boolean;
+        instanceName: string;
+      }>();
+
+      for (const msg of msgs) {
+        if (!msg.remote_jid || msg.remote_jid.endsWith('@g.us')) continue;
+        if (!chatMap.has(msg.remote_jid)) {
+          chatMap.set(msg.remote_jid, {
+            remoteJid: msg.remote_jid,
+            name: msg.push_name || '',
+            lastMessage: msg.content || '',
+            timestamp: msg.timestamp,
+            fromMe: msg.from_me || msg.direction === 'outbound',
+            instanceName: msg.instance_name,
+          });
+        }
+      }
+
+      // Convert to Chat objects
+      const chats: (Chat & { _timestamp?: number })[] = [];
+      for (const [jid, info] of chatMap) {
+        const ts = new Date(info.timestamp).getTime() / 1000;
+        const phoneDigits = cleanPhoneNumber(jid);
+        const phone = formatPhoneDisplay(phoneDigits);
+        
+        // Check for matching lead
+        const matchingLead = leadsRef.current.find((l) => {
+          if (l.whatsapp_jid === jid) return true;
+          const leadDigits = cleanPhoneNumber(l.phone || '');
+          if (phoneDigits.length >= 10 && leadDigits.length >= 10) {
+            return leadDigits.endsWith(phoneDigits.slice(-10)) || phoneDigits.endsWith(leadDigits.slice(-10));
+          }
+          return false;
+        });
+
+        const displayName = matchingLead?.name || info.name || phone || 'Contato WhatsApp';
+
+        chats.push({
+          id: info.instanceName ? `${info.instanceName}:${jid}` : jid,
+          remoteJid: jid,
+          name: displayName,
+          lastMessage: info.lastMessage,
+          time: formatTime(ts),
+          unread: 0,
+          online: false,
+          phone: phone,
+          lastMessageFromMe: info.fromMe,
+          instanceName: info.instanceName,
+          instanceLabel: info.instanceName,
+          _timestamp: ts,
+        });
+      }
+
+      chats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
+      console.log(`[Chats] Loaded ${chats.length} chats from local DB${instanceName ? ` for ${instanceName}` : ''}`);
+      return chats;
+    } catch (err) {
+      console.error('[Chats] Error loading chats from DB:', err);
+      return [];
+    }
+  }, []);
+
   // Load chats when instance is selected
   useEffect(() => {
     if (!selectedInstance) return;
@@ -828,6 +913,12 @@ export default function Chats() {
           const results = await Promise.all(promises);
           allChats = results.flat();
 
+          // FALLBACK: If Evolution API returned no WhatsApp chats, load from local DB
+          if (allChats.length === 0 && instances.length > 0) {
+            console.log('[Chats] No chats from Evolution API, falling back to local DB');
+            allChats = await loadChatsFromDB('all');
+          }
+
           // Also fetch Meta conversations
           if (metaPages.length > 0) {
             try {
@@ -872,18 +963,26 @@ export default function Chats() {
           
         } else {
           // Fetch from single WhatsApp instance
-          const data = await fetchChats(selectedInstance);
+          let data: any[] = [];
+          try {
+            data = await fetchChats(selectedInstance);
+          } catch {
+            data = [];
+          }
+          
           if (!Array.isArray(data) || data.length === 0) {
             if ((data as any)?.error) {
-              setChatError(`Erro na instância "${selectedInstance}": ${(data as any).error}`);
-              return;
+              console.warn(`[Chats] API error for "${selectedInstance}": ${(data as any).error}`);
             }
+            // FALLBACK: load from local DB
+            console.log(`[Chats] No API chats for ${selectedInstance}, falling back to local DB`);
+            allChats = await loadChatsFromDB(selectedInstance);
+          } else {
+            allChats = data
+              .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+              .map((chat: any) => transformChatData(chat))
+              .slice(0, 50);
           }
-
-          allChats = data
-            .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
-            .map((chat: any) => transformChatData(chat))
-            .slice(0, 50);
         }
 
         setChats(allChats);
@@ -1069,94 +1168,123 @@ export default function Chats() {
     const loadMessages = async () => {
       setLoadingMessages(true);
       try {
-        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, 30);
-        
-        // Extract remoteJidAlt from loaded messages if chat doesn't have one yet
-        if (!selectedChat.remoteJidAlt && selectedChat.remoteJid.endsWith("@lid")) {
-          for (const msg of data) {
-            const alt = (msg.key as any)?.remoteJidAlt;
-            if (alt && alt.endsWith("@s.whatsapp.net")) {
-              // Update the selected chat and the chats list with the discovered real JID
-              setSelectedChat((prev) => prev ? { ...prev, remoteJidAlt: alt } : prev);
-              setChats((prev) => prev.map((c) => 
-                c.remoteJid === selectedChat.remoteJid ? { ...c, remoteJidAlt: alt } : c
-              ));
-              // Also update the phone if it was empty
-              const altDigits = alt.replace(/@s\.whatsapp\.net$/, "");
-              if ((!selectedChat.phone || selectedChat.phone.length < 4) && altDigits.length >= 10) {
-                const formatted = formatPhoneDisplay(altDigits);
-                setSelectedChat((prev) => prev ? { ...prev, phone: formatted, remoteJidAlt: alt } : prev);
-                setChats((prev) => prev.map((c) =>
-                  c.remoteJid === selectedChat.remoteJid ? { ...c, phone: formatted, remoteJidAlt: alt } : c
+        let data: EvolutionMessage[] = [];
+        try {
+          data = await fetchMessages(targetInstance, selectedChat.remoteJid, 30);
+        } catch {
+          data = [];
+        }
+
+        // If Evolution API returned messages, use them
+        if (data.length > 0) {
+          // Extract remoteJidAlt from loaded messages if chat doesn't have one yet
+          if (!selectedChat.remoteJidAlt && selectedChat.remoteJid.endsWith("@lid")) {
+            for (const msg of data) {
+              const alt = (msg.key as any)?.remoteJidAlt;
+              if (alt && alt.endsWith("@s.whatsapp.net")) {
+                setSelectedChat((prev) => prev ? { ...prev, remoteJidAlt: alt } : prev);
+                setChats((prev) => prev.map((c) => 
+                  c.remoteJid === selectedChat.remoteJid ? { ...c, remoteJidAlt: alt } : c
                 ));
-                // Persist phone (and name if placeholder) to database
-                const matchingLeadForUpdate = leadsRef.current.find(
-                  (l) => l.whatsapp_jid === selectedChat.remoteJid ||
-                         l.whatsapp_jid === alt
-                );
-                if (matchingLeadForUpdate) {
-                  const updates: Record<string, string> = { phone: formatted };
-                  // Find pushName from loaded messages
-                  const pushNameMsg = data.find((m: any) => m.pushName && typeof m.pushName === "string" && m.pushName.trim().length > 1);
-                  const pushName = (pushNameMsg as any)?.pushName;
-                  if (
-                    matchingLeadForUpdate.name === "Contato WhatsApp" &&
-                    pushName
-                  ) {
-                    updates.name = pushName.trim();
+                const altDigits = alt.replace(/@s\.whatsapp\.net$/, "");
+                if ((!selectedChat.phone || selectedChat.phone.length < 4) && altDigits.length >= 10) {
+                  const formatted = formatPhoneDisplay(altDigits);
+                  setSelectedChat((prev) => prev ? { ...prev, phone: formatted, remoteJidAlt: alt } : prev);
+                  setChats((prev) => prev.map((c) =>
+                    c.remoteJid === selectedChat.remoteJid ? { ...c, phone: formatted, remoteJidAlt: alt } : c
+                  ));
+                  const matchingLeadForUpdate = leadsRef.current.find(
+                    (l) => l.whatsapp_jid === selectedChat.remoteJid || l.whatsapp_jid === alt
+                  );
+                  if (matchingLeadForUpdate) {
+                    const updates: Record<string, string> = { phone: formatted };
+                    const pushNameMsg = data.find((m: any) => m.pushName && typeof m.pushName === "string" && m.pushName.trim().length > 1);
+                    const pushName = (pushNameMsg as any)?.pushName;
+                    if (matchingLeadForUpdate.name === "Contato WhatsApp" && pushName) {
+                      updates.name = pushName.trim();
+                    }
+                    updateLead(matchingLeadForUpdate.id, updates);
                   }
-                  updateLead(matchingLeadForUpdate.id, updates);
                 }
+                break;
               }
-              break;
             }
           }
-        }
-        
-        const transformedMessages: Message[] = data
-          .map((msg) => {
-            const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
-            const timestamp = msg.messageTimestamp;
-            const date = timestamp ? new Date(timestamp * 1000) : new Date();
-            return {
-              id: msg.key?.id || Math.random().toString(),
-              content,
-              time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-              sent: msg.key?.fromMe || false,
-              read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
-              type,
-              mediaUrl,
-              thumbnailBase64,
-              fileName,
-              duration,
-            };
-          })
-          .reverse();
-        setMessages(transformedMessages);
-        setHasMoreMessages(data.length >= 30);
-        messageCacheRef.current.set(chatId, transformedMessages);
 
-        // Fire-and-forget: persist inbound WA messages for dashboard metrics
-        if (workspaceId && !selectedChat.isMeta) {
-          const inboundMsgs = data.filter((msg) => !msg.key?.fromMe);
-          if (inboundMsgs.length > 0) {
-            const rows = inboundMsgs.map((msg) => {
-              const { content } = extractMessageContent(msg);
-              const ts = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+          const transformedMessages: Message[] = data
+            .map((msg) => {
+              const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
+              const timestamp = msg.messageTimestamp;
+              const date = timestamp ? new Date(timestamp * 1000) : new Date();
               return {
-                workspace_id: workspaceId,
-                instance_name: selectedChat.instanceName || selectedInstance || '',
-                remote_jid: selectedChat.remoteJid,
-                from_me: false,
-                direction: 'inbound' as const,
-                content: content || '',
-                message_type: 'text',
-                timestamp: ts,
-                message_id: msg.key?.id || null,
-                push_name: (msg as any).pushName || null,
+                id: msg.key?.id || Math.random().toString(),
+                content,
+                time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                sent: msg.key?.fromMe || false,
+                read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
+                type,
+                mediaUrl,
+                thumbnailBase64,
+                fileName,
+                duration,
+              };
+            })
+            .reverse();
+          setMessages(transformedMessages);
+          setHasMoreMessages(data.length >= 30);
+          messageCacheRef.current.set(chatId, transformedMessages);
+
+          // Fire-and-forget: persist inbound WA messages for dashboard metrics
+          if (workspaceId && !selectedChat.isMeta) {
+            const inboundMsgs = data.filter((msg) => !msg.key?.fromMe);
+            if (inboundMsgs.length > 0) {
+              const rows = inboundMsgs.map((msg) => {
+                const { content } = extractMessageContent(msg);
+                const ts = msg.messageTimestamp ? new Date(msg.messageTimestamp * 1000).toISOString() : new Date().toISOString();
+                return {
+                  workspace_id: workspaceId,
+                  instance_name: selectedChat.instanceName || selectedInstance || '',
+                  remote_jid: selectedChat.remoteJid,
+                  from_me: false,
+                  direction: 'inbound' as const,
+                  content: content || '',
+                  message_type: 'text',
+                  timestamp: ts,
+                  message_id: msg.key?.id || null,
+                  push_name: (msg as any).pushName || null,
+                };
+              });
+              Promise.resolve(supabase.from('whatsapp_messages').insert(rows)).catch(() => {});
+            }
+          }
+        } else {
+          // FALLBACK: Load messages from local DB when Evolution API has no data
+          console.log(`[Chats] No API messages for ${selectedChat.remoteJid}, falling back to local DB`);
+          const { data: dbMsgs } = await supabase
+            .from('whatsapp_messages')
+            .select('*')
+            .eq('remote_jid', selectedChat.remoteJid)
+            .order('timestamp', { ascending: true })
+            .limit(100);
+          
+          if (dbMsgs && dbMsgs.length > 0) {
+            const transformedMessages: Message[] = dbMsgs.map((msg) => {
+              const date = new Date(msg.timestamp);
+              return {
+                id: msg.message_id || msg.id,
+                content: msg.content || '',
+                time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                sent: msg.from_me || msg.direction === 'outbound',
+                read: true,
+                type: (msg.message_type || 'text') as Message["type"],
               };
             });
-            Promise.resolve(supabase.from('whatsapp_messages').insert(rows)).catch(() => {});
+            setMessages(transformedMessages);
+            setHasMoreMessages(false);
+            messageCacheRef.current.set(chatId, transformedMessages);
+          } else {
+            setMessages([]);
+            setHasMoreMessages(false);
           }
         }
       } catch (err) {
