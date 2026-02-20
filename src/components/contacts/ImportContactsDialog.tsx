@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useNavigate } from "react-router-dom";
 
 interface ImportContactsDialogProps {
   open: boolean;
@@ -73,8 +75,10 @@ function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
 
 export default function ImportContactsDialog({ open, onOpenChange, onImportComplete }: ImportContactsDialogProps) {
   const { workspaceId } = useWorkspace();
+  const { currentLeadCount, totalLeadLimit, canAddLead, refetch: refetchPlan } = usePlanLimits();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"upload" | "mapping" | "importing" | "done">("upload");
+  const [step, setStep] = useState<"upload" | "mapping" | "limit_warning" | "importing" | "done">("upload");
   const [headers, setHeaders] = useState<string[]>([]);
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [mapping, setMapping] = useState<FieldMapping>({ name: "", phone: "", email: "", company: "" });
@@ -85,6 +89,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
   const [selectedTagId, setSelectedTagId] = useState<string>("");
   const [newTagName, setNewTagName] = useState("");
   const [creatingTag, setCreatingTag] = useState(false);
+  const [importLimit, setImportLimit] = useState<number | null>(null);
 
   // Fetch first stage and tags dynamically when dialog opens
   useEffect(() => {
@@ -120,6 +125,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
     setResult({ imported: 0, duplicates: 0, errors: 0 });
     setSelectedTagId("");
     setNewTagName("");
+    setImportLimit(null);
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -170,7 +176,7 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
     setCreatingTag(false);
   };
 
-  const startImport = useCallback(async () => {
+  const handleStartImport = useCallback(() => {
     if (!mapping.name || !mapping.phone) {
       toast.error("Mapeie pelo menos Nome e Telefone");
       return;
@@ -179,6 +185,35 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       toast.error("Crie um funil antes de importar contatos.");
       return;
     }
+
+    // Count valid rows first
+    const seenPhones = new Set<string>();
+    let validCount = 0;
+    for (const row of rows) {
+      const name = row[mapping.name]?.trim();
+      const phone = row[mapping.phone]?.trim();
+      if (!name || !phone || seenPhones.has(phone)) continue;
+      seenPhones.add(phone);
+      validCount++;
+    }
+
+    const available = totalLeadLimit - currentLeadCount;
+    if (available <= 0 && !canAddLead) {
+      toast.error("Limite de leads atingido. Acesse Planos para adicionar mais.");
+      return;
+    }
+    if (validCount > available && available > 0) {
+      setImportLimit(available);
+      setStep("limit_warning");
+      return;
+    }
+
+    startImport();
+  }, [mapping, firstStageId, rows, totalLeadLimit, currentLeadCount, canAddLead]);
+
+  const startImport = useCallback(async (maxRows?: number) => {
+    if (!mapping.name || !mapping.phone) return;
+    if (!firstStageId) return;
     setStep("importing");
     setProgress(0);
 
@@ -218,6 +253,8 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
         position: nextPosition++,
         workspace_id: workspaceId!,
       });
+
+      if (maxRows !== undefined && validRows.length >= maxRows) break;
     }
 
     let imported = 0;
@@ -271,8 +308,11 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
 
     setResult({ imported, duplicates, errors });
     setStep("done");
-    if (imported > 0) onImportComplete();
-  }, [rows, mapping, onImportComplete, firstStageId, workspaceId, selectedTagId]);
+    if (imported > 0) {
+      refetchPlan();
+      onImportComplete();
+    }
+  }, [rows, mapping, onImportComplete, firstStageId, workspaceId, selectedTagId, refetchPlan]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
@@ -408,8 +448,31 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancelar</Button>
-              <Button onClick={startImport} disabled={!mapping.name || !mapping.phone}>
+              <Button onClick={handleStartImport} disabled={!mapping.name || !mapping.phone}>
                 Importar {rows.length} contatos
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "limit_warning" && (
+          <div className="space-y-4 py-4">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-medium text-foreground mb-1">Limite de leads próximo</p>
+                <p className="text-muted-foreground">
+                  Esta importação adicionaria mais leads do que o espaço disponível. 
+                  Você tem espaço para <strong>{importLimit?.toLocaleString("pt-BR")}</strong> novos leads. 
+                  Serão importados apenas os primeiros {importLimit?.toLocaleString("pt-BR")} contatos, ou acesse Planos para expandir.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { reset(); onOpenChange(false); }}>Cancelar</Button>
+              <Button variant="outline" onClick={() => { reset(); onOpenChange(false); navigate("/planos"); }}>Ver planos</Button>
+              <Button onClick={() => startImport(importLimit ?? undefined)}>
+                Importar parcialmente
               </Button>
             </div>
           </div>

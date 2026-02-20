@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useCalendar } from "@/hooks/useCalendar";
 import {
@@ -35,6 +36,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 type MetaPage = Pick<Tables<"meta_pages">, "id" | "page_id" | "page_name" | "platform" | "instagram_username" | "is_active" | "meta_account_id" | "workspace_id">;
 
@@ -101,6 +103,8 @@ const formatPhoneNumber = (ownerJid: string | undefined) => {
 export default function Settings() {
   const { canManageIntegrations, canManageWhatsApp, isSeller } = useUserRole();
   const { workspaceId } = useWorkspace();
+  const planLimits = usePlanLimits();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("integrations");
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [reconnectingInstance, setReconnectingInstance] = useState<string | null>(null);
@@ -539,6 +543,11 @@ export default function Settings() {
                         onClick={() => {
                           if (isLocked) return;
                           if (isWhatsApp) {
+                            if (!planLimits.canAddWhatsapp(instances.length)) {
+                              toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                              navigate("/planos");
+                              return;
+                            }
                             setShowConnectionModal(true);
                           } else if (integration.id === "instagram" || integration.id === "facebook") {
                             handleConnectMeta();
@@ -609,7 +618,14 @@ export default function Settings() {
                   className={`w-4 h-4 ${loadingInstances ? "animate-spin" : ""}`}
                 />
               </Button>
-              <Button className="gap-2" onClick={() => setShowConnectionModal(true)}>
+              <Button className="gap-2" onClick={() => {
+                if (!planLimits.canAddWhatsapp(instances.length)) {
+                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                  navigate("/planos");
+                  return;
+                }
+                setShowConnectionModal(true);
+              }}>
                 <Smartphone className="w-4 h-4" />
                 Adicionar Número
               </Button>
@@ -630,7 +646,14 @@ export default function Settings() {
               <p className="text-muted-foreground mb-4">
                 Conecte seu primeiro número WhatsApp Business
               </p>
-              <Button onClick={() => setShowConnectionModal(true)}>
+              <Button onClick={() => {
+                if (!planLimits.canAddWhatsapp(instances.length)) {
+                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                  navigate("/planos");
+                  return;
+                }
+                setShowConnectionModal(true);
+              }}>
                 <Plus className="w-4 h-4 mr-2" />
                 Criar Conexão
               </Button>
