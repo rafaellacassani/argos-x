@@ -320,10 +320,9 @@ export function useCampaigns() {
       let filtered = (leads || []).filter(l => (l.phone || '').replace(/\D/g, '').length >= 10);
 
       if (filterTagIds.length > 0) {
-        const { data: tagAssignments } = await supabase
+      const { data: tagAssignments } = await supabase
           .from('lead_tag_assignments')
           .select('lead_id')
-          .eq('workspace_id', workspaceId)
           .in('tag_id', filterTagIds);
 
         const tagLeadIds = new Set((tagAssignments || []).map(t => t.lead_id));
