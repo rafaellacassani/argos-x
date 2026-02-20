@@ -37,7 +37,7 @@ const emails: EmailItem[] = [
   { id: "2", from: "Maria Santos", fromEmail: "maria@empresa.com", subject: "Dúvida sobre integração", preview: "Bom dia! Tenho uma dúvida sobre a integração do WhatsApp...", date: "09:15", read: false, starred: false, hasAttachment: false },
   { id: "3", from: "Pedro Costa", fromEmail: "pedro@agency.com", subject: "Contrato assinado", preview: "Segue em anexo o contrato assinado conforme combinado...", date: "Ontem", read: true, starred: true, hasAttachment: true },
   { id: "4", from: "Ana Oliveira", fromEmail: "ana@startup.io", subject: "Reunião de alinhamento", preview: "Podemos marcar uma reunião para a próxima semana?", date: "Ontem", read: true, starred: false, hasAttachment: false },
-  { id: "5", from: "Sistema Inboxia", fromEmail: "noreply@inboxia.com", subject: "Novo lead recebido", preview: "Você recebeu um novo lead via WhatsApp: Carlos Lima...", date: "15/01", read: true, starred: false, hasAttachment: false },
+  { id: "5", from: "Sistema Argos X", fromEmail: "noreply@argosx.com", subject: "Novo lead recebido", preview: "Você recebeu um novo lead via WhatsApp: Carlos Lima...", date: "15/01", read: true, starred: false, hasAttachment: false },
   { id: "6", from: "Fernanda Rocha", fromEmail: "fernanda@ecommerce.com", subject: "Feedback do produto", preview: "Estou muito satisfeita com o sistema! Gostaria de dar um feedback...", date: "14/01", read: true, starred: false, hasAttachment: false },
 ];
 

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import inboxiaIcon from "@/assets/inboxia-icon.png";
+import argosIcon from "@/assets/argos-icon.png";
 
 export default function CreateWorkspace() {
   const [name, setName] = useState("");
@@ -55,13 +55,13 @@ export default function CreateWorkspace() {
       >
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto mb-4">
-            <img src={inboxiaIcon} alt="Inboxia" className="w-16 h-16 object-contain" />
+            <img src={argosIcon} alt="Argos X" className="w-16 h-16 object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-foreground font-display">
             Crie seu Workspace
           </h1>
           <p className="text-muted-foreground mt-2">
-            Configure o espaço da sua empresa para começar a usar o Inboxia.
+            Configure o espaço da sua empresa para começar a usar o Argos X.
           </p>
         </div>
 
