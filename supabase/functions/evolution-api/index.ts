@@ -90,10 +90,11 @@ app.get("/connection-state/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/instance/connectionState/${instanceName}`);
+    const result = await evolutionRequest(`/instance/connectionState/${instanceName}`, "GET", undefined, false);
+    if (!result) return c.json({ instance: { state: "close" } }, 200, corsHeaders);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to get connection state" }, 500, corsHeaders);
+    return c.json({ instance: { state: "close" } }, 200, corsHeaders);
   }
 });
 
@@ -132,10 +133,9 @@ app.post("/chats/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/chat/findChats/${instanceName}`, "POST", {});
-    // Return all chats sorted by most recent, limited to 200
+    const result = await evolutionRequest(`/chat/findChats/${instanceName}`, "POST", {}, false);
+    if (!result) return c.json([], 200, corsHeaders); // Instance not found - return empty
     const chats = Array.isArray(result) ? result : [];
-    // Sort by lastMessage timestamp descending
     chats.sort((a: any, b: any) => {
       const tsA = a.lastMessage?.messageTimestamp || 0;
       const tsB = b.lastMessage?.messageTimestamp || 0;
@@ -143,7 +143,7 @@ app.post("/chats/:instanceName", async (c) => {
     });
     return c.json(chats.slice(0, 200), 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to fetch chats" }, 500, corsHeaders);
+    return c.json([], 200, corsHeaders);
   }
 });
 
@@ -154,10 +154,11 @@ app.post("/messages/:instanceName", async (c) => {
     const { remoteJid, limit = 50 } = await c.req.json();
     if (!remoteJid || typeof remoteJid !== "string" || remoteJid.length > 100) return c.json({ error: "Invalid remoteJid" }, 400, corsHeaders);
     const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
-    const result = await evolutionRequest(`/chat/findMessages/${instanceName}`, "POST", { where: { key: { remoteJid } }, limit: safeLimit });
+    const result = await evolutionRequest(`/chat/findMessages/${instanceName}`, "POST", { where: { key: { remoteJid } }, limit: safeLimit }, false);
+    if (!result) return c.json({ messages: { records: [] } }, 200, corsHeaders); // Instance not found - return empty
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to fetch messages" }, 500, corsHeaders);
+    return c.json({ messages: { records: [] } }, 200, corsHeaders);
   }
 });
 
@@ -220,7 +221,7 @@ app.post("/fetch-profile/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const { number } = await c.req.json();
-    if (!number || typeof number !== "string" || number.length > 30) return c.json({ error: "Invalid number" }, 400, corsHeaders);
+    if (!number || typeof number !== "string" || number.length > 30) return c.json({ name: null, profilePicUrl: null }, 200, corsHeaders);
     const result = await evolutionRequest(`/chat/fetchProfile/${instanceName}`, "POST", { number }, false);
     if (!result) return c.json({ name: null, profilePicUrl: null }, 200, corsHeaders);
     return c.json(result, 200, corsHeaders);
