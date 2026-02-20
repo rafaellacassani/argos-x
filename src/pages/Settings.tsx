@@ -118,7 +118,7 @@ export default function Settings() {
     try {
       const { data, error } = await supabase
         .from("meta_pages")
-        .select("*")
+        .select("id, page_id, page_name, platform, instagram_username, is_active, meta_account_id, workspace_id")
         .eq("is_active", true);
       
       if (error) throw error;
