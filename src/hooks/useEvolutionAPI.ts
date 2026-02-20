@@ -280,11 +280,47 @@ export function useEvolutionAPI() {
     }
   }, []);
 
-  const deleteInstance = useCallback(async (instanceName: string): Promise<boolean> => {
+  const deleteInstance = useCallback(async (instanceName: string, userId?: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
 
     try {
+      // 0. Log to lead_history for all leads associated with this instance
+      try {
+        const { data: relatedMessages } = await supabase
+          .from('whatsapp_messages')
+          .select('remote_jid')
+          .eq('instance_name', instanceName);
+        
+        if (relatedMessages && relatedMessages.length > 0) {
+          const uniqueJids = [...new Set(relatedMessages.map(m => m.remote_jid))];
+          
+          // Find leads matching these JIDs
+          const { data: relatedLeads } = await supabase
+            .from('leads')
+            .select('id, workspace_id')
+            .in('whatsapp_jid', uniqueJids);
+          
+          if (relatedLeads && relatedLeads.length > 0) {
+            const historyEntries = relatedLeads.map(lead => ({
+              lead_id: lead.id,
+              action: 'whatsapp_instance_deleted',
+              performed_by: userId || 'system',
+              workspace_id: lead.workspace_id,
+              metadata: {
+                instance_name: instanceName,
+                reason: 'Instância removida pelo usuário',
+                deleted_at: new Date().toISOString(),
+              },
+            }));
+            await supabase.from('lead_history').insert(historyEntries);
+          }
+        }
+      } catch (histErr) {
+        console.error("[useEvolutionAPI] Error logging to lead_history:", histErr);
+        // Don't block deletion
+      }
+
       // 1. Deletar na Evolution API
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/delete/${instanceName}`, {
         method: "DELETE",

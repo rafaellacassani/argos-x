@@ -504,6 +504,32 @@ export default function Chats() {
           message_type: 'text',
           timestamp: new Date().toISOString(),
         }).then(() => {});
+        
+        // CORREÇÃO 2: Log message sent to lead_history
+        const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
+        const chatDigits = stripDigits(selectedChat.phone || "");
+        const matchingLead = leadsRef.current.find((l) => {
+          if (l.whatsapp_jid === selectedChat.remoteJid) return true;
+          if (selectedChat.remoteJidAlt && l.whatsapp_jid === selectedChat.remoteJidAlt) return true;
+          if (chatDigits.length >= 10) {
+            const leadDigits = stripDigits(l.phone || "");
+            return leadDigits.length >= 10 && (leadDigits.endsWith(chatDigits.slice(-10)) || chatDigits.endsWith(leadDigits.slice(-10)));
+          }
+          return false;
+        });
+        if (matchingLead && userProfileId) {
+          supabase.from('lead_history').insert({
+            lead_id: matchingLead.id,
+            action: 'whatsapp_message_sent',
+            performed_by: userProfileId,
+            workspace_id: workspaceId,
+            metadata: {
+              instance_name: selectedChat.instanceName || selectedInstance || '',
+              remote_jid: selectedChat.remoteJid,
+              preview: text.substring(0, 80),
+            },
+          }).then(() => {});
+        }
       }
     }
     return success;
@@ -773,19 +799,18 @@ export default function Chats() {
   // Ref to track which JIDs we've already processed for lead creation
   const processedJidsRef = useRef<Set<string>>(new Set());
 
-  // Helper: load chat list from local whatsapp_messages DB (fallback when Evolution API has no data)
+  // Helper: load chat list from local whatsapp_messages DB
+  // ALWAYS loads by workspace_id (via RLS), never filters by instance_name
+  // This ensures chats from deleted/offline instances remain visible
   const loadChatsFromDB = useCallback(async (instanceName?: string): Promise<(Chat & { _timestamp?: number })[]> => {
     try {
       // Query whatsapp_messages grouped by remote_jid to build a chat list
-      let query = supabase
+      // NO instance_name filter — chats must survive instance deletion
+      const query = supabase
         .from('whatsapp_messages')
         .select('remote_jid, push_name, content, direction, timestamp, instance_name, from_me')
         .order('timestamp', { ascending: false })
         .limit(1000);
-      
-      if (instanceName && instanceName !== 'all') {
-        query = query.eq('instance_name', instanceName);
-      }
 
       const { data: msgs, error } = await query;
       if (error || !msgs || msgs.length === 0) return [];
@@ -892,7 +917,10 @@ export default function Chats() {
             _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
           }));
         } else if (selectedInstance === "all") {
-          // Fetch from ALL WhatsApp instances in parallel
+          // DATABASE-FIRST: Always load from local DB first
+          const dbChats = await loadChatsFromDB('all');
+          
+          // Then try to fetch from Evolution API to get newer data
           const promises = instances.map(async (inst) => {
             try {
               const data = await fetchChats(inst.instanceName);
@@ -911,13 +939,10 @@ export default function Chats() {
           });
           
           const results = await Promise.all(promises);
-          allChats = results.flat();
+          const apiChats = results.flat();
 
-          // FALLBACK: If Evolution API returned no WhatsApp chats, load from local DB
-          if (allChats.length === 0 && instances.length > 0) {
-            console.log('[Chats] No chats from Evolution API, falling back to local DB');
-            allChats = await loadChatsFromDB('all');
-          }
+          // Merge: DB chats + API chats, deduplicate by remoteJid keeping most recent
+          allChats = [...dbChats, ...apiChats];
 
           // Also fetch Meta conversations
           if (metaPages.length > 0) {
@@ -962,27 +987,34 @@ export default function Chats() {
           allChats = allChats.slice(0, 100);
           
         } else {
-          // Fetch from single WhatsApp instance
-          let data: any[] = [];
+          // DATABASE-FIRST: Always load from local DB first
+          const dbChats = await loadChatsFromDB(selectedInstance);
+          
+          // Then try to fetch from Evolution API for newer data
+          let apiChats: (Chat & { _timestamp?: number })[] = [];
           try {
-            data = await fetchChats(selectedInstance);
+            const data = await fetchChats(selectedInstance);
+            if (Array.isArray(data) && data.length > 0) {
+              apiChats = data
+                .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+                .map((chat: any) => transformChatData(chat));
+            }
           } catch {
-            data = [];
+            // API unavailable — DB chats are sufficient
           }
           
-          if (!Array.isArray(data) || data.length === 0) {
-            if ((data as any)?.error) {
-              console.warn(`[Chats] API error for "${selectedInstance}": ${(data as any).error}`);
+          // Merge DB + API, deduplicate by remoteJid keeping most recent
+          const merged = [...dbChats, ...apiChats];
+          const deduped = new Map<string, (Chat & { _timestamp?: number })>();
+          for (const c of merged) {
+            const existing = deduped.get(c.remoteJid);
+            if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
+              deduped.set(c.remoteJid, c);
             }
-            // FALLBACK: load from local DB
-            console.log(`[Chats] No API chats for ${selectedInstance}, falling back to local DB`);
-            allChats = await loadChatsFromDB(selectedInstance);
-          } else {
-            allChats = data
-              .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
-              .map((chat: any) => transformChatData(chat))
-              .slice(0, 50);
           }
+          allChats = Array.from(deduped.values());
+          allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
+          allChats = allChats.slice(0, 100);
         }
 
         setChats(allChats);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useCalendar } from "@/hooks/useCalendar";
 import {
@@ -21,6 +21,7 @@ import {
   Tag,
   Loader2,
   Lock,
+  Unplug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -114,8 +115,12 @@ export default function Settings() {
     loading,
     listInstances,
     deleteInstance,
+    logoutInstance,
     getConnectionState,
   } = useEvolutionAPI();
+
+  // Track previous instance states for auto-sync
+  const prevStatesRef = useRef<Record<string, string>>({});
 
   // Fetch meta pages on mount
   const fetchMetaPages = async () => {
@@ -242,16 +247,34 @@ export default function Settings() {
     return () => clearInterval(interval);
   }, [activeTab]);
 
+  // CORREÇÃO 3: Desconectar (logout sem deletar) e Remover (com confirmação clara)
+  const handleDisconnectInstance = async (instanceName: string) => {
+    if (!confirm(`Deseja desconectar "${instanceName}" do WhatsApp?\n\nOs chats e histórico serão mantidos.`)) return;
+    
+    const success = await logoutInstance(instanceName);
+    if (success) {
+      toast({
+        title: "Desconectado",
+        description: `"${instanceName}" foi desconectado. Os chats continuam visíveis.`,
+      });
+      fetchInstances();
+    } else {
+      toast({ title: "Erro ao desconectar", variant: "destructive" });
+    }
+  };
+
   const handleDeleteInstance = async (instanceName: string) => {
-    if (!confirm(`Tem certeza que deseja deletar a conexão "${instanceName}"?`)) {
+    if (!confirm(`Tem certeza que deseja REMOVER a conexão "${instanceName}"?\n\n⚠️ A conexão será removida, mas os chats e histórico de mensagens continuarão visíveis normalmente.`)) {
       return;
     }
 
-    const success = await deleteInstance(instanceName);
+    // Get current user ID for lead_history logging
+    const { data: { user } } = await supabase.auth.getUser();
+    const success = await deleteInstance(instanceName, user?.id);
     if (success) {
       toast({
         title: "Conexão removida",
-        description: `A conexão "${instanceName}" foi removida com sucesso.`,
+        description: `"${instanceName}" removida. Os chats continuam visíveis.`,
       });
       fetchInstances();
     } else {
@@ -262,6 +285,31 @@ export default function Settings() {
       });
     }
   };
+
+  // CORREÇÃO 4: Auto-sync when instance transitions to "open"
+  useEffect(() => {
+    for (const inst of instances) {
+      const prevState = prevStatesRef.current[inst.instanceName];
+      const currentState = inst.connectionStatus;
+      if (prevState && prevState !== 'open' && currentState === 'open' && workspaceId) {
+        console.log(`[Settings] Instance ${inst.instanceName} went open, triggering sync`);
+        toast({ title: "Sincronizando histórico...", description: `Importando mensagens de ${inst.instanceName}` });
+        supabase.functions.invoke('sync-whatsapp-messages', {
+          body: { instanceName: inst.instanceName, workspaceId },
+        }).then((res) => {
+          if (res.data && !res.error) {
+            toast({ title: "Histórico sincronizado ✓", description: `${res.data.synced || 0} mensagens importadas.` });
+          }
+        }).catch(() => {});
+      }
+    }
+    // Update prev states
+    const newStates: Record<string, string> = {};
+    for (const inst of instances) {
+      newStates[inst.instanceName] = inst.connectionStatus || 'close';
+    }
+    prevStatesRef.current = newStates;
+  }, [instances, workspaceId]);
 
   const handleRefreshInstance = async (instanceName: string) => {
     try {
@@ -661,6 +709,18 @@ export default function Settings() {
                             Reconectar
                           </Button>
                         )}
+                        {instance.connectionStatus === "open" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleDisconnectInstance(instance.instanceName)}
+                            disabled={loading}
+                          >
+                            <Unplug className="w-4 h-4" />
+                            Desconectar
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -679,6 +739,7 @@ export default function Settings() {
                             handleDeleteInstance(instance.instanceName)
                           }
                           disabled={loading}
+                          title="Remover conexão (chats serão mantidos)"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
