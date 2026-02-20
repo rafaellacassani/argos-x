@@ -459,6 +459,153 @@ export type Database = {
           },
         ]
       }
+      campaign_recipients: {
+        Row: {
+          campaign_id: string
+          error_message: string | null
+          id: string
+          lead_id: string
+          personalized_message: string | null
+          phone: string
+          position: number
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          error_message?: string | null
+          id?: string
+          lead_id: string
+          personalized_message?: string | null
+          phone: string
+          position?: number
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          error_message?: string | null
+          id?: string
+          lead_id?: string
+          personalized_message?: string | null
+          phone?: string
+          position?: number
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_recipients_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          attachment_type: string | null
+          attachment_url: string | null
+          created_at: string
+          created_by: string | null
+          delivered_count: number | null
+          failed_count: number | null
+          filter_responsible_ids: Json | null
+          filter_stage_ids: Json | null
+          filter_tag_ids: Json | null
+          id: string
+          instance_name: string
+          interval_seconds: number
+          last_sent_at: string | null
+          message_text: string
+          name: string
+          schedule_days: Json | null
+          schedule_end_time: string | null
+          schedule_start_time: string | null
+          scheduled_at: string | null
+          sent_count: number | null
+          status: string
+          total_recipients: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number | null
+          failed_count?: number | null
+          filter_responsible_ids?: Json | null
+          filter_stage_ids?: Json | null
+          filter_tag_ids?: Json | null
+          id?: string
+          instance_name: string
+          interval_seconds?: number
+          last_sent_at?: string | null
+          message_text: string
+          name: string
+          schedule_days?: Json | null
+          schedule_end_time?: string | null
+          schedule_start_time?: string | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          status?: string
+          total_recipients?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          delivered_count?: number | null
+          failed_count?: number | null
+          filter_responsible_ids?: Json | null
+          filter_stage_ids?: Json | null
+          filter_tag_ids?: Json | null
+          id?: string
+          instance_name?: string
+          interval_seconds?: number
+          last_sent_at?: string | null
+          message_text?: string
+          name?: string
+          schedule_days?: Json | null
+          schedule_end_time?: string | null
+          schedule_start_time?: string | null
+          scheduled_at?: string | null
+          sent_count?: number | null
+          status?: string
+          total_recipients?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funnel_stages: {
         Row: {
           bot_id: string | null
