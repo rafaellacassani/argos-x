@@ -785,11 +785,21 @@ export function useLeads() {
 
       if (error) throw error;
 
-      const tag = tags.find(t => t.id === tagId);
+      // Buscar a tag do estado OU do banco para evitar closure stale
+      let tag = tags.find(t => t.id === tagId);
+      if (!tag) {
+        const { data } = await supabase
+          .from('lead_tags')
+          .select('*')
+          .eq('id', tagId)
+          .single();
+        tag = data as LeadTag;
+      }
+
       if (tag) {
         setLeads(prev => prev.map(l => 
           l.id === leadId 
-            ? { ...l, tags: [...(l.tags || []), tag] }
+            ? { ...l, tags: [...(l.tags || []), tag!] }
             : l
         ));
       }

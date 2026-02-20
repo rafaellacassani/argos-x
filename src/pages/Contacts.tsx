@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
+import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
 import {
   Search,
@@ -18,16 +19,26 @@ import {
   ChevronDown,
   Filter,
   Loader2,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import ImportContactsDialog from "@/components/contacts/ImportContactsDialog";
 
@@ -64,12 +75,20 @@ const formatContactPhone = (phone: string): string => {
 export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
   const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
+  const { tags: allTags, addTagToLead, removeTagFromLead, createTag, fetchTags } = useLeads();
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [enriching, setEnriching] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [importOpen, setImportOpen] = useState(false);
+  const [tagFilterOpen, setTagFilterOpen] = useState(false);
+  const [selectedTagFilter, setSelectedTagFilter] = useState<string[]>([]);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [bulkTagSearch, setBulkTagSearch] = useState("");
+  const [newBulkTagColor, setNewBulkTagColor] = useState("#3B82F6");
+
+  useEffect(() => { fetchTags(); }, [fetchTags]);
 
   // Batch enrich contacts: fetch WhatsApp profile name/photo for contacts with only numbers
   const handleBatchEnrich = useCallback(async () => {
@@ -194,15 +213,25 @@ export default function Contacts() {
   useEffect(() => { fetchContacts(); }, []);
 
   const filteredContacts = useMemo(() => {
-    if (!searchTerm) return contacts;
-    const q = searchTerm.toLowerCase();
-    return contacts.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.phone.includes(searchTerm) ||
-        (c.email && c.email.toLowerCase().includes(q))
-    );
-  }, [contacts, searchTerm]);
+    let result = contacts;
+    // Tag filter
+    if (selectedTagFilter.length > 0) {
+      result = result.filter(c => 
+        (c.tags || []).some(t => selectedTagFilter.includes(t.id))
+      );
+    }
+    // Search filter
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.phone.includes(searchTerm) ||
+          (c.email && c.email.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [contacts, searchTerm, selectedTagFilter]);
 
   const toggleSelectAll = () => {
     setSelectedContacts((prev) =>
@@ -263,12 +292,55 @@ export default function Contacts() {
               className="pl-10"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="gap-2">
-              <Tag className="w-4 h-4" />
-              Tags
-              <ChevronDown className="w-4 h-4" />
-            </Button>
+           <div className="flex items-center gap-2">
+            <Popover open={tagFilterOpen} onOpenChange={setTagFilterOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <Tag className="w-4 h-4" />
+                  Tags
+                  {selectedTagFilter.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{selectedTagFilter.length}</Badge>
+                  )}
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar tag..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhuma tag encontrada</CommandEmpty>
+                    <CommandGroup>
+                      {allTags.map((tag) => (
+                        <CommandItem
+                          key={tag.id}
+                          onSelect={() => {
+                            setSelectedTagFilter(prev =>
+                              prev.includes(tag.id)
+                                ? prev.filter(id => id !== tag.id)
+                                : [...prev, tag.id]
+                            );
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                          {selectedTagFilter.includes(tag.id) && (
+                            <Check className="ml-auto h-4 w-4 text-primary" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+                {selectedTagFilter.length > 0 && (
+                  <div className="p-2 border-t">
+                    <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => setSelectedTagFilter([])}>
+                      <X className="w-3 h-3 mr-1" /> Limpar filtros
+                    </Button>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
             <Button variant="outline" className="gap-2">
               <Filter className="w-4 h-4" />
               Filtros
@@ -290,10 +362,62 @@ export default function Contacts() {
               <MessageCircle className="w-4 h-4 mr-2" />
               Enviar Mensagem
             </Button>
-            <Button variant="outline" size="sm">
-              <Tag className="w-4 h-4 mr-2" />
-              Adicionar Tag
-            </Button>
+            <Popover open={bulkTagOpen} onOpenChange={setBulkTagOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Tag className="w-4 h-4 mr-2" />
+                  Adicionar Tag
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder="Buscar ou criar tag..." value={bulkTagSearch} onValueChange={setBulkTagSearch} />
+                  <CommandList>
+                    <CommandEmpty>
+                      {bulkTagSearch.trim() && !allTags.some(t => t.name.toLowerCase() === bulkTagSearch.trim().toLowerCase()) ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="w-full justify-start text-xs"
+                          onClick={async () => {
+                            const newTag = await createTag(bulkTagSearch.trim(), newBulkTagColor);
+                            if (newTag) {
+                              await Promise.all(selectedContacts.map(id => addTagToLead(id, newTag.id)));
+                              setBulkTagSearch("");
+                              setBulkTagOpen(false);
+                              fetchContacts();
+                            }
+                          }}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Criar "{bulkTagSearch}"
+                        </Button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">Nenhuma tag</span>
+                      )}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {allTags
+                        .filter(t => !bulkTagSearch || t.name.toLowerCase().includes(bulkTagSearch.toLowerCase()))
+                        .map((tag) => (
+                        <CommandItem
+                          key={tag.id}
+                          value={tag.name}
+                          onSelect={async () => {
+                            await Promise.all(selectedContacts.map(id => addTagToLead(id, tag.id)));
+                            setBulkTagOpen(false);
+                            fetchContacts();
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <Button variant="outline" size="sm" className="text-destructive" disabled={!canDeleteContacts}>
               Excluir
             </Button>

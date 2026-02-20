@@ -31,9 +31,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { type Lead, type FunnelStage, type LeadTag, type LeadSale } from "@/hooks/useLeads";
+import { ChatTagManager } from "./ChatTagManager";
 import { supabase } from "@/integrations/supabase/client";
 import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
@@ -139,7 +139,7 @@ const formatLeadPhone = (phone: string): string => {
   return phone;
 };
 
-const TAG_COLORS = ["#EF4444", "#F97316", "#EAB308", "#22C55E", "#3B82F6", "#8B5CF6", "#EC4899", "#6B7280"];
+
 
 export function LeadSidePanel({
   lead,
@@ -156,9 +156,6 @@ export function LeadSidePanel({
   onCreateLead,
   onOpenDetailModal,
 }: LeadSidePanelProps) {
-  const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
-  const [newTagName, setNewTagName] = useState("");
-  const [newTagColor, setNewTagColor] = useState(TAG_COLORS[0]);
   const [responsibleName, setResponsibleName] = useState<string | null>(null);
   const [creatingLead, setCreatingLead] = useState(false);
 
@@ -330,88 +327,14 @@ export function LeadSidePanel({
         </div>
 
         {/* Tags */}
-        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-          {assignedTags.map((tag) => (
-            <Badge
-              key={tag.id}
-              className="text-[10px] px-2 py-0.5 cursor-pointer group/tag"
-              style={{ backgroundColor: tag.color, color: "#fff" }}
-              onClick={() => onRemoveTag(lead.id, tag.id)}
-            >
-              {tag.name}
-              <X className="w-2.5 h-2.5 ml-1 opacity-0 group-hover/tag:opacity-100" />
-            </Badge>
-          ))}
-          <Popover open={tagPopoverOpen} onOpenChange={setTagPopoverOpen}>
-            <PopoverTrigger asChild>
-              <button className="w-5 h-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center hover:bg-muted/50 transition-colors">
-                <Plus className="w-3 h-3 text-muted-foreground" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Buscar tag..." />
-                <CommandList>
-                  <CommandEmpty>
-                    <div className="p-2 space-y-2">
-                      <Input
-                        placeholder="Nova tag..."
-                        value={newTagName}
-                        onChange={(e) => setNewTagName(e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                      <div className="flex gap-1">
-                        {TAG_COLORS.map((c) => (
-                          <button
-                            key={c}
-                            className={cn(
-                              "w-5 h-5 rounded-full border-2",
-                              newTagColor === c ? "border-foreground" : "border-transparent"
-                            )}
-                            style={{ backgroundColor: c }}
-                            onClick={() => setNewTagColor(c)}
-                          />
-                        ))}
-                      </div>
-                      {newTagName && (
-                        <Button
-                          size="sm"
-                          className="w-full h-7 text-xs"
-                          onClick={async () => {
-                            const tag = await onCreateTag(newTagName, newTagColor);
-                            if (tag) {
-                              await onAddTag(lead.id, tag.id);
-                              setNewTagName("");
-                              setTagPopoverOpen(false);
-                            }
-                          }}
-                        >
-                          Criar "{newTagName}"
-                        </Button>
-                      )}
-                    </div>
-                  </CommandEmpty>
-                  <CommandGroup>
-                    {availableTags.map((tag) => (
-                      <CommandItem
-                        key={tag.id}
-                        onSelect={async () => {
-                          await onAddTag(lead.id, tag.id);
-                          setTagPopoverOpen(false);
-                        }}
-                      >
-                        <div
-                          className="w-3 h-3 rounded-full mr-2 flex-shrink-0"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        {tag.name}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
+        <div className="mt-2">
+          <ChatTagManager
+            lead={lead}
+            allTags={tags}
+            onAddTag={onAddTag}
+            onRemoveTag={onRemoveTag}
+            onCreateTag={onCreateTag}
+          />
         </div>
       </div>
 
