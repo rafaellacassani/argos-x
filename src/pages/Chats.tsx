@@ -613,17 +613,11 @@ export default function Chats() {
             }
           })
         );
-        // Include instances that are "open" OR whose state check returned null/undefined
-        // This prevents chats from disappearing due to transient API errors
-        connectedInstances = stateResults
-          .filter(({ state }) => {
-            const s = state?.instance?.state;
-            return s === "open" || s === undefined || s === null;
-          })
-          .map(({ instance, state }) => ({
-            ...instance,
-            connectionStatus: (state?.instance?.state === "open" ? "open" : "open") as "open",
-          }));
+        // Include ALL instances regardless of connection state — chats must never disappear
+        connectedInstances = stateResults.map(({ instance, state }) => ({
+          ...instance,
+          connectionStatus: (state?.instance?.state || "connecting") as "open" | "connecting" | "close",
+        }));
       } catch (err) {
         console.warn("[Chats] Evolution API indisponível:", err);
         // Even if Evolution API is completely down, try to load instances from local DB
