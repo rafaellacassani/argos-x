@@ -468,6 +468,81 @@ export type Database = {
           },
         ]
       }
+      calendar_events: {
+        Row: {
+          all_day: boolean
+          color: string | null
+          created_at: string
+          description: string | null
+          end_at: string
+          google_event_id: string | null
+          id: string
+          last_synced_at: string | null
+          lead_id: string | null
+          location: string | null
+          start_at: string
+          synced_to_google: boolean
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_at: string
+          google_event_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          lead_id?: string | null
+          location?: string | null
+          start_at: string
+          synced_to_google?: boolean
+          title: string
+          type?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          all_day?: boolean
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_at?: string
+          google_event_id?: string | null
+          id?: string
+          last_synced_at?: string | null
+          lead_id?: string | null
+          location?: string | null
+          start_at?: string
+          synced_to_google?: boolean
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_recipients: {
         Row: {
           campaign_id: string
@@ -710,6 +785,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "funnels_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_tokens: {
+        Row: {
+          access_token: string
+          created_at: string
+          google_calendar_id: string | null
+          google_email: string | null
+          id: string
+          refresh_token: string
+          sync_enabled: boolean
+          token_expiry: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          google_calendar_id?: string | null
+          google_email?: string | null
+          id?: string
+          refresh_token: string
+          sync_enabled?: boolean
+          token_expiry: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          google_calendar_id?: string | null
+          google_email?: string | null
+          id?: string
+          refresh_token?: string
+          sync_enabled?: boolean
+          token_expiry?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_tokens_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"

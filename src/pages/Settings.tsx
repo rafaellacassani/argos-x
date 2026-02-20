@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useCalendar } from "@/hooks/useCalendar";
 import {
   MessageCircle,
   Phone,
@@ -106,6 +107,7 @@ export default function Settings() {
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
 
   const {
     loading,
@@ -166,13 +168,19 @@ export default function Settings() {
     const metaConnected = params.get("meta_connected");
     const pagesCount = params.get("pages");
     const errorParam = params.get("error");
+    const googleCalendar = params.get("google_calendar");
 
-    if (metaConnected === "true") {
+    if (googleCalendar === "connected") {
+      toast({
+        title: "Google Calendar conectado!",
+        description: "Seus eventos serão sincronizados automaticamente.",
+      });
+      window.history.replaceState({}, "", "/settings");
+    } else if (metaConnected === "true") {
       toast({
         title: "Conta conectada!",
         description: `${pagesCount || "Suas"} página(s) conectada(s) com sucesso.`,
       });
-      // Clear URL params
       window.history.replaceState({}, "", "/settings");
       fetchMetaPages();
     } else if (errorParam) {
@@ -328,10 +336,10 @@ export default function Settings() {
     {
       id: "google-calendar",
       name: "Google Calendar",
-      description: "Sincronize eventos",
+      description: googleConnected ? (googleEmail || "Sincronizado") : "Sincronize eventos",
       icon: <Calendar className="w-6 h-6 text-red-500" />,
-      connected: false,
-      available: false,
+      connected: googleConnected,
+      available: true,
     },
     {
       id: "calendly",
@@ -466,6 +474,12 @@ export default function Settings() {
                             setShowConnectionModal(true);
                           } else if (integration.id === "instagram" || integration.id === "facebook") {
                             handleConnectMeta();
+                          } else if (integration.id === "google-calendar") {
+                            if (integration.connected) {
+                              pullFromGoogle();
+                            } else {
+                              connectGoogle();
+                            }
                           }
                         }}
                       >
@@ -480,10 +494,17 @@ export default function Settings() {
                             Conectando...
                           </>
                         ) : integration.connected ? (
-                          <>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Adicionar Conexão
-                          </>
+                          integration.id === "google-calendar" ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Sincronizar agora
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-4 h-4 mr-2" />
+                              Adicionar Conexão
+                            </>
+                          )
                         ) : (
                           <>
                             <Link2 className="w-4 h-4 mr-2" />
