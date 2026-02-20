@@ -809,6 +809,7 @@ export default function Chats() {
       const query = supabase
         .from('whatsapp_messages')
         .select('remote_jid, push_name, content, direction, timestamp, instance_name, from_me')
+        .eq('workspace_id', workspaceId || '')
         .order('timestamp', { ascending: false })
         .limit(1000);
 
@@ -1287,6 +1288,29 @@ export default function Chats() {
                 };
               });
               Promise.resolve(supabase.from('whatsapp_messages').insert(rows)).catch(() => {});
+
+              // Log received messages to lead_history if lead exists
+              const matchingLead = leadsRef.current.find((l) => {
+                if (l.whatsapp_jid === selectedChat.remoteJid) return true;
+                const chatDigits = (selectedChat.phone || '').replace(/[^0-9]/g, '');
+                const leadDigits = (l.phone || '').replace(/[^0-9]/g, '');
+                return chatDigits.length >= 10 && leadDigits.length >= 10 &&
+                  (leadDigits.endsWith(chatDigits.slice(-10)) || 
+                   chatDigits.endsWith(leadDigits.slice(-10)));
+              });
+              if (matchingLead && workspaceId) {
+                supabase.from('lead_history').insert({
+                  lead_id: matchingLead.id,
+                  action: 'whatsapp_message_received',
+                  performed_by: 'system',
+                  workspace_id: workspaceId,
+                  metadata: {
+                    instance_name: selectedChat.instanceName || selectedInstance || '',
+                    remote_jid: selectedChat.remoteJid,
+                    push_name: selectedChat.name,
+                  },
+                }).then(() => {});
+              }
             }
           }
         } else {
