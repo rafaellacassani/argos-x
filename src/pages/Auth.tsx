@@ -89,7 +89,7 @@ export default function Auth() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="font-display text-3xl font-bold text-foreground">Inboxia</h1>
+          <h1 className="font-display text-3xl font-bold text-foreground">Argos X</h1>
           <p className="text-muted-foreground mt-2">
             {mode === "login" ? "Entre na sua conta" : mode === "signup" ? "Crie sua conta" : "Recupere sua senha"}
           </p>

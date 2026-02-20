@@ -42,7 +42,7 @@ export default function ProjectDocs() {
       <div className="min-h-screen bg-white text-gray-900">
         {/* Fixed Export Button */}
         <div className="no-print sticky top-0 z-50 bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold">Documentação Inboxia CRM</h1>
+          <h1 className="text-xl font-bold">Documentação Argos X CRM</h1>
           <Button onClick={handleExportPDF} className="gap-2">
             <FileDown className="w-4 h-4" />
             Exportar para PDF
@@ -54,7 +54,7 @@ export default function ProjectDocs() {
 
           {/* Cover */}
           <div className="text-center mb-16">
-            <h1 className="text-4xl font-bold mb-4">Inboxia CRM</h1>
+            <h1 className="text-4xl font-bold mb-4">Argos X CRM</h1>
             <p className="text-xl text-gray-600 mb-2">Documentação Completa do Sistema</p>
             <p className="text-sm text-gray-400">Versão 1.0 — Fevereiro 2026</p>
           </div>
@@ -63,7 +63,7 @@ export default function ProjectDocs() {
           <div className="mb-16 p-6 bg-gray-50 rounded-lg border">
             <h2 className="text-2xl font-bold mb-4" style={{ pageBreakBefore: "avoid" }}>Índice</h2>
             <ol className="list-decimal list-inside space-y-1 text-sm">
-              <li>Visão Geral do Inboxia</li>
+              <li>Visão Geral do Argos X</li>
               <li>Autenticação e Onboarding</li>
               <li>Dashboard</li>
               <li>Funil de Vendas (Leads)</li>
@@ -85,8 +85,8 @@ export default function ProjectDocs() {
           </div>
 
           {/* 1. Visão Geral */}
-          <Section title="1. Visão Geral do Inboxia">
-            <p>O <strong>Inboxia</strong> é um CRM completo de vendas com foco em comunicação omnichannel, construído como uma plataforma SaaS multi-tenant. O sistema foi projetado para equipes comerciais que precisam gerenciar leads, conversas e automações de vendas em um único lugar.</p>
+          <Section title="1. Visão Geral do Argos X">
+            <p>O <strong>Argos X</strong> é um CRM completo de vendas com foco em comunicação omnichannel, construído como uma plataforma SaaS multi-tenant. O sistema foi projetado para equipes comerciais que precisam gerenciar leads, conversas e automações de vendas em um único lugar.</p>
 
             <h3 className="text-lg font-semibold mt-6 mb-2">Arquitetura Multi-Tenant</h3>
             <p>O sistema opera com <strong>workspaces isolados</strong>. Cada empresa cliente possui seu próprio workspace com dados completamente separados. A arquitetura garante:</p>
@@ -288,7 +288,7 @@ export default function ProjectDocs() {
 
           {/* 6. Agendamento de Mensagens */}
           <Section title="6. Agendamento de Mensagens — Follow-up Automático">
-            <p className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><strong>⭐ Diferencial de Mercado:</strong> O Inboxia permite agendar mensagens futuras para qualquer canal (WhatsApp, Facebook, Instagram) diretamente do chat, criando um sistema completo de follow-up automatizado sem necessidade de ferramentas externas.</p>
+            <p className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><strong>⭐ Diferencial de Mercado:</strong> O Argos X permite agendar mensagens futuras para qualquer canal (WhatsApp, Facebook, Instagram) diretamente do chat, criando um sistema completo de follow-up automatizado sem necessidade de ferramentas externas.</p>
 
             <h3 className="text-lg font-semibold mt-6 mb-2">Como Funciona</h3>
             <ol className="list-decimal list-inside ml-4 space-y-2">
@@ -330,7 +330,7 @@ export default function ProjectDocs() {
 
           {/* 7. Tags Automáticas */}
           <Section title="7. Tags Automáticas por Campanha">
-            <p className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><strong>⭐ Diferencial de Mercado:</strong> O Inboxia permite criar regras que aplicam tags automaticamente com base na <strong>primeira mensagem de abordagem</strong> do lead. Isso permite cruzar exatamente <strong>de qual campanha do Meta</strong> cada lead está vindo, identificando quais campanhas estão gerando conversão e quais não estão.</p>
+            <p className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg"><strong>⭐ Diferencial de Mercado:</strong> O Argos X permite criar regras que aplicam tags automaticamente com base na <strong>primeira mensagem de abordagem</strong> do lead. Isso permite cruzar exatamente <strong>de qual campanha do Meta</strong> cada lead está vindo, identificando quais campanhas estão gerando conversão e quais não estão.</p>
 
             <h3 className="text-lg font-semibold mt-6 mb-2">Lógica de Funcionamento</h3>
             <ol className="list-decimal list-inside ml-4 space-y-2">
@@ -348,9 +348,9 @@ export default function ProjectDocs() {
             <p>O fluxo completo de rastreamento funciona assim:</p>
             <ol className="list-decimal list-inside ml-4 space-y-1">
               <li>Admin cria campanha no Meta Ads com uma <strong>mensagem de abordagem específica</strong> (ex: "Quero saber mais sobre o plano Premium")</li>
-              <li>No Inboxia, cria regra: <em>se mensagem contém "plano Premium" → aplica tag "Campanha Premium Jan/26"</em></li>
+              <li>No Argos X, cria regra: <em>se mensagem contém "plano Premium" → aplica tag "Campanha Premium Jan/26"</em></li>
               <li>Lead clica no anúncio → mensagem chega via WhatsApp/Instagram/Facebook</li>
-              <li>Inboxia cria o lead automaticamente E aplica a tag automaticamente</li>
+              <li>Argos X cria o lead automaticamente E aplica a tag automaticamente</li>
               <li>No Kanban, admin pode filtrar leads por tag e ver exatamente quantos vieram dessa campanha</li>
               <li>Cruzando com leads que avançaram no funil (ganhos), identifica a <strong>taxa de conversão por campanha</strong></li>
             </ol>
@@ -618,7 +618,7 @@ export default function ProjectDocs() {
 
           {/* 18. Backend */}
           <Section title="18. Funções de Backend (Edge Functions)">
-            <p>O Inboxia utiliza 11 Edge Functions serverless para processar lógica de negócio:</p>
+            <p>O Argos X utiliza 11 Edge Functions serverless para processar lógica de negócio:</p>
             <table className="w-full border-collapse border border-gray-300 mt-4 text-sm">
               <thead><tr className="bg-gray-100">
                 <th className="border border-gray-300 px-3 py-2 text-left">Função</th>
@@ -643,7 +643,7 @@ export default function ProjectDocs() {
 
           {/* Footer */}
           <div className="mt-16 pt-8 border-t border-gray-300 text-center text-sm text-gray-400">
-            <p>Inboxia CRM — Documentação Técnica e Funcional</p>
+            <p>Argos X CRM — Documentação Técnica e Funcional</p>
             <p>© 2026 MKT Boost. Todos os direitos reservados.</p>
           </div>
         </div>

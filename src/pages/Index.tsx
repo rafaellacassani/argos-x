@@ -75,7 +75,7 @@ export default function Index() {
       >
         <div className="relative z-10">
           <h1 className="font-display text-3xl font-bold mb-2">
-            Bem-vindo ao Inboxia! 👋
+            Bem-vindo ao Argos X! 👋
           </h1>
           <p className="text-primary-foreground/80 text-lg max-w-2xl">
             Seu CRM completo para WhatsApp. Gerencie leads, automatize atendimentos

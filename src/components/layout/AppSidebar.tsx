@@ -20,7 +20,7 @@ import {
   Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import inboxiaIcon from "@/assets/inboxia-icon.png";
+import argosIcon from "@/assets/argos-icon.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -70,7 +70,7 @@ export function AppSidebar() {
           className="flex items-center gap-3"
         >
           <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
-            <img src={inboxiaIcon} alt="Inboxia" className="w-10 h-10 object-contain" />
+            <img src={argosIcon} alt="Argos X" className="w-10 h-10 object-contain" />
           </div>
           <AnimatePresence>
             {!collapsed && (
@@ -82,7 +82,7 @@ export function AppSidebar() {
                 className="flex flex-col"
               >
                 <span className="font-display font-bold text-lg text-sidebar-foreground leading-tight">
-                  {workspace?.name || "Inboxia"}
+                  {workspace?.name || "Argos X"}
                 </span>
                 <span className="text-[10px] font-medium tracking-wide" style={{ color: '#07C3E8' }}>
                   by Mkt Boost
