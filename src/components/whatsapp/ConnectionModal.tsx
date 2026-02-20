@@ -28,6 +28,7 @@ interface ConnectionModalProps {
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
   instanceType?: "commercial" | "alerts";
+  instanceToReconnect?: string;
 }
 
 export function ConnectionModal({
@@ -35,6 +36,7 @@ export function ConnectionModal({
   onOpenChange,
   onSuccess,
   instanceType = "commercial",
+  instanceToReconnect,
 }: ConnectionModalProps) {
   const { workspaceId } = useWorkspace();
   const [step, setStep] = useState<Step>("name");
@@ -68,6 +70,25 @@ export function ConnectionModal({
         if (pollingRef.current) clearInterval(pollingRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
       }, 300);
+    } else if (open && instanceToReconnect) {
+      // Reconnect mode: skip name step, go straight to QR code
+      setInstanceName(instanceToReconnect);
+      setStep("creating");
+      (async () => {
+        try {
+          const qrResult = await getQRCode(instanceToReconnect);
+          if (qrResult?.base64) {
+            setQrCodeBase64(qrResult.base64);
+            setStep("qrcode");
+            startPolling(instanceToReconnect);
+          } else {
+            throw new Error("Não foi possível obter o QR Code");
+          }
+        } catch (err) {
+          setErrorMessage(err instanceof Error ? err.message : "Erro ao reconectar");
+          setStep("error");
+        }
+      })();
     }
   }, [open]);
 
@@ -154,35 +175,37 @@ export function ConnectionModal({
           if (pollingRef.current) clearInterval(pollingRef.current);
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           
-          // Salvar instância no banco de dados local
-          const sanitizedName = instanceName
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-|-$/g, "");
-          
-          const { data: { user } } = await supabase.auth.getUser();
-          await supabase.from('whatsapp_instances').upsert({
-            instance_name: sanitizedName,
-            display_name: instanceName.trim(),
-            workspace_id: workspaceId!,
-            created_by: user?.id,
-            instance_type: instanceType,
-          } as any, { onConflict: 'instance_name' });
-          
-          // Auto-setup webhook for this instance
-          try {
-            await supabase.functions.invoke(`evolution-api/setup-webhook/${sanitizedName}`, {
-              method: "POST",
-            });
-            console.log("[ConnectionModal] Webhook configured for", sanitizedName);
-            toast({
-              title: "Webhook configurado ✓",
-              description: "Automações serão disparadas automaticamente.",
-            });
-          } catch (webhookErr) {
-            console.error("[ConnectionModal] Webhook setup error:", webhookErr);
+          // Only save to DB if creating new instance (not reconnecting)
+          if (!instanceToReconnect) {
+            const sanitizedName = instanceName
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "-")
+              .replace(/-+/g, "-")
+              .replace(/^-|-$/g, "");
+            
+            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.from('whatsapp_instances').upsert({
+              instance_name: sanitizedName,
+              display_name: instanceName.trim(),
+              workspace_id: workspaceId!,
+              created_by: user?.id,
+              instance_type: instanceType,
+            } as any, { onConflict: 'instance_name' });
+            
+            // Auto-setup webhook for this instance
+            try {
+              await supabase.functions.invoke(`evolution-api/setup-webhook/${sanitizedName}`, {
+                method: "POST",
+              });
+              console.log("[ConnectionModal] Webhook configured for", sanitizedName);
+              toast({
+                title: "Webhook configurado ✓",
+                description: "Automações serão disparadas automaticamente.",
+              });
+            } catch (webhookErr) {
+              console.error("[ConnectionModal] Webhook setup error:", webhookErr);
+            }
           }
           
           setStep("success");
@@ -243,8 +266,8 @@ export function ConnectionModal({
         <DialogHeader>
           <DialogTitle className="text-center">
             {step === "name" && "Criar Nova Conexão"}
-            {step === "creating" && "Criando Conexão..."}
-            {step === "qrcode" && "Escaneie o QR Code"}
+            {step === "creating" && (instanceToReconnect ? `Reconectando ${instanceToReconnect}...` : "Criando Conexão...")}
+            {step === "qrcode" && (instanceToReconnect ? `Reconectar ${instanceToReconnect}` : "Escaneie o QR Code")}
             {step === "waiting" && "Aguardando..."}
             {step === "success" && "Conectado!"}
             {step === "error" && "Erro na Conexão"}

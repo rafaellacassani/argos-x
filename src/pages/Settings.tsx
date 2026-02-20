@@ -54,11 +54,11 @@ const getStatusColor = (status: string) => {
     case "open":
     case "connected":
       return "bg-success/10 text-success border-success/20";
+    case "connecting":
+      return "bg-yellow-500/10 text-yellow-600 border-yellow-500/20";
     case "close":
     case "disconnected":
-      return "bg-warning/10 text-warning border-warning/20";
-    case "connecting":
-      return "bg-primary/10 text-primary border-primary/20";
+      return "bg-destructive/10 text-destructive border-destructive/20";
     case "error":
       return "bg-destructive/10 text-destructive border-destructive/20";
     default:
@@ -102,6 +102,7 @@ export default function Settings() {
   const { workspaceId } = useWorkspace();
   const [activeTab, setActiveTab] = useState("integrations");
   const [showConnectionModal, setShowConnectionModal] = useState(false);
+  const [reconnectingInstance, setReconnectingInstance] = useState<string | null>(null);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
@@ -234,6 +235,13 @@ export default function Settings() {
     }
   }, [activeTab]);
 
+  // Bug 4: Auto-polling every 30s when on WhatsApp tab
+  useEffect(() => {
+    if (activeTab !== "whatsapp") return;
+    const interval = setInterval(() => fetchInstances(), 30000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
   const handleDeleteInstance = async (instanceName: string) => {
     if (!confirm(`Tem certeza que deseja deletar a conexão "${instanceName}"?`)) {
       return;
@@ -256,14 +264,18 @@ export default function Settings() {
   };
 
   const handleRefreshInstance = async (instanceName: string) => {
-    const state = await getConnectionState(instanceName);
-    setInstances((prev) =>
-      prev.map((inst) =>
-        inst.instanceName === instanceName
-          ? { ...inst, connectionStatus: state?.instance?.state || "close" }
-          : inst
-      )
-    );
+    try {
+      const state = await getConnectionState(instanceName);
+      setInstances((prev) =>
+        prev.map((inst) =>
+          inst.instanceName === instanceName
+            ? { ...inst, connectionStatus: state?.instance?.state || "connecting" }
+            : inst
+        )
+      );
+    } catch {
+      // Keep current state on failure
+    }
     toast({
       title: "Status atualizado",
       description: `Status da conexão "${instanceName}" atualizado.`,
@@ -591,13 +603,17 @@ export default function Settings() {
                         className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                           instance.connectionStatus === "open"
                             ? "bg-success/10"
-                            : "bg-warning/10"
+                            : instance.connectionStatus === "connecting"
+                            ? "bg-yellow-500/10"
+                            : "bg-destructive/10"
                         }`}
                       >
                         {instance.connectionStatus === "open" ? (
                           <Wifi className="w-6 h-6 text-success" />
+                        ) : instance.connectionStatus === "connecting" ? (
+                          <Loader2 className="w-6 h-6 text-yellow-600 animate-spin" />
                         ) : (
-                          <WifiOff className="w-6 h-6 text-warning" />
+                          <WifiOff className="w-6 h-6 text-destructive" />
                         )}
                       </div>
                       <div>
@@ -632,11 +648,14 @@ export default function Settings() {
                         {getStatusLabel(instance.connectionStatus || "close")}
                       </span>
                       <div className="flex items-center gap-2">
-                        {instance.connectionStatus !== "open" && (
+                        {instance.connectionStatus === "close" && (
                           <Button
                             size="sm"
                             className="gap-2"
-                            onClick={() => setShowConnectionModal(true)}
+                            onClick={() => {
+                              setReconnectingInstance(instance.instanceName);
+                              setShowConnectionModal(true);
+                            }}
                           >
                             <QrCode className="w-4 h-4" />
                             Reconectar
@@ -668,11 +687,19 @@ export default function Settings() {
                   </div>
 
                   {instance.connectionStatus === "close" && (
-                    <div className="mt-4 p-3 rounded-lg bg-warning/5 border border-warning/20 flex items-center gap-3">
-                      <AlertCircle className="w-5 h-5 text-warning" />
-                      <p className="text-sm text-warning">
+                    <div className="mt-4 p-3 rounded-lg bg-destructive/5 border border-destructive/20 flex items-center gap-3">
+                      <AlertCircle className="w-5 h-5 text-destructive" />
+                      <p className="text-sm text-destructive">
                         Esta conexão está desconectada. Clique em "Reconectar"
                         para escanear o QR Code novamente.
+                      </p>
+                    </div>
+                  )}
+                  {instance.connectionStatus === "connecting" && (
+                    <div className="mt-4 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20 flex items-center gap-3">
+                      <Loader2 className="w-5 h-5 text-yellow-600 animate-spin" />
+                      <p className="text-sm text-yellow-600">
+                        Conectando... aguarde enquanto o WhatsApp se reconecta automaticamente.
                       </p>
                     </div>
                   )}
@@ -787,8 +814,12 @@ export default function Settings() {
       {/* Connection Modal */}
       <ConnectionModal
         open={showConnectionModal}
-        onOpenChange={setShowConnectionModal}
+        onOpenChange={(open) => {
+          setShowConnectionModal(open);
+          if (!open) setReconnectingInstance(null);
+        }}
         onSuccess={fetchInstances}
+        instanceToReconnect={reconnectingInstance ?? undefined}
       />
     </div>
   );
