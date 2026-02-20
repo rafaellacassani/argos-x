@@ -35,6 +35,7 @@ const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 const AdminMindMap = lazy(() => import("./pages/AdminMindMap"));
 const ProjectDocs = lazy(() => import("./pages/ProjectDocs"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
+const Planos = lazy(() => import("./pages/Planos"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -112,6 +113,7 @@ const App = () => (
                             <Route path="/campaigns" element={<PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard>} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/configuracoes" element={<Configuracoes />} />
+                            <Route path="/planos" element={<Planos />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
