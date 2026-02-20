@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { useLeads } from "@/hooks/useLeads";
@@ -76,6 +77,7 @@ export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
   const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
   const { tags: allTags, addTagToLead, removeTagFromLead, createTag, fetchTags } = useLeads();
+  const { workspaceId } = useWorkspace();
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [enriching, setEnriching] = useState(false);
@@ -89,6 +91,32 @@ export default function Contacts() {
   const [newBulkTagColor, setNewBulkTagColor] = useState("#3B82F6");
 
   useEffect(() => { fetchTags(); }, [fetchTags]);
+
+  const bulkAssignTag = useCallback(async (tagId: string) => {
+    if (!workspaceId || selectedContacts.length === 0) return;
+    try {
+      const assignments = selectedContacts.map(leadId => ({
+        lead_id: leadId,
+        tag_id: tagId,
+        workspace_id: workspaceId,
+      }));
+      // Batch upsert in chunks of 500
+      const BATCH = 500;
+      for (let i = 0; i < assignments.length; i += BATCH) {
+        const { error } = await supabase
+          .from("lead_tag_assignments")
+          .upsert(assignments.slice(i, i + BATCH), { onConflict: "lead_id,tag_id", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+      toast({ title: "Tag aplicada", description: `Tag adicionada a ${selectedContacts.length} contato(s).` });
+      setBulkTagSearch("");
+      setBulkTagOpen(false);
+      fetchContacts();
+    } catch (err) {
+      console.error("Bulk tag assign error:", err);
+      toast({ title: "Erro ao aplicar tag", description: "Tente novamente.", variant: "destructive" });
+    }
+  }, [workspaceId, selectedContacts]);
 
   // Batch enrich contacts: fetch WhatsApp profile name/photo for contacts with only numbers
   const handleBatchEnrich = useCallback(async () => {
@@ -382,10 +410,7 @@ export default function Contacts() {
                           onClick={async () => {
                             const newTag = await createTag(bulkTagSearch.trim(), newBulkTagColor);
                             if (newTag) {
-                              await Promise.all(selectedContacts.map(id => addTagToLead(id, newTag.id)));
-                              setBulkTagSearch("");
-                              setBulkTagOpen(false);
-                              fetchContacts();
+                              await bulkAssignTag(newTag.id);
                             }
                           }}
                         >
@@ -403,9 +428,7 @@ export default function Contacts() {
                           key={tag.id}
                           value={tag.name}
                           onSelect={async () => {
-                            await Promise.all(selectedContacts.map(id => addTagToLead(id, tag.id)));
-                            setBulkTagOpen(false);
-                            fetchContacts();
+                            await bulkAssignTag(tag.id);
                           }}
                           className="cursor-pointer"
                         >
