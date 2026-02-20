@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import argosIcon from "@/assets/argos-icon.png";
+import argosLogoLight from "@/assets/argos-logo-light.png";
 
 export default function CreateWorkspace() {
   const [name, setName] = useState("");
@@ -54,9 +54,7 @@ export default function CreateWorkspace() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl overflow-hidden mx-auto mb-4">
-            <img src={argosIcon} alt="Argos X" className="w-16 h-16 object-contain" />
-          </div>
+          <img src={argosLogoLight} alt="Argos X" className="h-20 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-foreground font-display">
             Crie seu Workspace
           </h1>
