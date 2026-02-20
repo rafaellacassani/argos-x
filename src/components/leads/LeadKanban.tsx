@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Plus, X, Check, CheckSquare, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Plus, X, Check, CheckSquare, Trash2, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +51,7 @@ interface LeadKanbanProps {
   onAddStage?: (funnelId: string, name: string, color: string) => Promise<FunnelStage | null>;
   onBulkMove?: (leadIds: string[], targetStageId: string) => Promise<void>;
   onBulkDelete?: (leadIds: string[]) => Promise<void>;
+  onReorderStage?: (stageId: string, direction: 'left' | 'right') => Promise<void>;
   currentFunnelId?: string;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
@@ -71,6 +72,7 @@ export const LeadKanban = memo(function LeadKanban({
   onAddStage,
   onBulkMove,
   onBulkDelete,
+  onReorderStage,
   currentFunnelId,
   canDelete = true,
   teamMembers = [],
@@ -247,7 +249,7 @@ export const LeadKanban = memo(function LeadKanban({
 
           <ScrollArea className="w-full flex-1">
             <div className="flex gap-4 p-4 min-h-full">
-              {stages.map(stage => (
+              {stages.map((stage, stageIndex) => (
                 <LeadColumn
                   key={stage.id}
                   stage={stage}
@@ -268,6 +270,10 @@ export const LeadKanban = memo(function LeadKanban({
                   selectedLeadIds={selectedLeadIds}
                   onToggleSelect={handleToggleSelect}
                   onToggleSelectAll={handleToggleSelectAll}
+                  canMoveLeft={stageIndex > 0}
+                  canMoveRight={stageIndex < stages.length - 1}
+                  onMoveLeft={onReorderStage ? () => onReorderStage(stage.id, 'left') : undefined}
+                  onMoveRight={onReorderStage ? () => onReorderStage(stage.id, 'right') : undefined}
                 />
               ))}
 

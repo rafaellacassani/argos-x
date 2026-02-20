@@ -1231,6 +1231,37 @@ export function useLeads() {
     }
   }, [workspaceId, funnels, currentFunnel, fetchFunnels, setCurrentFunnel]);
 
+  // Reorder stages (swap positions)
+  const reorderStages = useCallback(async (stageId: string, direction: 'left' | 'right') => {
+    const sorted = [...stages].sort((a, b) => a.position - b.position);
+    const idx = sorted.findIndex(s => s.id === stageId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+
+    const stageA = sorted[idx];
+    const stageB = sorted[swapIdx];
+
+    try {
+      await Promise.all([
+        supabase.from('funnel_stages').update({ position: stageB.position }).eq('id', stageA.id),
+        supabase.from('funnel_stages').update({ position: stageA.position }).eq('id', stageB.id),
+      ]);
+
+      setStages(prev => {
+        const updated = prev.map(s => {
+          if (s.id === stageA.id) return { ...s, position: stageB.position };
+          if (s.id === stageB.id) return { ...s, position: stageA.position };
+          return s;
+        });
+        return updated.sort((a, b) => a.position - b.position);
+      });
+    } catch (err) {
+      console.error('Error reordering stages:', err);
+      toast.error('Erro ao reordenar etapas');
+    }
+  }, [stages]);
+
   // Bulk move leads
   const bulkMoveLeads = useCallback(async (leadIds: string[], targetStageId: string) => {
     if (!workspaceId || leadIds.length === 0) return;
@@ -1305,6 +1336,7 @@ export function useLeads() {
     findLeadByWhatsAppJid,
     createFunnel,
     updateStage,
+    reorderStages,
     createStage,
     deleteStage,
     deleteFunnel,

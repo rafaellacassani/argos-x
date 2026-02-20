@@ -59,7 +59,7 @@ export default function Leads() {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
     moveLead, deleteLead, addTagToLead, removeTagFromLead,
-    createFunnel, updateStage, saveSales, createStage, deleteStage,
+    createFunnel, updateStage, reorderStages, saveSales, createStage, deleteStage,
     deleteFunnel, bulkMoveLeads, bulkDeleteLeads
   } = useLeads();
   const { teamMembers, fetchTeamMembers } = useTeam();
@@ -420,6 +420,7 @@ export default function Leads() {
             onAddStage={createStage}
             onBulkMove={bulkMoveLeads}
             onBulkDelete={bulkDeleteLeads}
+            onReorderStage={reorderStages}
             currentFunnelId={currentFunnel?.id}
             canDelete={canDeleteLeads}
             teamMembers={teamMembers}
