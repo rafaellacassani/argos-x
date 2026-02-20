@@ -1107,6 +1107,68 @@ export function useLeads() {
     };
   }, [stages]);
 
+  // Create a new stage
+  const createStage = useCallback(async (funnelId: string, name: string, color: string) => {
+    if (!workspaceId) return null;
+    try {
+      const position = stages.length;
+      const { data, error } = await supabase
+        .from('funnel_stages')
+        .insert({
+          funnel_id: funnelId,
+          workspace_id: workspaceId,
+          name,
+          color,
+          position,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      await fetchStages(funnelId);
+      toast.success('Etapa criada com sucesso!');
+      return data as FunnelStage;
+    } catch (err) {
+      console.error('Error creating stage:', err);
+      toast.error('Erro ao criar etapa');
+      return null;
+    }
+  }, [workspaceId, stages.length, fetchStages]);
+
+  // Delete a stage
+  const deleteStage = useCallback(async (stageId: string): Promise<{ success: boolean; error?: string; count?: number }> => {
+    if (!workspaceId) return { success: false, error: 'no_workspace' };
+    try {
+      // Check if there are leads in this stage
+      const { count, error: countError } = await supabase
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('stage_id', stageId)
+        .eq('workspace_id', workspaceId);
+
+      if (countError) throw countError;
+
+      if ((count || 0) > 0) {
+        return { success: false, error: 'has_leads', count: count || 0 };
+      }
+
+      const { error } = await supabase
+        .from('funnel_stages')
+        .delete()
+        .eq('id', stageId);
+
+      if (error) throw error;
+
+      if (currentFunnel) await fetchStages(currentFunnel.id);
+      toast.success('Etapa excluída!');
+      return { success: true };
+    } catch (err) {
+      console.error('Error deleting stage:', err);
+      toast.error('Erro ao excluir etapa');
+      return { success: false, error: 'unknown' };
+    }
+  }, [workspaceId, currentFunnel, fetchStages]);
+
   return {
     funnels,
     currentFunnel,
@@ -1139,6 +1201,8 @@ export function useLeads() {
     findLeadByWhatsAppJid,
     createFunnel,
     updateStage,
+    createStage,
+    deleteStage,
     getStatistics,
   };
 }

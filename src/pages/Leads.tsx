@@ -51,7 +51,7 @@ export default function Leads() {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
     moveLead, deleteLead, addTagToLead, removeTagFromLead,
-    createFunnel, updateStage, saveSales
+    createFunnel, updateStage, saveSales, createStage, deleteStage
   } = useLeads();
   const { teamMembers, fetchTeamMembers } = useTeam();
   const { executeStageAutomations } = useStageAutomations();
@@ -360,6 +360,9 @@ export default function Leads() {
             onOpenChat={handleOpenChat}
             onAddLead={handleAddLead}
             onUpdateStage={updateStage}
+            onDeleteStage={deleteStage}
+            onAddStage={createStage}
+            currentFunnelId={currentFunnel?.id}
             canDelete={canDeleteLeads}
             teamMembers={teamMembers}
             tags={tags}
