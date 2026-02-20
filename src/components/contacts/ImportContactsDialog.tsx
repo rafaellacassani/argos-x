@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Plus, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -79,8 +81,12 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState({ imported: 0, duplicates: 0, errors: 0 });
   const [firstStageId, setFirstStageId] = useState<string | null>(null);
+  const [availableTags, setAvailableTags] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [selectedTagId, setSelectedTagId] = useState<string>("");
+  const [newTagName, setNewTagName] = useState("");
+  const [creatingTag, setCreatingTag] = useState(false);
 
-  // Fetch first stage dynamically when dialog opens
+  // Fetch first stage and tags dynamically when dialog opens
   useEffect(() => {
     if (!open || !workspaceId) return;
     const fetchFirstStage = async () => {
@@ -93,7 +99,16 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
         .single();
       setFirstStageId(data?.id ?? null);
     };
+    const fetchTags = async () => {
+      const { data } = await supabase
+        .from("lead_tags")
+        .select("id, name, color")
+        .eq("workspace_id", workspaceId)
+        .order("name");
+      setAvailableTags(data ?? []);
+    };
     fetchFirstStage();
+    fetchTags();
   }, [open, workspaceId]);
 
   const reset = () => {
@@ -103,6 +118,8 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
     setMapping({ name: "", phone: "", email: "", company: "" });
     setProgress(0);
     setResult({ imported: 0, duplicates: 0, errors: 0 });
+    setSelectedTagId("");
+    setNewTagName("");
   };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,6 +147,27 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       setStep("mapping");
     };
     reader.readAsText(file);
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim() || !workspaceId) return;
+    setCreatingTag(true);
+    const colors = ["#3B82F6", "#EF4444", "#F59E0B", "#10B981", "#8B5CF6", "#EC4899", "#F97316"];
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const { data, error } = await supabase
+      .from("lead_tags")
+      .insert({ name: newTagName.trim(), color, workspace_id: workspaceId })
+      .select("id, name, color")
+      .single();
+    if (error) {
+      toast.error("Erro ao criar tag");
+    } else if (data) {
+      setAvailableTags(prev => [...prev, data]);
+      setSelectedTagId(data.id);
+      setNewTagName("");
+      toast.success(`Tag "${data.name}" criada`);
+    }
+    setCreatingTag(false);
   };
 
   const startImport = useCallback(async () => {
@@ -204,14 +242,41 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       setProgress(Math.round(((i + batch.length) / total) * 100));
     }
 
+    // Assign tag to all imported leads if selected
+    if (selectedTagId && selectedTagId !== "__none__" && imported > 0) {
+      // Get all lead IDs that were just imported (by phone+workspace)
+      const phones = validRows.map(r => r.phone);
+      const tagAssignments: Array<{ lead_id: string; tag_id: string; workspace_id: string }> = [];
+      
+      for (let i = 0; i < phones.length; i += BATCH_SIZE) {
+        const phoneBatch = phones.slice(i, i + BATCH_SIZE);
+        const { data: leadIds } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("workspace_id", workspaceId!)
+          .in("phone", phoneBatch);
+        if (leadIds) {
+          leadIds.forEach(l => tagAssignments.push({ lead_id: l.id, tag_id: selectedTagId, workspace_id: workspaceId! }));
+        }
+      }
+
+      if (tagAssignments.length > 0) {
+        for (let i = 0; i < tagAssignments.length; i += BATCH_SIZE) {
+          await supabase
+            .from("lead_tag_assignments")
+            .upsert(tagAssignments.slice(i, i + BATCH_SIZE), { onConflict: "lead_id,tag_id", ignoreDuplicates: true });
+        }
+      }
+    }
+
     setResult({ imported, duplicates, errors });
     setStep("done");
     if (imported > 0) onImportComplete();
-  }, [rows, mapping, onImportComplete, firstStageId, workspaceId]);
+  }, [rows, mapping, onImportComplete, firstStageId, workspaceId, selectedTagId]);
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl w-[95vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5" />
@@ -286,6 +351,59 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
                   </Select>
                 </div>
               ))}
+            </div>
+
+            {/* Tag assignment */}
+            <div className="space-y-2">
+              <Label className="text-xs flex items-center gap-1">
+                <Tag className="w-3 h-3" />
+                Tag para os contatos importados (opcional)
+              </Label>
+              <div className="flex gap-2">
+                <Select value={selectedTagId} onValueChange={setSelectedTagId}>
+                  <SelectTrigger className="h-8 text-xs flex-1">
+                    <SelectValue placeholder="Selecionar tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Nenhuma —</SelectItem>
+                    {availableTags.map((tag) => (
+                      <SelectItem key={tag.id} value={tag.id}>
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: tag.color }} />
+                          {tag.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-1">
+                  <Input
+                    className="h-8 text-xs w-32"
+                    placeholder="Nova tag..."
+                    value={newTagName}
+                    onChange={(e) => setNewTagName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={handleCreateTag}
+                    disabled={!newTagName.trim() || creatingTag}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+              {selectedTagId && selectedTagId !== "__none__" && (
+                <div className="flex items-center gap-1">
+                  <Badge variant="secondary" className="text-xs">
+                    {availableTags.find(t => t.id === selectedTagId)?.name}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">será aplicada a todos os contatos</span>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-2">
