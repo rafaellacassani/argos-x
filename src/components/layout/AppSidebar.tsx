@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
+import argosLogoDarkHorizontal from "@/assets/argos-logo-dark-horizontal.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -69,27 +70,13 @@ export function AppSidebar() {
           animate={{ opacity: 1 }}
           className="flex items-center gap-3"
         >
-          <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
-            <img src={argosIcon} alt="Argos X" className="w-10 h-10 object-contain" />
-          </div>
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2 }}
-                className="flex flex-col"
-              >
-                <span className="font-display font-bold text-lg text-sidebar-foreground leading-tight">
-                  {workspace?.name || "Argos X"}
-                </span>
-                <span className="text-[10px] font-medium tracking-wide" style={{ color: '#07C3E8' }}>
-                  by Mkt Boost
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {collapsed ? (
+            <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
+              <img src={argosIcon} alt="Argos X" className="w-10 h-10 object-contain" />
+            </div>
+          ) : (
+            <img src={argosLogoDarkHorizontal} alt="Argos X" className="h-9 object-contain" />
+          )}
         </motion.div>
       </div>
 
