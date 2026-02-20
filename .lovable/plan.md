@@ -1,95 +1,78 @@
 
-# Correcao: Criacao e Gerenciamento de Tags no Chat e Contatos
+# Correcao: Integracao Meta (Facebook/Instagram) - workspace_id ausente
 
-## Problemas Identificados
+## Diagnostico
 
-### Problema 1: Criar tag no painel do lead (Chat) so aparece quando TODAS as tags ja estao atribuidas
-No `LeadSidePanel.tsx`, o formulario de criacao de tag esta dentro do `<CommandEmpty>`. Isso significa que ele so aparece quando **nenhuma tag disponivel** existe na lista. Se o workspace tem tags existentes, o usuario nunca ve a opcao de criar uma nova.
+Foram identificados **3 bugs criticos** que impedem a integracao Meta de funcionar corretamente no modelo multi-tenant (por workspace):
 
-### Problema 2: O campo de busca (CommandInput) e o campo de nova tag (newTagName) sao separados
-O usuario digita no `CommandInput` para buscar, mas se nada corresponde e ele quer criar, precisa digitar o nome de novo no input separado `newTagName` dentro do `CommandEmpty`.
+### Bug 1: OAuth nao salva workspace_id
+A Edge Function `facebook-oauth` insere registros em `meta_accounts` e `meta_pages` **sem workspace_id**. Ambas as tabelas tem `workspace_id NOT NULL`, entao o INSERT falha silenciosamente ou gera erro. Nenhum workspace consegue conectar sua conta Meta.
 
-### Problema 3: Tag criada nao aparece imediatamente no lead
-Quando `createTag` e chamado e retorna a tag, `addTagToLead` e chamado logo em seguida. Porem, o `addTagToLead` busca a tag no estado local `tags` via `tags.find(t => t.id === tagId)`. Como `createTag` acabou de adicionar a tag via `setTags`, o estado pode nao ter sido atualizado ainda (closure stale). Resultado: a tag e criada no banco mas nao aparece visualmente no lead.
+**Causa**: O fluxo OAuth e um redirect (GET callback), nao carrega contexto do usuario autenticado. O `workspace_id` precisa ser passado via parametro `state` do OAuth.
 
-### Problema 4: Contatos nao tem gerenciamento de tags
-A pagina de Contatos exibe tags mas os botoes "Tags" e "Adicionar Tag" nao fazem nada (sao botoes decorativos sem funcionalidade).
+### Bug 2: Webhook nao salva workspace_id em meta_conversations
+A Edge Function `facebook-webhook` salva mensagens recebidas na tabela `meta_conversations`, mas nunca inclui `workspace_id`. Como a coluna e `NOT NULL`, todas as mensagens recebidas falham ao serem salvas.
+
+**Causa**: A funcao `saveMessage` nao busca o `workspace_id` da `meta_page` correspondente.
+
+### Bug 3: meta-send-message nao salva workspace_id
+A Edge Function `meta-send-message` insere mensagens outbound em `meta_conversations` sem `workspace_id`.
 
 ---
 
 ## Plano de Correcao
 
-### Arquivo 1: `src/components/chat/LeadSidePanel.tsx`
+### Arquivo 1: `supabase/functions/facebook-oauth/index.ts`
 
-**Refatorar o popover de tags** para usar o `ChatTagManager` existente (que ja tem a logica correta de buscar, filtrar, criar e adicionar tags):
+Incluir `workspace_id` no fluxo OAuth:
+- Na rota POST `/url`: receber `workspace_id` do body da requisicao (o frontend ja envia o auth token)
+- Codificar o `workspace_id` dentro do parametro `state` do OAuth (junto com o HMAC existente)
+- Na rota GET (callback): extrair `workspace_id` do `state` decodificado
+- Passar `workspace_id` ao inserir em `meta_accounts` e `meta_pages`
 
-- Substituir todo o bloco do Popover de tags (linhas ~332-414) por `<ChatTagManager>` que ja:
-  - Mostra tags existentes com botao de remover
-  - Popover com busca integrada
-  - Opcao de criar nova tag aparece quando o termo buscado nao existe como tag
-  - Cria e adiciona em uma unica acao
+Mudancas especificas:
+- `generateState(workspaceId)` -> incluir workspace_id no payload
+- `validateState(state)` -> retornar `{ valid, workspaceId }` em vez de apenas boolean
+- INSERT `meta_accounts` -> adicionar `workspace_id`
+- INSERT `meta_pages` -> adicionar `workspace_id`
 
-### Arquivo 2: `src/hooks/useLeads.ts`
+### Arquivo 2: `supabase/functions/facebook-webhook/index.ts`
 
-**Corrigir closure stale no `addTagToLead`**: Em vez de buscar a tag no estado `tags` local (que pode estar desatualizado), buscar a tag diretamente do banco apos o insert:
+Incluir `workspace_id` ao salvar mensagens:
+- Em `findMetaPage`: adicionar `workspace_id` ao SELECT (ja seleciona `id, page_access_token, platform`)
+- Na funcao `saveMessage`: adicionar campo `workspace_id` ao parametro
+- Em `processMessengerEvent`, `processInstagramEvent`, `processWhatsAppBusinessEvent`: passar `metaPage.workspace_id` para `saveMessage`
 
-```typescript
-const addTagToLead = useCallback(async (leadId: string, tagId: string) => {
-  if (!workspaceId) return false;
-  try {
-    const { error } = await supabase
-      .from('lead_tag_assignments')
-      .insert({ lead_id: leadId, tag_id: tagId, workspace_id: workspaceId });
-    if (error) throw error;
+### Arquivo 3: `supabase/functions/meta-send-message/index.ts`
 
-    // Buscar a tag do estado OU do banco para evitar closure stale
-    let tag = tags.find(t => t.id === tagId);
-    if (!tag) {
-      const { data } = await supabase
-        .from('lead_tags')
-        .select('*')
-        .eq('id', tagId)
-        .single();
-      tag = data as LeadTag;
-    }
+Incluir `workspace_id` ao salvar mensagem outbound:
+- No SELECT de `meta_pages`: adicionar `workspace_id` ao select (ja seleciona `id, page_id, page_access_token, platform, instagram_account_id`)
+- No INSERT em `meta_conversations`: adicionar `workspace_id: page.workspace_id`
 
-    if (tag) {
-      setLeads(prev => prev.map(l =>
-        l.id === leadId
-          ? { ...l, tags: [...(l.tags || []), tag!] }
-          : l
-      ));
-    }
-    return true;
-  } catch (err) {
-    console.error('Error adding tag:', err);
-    return false;
-  }
-}, [tags, workspaceId]);
-```
+### Arquivo 4: `src/pages/Settings.tsx`
 
-### Arquivo 3: `src/pages/Contacts.tsx`
+Enviar `workspace_id` ao solicitar URL OAuth:
+- Buscar `workspaceId` do contexto (useWorkspace)
+- Enviar no body do invoke: `{ workspaceId }`
 
-**Adicionar gerenciamento de tags em massa**:
-- Importar `useLeads` para acessar `tags`, `addTagToLead`, `removeTagFromLead`, `createTag`
-- Implementar funcionalidade no botao "Adicionar Tag" da barra de selecao em massa: abre um popover com lista de tags para aplicar aos contatos selecionados
-- Implementar botao "Tags" no header como filtro por tags
+### Arquivo 5: `supabase/functions/send-scheduled-messages/index.ts`
+
+Verificar se as queries de meta_pages incluem `workspace_id` para consistencia (este arquivo tambem busca `meta_pages` para enviar mensagens agendadas).
 
 ---
 
-## Detalhes Tecnicos
-
-### Mudancas por arquivo:
+## Resumo das mudancas
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/components/chat/LeadSidePanel.tsx` | Substituir popover manual por `ChatTagManager` |
-| `src/hooks/useLeads.ts` | Fallback de busca de tag no banco dentro de `addTagToLead` |
-| `src/pages/Contacts.tsx` | Adicionar funcionalidade real aos botoes de tag |
+| `facebook-oauth/index.ts` | Incluir workspace_id no state OAuth e nos INSERTs |
+| `facebook-webhook/index.ts` | Buscar e passar workspace_id ao salvar mensagens |
+| `meta-send-message/index.ts` | Buscar e passar workspace_id ao salvar outbound |
+| `Settings.tsx` | Enviar workspaceId no body do invoke OAuth |
+| `send-scheduled-messages/index.ts` | Incluir workspace_id se necessario |
 
-### Sem alteracoes em:
-- `useStageAutomations`
-- `FunnelAutomationsPage`
-- `TagManager` (configuracoes)
-- `AutoTagRules`
-- Edge functions
+## Impacto
+- Cada workspace passa a configurar sua propria conta Meta isoladamente
+- Mensagens inbound (webhook) e outbound (send) sao corretamente associadas ao workspace
+- O chat unificado passa a exibir as conversas Meta filtradas por workspace via RLS
+- Edge Functions usam service_role, entao nao sao afetadas pelas policies de RLS criadas anteriormente
