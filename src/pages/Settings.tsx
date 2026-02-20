@@ -861,13 +861,16 @@ export default function Settings() {
 
         {/* Billing Tab */}
         <TabsContent value="billing">
-          <div className="inboxia-card p-12 text-center">
+          <div className="inboxia-card p-12 text-center space-y-4">
             <h3 className="font-display font-semibold text-lg mb-2">
               Plano & Faturamento
             </h3>
             <p className="text-muted-foreground">
               Gerencie seu plano e informações de pagamento
             </p>
+            <Button variant="default" onClick={() => window.location.href = "/planos"}>
+              Ver planos e pacotes
+            </Button>
           </div>
         </TabsContent>
       </Tabs>
