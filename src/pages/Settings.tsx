@@ -205,11 +205,19 @@ export default function Settings() {
       // Fetch connection state for each instance
       const instancesWithState = await Promise.all(
         data.map(async (instance) => {
-          const state = await getConnectionState(instance.instanceName);
-          return {
-            ...instance,
-            connectionStatus: state?.instance?.state || "close",
-          };
+          try {
+            const state = await getConnectionState(instance.instanceName);
+            return {
+              ...instance,
+              connectionStatus: state?.instance?.state || "open",
+            };
+          } catch {
+            // Fail-open: assume connected if state check fails
+            return {
+              ...instance,
+              connectionStatus: "open" as const,
+            };
+          }
         })
       );
       setInstances(instancesWithState);
