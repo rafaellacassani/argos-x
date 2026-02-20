@@ -4,6 +4,7 @@ import { TopBar } from "./TopBar";
 import { useWorkspaceAccess } from "@/hooks/useWorkspaceAccess";
 import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
+import { LeadLimitBanner } from "./LeadLimitBanner";
 import { Loader2 } from "lucide-react";
 
 interface AppLayoutProps {
@@ -36,6 +37,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar />
         {showTrialBanner && <TrialBanner daysRemaining={daysRemaining} />}
+        <LeadLimitBanner />
         <main className="flex-1 overflow-auto p-6">
           {children}
         </main>
