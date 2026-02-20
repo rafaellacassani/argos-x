@@ -159,9 +159,17 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     loadData();
   }, [open, workspaceId, loadData]);
 
-  // Estimate recipients with debounce
+  // Estimate recipients with debounce — only when filters actually change
+  const filtersKey = `${filterTagIds.join(",")}-${filterStageIds.join(",")}-${filterResponsibleIds.join(",")}`;
+  const prevFiltersKeyRef = useRef("");
   useEffect(() => {
     if (!open || !workspaceId) return;
+    // Skip initial render — loadData already does the first estimate
+    if (prevFiltersKeyRef.current === "" && filtersKey === "--") {
+      prevFiltersKeyRef.current = filtersKey;
+      return;
+    }
+    prevFiltersKeyRef.current = filtersKey;
     const timer = setTimeout(async () => {
       setEstimating(true);
       const count = await estimateRecipients(filterTagIds, filterStageIds, filterResponsibleIds);
@@ -169,7 +177,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
       setEstimating(false);
     }, 500);
     return () => clearTimeout(timer);
-  }, [filterTagIds, filterStageIds, filterResponsibleIds, open, workspaceId, estimateRecipients]);
+  }, [filtersKey, open, workspaceId, estimateRecipients]);
 
   const insertShortcode = (code: string) => {
     const textarea = textareaRef.current;
@@ -297,6 +305,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   };
 
   const resetForm = () => {
+    prevFiltersKeyRef.current = "";
     setStep(1);
     setName("");
     setFilterTagIds([]);
