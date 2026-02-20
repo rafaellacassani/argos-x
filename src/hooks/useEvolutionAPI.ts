@@ -242,8 +242,8 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      // 3. Mapear e filtrar apenas as instâncias que estão no banco local
-      const allInstances = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
+      // 3. Mapear instâncias da Evolution API
+      const allApiInstances = Array.isArray(data) ? data.map((item: Record<string, unknown>) => ({
         instanceName: item.name as string,
         instanceId: item.id as string,
         profileName: item.profileName as string,
@@ -252,13 +252,24 @@ export function useEvolutionAPI() {
         connectionStatus: item.connectionStatus as "open" | "close" | "connecting",
       })) : [];
 
-      // Filtrar para mostrar apenas instâncias do CRM
-      const filteredInstances = allInstances.filter(inst => 
+      // Filtrar para mostrar apenas instâncias do CRM que existem na API
+      const apiInstanceNames = new Set(allApiInstances.map(i => i.instanceName));
+      const matchedInstances = allApiInstances.filter(inst => 
         localInstanceNames.includes(inst.instanceName)
       );
 
-      console.log("[useEvolutionAPI] Filtered instances:", filteredInstances.map(i => i.instanceName));
-      return filteredInstances;
+      // 4. Para instâncias locais que NÃO existem na Evolution API (deletadas/recriadas),
+      // incluí-las com status "close" para que os chats do banco continuem visíveis
+      const missingFromApi = localInstances
+        .filter(inst => !apiInstanceNames.has(inst.instance_name))
+        .map(inst => ({
+          instanceName: inst.instance_name,
+          connectionStatus: "close" as const,
+        }));
+
+      const result = [...matchedInstances, ...missingFromApi];
+      console.log("[useEvolutionAPI] Filtered instances:", result.map(i => i.instanceName));
+      return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao listar conexões";
       setError(message);
