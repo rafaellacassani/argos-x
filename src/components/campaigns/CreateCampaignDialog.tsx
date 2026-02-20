@@ -104,24 +104,60 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [members, setMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
 
-  useEffect(() => {
-    if (!open || !workspaceId) return;
-    loadData();
-  }, [open, workspaceId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!workspaceId) return;
+
+    // Find default funnel (or first available)
+    let funnelId: string | null = null;
+    const { data: defaultFunnel } = await supabase
+      .from("funnels")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("is_default", true)
+      .maybeSingle();
+    
+    if (defaultFunnel) {
+      funnelId = defaultFunnel.id;
+    } else {
+      const { data: firstFunnel } = await supabase
+        .from("funnels")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      funnelId = firstFunnel?.id || null;
+    }
+
+    const stagesQuery = funnelId
+      ? supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).eq("funnel_id", funnelId).order("position")
+      : supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).order("position").limit(0);
+
     const [tagsRes, stagesRes, membersRes, instancesRes] = await Promise.all([
       supabase.from("lead_tags").select("id, name, color").eq("workspace_id", workspaceId),
-      supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).order("position"),
-      supabase.from("user_profiles").select("id, full_name"),
+      stagesQuery,
+      supabase.from("workspace_members").select("user_id, user_profiles(id, full_name)").eq("workspace_id", workspaceId),
       supabase.from("whatsapp_instances").select("instance_name, display_name").eq("workspace_id", workspaceId),
     ]);
     setTags(tagsRes.data || []);
     setStages(stagesRes.data || []);
-    setMembers(membersRes.data || []);
+    setMembers(
+      (membersRes.data || [])
+        .map((m: any) => m.user_profiles)
+        .filter(Boolean)
+        .map((p: any) => ({ id: p.id, full_name: p.full_name }))
+    );
     setInstances(instancesRes.data || []);
-  };
+
+    // Initial estimate (no filters = all leads with phone)
+    const count = await estimateRecipients([], [], []);
+    setEstimatedCount(count);
+  }, [workspaceId, estimateRecipients]);
+
+  useEffect(() => {
+    if (!open || !workspaceId) return;
+    loadData();
+  }, [open, workspaceId, loadData]);
 
   // Estimate recipients with debounce
   useEffect(() => {
