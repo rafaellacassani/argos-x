@@ -1,8 +1,9 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { MoreHorizontal, Plus, Bot, Pencil, Palette, Trash2, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +55,10 @@ interface LeadColumnProps {
   teamMembers?: TeamMember[];
   hasActiveAutomations?: boolean;
   tags?: LeadTag[];
+  bulkMode?: boolean;
+  selectedLeadIds?: Set<string>;
+  onToggleSelect?: (leadId: string) => void;
+  onToggleSelectAll?: (stageId: string, leadIds: string[]) => void;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -71,6 +76,10 @@ export const LeadColumn = memo(function LeadColumn({
   teamMembers = [],
   hasActiveAutomations = false,
   tags = [],
+  bulkMode = false,
+  selectedLeadIds = new Set(),
+  onToggleSelect,
+  onToggleSelectAll,
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -81,6 +90,12 @@ export const LeadColumn = memo(function LeadColumn({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const totalValue = leads.reduce((sum, lead) => sum + (lead.total_sales_value || lead.value || 0), 0);
+
+  // Bulk selection state for this column
+  const columnLeadIds = leads.map(l => l.id);
+  const selectedInColumn = columnLeadIds.filter(id => selectedLeadIds.has(id));
+  const allSelected = columnLeadIds.length > 0 && selectedInColumn.length === columnLeadIds.length;
+  const someSelected = selectedInColumn.length > 0 && !allSelected;
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -112,18 +127,12 @@ export const LeadColumn = memo(function LeadColumn({
   }, [editName, stage.name, stage.id, onUpdateStage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSaveName();
-    } else if (e.key === 'Escape') {
-      setIsEditing(false);
-      setEditName(stage.name);
-    }
+    if (e.key === 'Enter') handleSaveName();
+    else if (e.key === 'Escape') { setIsEditing(false); setEditName(stage.name); }
   }, [handleSaveName, stage.name]);
 
   const handleColorChange = useCallback((color: string) => {
-    if (onUpdateStage) {
-      onUpdateStage(stage.id, { color });
-    }
+    if (onUpdateStage) onUpdateStage(stage.id, { color });
     setColorOpen(false);
   }, [stage.id, onUpdateStage]);
 
@@ -133,8 +142,6 @@ export const LeadColumn = memo(function LeadColumn({
     if (result.error === 'has_leads') {
       setDeleteInfo({ hasLeads: true, count: result.count || 0 });
       setDeleteDialogOpen(true);
-    } else if (result.success) {
-      // Already deleted
     }
   }, [onDeleteStage, stage.id]);
 
@@ -152,41 +159,49 @@ export const LeadColumn = memo(function LeadColumn({
         style={{ backgroundColor: `${stage.color}15` }}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Popover open={colorOpen} onOpenChange={setColorOpen}>
-            <PopoverTrigger asChild>
-              <button className="relative flex-shrink-0 cursor-pointer group/color" title="Mudar cor">
-                <div
-                  className="w-3 h-3 rounded-full ring-2 ring-transparent group-hover/color:ring-foreground/20 transition-all"
-                  style={{ backgroundColor: stage.color }}
-                />
-                {hasActiveAutomations && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border border-background" />
-                    </TooltipTrigger>
-                    <TooltipContent>Automações ativas — clique em Automações para gerenciar</TooltipContent>
-                  </Tooltip>
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-3" align="start">
-              <div className="grid grid-cols-6 gap-2">
-                {STAGE_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110",
-                      stage.color === c && "ring-2 ring-offset-2 ring-foreground/50"
-                    )}
-                    style={{ backgroundColor: c }}
-                    onClick={() => handleColorChange(c)}
-                  >
-                    {stage.color === c && <Check className="h-3.5 w-3.5 text-white" />}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+          {bulkMode && columnLeadIds.length > 0 ? (
+            <Checkbox
+              checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+              onCheckedChange={() => onToggleSelectAll?.(stage.id, columnLeadIds)}
+              className="flex-shrink-0"
+            />
+          ) : (
+            <Popover open={colorOpen} onOpenChange={setColorOpen}>
+              <PopoverTrigger asChild>
+                <button className="relative flex-shrink-0 cursor-pointer group/color" title="Mudar cor">
+                  <div
+                    className="w-3 h-3 rounded-full ring-2 ring-transparent group-hover/color:ring-foreground/20 transition-all"
+                    style={{ backgroundColor: stage.color }}
+                  />
+                  {hasActiveAutomations && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500 border border-background" />
+                      </TooltipTrigger>
+                      <TooltipContent>Automações ativas — clique em Automações para gerenciar</TooltipContent>
+                    </Tooltip>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-3" align="start">
+                <div className="grid grid-cols-6 gap-2">
+                  {STAGE_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      className={cn(
+                        "w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110",
+                        stage.color === c && "ring-2 ring-offset-2 ring-foreground/50"
+                      )}
+                      style={{ backgroundColor: c }}
+                      onClick={() => handleColorChange(c)}
+                    >
+                      {stage.color === c && <Check className="h-3.5 w-3.5 text-white" />}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
 
           {isEditing ? (
             <Input
@@ -205,7 +220,7 @@ export const LeadColumn = memo(function LeadColumn({
             {leads.length}
           </span>
 
-          {!isEditing && (
+          {!isEditing && !bulkMode && (
             <Button
               variant="ghost"
               size="icon"
@@ -217,53 +232,55 @@ export const LeadColumn = memo(function LeadColumn({
           )}
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {onAddLead && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAddLead(stage.id)}>
-              <Plus className="h-4 w-4" />
-            </Button>
-          )}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 relative">
-                <MoreHorizontal className="h-4 w-4" />
-                {stage.bot_id && <Bot className="h-3 w-3 absolute -top-1 -right-1 text-primary" />}
+        {!bulkMode && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {onAddLead && (
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onAddLead(stage.id)}>
+                <Plus className="h-4 w-4" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleStartEdit}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Renomear etapa
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setColorOpen(true)}>
-                <Palette className="h-4 w-4 mr-2" />
-                Mudar cor
-              </DropdownMenuItem>
-              {onEditStage && (
-                <DropdownMenuItem onClick={() => onEditStage(stage)}>
-                  Editar Fase
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 relative">
+                  <MoreHorizontal className="h-4 w-4" />
+                  {stage.bot_id && <Bot className="h-3 w-3 absolute -top-1 -right-1 text-primary" />}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleStartEdit}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Renomear etapa
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-                <Bot className="h-4 w-4 mr-2" />
-                Configurar Automação
-              </DropdownMenuItem>
-              {onDeleteStage && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    disabled={!canDeleteStage}
-                    onClick={handleDeleteClick}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Excluir etapa
+                <DropdownMenuItem onClick={() => setColorOpen(true)}>
+                  <Palette className="h-4 w-4 mr-2" />
+                  Mudar cor
+                </DropdownMenuItem>
+                {onEditStage && (
+                  <DropdownMenuItem onClick={() => onEditStage(stage)}>
+                    Editar Fase
                   </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+                )}
+                <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
+                  <Bot className="h-4 w-4 mr-2" />
+                  Configurar Automação
+                </DropdownMenuItem>
+                {onDeleteStage && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      disabled={!canDeleteStage}
+                      onClick={handleDeleteClick}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Excluir etapa
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
 
       {/* Stats Bar */}
@@ -276,7 +293,7 @@ export const LeadColumn = memo(function LeadColumn({
       </div>
 
       {/* Droppable Area */}
-      <Droppable droppableId={stage.id}>
+      <Droppable droppableId={stage.id} isDropDisabled={bulkMode}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -302,6 +319,9 @@ export const LeadColumn = memo(function LeadColumn({
                   onOpenChat={onOpenChat}
                   canDelete={canDelete}
                   teamMembers={teamMembers}
+                  bulkMode={bulkMode}
+                  isSelected={selectedLeadIds.has(lead.id)}
+                  onToggleSelect={onToggleSelect}
                 />
               ))}
             </AnimatePresence>
@@ -310,7 +330,7 @@ export const LeadColumn = memo(function LeadColumn({
             {leads.length === 0 && !snapshot.isDraggingOver && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <p className="text-sm">Nenhum lead nesta fase</p>
-                {onAddLead && (
+                {onAddLead && !bulkMode && (
                   <Button variant="ghost" size="sm" className="mt-2" onClick={() => onAddLead(stage.id)}>
                     <Plus className="h-4 w-4 mr-1" />
                     Adicionar
