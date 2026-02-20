@@ -907,6 +907,44 @@ export type Database = {
           },
         ]
       }
+      lead_packs: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          pack_size: number
+          price_paid: number | null
+          stripe_item_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          pack_size: number
+          price_paid?: number | null
+          stripe_item_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          pack_size?: number
+          price_paid?: number | null
+          stripe_item_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_packs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_proposals: {
         Row: {
           created_at: string
@@ -2005,14 +2043,20 @@ export type Database = {
       }
       workspaces: {
         Row: {
+          ai_interactions_limit: number | null
+          ai_interactions_used: number | null
+          ai_reset_at: string | null
           alert_instance_name: string | null
           blocked_at: string | null
           created_at: string
           created_by: string
+          extra_leads: number | null
           id: string
+          lead_limit: number | null
           name: string
           onboarding_completed: boolean | null
           onboarding_step: number | null
+          plan_name: string | null
           plan_type: string
           slug: string
           stripe_customer_id: string | null
@@ -2020,16 +2064,24 @@ export type Database = {
           stripe_subscription_id: string | null
           subscription_status: string
           trial_end: string | null
+          user_limit: number | null
+          whatsapp_limit: number | null
         }
         Insert: {
+          ai_interactions_limit?: number | null
+          ai_interactions_used?: number | null
+          ai_reset_at?: string | null
           alert_instance_name?: string | null
           blocked_at?: string | null
           created_at?: string
           created_by: string
+          extra_leads?: number | null
           id?: string
+          lead_limit?: number | null
           name: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
+          plan_name?: string | null
           plan_type?: string
           slug: string
           stripe_customer_id?: string | null
@@ -2037,16 +2089,24 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_status?: string
           trial_end?: string | null
+          user_limit?: number | null
+          whatsapp_limit?: number | null
         }
         Update: {
+          ai_interactions_limit?: number | null
+          ai_interactions_used?: number | null
+          ai_reset_at?: string | null
           alert_instance_name?: string | null
           blocked_at?: string | null
           created_at?: string
           created_by?: string
+          extra_leads?: number | null
           id?: string
+          lead_limit?: number | null
           name?: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
+          plan_name?: string | null
           plan_type?: string
           slug?: string
           stripe_customer_id?: string | null
@@ -2054,6 +2114,8 @@ export type Database = {
           stripe_subscription_id?: string | null
           subscription_status?: string
           trial_end?: string | null
+          user_limit?: number | null
+          whatsapp_limit?: number | null
         }
         Relationships: []
       }
