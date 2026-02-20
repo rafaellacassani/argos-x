@@ -1,7 +1,7 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import { AnimatePresence } from 'framer-motion';
-import { MoreHorizontal, Plus, Bot, Pencil, Palette, Trash2, Check } from 'lucide-react';
+import { MoreHorizontal, Plus, Bot, Pencil, Palette, Trash2, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -59,6 +59,10 @@ interface LeadColumnProps {
   selectedLeadIds?: Set<string>;
   onToggleSelect?: (leadId: string) => void;
   onToggleSelectAll?: (stageId: string, leadIds: string[]) => void;
+  canMoveLeft?: boolean;
+  canMoveRight?: boolean;
+  onMoveLeft?: () => void;
+  onMoveRight?: () => void;
 }
 
 export const LeadColumn = memo(function LeadColumn({
@@ -80,6 +84,10 @@ export const LeadColumn = memo(function LeadColumn({
   selectedLeadIds = new Set(),
   onToggleSelect,
   onToggleSelectAll,
+  canMoveLeft = false,
+  canMoveRight = false,
+  onMoveLeft,
+  onMoveRight,
 }: LeadColumnProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -264,6 +272,18 @@ export const LeadColumn = memo(function LeadColumn({
                   <Bot className="h-4 w-4 mr-2" />
                   Configurar Automação
                 </DropdownMenuItem>
+                {onMoveLeft && (
+                  <DropdownMenuItem disabled={!canMoveLeft} onClick={onMoveLeft}>
+                    <ChevronLeft className="h-4 w-4 mr-2" />
+                    Mover para esquerda
+                  </DropdownMenuItem>
+                )}
+                {onMoveRight && (
+                  <DropdownMenuItem disabled={!canMoveRight} onClick={onMoveRight}>
+                    <ChevronRight className="h-4 w-4 mr-2" />
+                    Mover para direita
+                  </DropdownMenuItem>
+                )}
                 {onDeleteStage && (
                   <>
                     <DropdownMenuSeparator />
