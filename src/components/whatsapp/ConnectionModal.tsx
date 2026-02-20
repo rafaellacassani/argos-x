@@ -208,6 +208,29 @@ export function ConnectionModal({
             }
           }
           
+          // Auto-sync message history from Evolution API to local DB
+          try {
+            toast({
+              title: "Sincronizando histórico...",
+              description: "Importando mensagens do WhatsApp para o banco local.",
+            });
+            supabase.functions.invoke('sync-whatsapp-messages', {
+              body: { instanceName: instanceToReconnect || instanceName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, ""), workspaceId },
+            }).then((res) => {
+              if (res.data && !res.error) {
+                console.log("[ConnectionModal] Sync complete:", res.data);
+                toast({
+                  title: "Histórico sincronizado ✓",
+                  description: `${res.data.synced || 0} mensagens de ${res.data.chats || 0} conversas importadas.`,
+                });
+              }
+            }).catch((err) => {
+              console.error("[ConnectionModal] Sync error:", err);
+            });
+          } catch (syncErr) {
+            console.error("[ConnectionModal] Sync trigger error:", syncErr);
+          }
+          
           setStep("success");
 
           toast({
