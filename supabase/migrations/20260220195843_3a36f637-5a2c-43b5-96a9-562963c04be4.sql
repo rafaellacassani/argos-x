@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX idx_leads_phone_workspace ON public.leads (phone, workspace_id);
