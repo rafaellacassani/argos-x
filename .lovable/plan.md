@@ -1,78 +1,101 @@
 
-# Correcao: Integracao Meta (Facebook/Instagram) - workspace_id ausente
 
-## Diagnostico
+# Implementacao: Calendario com Google Calendar - Prompt 1
 
-Foram identificados **3 bugs criticos** que impedem a integracao Meta de funcionar corretamente no modelo multi-tenant (por workspace):
-
-### Bug 1: OAuth nao salva workspace_id
-A Edge Function `facebook-oauth` insere registros em `meta_accounts` e `meta_pages` **sem workspace_id**. Ambas as tabelas tem `workspace_id NOT NULL`, entao o INSERT falha silenciosamente ou gera erro. Nenhum workspace consegue conectar sua conta Meta.
-
-**Causa**: O fluxo OAuth e um redirect (GET callback), nao carrega contexto do usuario autenticado. O `workspace_id` precisa ser passado via parametro `state` do OAuth.
-
-### Bug 2: Webhook nao salva workspace_id em meta_conversations
-A Edge Function `facebook-webhook` salva mensagens recebidas na tabela `meta_conversations`, mas nunca inclui `workspace_id`. Como a coluna e `NOT NULL`, todas as mensagens recebidas falham ao serem salvas.
-
-**Causa**: A funcao `saveMessage` nao busca o `workspace_id` da `meta_page` correspondente.
-
-### Bug 3: meta-send-message nao salva workspace_id
-A Edge Function `meta-send-message` insere mensagens outbound em `meta_conversations` sem `workspace_id`.
+## Resumo
+Criar toda a infraestrutura backend para o calendario interno + sincronizacao bidirecional com Google Calendar: banco de dados, OAuth, Edge Functions e hook frontend. A CalendarPage.tsx NAO sera alterada neste prompt.
 
 ---
 
-## Plano de Correcao
+## 1. Migration SQL
 
-### Arquivo 1: `supabase/functions/facebook-oauth/index.ts`
+Criar duas tabelas:
 
-Incluir `workspace_id` no fluxo OAuth:
-- Na rota POST `/url`: receber `workspace_id` do body da requisicao (o frontend ja envia o auth token)
-- Codificar o `workspace_id` dentro do parametro `state` do OAuth (junto com o HMAC existente)
-- Na rota GET (callback): extrair `workspace_id` do `state` decodificado
-- Passar `workspace_id` ao inserir em `meta_accounts` e `meta_pages`
+**calendar_events** - Eventos do calendario interno
+- Campos: id, workspace_id, user_id, title, description, start_at, end_at, all_day, type, color, lead_id, location, google_event_id, synced_to_google, last_synced_at, created_at, updated_at
+- Indices em workspace_id, user_id+start_at, google_event_id
+- RLS: membros do workspace podem gerenciar seus eventos
+- Realtime habilitado
 
-Mudancas especificas:
-- `generateState(workspaceId)` -> incluir workspace_id no payload
-- `validateState(state)` -> retornar `{ valid, workspaceId }` em vez de apenas boolean
-- INSERT `meta_accounts` -> adicionar `workspace_id`
-- INSERT `meta_pages` -> adicionar `workspace_id`
+**google_calendar_tokens** - Tokens OAuth por usuario
+- Campos: id, user_id (UNIQUE), workspace_id, access_token, refresh_token, token_expiry, google_email, google_calendar_id, sync_enabled, created_at, updated_at
+- RLS: apenas o proprio usuario acessa seus tokens
 
-### Arquivo 2: `supabase/functions/facebook-webhook/index.ts`
-
-Incluir `workspace_id` ao salvar mensagens:
-- Em `findMetaPage`: adicionar `workspace_id` ao SELECT (ja seleciona `id, page_access_token, platform`)
-- Na funcao `saveMessage`: adicionar campo `workspace_id` ao parametro
-- Em `processMessengerEvent`, `processInstagramEvent`, `processWhatsAppBusinessEvent`: passar `metaPage.workspace_id` para `saveMessage`
-
-### Arquivo 3: `supabase/functions/meta-send-message/index.ts`
-
-Incluir `workspace_id` ao salvar mensagem outbound:
-- No SELECT de `meta_pages`: adicionar `workspace_id` ao select (ja seleciona `id, page_id, page_access_token, platform, instagram_account_id`)
-- No INSERT em `meta_conversations`: adicionar `workspace_id: page.workspace_id`
-
-### Arquivo 4: `src/pages/Settings.tsx`
-
-Enviar `workspace_id` ao solicitar URL OAuth:
-- Buscar `workspaceId` do contexto (useWorkspace)
-- Enviar no body do invoke: `{ workspaceId }`
-
-### Arquivo 5: `supabase/functions/send-scheduled-messages/index.ts`
-
-Verificar se as queries de meta_pages incluem `workspace_id` para consistencia (este arquivo tambem busca `meta_pages` para enviar mensagens agendadas).
+Trigger `update_updated_at_column` em ambas as tabelas.
 
 ---
 
-## Resumo das mudancas
+## 2. Edge Function: google-calendar-oauth
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `facebook-oauth/index.ts` | Incluir workspace_id no state OAuth e nos INSERTs |
-| `facebook-webhook/index.ts` | Buscar e passar workspace_id ao salvar mensagens |
-| `meta-send-message/index.ts` | Buscar e passar workspace_id ao salvar outbound |
-| `Settings.tsx` | Enviar workspaceId no body do invoke OAuth |
-| `send-scheduled-messages/index.ts` | Incluir workspace_id se necessario |
+Arquivo: `supabase/functions/google-calendar-oauth/index.ts`
 
-## Impacto
-- Cada workspace passa a configurar sua propria conta Meta isoladamente
-- Mensagens inbound (webhook) e outbound (send) sao corretamente associadas ao workspace
-- O chat unificado passa a exibir as conversas Meta filtradas por workspace via RLS
-- Edge Functions usam service_role, entao nao sao afetadas pelas policies de RLS criadas anteriormente
+Usa framework Hono (mesmo padrao do facebook-oauth). 4 rotas:
+
+- **POST /url** - Gera URL de autorizacao Google. Recebe `{ workspaceId }` + JWT do usuario. Codifica userId + workspaceId no state. Retorna `{ url }`.
+
+- **GET /callback** - Recebe code + state do Google. Troca code por tokens (access_token + refresh_token). Busca email do usuario Google. UPSERT em google_calendar_tokens. Redireciona para `APP_URL/settings?tab=integrations&google_calendar=connected`.
+
+- **POST /refresh** - Renova access_token expirado. Recebe `{ userId }`. Busca refresh_token, chama Google token endpoint com grant_type=refresh_token. Atualiza no banco. Retorna `{ access_token }`.
+
+- **DELETE /disconnect** - Extrai userId do JWT. Deleta registro de google_calendar_tokens. Retorna `{ success: true }`.
+
+Config: `verify_jwt = false` no config.toml (validacao manual dentro da funcao).
+
+---
+
+## 3. Edge Function: sync-google-calendar
+
+Arquivo: `supabase/functions/sync-google-calendar/index.ts`
+
+Helper `refreshIfNeeded(userId)`: busca token, se expira em menos de 5 min, chama google-calendar-oauth/refresh.
+
+- **POST /push** - Recebe `{ eventId }`. Busca evento + token do usuario. Se nao sincronizado: POST para Google Calendar API, salva google_event_id. Se ja sincronizado: PUT para atualizar.
+
+- **DELETE /delete** - Recebe `{ eventId }`. Se tem google_event_id: DELETE no Google Calendar. Limpa campos de sync.
+
+- **POST /pull** - Recebe `{ userId, daysAhead }`. GET eventos do Google Calendar. Para cada evento que nao existe localmente (por google_event_id): INSERT em calendar_events.
+
+Config: `verify_jwt = false` no config.toml.
+
+---
+
+## 4. Hook: useCalendar.ts
+
+Arquivo: `src/hooks/useCalendar.ts`
+
+Funcionalidades:
+- `events` - estado com eventos do mes
+- `fetchEvents(year, month)` - busca do banco por periodo
+- `createEvent(data)` - INSERT + auto-push se Google conectado
+- `updateEvent(id, data)` - UPDATE + auto-push
+- `deleteEvent(id)` - DELETE + sync delete
+- `googleConnected` / `googleEmail` - status da conexao Google
+- `connectGoogle()` - invoca google-calendar-oauth/url e redireciona
+- `disconnectGoogle()` - invoca google-calendar-oauth/disconnect
+- `pullFromGoogle()` - invoca sync-google-calendar/pull
+- Subscription Realtime em calendar_events para atualizacoes em tempo real
+
+---
+
+## 5. Settings.tsx - Integracao Google Calendar
+
+No card "Google Calendar" (linha ~329):
+- Mudar `available: false` para `available: true`
+- Mudar `connected: false` para usar `googleConnected` do hook
+- Se conectado: badge "Conectado" + email Google + botoes "Sincronizar agora" e "Desconectar"
+- Se nao conectado: botao "Conectar" chama `connectGoogle()`
+- Detectar `?google_calendar=connected` na URL e mostrar toast de sucesso
+
+---
+
+## Arquivos criados/modificados
+
+| Arquivo | Acao |
+|---------|------|
+| Migration SQL | Criar tabelas calendar_events + google_calendar_tokens |
+| `supabase/functions/google-calendar-oauth/index.ts` | Criar |
+| `supabase/functions/sync-google-calendar/index.ts` | Criar |
+| `supabase/config.toml` | Adicionar verify_jwt=false para as 2 novas functions |
+| `src/hooks/useCalendar.ts` | Criar |
+| `src/pages/Settings.tsx` | Modificar card Google Calendar |
+
