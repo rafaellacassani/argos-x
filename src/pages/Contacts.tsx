@@ -18,6 +18,8 @@ import {
   Building,
   Tag,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Loader2,
   Check,
@@ -89,6 +91,9 @@ export default function Contacts() {
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [bulkTagSearch, setBulkTagSearch] = useState("");
   const [newBulkTagColor, setNewBulkTagColor] = useState("#3B82F6");
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 100;
 
   useEffect(() => { fetchTags(); }, [fetchTags]);
 
@@ -111,7 +116,7 @@ export default function Contacts() {
       toast({ title: "Tag aplicada", description: `Tag adicionada a ${selectedContacts.length} contato(s).` });
       setBulkTagSearch("");
       setBulkTagOpen(false);
-      fetchContacts();
+      fetchContacts(currentPage);
     } catch (err) {
       console.error("Bulk tag assign error:", err);
       toast({ title: "Erro ao aplicar tag", description: "Tente novamente.", variant: "destructive" });
@@ -195,7 +200,7 @@ export default function Contacts() {
       }
 
       toast({ title: "Enriquecimento concluído", description: `${updated} contatos atualizados de ${needsEnrichment.length} processados.` });
-      fetchContacts();
+      fetchContacts(currentPage);
     } catch (err) {
       console.error("[Contacts] Batch enrich error:", err);
       toast({ title: "Erro no enriquecimento", description: "Tente novamente.", variant: "destructive" });
@@ -204,13 +209,23 @@ export default function Contacts() {
     }
   }, [listInstances, getConnectionState, fetchProfilesBatch]);
 
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async (page = currentPage) => {
     setLoading(true);
+
+    // Get total count
+    const { count } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true });
+    setTotalCount(count ?? 0);
+
+    // Fetch paginated leads
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
     const { data: leads } = await supabase
       .from("leads")
       .select("id, name, phone, email, company, source, created_at")
       .order("created_at", { ascending: false })
-      .limit(5000);
+      .range(from, to);
 
     if (!leads || leads.length === 0) {
       setContacts([]);
@@ -236,9 +251,17 @@ export default function Contacts() {
       leads.map((l) => ({ ...l, tags: tagMap.get(l.id) || [] }))
     );
     setLoading(false);
-  };
+  }, [currentPage]);
 
-  useEffect(() => { fetchContacts(); }, []);
+  useEffect(() => { fetchContacts(currentPage); }, [currentPage]);
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  const goToPage = (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+    setSelectedContacts([]);
+  };
 
   const filteredContacts = useMemo(() => {
     let result = contacts;
@@ -280,7 +303,7 @@ export default function Contacts() {
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Contatos</h1>
           <p className="text-muted-foreground">
-            {loading ? "Carregando..." : `${contacts.length} contatos no total`}
+            {loading ? "Carregando..." : `${totalCount} contatos no total · Página ${currentPage} de ${totalPages || 1}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -481,12 +504,9 @@ export default function Contacts() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredContacts.map((contact, index) => (
-                  <motion.tr
+                filteredContacts.map((contact) => (
+                  <TableRow
                     key={contact.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: Math.min(index * 0.02, 0.5) }}
                     className="hover:bg-muted/30 transition-colors"
                   >
                     <TableCell>
@@ -550,7 +570,7 @@ export default function Contacts() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
-                  </motion.tr>
+                  </TableRow>
                 ))
               )}
             </TableBody>
@@ -558,7 +578,57 @@ export default function Contacts() {
         )}
       </motion.div>
 
-      <ImportContactsDialog open={importOpen} onOpenChange={setImportOpen} onImportComplete={fetchContacts} />
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-2">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {((currentPage - 1) * PAGE_SIZE) + 1}–{Math.min(currentPage * PAGE_SIZE, totalCount)} de {totalCount}
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let page: number;
+              if (totalPages <= 7) {
+                page = i + 1;
+              } else if (currentPage <= 4) {
+                page = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                page = totalPages - 6 + i;
+              } else {
+                page = currentPage - 3 + i;
+              }
+              return (
+                <Button
+                  key={page}
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="sm"
+                  className="w-8 h-8 p-0"
+                  onClick={() => goToPage(page)}
+                >
+                  {page}
+                </Button>
+              );
+            })}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <ImportContactsDialog open={importOpen} onOpenChange={setImportOpen} onImportComplete={() => fetchContacts(currentPage)} />
     </div>
   );
 }
