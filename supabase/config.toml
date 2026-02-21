@@ -71,3 +71,6 @@ verify_jwt = false
 
 [functions.sync-whatsapp-messages]
 verify_jwt = false
+
+[functions.admin-clients]
+verify_jwt = false
