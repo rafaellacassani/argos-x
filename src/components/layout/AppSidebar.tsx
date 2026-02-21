@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lock,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -48,6 +49,7 @@ const menuItems: MenuItem[] = [
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
+  { icon: Shield, label: "Admin Clientes", path: "/admin/clients", requiredPermission: 'canManageWorkspaceSettings' },
 ];
 
 export function AppSidebar() {
