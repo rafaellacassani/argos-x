@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Lock } from "lucide-react";
+import argosLogoLight from "@/assets/argos-logo-light.png";
 
 const resetSchema = z
   .object({
@@ -56,7 +57,7 @@ export default function ResetPassword() {
         className="w-full max-w-md"
       >
         <div className="text-center mb-8">
-          <h1 className="font-display text-3xl font-bold text-foreground">Inboxia</h1>
+          <img src={argosLogoLight} alt="Argos X" className="h-24 mx-auto mb-2" />
           <p className="text-muted-foreground mt-2">Defina sua nova senha</p>
         </div>
 
