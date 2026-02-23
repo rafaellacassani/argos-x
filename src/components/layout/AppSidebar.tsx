@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -25,6 +25,8 @@ import argosIcon from "@/assets/argos-icon.png";
 import argosLogoDarkHorizontal from "@/assets/argos-logo-dark-horizontal.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MenuItem {
@@ -49,14 +51,33 @@ const menuItems: MenuItem[] = [
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
-  { icon: Shield, label: "Admin Clientes", path: "/admin/clients", requiredPermission: 'canManageWorkspaceSettings' },
 ];
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const location = useLocation();
   const { workspace } = useWorkspace();
+  const { user } = useAuth();
   const permissions = useUserRole();
+
+  useEffect(() => {
+    const checkSuperAdmin = async () => {
+      if (!user) { setIsSuperAdmin(false); return; }
+      const { data } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin");
+      setIsSuperAdmin(!!(data && data.length > 0));
+    };
+    checkSuperAdmin();
+  }, [user]);
+
+  const visibleItems: MenuItem[] = [
+    ...menuItems,
+    ...(isSuperAdmin ? [{ icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem] : []),
+  ];
 
   return (
     <motion.aside
@@ -85,7 +106,7 @@ export function AppSidebar() {
       {/* Navigation */}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
         <ul className="space-y-2">
-          {menuItems.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = location.pathname === item.path;
             const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
 
