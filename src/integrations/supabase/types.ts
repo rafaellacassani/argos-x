@@ -2193,6 +2193,7 @@ export type Database = {
           extra_leads: number | null
           id: string
           lead_limit: number | null
+          logo_url: string | null
           name: string
           onboarding_completed: boolean | null
           onboarding_step: number | null
@@ -2218,6 +2219,7 @@ export type Database = {
           extra_leads?: number | null
           id?: string
           lead_limit?: number | null
+          logo_url?: string | null
           name: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
@@ -2243,6 +2245,7 @@ export type Database = {
           extra_leads?: number | null
           id?: string
           lead_limit?: number | null
+          logo_url?: string | null
           name?: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null

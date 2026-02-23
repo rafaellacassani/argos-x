@@ -9,6 +9,7 @@ export interface Workspace {
   created_by: string;
   created_at: string;
   alert_instance_name?: string | null;
+  logo_url?: string | null;
 }
 
 export interface WorkspaceMember {
