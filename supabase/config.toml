@@ -72,5 +72,17 @@ verify_jwt = false
 [functions.sync-whatsapp-messages]
 verify_jwt = false
 
+[functions.gmail-oauth]
+verify_jwt = false
+
+[functions.sync-emails]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.email-actions]
+verify_jwt = false
+
 [functions.admin-clients]
 verify_jwt = false
