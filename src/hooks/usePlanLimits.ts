@@ -3,6 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "./useWorkspace";
 
 export const PLAN_DEFINITIONS = {
+  gratuito: {
+    name: 'Gratuito',
+    price: 0,
+    leadLimit: 300,
+    whatsappLimit: 1,
+    userLimit: 1,
+    aiLimit: 100,
+    color: 'gray',
+    description: 'Plano gratuito',
+  },
   semente: {
     name: 'Semente',
     price: 47,
