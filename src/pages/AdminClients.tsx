@@ -778,8 +778,8 @@ export default function AdminClients() {
                               Link do workspace
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleResendInvite(client)}>
-                              <Mail className="w-4 h-4 mr-2" />
-                              Reenviar convite
+                              <ExternalLink className="w-4 h-4 mr-2" />
+                              Gerar link de login
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => openEditDialog(client)}>
@@ -1104,8 +1104,8 @@ export default function AdminClients() {
       <Dialog open={!!inviteLink} onOpenChange={(open) => !open && setInviteLink("")}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Link de convite gerado</DialogTitle>
-            <DialogDescription>Envie este link ao cliente para ele criar a senha e acessar o sistema.</DialogDescription>
+            <DialogTitle>Link de login gerado</DialogTitle>
+            <DialogDescription>Envie este link ao cliente. Ao acessar, ele poderá criar sua senha e entrar no sistema.</DialogDescription>
           </DialogHeader>
           <div className="flex gap-2">
             <Input readOnly value={inviteLink} className="text-xs bg-background" />
