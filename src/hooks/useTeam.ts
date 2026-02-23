@@ -51,27 +51,46 @@ export function useTeam() {
   };
 
   const fetchTeamMembers = useCallback(async () => {
+    if (!workspaceId) return [];
     setLoading(true);
     try {
-      // Fetch profiles
+      // 1. Fetch workspace members to know which users belong to this workspace
+      const { data: wsMembers, error: wsMembersError } = await supabase
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId);
+
+      if (wsMembersError) throw wsMembersError;
+
+      const memberUserIds = (wsMembers || []).map(m => m.user_id).filter(id => id !== "00000000-0000-0000-0000-000000000000");
+
+      if (memberUserIds.length === 0) {
+        setTeamMembers([]);
+        return [];
+      }
+
+      // 2. Fetch profiles only for workspace members
       const { data: profiles, error: profilesError } = await supabase
         .from("user_profiles")
         .select("*")
+        .in("user_id", memberUserIds)
         .order("full_name");
 
       if (profilesError) throw profilesError;
 
-      // Fetch roles for all users
+      // 3. Fetch roles only for workspace members
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
-        .select("*");
+        .select("*")
+        .in("user_id", memberUserIds);
 
       if (rolesError) throw rolesError;
 
-      // Fetch notification settings for all users
+      // 4. Fetch notification settings only for workspace members
       const { data: notificationSettings, error: notifError } = await supabase
         .from("notification_settings")
-        .select("*");
+        .select("*")
+        .eq("workspace_id", workspaceId);
 
       if (notifError) throw notifError;
 
@@ -106,7 +125,7 @@ export function useTeam() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, workspaceId]);
 
   const createTeamMember = useCallback(
     async (data: {
