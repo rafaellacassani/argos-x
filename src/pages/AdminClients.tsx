@@ -34,7 +34,26 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -50,6 +69,12 @@ import {
   ExternalLink,
   Check,
   RefreshCw,
+  MoreHorizontal,
+  Link2,
+  Mail,
+  Trash2,
+  Pencil,
+  CreditCard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -110,6 +135,20 @@ export default function AdminClients() {
   const [freeLoading, setFreeLoading] = useState(false);
   const [freeRecoveryLink, setFreeRecoveryLink] = useState("");
   const [freeCopied, setFreeCopied] = useState(false);
+
+  // Action states
+  const [deleteClient, setDeleteClient] = useState<ClientData | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [editClient, setEditClient] = useState<ClientData | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editOwnerName, setEditOwnerName] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [planClient, setPlanClient] = useState<ClientData | null>(null);
+  const [planSelected, setPlanSelected] = useState("semente");
 
   useEffect(() => {
     if (!user) return;
@@ -262,6 +301,100 @@ export default function AdminClients() {
     setFormName("");
     setFormPhone("");
     setGeneratedUrl("");
+  };
+
+  const handleCopyWorkspaceLink = (client: ClientData) => {
+    const link = `https://argos-x.lovable.app/auth`;
+    navigator.clipboard.writeText(link);
+    toast({ title: "Link copiado!", description: `Link de acesso copiado para ${client.name}.` });
+  };
+
+  const handleResendInvite = async (client: ClientData) => {
+    if (!client.owner?.email) {
+      toast({ title: "Erro", description: "Cliente sem e-mail cadastrado.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: { action: "resend-invite", email: client.owner.email },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      if (data?.recoveryLink) {
+        setInviteLink(data.recoveryLink);
+        await navigator.clipboard.writeText(data.recoveryLink);
+        toast({ title: "Link de convite gerado e copiado!", description: "Envie ao cliente para ele definir a senha." });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Tente novamente.", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    if (!deleteClient) return;
+    setDeleteLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: { action: "delete-workspace", workspaceId: deleteClient.id },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Workspace excluído!", description: `"${deleteClient.name}" foi removido.` });
+      setDeleteClient(null);
+      fetchClients();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const openEditDialog = (client: ClientData) => {
+    setEditClient(client);
+    setEditName(client.name);
+    setEditOwnerName(client.owner?.full_name || "");
+    setEditEmail(client.owner?.email || "");
+    setEditPhone(client.owner?.phone || "");
+  };
+
+  const handleUpdateWorkspace = async () => {
+    if (!editClient) return;
+    setEditLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: {
+          action: "update-workspace",
+          workspaceId: editClient.id,
+          name: editName,
+          ownerName: editOwnerName,
+          ownerEmail: editEmail,
+          ownerPhone: editPhone,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Atualizado!", description: "Dados do cliente atualizados com sucesso." });
+      setEditClient(null);
+      fetchClients();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleActivatePlan = () => {
+    toast({ title: "Em breve!", description: `Ativação do plano "${planSelected}" será implementada em breve.` });
+    setPlanClient(null);
   };
 
   if (loading) {
@@ -592,13 +725,14 @@ export default function AdminClients() {
                   <TableHead className="text-center">Usuários</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Criado em</TableHead>
+                  <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredClients.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={6}
+                      colSpan={7}
                       className="text-center py-8 text-muted-foreground"
                     >
                       {refreshing
@@ -630,6 +764,42 @@ export default function AdminClients() {
                       <TableCell>{getPlanBadge(client.plan_type)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(client.created_at), "dd/MM/yyyy")}
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem onClick={() => handleCopyWorkspaceLink(client)}>
+                              <Link2 className="w-4 h-4 mr-2" />
+                              Link do workspace
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleResendInvite(client)}>
+                              <Mail className="w-4 h-4 mr-2" />
+                              Reenviar convite
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setPlanClient(client); setPlanSelected("semente"); }}>
+                              <CreditCard className="w-4 h-4 mr-2" />
+                              Ativar plano
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setDeleteClient(client)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))
@@ -822,6 +992,138 @@ export default function AdminClients() {
             </div>
           </DialogContent>
         )}
+      </Dialog>
+
+      {/* ───────── DELETE CONFIRMATION ───────── */}
+      <AlertDialog open={!!deleteClient} onOpenChange={(open) => !open && setDeleteClient(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir workspace?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o workspace <strong>"{deleteClient?.name}"</strong>? 
+              Todos os dados (leads, conversas, agentes, etc.) serão permanentemente removidos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteWorkspace}
+              disabled={deleteLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Excluir permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ───────── EDIT DIALOG ───────── */}
+      <Dialog open={!!editClient} onOpenChange={(open) => !open && setEditClient(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5" />
+              Editar Cliente
+            </DialogTitle>
+            <DialogDescription>Atualize os dados do workspace e do proprietário.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome do workspace</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Nome do proprietário</Label>
+              <Input value={editOwnerName} onChange={(e) => setEditOwnerName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>E-mail</Label>
+              <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditClient(null)} disabled={editLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdateWorkspace} disabled={editLoading}>
+              {editLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ───────── ACTIVATE PLAN DIALOG (simulated) ───────── */}
+      <Dialog open={!!planClient} onOpenChange={(open) => !open && setPlanClient(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Ativar Plano
+            </DialogTitle>
+            <DialogDescription>
+              Selecione o plano para <strong>{planClient?.name}</strong>. Um e-mail do Stripe será enviado ao cliente para ativação.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Plano</Label>
+              <Select value={planSelected} onValueChange={setPlanSelected}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(PLAN_DEFINITIONS)
+                    .filter(([key]) => key !== "gratuito")
+                    .map(([key, plan]) => (
+                      <SelectItem key={key} value={key}>
+                        {plan.name} — R$ {plan.price}/mês
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanClient(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleActivatePlan}>
+              Ativar plano
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ───────── INVITE LINK DIALOG ───────── */}
+      <Dialog open={!!inviteLink} onOpenChange={(open) => !open && setInviteLink("")}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Link de convite gerado</DialogTitle>
+            <DialogDescription>Envie este link ao cliente para ele criar a senha e acessar o sistema.</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Input readOnly value={inviteLink} className="text-xs bg-background" />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                await navigator.clipboard.writeText(inviteLink);
+                setInviteLinkCopied(true);
+                toast({ title: "Link copiado!" });
+                setTimeout(() => setInviteLinkCopied(false), 2000);
+              }}
+              className="shrink-0"
+            >
+              {inviteLinkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+        </DialogContent>
       </Dialog>
     </div>
   );
