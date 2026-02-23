@@ -1,69 +1,64 @@
 
+# Criar Workspace Gratuito pelo Painel Admin
 
-# Correção Urgente: Chats Vazios - Arquitetura Database-First
+## O que será feito
 
-## Diagnóstico
+Adicionar um novo fluxo no painel de Gestão de Clientes (`/admin/clients`) que permite criar um workspace gratuito diretamente, sem passar pelo Stripe. O admin preenche os dados do cliente (e-mail, nome, telefone), e o sistema:
 
-O problema **não é um bug de exibição**. A tabela `whatsapp_messages` no banco local possui apenas **14 mensagens de 3 contatos** (todas a partir de 18/02 da instância `geisi-wpp`). Nenhuma mensagem da `natcrm` foi persistida.
-
-Isso acontece porque a persistência de mensagens no banco local foi implementada recentemente, e o histórico anterior existia **somente na Evolution API**. Ao deletar as instâncias na API, esse histórico foi perdido.
-
-## O que vamos fazer
-
-### 1. Recuperar o histórico existente da Evolution API para o banco local
-Quando as instâncias forem reconectadas (QR Code escaneado), executar uma **sincronização inicial** que busca todas as mensagens da Evolution API e as persiste no banco `whatsapp_messages`. Isso garante que, a partir de agora, todo histórico fica salvo localmente.
-
-### 2. Garantir persistência contínua de TODAS as mensagens
-O webhook (`whatsapp-webhook`) já salva mensagens recebidas. Vamos garantir que:
-- Mensagens **enviadas** pelo CRM também sejam salvas
-- A sincronização inicial rode automaticamente ao conectar/reconectar uma instância
-
-### 3. Tornar o banco local a fonte PRIMÁRIA de chats (Database-First)
-Inverter a lógica atual: ao invés de buscar chats da Evolution API e usar o banco como fallback, a listagem de chats e mensagens virá **sempre do banco local primeiro**, com a Evolution API usada apenas para buscar mensagens novas e sincronizar.
+1. Cria a conta do usuário (ou localiza se já existir)
+2. Cria o workspace com `plan_type = 'active'` e `plan_name = 'gratuito'`
+3. Cria o perfil do usuário
+4. Adiciona o usuário como admin do workspace
+5. Cria o funil padrão com os 6 estágios
+6. O cliente aparece na lista de clientes com o badge "Gratuito"
 
 ---
 
-## Detalhes Técnicos
+## Mudancas
 
-### Passo 1 - Backend: Criar Edge Function de sincronização (`sync-whatsapp-messages`)
-Nova Edge Function que:
-- Recebe `instanceName` e `workspaceId`
-- Chama `chat/findChats/{instanceName}` na Evolution API para listar todos os contatos
-- Para cada contato, chama `chat/findMessages/{instanceName}` para buscar mensagens
-- Faz `upsert` no `whatsapp_messages` usando `message_id` como chave de deduplicacao
-- Retorna contagem de mensagens sincronizadas
+### 1. Edge Function `admin-clients` — nova action `create-free-workspace`
 
-### Passo 2 - Frontend: Disparar sincronização ao reconectar instância
-No `ConnectionModal.tsx`, ao detectar conexão bem-sucedida (`state === "open"`):
-- Chamar `sync-whatsapp-messages` em background
-- Mostrar toast: "Sincronizando historico de mensagens..."
+Adicionar uma nova action que:
+- Recebe `email`, `fullName`, `phone` (opcional)
+- Cria o usuario via `supabaseAdmin.auth.admin.createUser()` (com `email_confirm: true` para já confirmar). Se o usuário já existir, busca o ID existente.
+- Cria o `user_profiles` com nome, email e telefone
+- Cria o workspace com limites generosos (ou iguais ao plano Semente) e `plan_name = 'gratuito'`, `plan_type = 'active'`, `subscription_status = 'active'`
+- Adiciona o membro como admin com `accepted_at` preenchido
+- Cria funil padrão + 6 estágios (mesma lógica do `create-workspace`)
+- Retorna o workspace criado
 
-### Passo 3 - Frontend: Arquitetura Database-First no Chats.tsx
-Modificar `loadChats`:
-- **Sempre** carregar lista de chats do banco local (`whatsapp_messages` agrupado por `remote_jid`)
-- Em paralelo, tentar buscar chats novos da Evolution API
-- Mesclar: chats do banco + chats novos da API, deduplicar por `remote_jid`
-- Novas mensagens da API sao persistidas no banco automaticamente
+### 2. Frontend `AdminClients.tsx` — novo formulário
 
-Modificar `loadMessages`:
-- **Sempre** carregar mensagens do banco local primeiro (exibicao imediata)
-- Em background, buscar mensagens novas da Evolution API
-- Persistir novas mensagens no banco e atualizar a UI
+Adicionar na aba "Novo Cliente" um segundo card/botao "Criar Workspace Gratuito" com campos:
+- Nome completo (obrigatório)
+- E-mail (obrigatório)
+- Telefone (opcional)
 
-### Passo 4 - Garantir persistência de mensagens enviadas
-Em `Chats.tsx`, nas funcoes `handleSendMessage`, `handleSendAudio`, `handleSendMedia`:
-- Apos envio bem-sucedido via Evolution API, inserir a mensagem no `whatsapp_messages`
+Ao clicar, chama a edge function com `action: "create-free-workspace"`. Exibe toast de sucesso e atualiza a lista.
 
-### Passo 5 - Adicionar botão manual "Sincronizar Mensagens"
-Na aba WhatsApp do Settings, adicionar botao por instancia conectada: "Sincronizar Historico"
-- Chama a Edge Function `sync-whatsapp-messages`
-- Util para importar historico de instancias ja conectadas
+### 3. Constante `PLAN_DEFINITIONS` — adicionar plano gratuito
+
+Adicionar entrada `gratuito` no `PLAN_DEFINITIONS` para que o badge e labels funcionem corretamente na lista de clientes.
+
+### 4. Lista de Clientes — badge "Gratuito"
+
+O `plan_name` será `'gratuito'`, então o badge ja aparecera automaticamente na tabela. Basta garantir que o `getPlanBadge` trate o status `active` corretamente (ja trata).
 
 ---
 
-## Resultado esperado
-- Chats **nunca mais desaparecem**, independente do estado da Evolution API
-- Historico de mensagens fica permanentemente no banco local
-- Reconectar uma instancia automaticamente sincroniza o historico
-- A interface carrega instantaneamente do banco local (sem esperar a API)
+## Detalhes Tecnicos
 
+**Edge Function (`supabase/functions/admin-clients/index.ts`)**:
+- Nova action `create-free-workspace`
+- Usa `supabaseAdmin.auth.admin.createUser({ email, password: randomPassword, email_confirm: true })` para criar conta com email ja confirmado
+- Se receber erro de "user already exists", busca o user por email via `supabaseAdmin.auth.admin.listUsers()`
+- Insere em `user_profiles`, `workspaces`, `workspace_members`, `funnels`, `funnel_stages`
+- Limites do workspace gratuito: `lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 100`
+
+**Frontend (`src/pages/AdminClients.tsx`)**:
+- Novo estado para alternar entre "Link Stripe" e "Workspace Gratuito"
+- Formulario simplificado (sem selecao de plano)
+- Feedback visual com toast de sucesso
+
+**Constantes (`src/hooks/usePlanLimits.ts`)**:
+- Adicionar `gratuito: { name: 'Gratuito', price: 0, leadLimit: 300, whatsappLimit: 1, userLimit: 1, aiLimit: 100, color: 'gray', description: 'Plano gratuito' }`
