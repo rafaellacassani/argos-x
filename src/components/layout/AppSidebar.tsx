@@ -103,6 +103,55 @@ export function AppSidebar() {
         </motion.div>
       </div>
 
+      {/* Workspace Info */}
+      {workspace && !collapsed && (
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <div className="flex items-center gap-3">
+            {workspace.logo_url ? (
+              <img
+                src={workspace.logo_url}
+                alt={workspace.name}
+                className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-sidebar-primary">
+                  {workspace.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/50 leading-tight">Workspace de</p>
+              <p className="text-sm font-semibold text-white truncate leading-tight">
+                {workspace.name}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {workspace && collapsed && (
+        <div className="flex justify-center py-3 border-b border-sidebar-border">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {workspace.logo_url ? (
+                <img
+                  src={workspace.logo_url}
+                  alt={workspace.name}
+                  className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center">
+                  <span className="text-xs font-bold text-sidebar-primary">
+                    {workspace.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+            </TooltipTrigger>
+            <TooltipContent side="right">Workspace de {workspace.name}</TooltipContent>
+          </Tooltip>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
         <ul className="space-y-2">
