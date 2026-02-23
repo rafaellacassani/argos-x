@@ -210,7 +210,8 @@ export function useEvolutionAPI() {
     setError(null);
 
     try {
-      // 1. Buscar instâncias registradas no banco de dados local (CRM)
+      // 1. Buscar instâncias registradas no banco de dados local (CRM) filtradas por workspace
+      const { data: { user } } = await supabase.auth.getUser();
       const { data: localInstances, error: dbError } = await supabase
         .from('whatsapp_instances')
         .select('*')
