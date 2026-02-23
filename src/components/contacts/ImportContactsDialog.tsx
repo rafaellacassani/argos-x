@@ -347,21 +347,25 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
         {step === "mapping" && (
           <div className="space-y-4">
             {/* Preview */}
-            <div className="rounded-md border overflow-auto max-h-40">
-              <table className="text-xs w-full">
+            <div className="rounded-md border overflow-x-auto max-h-40 overflow-y-auto">
+              <table className="text-xs min-w-0 w-full">
                 <thead>
                   <tr className="bg-muted/50">
-                    {headers.map((h) => (
-                      <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>
+                    {headers.slice(0, 6).map((h) => (
+                      <th key={h} className="px-2 py-1 text-left font-medium whitespace-nowrap max-w-[100px] truncate">{h}</th>
                     ))}
+                    {headers.length > 6 && (
+                      <th className="px-2 py-1 text-left font-medium text-muted-foreground">+{headers.length - 6}</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, 5).map((row, i) => (
+                  {rows.slice(0, 4).map((row, i) => (
                     <tr key={i} className="border-t">
-                      {headers.map((h) => (
-                        <td key={h} className="px-2 py-1 truncate max-w-[120px]">{row[h]}</td>
+                      {headers.slice(0, 6).map((h) => (
+                        <td key={h} className="px-2 py-1 truncate max-w-[100px] whitespace-nowrap">{row[h]}</td>
                       ))}
+                      {headers.length > 6 && <td className="px-2 py-1 text-muted-foreground">…</td>}
                     </tr>
                   ))}
                 </tbody>
