@@ -103,6 +103,12 @@ export default function AdminClients() {
   const [generatedUrl, setGeneratedUrl] = useState("");
   const [copied, setCopied] = useState(false);
 
+  // Free workspace form state
+  const [freeEmail, setFreeEmail] = useState("");
+  const [freeName, setFreeName] = useState("");
+  const [freePhone, setFreePhone] = useState("");
+  const [freeLoading, setFreeLoading] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     checkAccess();
@@ -206,6 +212,46 @@ export default function AdminClients() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCreateFreeWorkspace = async () => {
+    if (!freeEmail || !freeName) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha pelo menos o e-mail e nome completo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setFreeLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: {
+          action: "create-free-workspace",
+          email: freeEmail,
+          fullName: freeName,
+          phone: freePhone,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Workspace criado!", description: `Workspace gratuito criado para ${freeName}.` });
+      setFreeEmail("");
+      setFreeName("");
+      setFreePhone("");
+      fetchClients();
+    } catch (err: any) {
+      console.error("Error creating free workspace:", err);
+      toast({ title: "Erro", description: err.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setFreeLoading(false);
+    }
+  };
+
   const handleResetForm = () => {
     setFormPlan("semente");
     setFormEmail("");
@@ -281,7 +327,7 @@ export default function AdminClients() {
         </TabsList>
 
         {/* ───────── TAB: NOVO CLIENTE ───────── */}
-        <TabsContent value="new-client">
+        <TabsContent value="new-client" className="space-y-6">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -301,7 +347,9 @@ export default function AdminClients() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(PLAN_DEFINITIONS).map(([key, plan]) => (
+                    {Object.entries(PLAN_DEFINITIONS)
+                      .filter(([key]) => key !== 'gratuito')
+                      .map(([key, plan]) => (
                       <SelectItem key={key} value={key}>
                         {plan.name} — R$ {plan.price}/mês
                       </SelectItem>
@@ -394,6 +442,67 @@ export default function AdminClients() {
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* ───── CRIAR WORKSPACE GRATUITO ───── */}
+          <Card className="max-w-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5" />
+                Criar Workspace Gratuito
+              </CardTitle>
+              <CardDescription>
+                Crie um workspace diretamente sem passar pelo Stripe. O cliente já será ativado com o plano gratuito.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Nome completo *</Label>
+                <Input
+                  placeholder="João da Silva"
+                  value={freeName}
+                  onChange={(e) => setFreeName(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>E-mail *</Label>
+                <Input
+                  type="email"
+                  placeholder="joao@empresa.com"
+                  value={freeEmail}
+                  onChange={(e) => setFreeEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Telefone</Label>
+                <Input
+                  placeholder="(11) 99999-9999"
+                  value={freePhone}
+                  onChange={(e) => setFreePhone(e.target.value)}
+                />
+              </div>
+
+              <Button
+                onClick={handleCreateFreeWorkspace}
+                disabled={freeLoading}
+                className="w-full"
+                variant="secondary"
+              >
+                {freeLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Criar Workspace Gratuito
+                  </>
+                )}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

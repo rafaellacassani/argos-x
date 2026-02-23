@@ -223,6 +223,126 @@ serve(async (req) => {
       });
     }
 
+    // ──────────────────────────────────────
+    // ACTION: CREATE-FREE-WORKSPACE
+    // ──────────────────────────────────────
+    if (action === "create-free-workspace") {
+      const { email, fullName, phone } = body;
+
+      if (!email || !fullName) {
+        return new Response(
+          JSON.stringify({ error: "Campos obrigatórios: email, fullName" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 1. Create or find user
+      let userId: string;
+      const randomPassword = crypto.randomUUID() + "Aa1!";
+
+      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password: randomPassword,
+        email_confirm: true,
+      });
+
+      if (createError) {
+        if (createError.message?.includes("already been registered") || createError.message?.includes("already exists")) {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1, page: 1 });
+          const found = listData?.users?.find((u: any) => u.email === email);
+          if (!found) {
+            // Search more broadly
+            const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+            const foundUser = allUsers?.users?.find((u: any) => u.email === email);
+            if (!foundUser) {
+              return new Response(
+                JSON.stringify({ error: "Usuário existe mas não foi possível localizar." }),
+                { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+              );
+            }
+            userId = foundUser.id;
+          } else {
+            userId = found.id;
+          }
+        } else {
+          throw createError;
+        }
+      } else {
+        userId = newUser.user.id;
+      }
+
+      // 2. Create user_profiles (upsert)
+      await supabaseAdmin.from("user_profiles").upsert(
+        { user_id: userId, full_name: fullName, email, phone: phone || null },
+        { onConflict: "user_id" }
+      );
+
+      // 3. Create workspace
+      const slug = fullName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      const { data: workspace, error: wsError } = await supabaseAdmin
+        .from("workspaces")
+        .insert({
+          name: fullName,
+          slug: `${slug}-${Date.now()}`,
+          created_by: userId,
+          plan_name: "gratuito",
+          plan_type: "active",
+          subscription_status: "active",
+          lead_limit: 300,
+          whatsapp_limit: 1,
+          user_limit: 1,
+          ai_interactions_limit: 100,
+        })
+        .select()
+        .single();
+
+      if (wsError) throw wsError;
+
+      // 4. Add user as admin member
+      await supabaseAdmin.from("workspace_members").insert({
+        workspace_id: workspace.id,
+        user_id: userId,
+        role: "admin",
+        accepted_at: new Date().toISOString(),
+      });
+
+      // 5. Create default funnel + stages
+      const { data: funnel } = await supabaseAdmin
+        .from("funnels")
+        .insert({ name: "Funil de Vendas", workspace_id: workspace.id, is_default: true })
+        .select()
+        .single();
+
+      if (funnel) {
+        const defaultStages = [
+          { name: "Leads de Entrada", color: "#6B7280", position: 0 },
+          { name: "Em Qualificação", color: "#0171C3", position: 1 },
+          { name: "Lixo", color: "#EF4444", position: 2, is_loss_stage: true },
+          { name: "Reunião Agendada", color: "#F59E0B", position: 3 },
+          { name: "Venda Realizada", color: "#22C55E", position: 4, is_win_stage: true },
+          { name: "No Show", color: "#8B5CF6", position: 5 },
+        ];
+
+        for (const stage of defaultStages) {
+          await supabaseAdmin.from("funnel_stages").insert({
+            funnel_id: funnel.id,
+            workspace_id: workspace.id,
+            ...stage,
+          });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, workspace }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
