@@ -108,6 +108,8 @@ export default function AdminClients() {
   const [freeName, setFreeName] = useState("");
   const [freePhone, setFreePhone] = useState("");
   const [freeLoading, setFreeLoading] = useState(false);
+  const [freeRecoveryLink, setFreeRecoveryLink] = useState("");
+  const [freeCopied, setFreeCopied] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -223,6 +225,7 @@ export default function AdminClients() {
     }
 
     setFreeLoading(true);
+    setFreeRecoveryLink("");
     try {
       const { data, error } = await supabase.functions.invoke("admin-clients", {
         body: {
@@ -239,10 +242,11 @@ export default function AdminClients() {
         return;
       }
 
+      if (data?.recoveryLink) {
+        setFreeRecoveryLink(data.recoveryLink);
+      }
+
       toast({ title: "Workspace criado!", description: `Workspace gratuito criado para ${freeName}.` });
-      setFreeEmail("");
-      setFreeName("");
-      setFreePhone("");
       fetchClients();
     } catch (err: any) {
       console.error("Error creating free workspace:", err);
@@ -503,6 +507,54 @@ export default function AdminClients() {
                   </>
                 )}
               </Button>
+
+              {/* Recovery link */}
+              {freeRecoveryLink && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <p className="text-sm font-medium text-foreground">
+                    ✅ Workspace criado! Envie o link abaixo para o cliente definir a senha:
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={freeRecoveryLink}
+                      className="text-xs bg-background"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(freeRecoveryLink);
+                        setFreeCopied(true);
+                        toast({ title: "Link copiado!" });
+                        setTimeout(() => setFreeCopied(false), 2000);
+                      }}
+                      className="shrink-0"
+                    >
+                      {freeCopied ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    O cliente deve clicar neste link para criar a senha e acessar o sistema.
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setFreeRecoveryLink("");
+                      setFreeEmail("");
+                      setFreeName("");
+                      setFreePhone("");
+                    }}
+                  >
+                    Criar outro
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

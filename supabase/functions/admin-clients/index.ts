@@ -337,8 +337,25 @@ serve(async (req) => {
         }
       }
 
+      // 6. Generate password reset link for the client
+      let recoveryLink = null;
+      try {
+        const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+          type: "recovery",
+          email,
+          options: {
+            redirectTo: "https://argos-x.lovable.app/auth/reset-password",
+          },
+        });
+        if (linkData?.properties?.action_link) {
+          recoveryLink = linkData.properties.action_link;
+        }
+      } catch (e) {
+        console.warn("Could not generate recovery link:", e);
+      }
+
       return new Response(
-        JSON.stringify({ success: true, workspace }),
+        JSON.stringify({ success: true, workspace, recoveryLink }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
