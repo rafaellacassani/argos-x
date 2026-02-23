@@ -360,6 +360,143 @@ serve(async (req) => {
       );
     }
 
+    // ──────────────────────────────────────
+    // ACTION: RESEND-INVITE
+    // ──────────────────────────────────────
+    if (action === "resend-invite") {
+      const { email } = body;
+      if (!email) {
+        return new Response(
+          JSON.stringify({ error: "email required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let recoveryLink = null;
+      try {
+        const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+          type: "recovery",
+          email,
+          options: {
+            redirectTo: "https://argos-x.lovable.app/auth/reset-password",
+          },
+        });
+        if (linkData?.properties?.action_link) {
+          recoveryLink = linkData.properties.action_link;
+        }
+      } catch (e) {
+        console.warn("Could not generate recovery link:", e);
+      }
+
+      if (!recoveryLink) {
+        return new Response(
+          JSON.stringify({ error: "Não foi possível gerar link de recuperação." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, recoveryLink }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ──────────────────────────────────────
+    // ACTION: DELETE-WORKSPACE
+    // ──────────────────────────────────────
+    if (action === "delete-workspace") {
+      const { workspaceId } = body;
+      if (!workspaceId) {
+        return new Response(
+          JSON.stringify({ error: "workspaceId required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Delete in order: dependents first
+      const tables = [
+        "agent_followup_queue", "agent_executions", "agent_memories", "ai_agents",
+        "bot_execution_logs", "salesbots",
+        "campaign_recipients", "campaigns",
+        "lead_tag_assignments", "lead_proposals", "lead_sales", "lead_history", "leads",
+        "funnel_stages", "funnels",
+        "whatsapp_messages", "whatsapp_instances",
+        "calendar_events", "google_calendar_tokens",
+        "notification_preferences", "notification_settings",
+        "scheduled_messages", "tag_rules", "lead_tags",
+        "stage_automation_queue", "stage_automations",
+        "meta_conversations", "meta_pages", "meta_accounts",
+        "alert_log", "lead_packs",
+        "workspace_members",
+      ];
+
+      for (const table of tables) {
+        await supabaseAdmin.from(table).delete().eq("workspace_id", workspaceId);
+      }
+
+      // Delete workspace itself
+      const { error: delError } = await supabaseAdmin
+        .from("workspaces")
+        .delete()
+        .eq("id", workspaceId);
+
+      if (delError) throw delError;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ──────────────────────────────────────
+    // ACTION: UPDATE-WORKSPACE
+    // ──────────────────────────────────────
+    if (action === "update-workspace") {
+      const { workspaceId, name, ownerEmail, ownerPhone, ownerName } = body;
+      if (!workspaceId) {
+        return new Response(
+          JSON.stringify({ error: "workspaceId required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Update workspace name
+      if (name) {
+        await supabaseAdmin.from("workspaces").update({ name }).eq("id", workspaceId);
+      }
+
+      // Update owner profile
+      const { data: ws } = await supabaseAdmin
+        .from("workspaces")
+        .select("created_by")
+        .eq("id", workspaceId)
+        .single();
+
+      if (ws?.created_by) {
+        const updates: Record<string, string> = {};
+        if (ownerName) updates.full_name = ownerName;
+        if (ownerEmail) updates.email = ownerEmail;
+        if (ownerPhone) updates.phone = ownerPhone;
+
+        if (Object.keys(updates).length > 0) {
+          await supabaseAdmin
+            .from("user_profiles")
+            .update(updates)
+            .eq("user_id", ws.created_by);
+        }
+
+        // Update auth email if changed
+        if (ownerEmail) {
+          await supabaseAdmin.auth.admin.updateUserById(ws.created_by, { email: ownerEmail });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
