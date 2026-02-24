@@ -21,6 +21,7 @@ interface ChatInputProps {
   onSendMedia: (file: File, caption?: string) => Promise<boolean>;
   onSendAudio: (audioBlob: Blob) => Promise<boolean>;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 export function ChatInput({
@@ -28,6 +29,7 @@ export function ChatInput({
   onSendMedia,
   onSendAudio,
   disabled = false,
+  placeholder: customPlaceholder,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -353,7 +355,7 @@ export function ChatInput({
           <div className="flex-1">
             <textarea
               ref={inputRef}
-              placeholder={selectedFile ? "Adicione uma legenda..." : "Digite sua mensagem..."}
+              placeholder={selectedFile ? "Adicione uma legenda..." : (customPlaceholder || "Digite sua mensagem...")}
               value={message}
               onChange={(e) => {
                 setMessage(e.target.value);

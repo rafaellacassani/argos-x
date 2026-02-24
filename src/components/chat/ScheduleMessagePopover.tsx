@@ -19,7 +19,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 
 interface ScheduleMessagePopoverProps {
   // Channel routing
-  channelType: "whatsapp" | "meta_facebook" | "meta_instagram";
+  channelType: "whatsapp" | "meta_facebook" | "meta_instagram" | "meta_whatsapp";
   // WhatsApp
   instanceName?: string;
   remoteJid?: string;

@@ -60,9 +60,36 @@ Deno.serve(async (req) => {
     let graphUrl: string;
 
     if (page.platform === "instagram" || page.instagram_account_id) {
+      // Instagram
       graphUrl = `https://graph.facebook.com/v21.0/${page.instagram_account_id || page.page_id}/messages`;
       graphPayload = { recipient: { id: recipientId }, message: { text: message } };
+    } else if (page.platform === "whatsapp_business") {
+      // WhatsApp Cloud API
+      graphUrl = `https://graph.facebook.com/v21.0/${page.page_id}/messages`;
+      if (messageType === "image" && mediaUrl) {
+        graphPayload = {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "image",
+          image: { link: mediaUrl, caption: message || undefined },
+        };
+      } else if (messageType === "document" && mediaUrl) {
+        graphPayload = {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "document",
+          document: { link: mediaUrl, caption: message || undefined },
+        };
+      } else {
+        graphPayload = {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "text",
+          text: { body: message },
+        };
+      }
     } else {
+      // Facebook Messenger
       graphUrl = `https://graph.facebook.com/v21.0/${page.page_id}/messages`;
       if (messageType === "image" && mediaUrl) {
         graphPayload = { recipient: { id: recipientId }, message: { attachment: { type: "image", payload: { url: mediaUrl, is_reusable: true } } } };
@@ -84,7 +111,8 @@ Deno.serve(async (req) => {
     }
 
     const outboundMessageId = graphData.message_id || `out-${Date.now()}`;
-    const platform = page.instagram_account_id ? "instagram" : "facebook";
+    const platform = page.instagram_account_id ? "instagram" 
+      : (page.platform === "whatsapp_business" ? "whatsapp_business" : "facebook");
 
     await supabase.from("meta_conversations").insert({
       meta_page_id: page.id, platform, sender_id: recipientId, message_id: outboundMessageId, content: message, message_type: messageType, media_url: mediaUrl, direction: "outbound", timestamp: new Date().toISOString(), raw_payload: graphData, workspace_id: page.workspace_id,
