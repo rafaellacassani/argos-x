@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { z } from "zod";
-import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,19 +21,57 @@ const resetSchema = z
   });
 
 export default function ResetPassword() {
-  const { updatePassword } = useAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    // Listen for the PASSWORD_RECOVERY event which fires when the recovery token is processed
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY" && session) {
+        setSessionReady(true);
+        setCheckingSession(false);
+      } else if (event === "SIGNED_IN" && session) {
+        // Also handle SIGNED_IN — some recovery flows emit this instead
+        setSessionReady(true);
+        setCheckingSession(false);
+      }
+    });
+
+    // Also check if there's already a session (user might have arrived with token already processed)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setSessionReady(true);
+      }
+      // Give some time for the auth state change to fire from the URL hash
+      setTimeout(() => {
+        setCheckingSession(false);
+      }, 3000);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!sessionReady) {
+      toast({
+        title: "Erro",
+        description: "Sessão de recuperação não encontrada. Solicite um novo link de redefinição de senha.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       const parsed = resetSchema.parse({ password, confirmPassword });
-      const { error } = await updatePassword(parsed.password);
+      const { error } = await supabase.auth.updateUser({ password: parsed.password });
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
       } else {
@@ -62,44 +100,61 @@ export default function ResetPassword() {
         </div>
 
         <div className="inboxia-card p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">Nova senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  maxLength={128}
-                />
-              </div>
+          {checkingSession ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Verificando link de recuperação...</p>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirmar senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="pl-10"
-                  maxLength={128}
-                />
-              </div>
+          ) : !sessionReady ? (
+            <div className="text-center py-6 space-y-3">
+              <p className="text-destructive font-medium">Link expirado ou inválido</p>
+              <p className="text-sm text-muted-foreground">
+                Solicite um novo link de redefinição de senha ao administrador.
+              </p>
+              <Button variant="outline" onClick={() => navigate("/auth")}>
+                Ir para login
+              </Button>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Nova senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    maxLength={128}
+                  />
+                </div>
+              </div>
 
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              Redefinir senha
-            </Button>
-          </form>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirmar senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10"
+                    maxLength={128}
+                  />
+                </div>
+              </div>
+
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Redefinir senha
+              </Button>
+            </form>
+          )}
         </div>
       </motion.div>
     </div>
