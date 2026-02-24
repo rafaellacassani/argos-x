@@ -213,6 +213,45 @@ app.get("/", async (c) => {
         console.error(`[Facebook OAuth] Failed to save page ${page.name}:`, pageError);
       } else {
         console.log(`[Facebook OAuth] ✅ Page saved: ${page.name}`);
+
+        // Subscribe page to webhook so Meta sends events to our endpoint
+        try {
+          const subscribeRes = await fetch(
+            `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed",
+                access_token: page.access_token,
+              }),
+            }
+          );
+          const subscribeData = await subscribeRes.json();
+          if (subscribeData.success) {
+            console.log(`[Facebook OAuth] ✅ Page ${page.name} subscribed to webhook`);
+          } else {
+            console.error(`[Facebook OAuth] ❌ Subscription failed for ${page.name}:`, subscribeData);
+          }
+
+          if (instagramAccountId) {
+            const igSubscribeRes = await fetch(
+              `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({
+                  subscribed_fields: "messages,messaging_postbacks,comments,live_comments,feed",
+                  access_token: page.access_token,
+                }),
+              }
+            );
+            const igSubscribeData = await igSubscribeRes.json();
+            console.log(`[Facebook OAuth] Instagram subscription response:`, igSubscribeData);
+          }
+        } catch (subErr) {
+          console.error(`[Facebook OAuth] Error subscribing to webhook:`, subErr);
+        }
       }
     }
 
