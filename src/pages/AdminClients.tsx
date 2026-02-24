@@ -211,8 +211,8 @@ export default function AdminClients() {
           email: formEmail,
           fullName: formName,
           phone: formPhone,
-          successUrl: window.location.origin + "/auth",
-          cancelUrl: window.location.origin + "/admin/clients",
+          successUrl: "https://argosx.com.br/auth",
+          cancelUrl: "https://argosx.com.br/admin/clients",
         },
       });
 
@@ -272,6 +272,7 @@ export default function AdminClients() {
           email: freeEmail,
           fullName: freeName,
           phone: freePhone,
+          redirectTo: "https://argosx.com.br",
         },
       });
 
@@ -316,7 +317,7 @@ export default function AdminClients() {
     }
     try {
       const { data, error } = await supabase.functions.invoke("admin-clients", {
-        body: { action: "resend-invite", email: client.owner.email, redirectTo: window.location.origin },
+        body: { action: "resend-invite", email: client.owner.email, redirectTo: "https://argosx.com.br" },
       });
       if (error) throw error;
       if (data?.error) {
