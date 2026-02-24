@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
+import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
@@ -113,6 +114,8 @@ export default function Settings() {
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const [showCloudAPIModal, setShowCloudAPIModal] = useState(false);
+  const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
 
   const {
@@ -203,9 +206,24 @@ export default function Settings() {
     }
   }, []);
 
+  const fetchCloudConnections = async () => {
+    if (!workspaceId) return;
+    try {
+      const { data } = await supabase
+        .from("whatsapp_cloud_connections")
+        .select("id, inbox_name, phone_number, is_active, status")
+        .eq("workspace_id", workspaceId)
+        .eq("is_active", true);
+      setCloudConnections(data || []);
+    } catch (err) {
+      console.error("Error fetching cloud connections:", err);
+    }
+  };
+
   useEffect(() => {
     fetchMetaPages();
-  }, []);
+    fetchCloudConnections();
+  }, [workspaceId]);
 
   // Fetch instances on mount and when tab changes
   const fetchInstances = async () => {
@@ -356,10 +374,10 @@ export default function Settings() {
       name: "WhatsApp API",
       description: "API oficial da Meta",
       icon: <Phone className="w-6 h-6 text-green-600" />,
-      connected: connectedCount > 0,
-      phoneNumber: connectedPhone,
+      connected: cloudConnections.filter(c => c.status === "active").length > 0,
+      phoneNumber: cloudConnections.find(c => c.status === "active")?.phone_number || null,
       available: true,
-      connectedCount,
+      connectedCount: cloudConnections.filter(c => c.status === "active").length,
     },
     {
       id: "instagram",
@@ -530,7 +548,24 @@ export default function Settings() {
                     )}
                   </div>
                 )}
-                {!integration.phoneNumber && !integration.metaPages?.length && <div className="mb-2" />}
+                {/* Show cloud API connections */}
+                {integration.id === "whatsapp-api" && cloudConnections.length > 0 && (
+                  <div className="mb-4 space-y-1">
+                    {cloudConnections.filter(c => c.status === "active").slice(0, 2).map((conn: any) => (
+                      <p key={conn.id} className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-success" />
+                        {conn.inbox_name} · {conn.phone_number}
+                      </p>
+                    ))}
+                    {cloudConnections.filter(c => c.status === "active").length > 2 && (
+                      <p className="text-xs text-muted-foreground">
+                        +{cloudConnections.filter(c => c.status === "active").length - 2} mais
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!integration.phoneNumber && !integration.metaPages?.length && integration.id !== "whatsapp-api" && <div className="mb-2" />}
+                {integration.id === "whatsapp-api" && cloudConnections.length === 0 && !integration.phoneNumber && <div className="mb-2" />}
                 {integration.available ? (
                   (() => {
                     const isWhatsApp = integration.id === "whatsapp-business" || integration.id === "whatsapp-api";
@@ -542,13 +577,15 @@ export default function Settings() {
                         disabled={isLocked || ((integration.id === "instagram" || integration.id === "facebook") && connectingMeta)}
                         onClick={() => {
                           if (isLocked) return;
-                          if (isWhatsApp) {
+                          if (integration.id === "whatsapp-business") {
                             if (!planLimits.canAddWhatsapp(instances.length)) {
                               toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
                               navigate("/planos");
                               return;
                             }
                             setShowConnectionModal(true);
+                          } else if (integration.id === "whatsapp-api") {
+                            setShowCloudAPIModal(true);
                           } else if (integration.id === "instagram" || integration.id === "facebook") {
                             handleConnectMeta();
                           } else if (integration.id === "google-calendar") {
@@ -907,6 +944,13 @@ export default function Settings() {
         }}
         onSuccess={fetchInstances}
         instanceToReconnect={reconnectingInstance ?? undefined}
+      />
+
+      {/* Cloud API Modal */}
+      <CloudAPIConnectionModal
+        open={showCloudAPIModal}
+        onOpenChange={setShowCloudAPIModal}
+        onSuccess={() => { fetchCloudConnections(); }}
       />
     </div>
   );
