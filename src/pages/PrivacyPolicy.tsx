@@ -4,8 +4,8 @@ export default function PrivacyPolicy() {
   return (
     <>
       <Helmet>
-        <title>Política de Privacidade - Inboxia</title>
-        <meta name="description" content="Política de Privacidade do Inboxia - CRM para WhatsApp, Facebook e Instagram" />
+         <title>Política de Privacidade - Argos X</title>
+        <meta name="description" content="Política de Privacidade do Argos X - CRM para WhatsApp, Facebook e Instagram" />
         <meta name="robots" content="index, follow" />
       </Helmet>
       
@@ -21,7 +21,7 @@ export default function PrivacyPolicy() {
             <section>
               <h2 className="text-xl font-semibold text-foreground mt-8 mb-4">1. Introdução</h2>
               <p>
-                O Inboxia ("nós", "nosso" ou "nossa") respeita sua privacidade e está comprometido em proteger seus dados pessoais. 
+                O Argos X ("nós", "nosso" ou "nossa") respeita sua privacidade e está comprometido em proteger seus dados pessoais. 
                 Esta Política de Privacidade explica como coletamos, usamos, divulgamos e protegemos suas informações quando você usa nossa plataforma.
               </p>
             </section>
@@ -110,8 +110,8 @@ export default function PrivacyPolicy() {
                 Para questões sobre esta Política de Privacidade ou exercer seus direitos, entre em contato:
               </p>
               <ul className="list-none mt-2 space-y-1">
-                <li><strong>Email:</strong> privacidade@inboxia.com.br</li>
-                <li><strong>Responsável:</strong> Mkt Boost</li>
+                 <li><strong>Email:</strong> contato@argosx.com.br</li>
+                <li><strong>Responsável:</strong> Argos X</li>
               </ul>
             </section>
           </div>

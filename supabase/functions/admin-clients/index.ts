@@ -179,9 +179,9 @@ serve(async (req) => {
           metadata: { plan, admin_created: "true" },
         },
         success_url:
-          successUrl || "https://argos-x.lovable.app/auth",
+          successUrl || "https://argosx.com.br/auth",
         cancel_url:
-          cancelUrl || "https://argos-x.lovable.app/admin/clients",
+          cancelUrl || "https://argosx.com.br/admin/clients",
       });
 
       return new Response(
