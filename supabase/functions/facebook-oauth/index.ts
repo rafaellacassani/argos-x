@@ -18,7 +18,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/facebook-oauth`;
 
 // App URL for redirecting back after OAuth
-const APP_URL = Deno.env.get("APP_URL") || "https://inboxia-prime-ai.lovable.app";
+const APP_URL = Deno.env.get("APP_URL") || "https://argosx.com.br";
 
 // Create Supabase client with service role for database operations
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
