@@ -15,8 +15,13 @@ const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const CONNECT_QR_CACHE_MS = 60_000;
+// --- Cache & concurrency settings ---
+const CONNECT_QR_CACHE_MS = 120_000; // 2 min cache for QR codes
 const CONNECTION_STATE_CACHE_MS = 5_000;
+const CONNECT_COOLDOWN_MS = 300_000; // 5 min cooldown after too many calls
+const MAX_CONNECT_CALLS_IN_WINDOW = 3;
+const CIRCUIT_BREAKER_TRIGGER_MS = 300_000; // 5 min of continuous "connecting"
+const CIRCUIT_BREAKER_OPEN_MS = 600_000; // 10 min circuit open
 
 const connectResponseCache = new Map<string, { at: number; payload: unknown }>();
 const connectInFlight = new Map<string, Promise<unknown>>();
@@ -24,7 +29,58 @@ const connectInFlight = new Map<string, Promise<unknown>>();
 const connectionStateCache = new Map<string, { at: number; payload: unknown }>();
 const connectionStateInFlight = new Map<string, Promise<unknown>>();
 
+// Connect call frequency tracking (cooldown)
+const connectCallLog = new Map<string, number[]>();
 
+// Circuit breaker: tracks when an instance first entered "connecting" state
+const connectingStartedAt = new Map<string, number>();
+// When circuit is open, we return cached "close" until this timestamp
+const circuitOpenUntil = new Map<string, number>();
+
+function isConnectCooledDown(instanceName: string): boolean {
+  const now = Date.now();
+  const calls = connectCallLog.get(instanceName) || [];
+  // Remove calls older than window
+  const recent = calls.filter(t => now - t < CONNECT_COOLDOWN_MS);
+  connectCallLog.set(instanceName, recent);
+  return recent.length >= MAX_CONNECT_CALLS_IN_WINDOW;
+}
+
+function recordConnectCall(instanceName: string) {
+  const calls = connectCallLog.get(instanceName) || [];
+  calls.push(Date.now());
+  connectCallLog.set(instanceName, calls);
+}
+
+function checkCircuitBreaker(instanceName: string, state: string): boolean {
+  const now = Date.now();
+
+  // Check if circuit is currently open
+  const openUntil = circuitOpenUntil.get(instanceName);
+  if (openUntil && now < openUntil) {
+    return true; // circuit is open, block
+  } else if (openUntil) {
+    circuitOpenUntil.delete(instanceName); // expired, close circuit
+  }
+
+  if (state === "connecting") {
+    const startedAt = connectingStartedAt.get(instanceName);
+    if (!startedAt) {
+      connectingStartedAt.set(instanceName, now);
+    } else if (now - startedAt > CIRCUIT_BREAKER_TRIGGER_MS) {
+      // Instance has been "connecting" for too long — open circuit
+      console.warn(`[evolution-api] Circuit breaker OPEN for ${instanceName} (stuck connecting for ${Math.round((now - startedAt) / 1000)}s)`);
+      circuitOpenUntil.set(instanceName, now + CIRCUIT_BREAKER_OPEN_MS);
+      connectingStartedAt.delete(instanceName);
+      return true;
+    }
+  } else {
+    // Not "connecting" anymore, reset tracker
+    connectingStartedAt.delete(instanceName);
+  }
+
+  return false;
+}
 
 async function getConnectResponse(instanceName: string) {
   const now = Date.now();
@@ -34,10 +90,18 @@ async function getConnectResponse(instanceName: string) {
     return cached.payload;
   }
 
+  // Cooldown check
+  if (isConnectCooledDown(instanceName) && cached) {
+    console.warn(`[evolution-api] Connect cooldown active for ${instanceName}, returning cached`);
+    return cached.payload;
+  }
+
   const inFlight = connectInFlight.get(instanceName);
   if (inFlight) {
     return await inFlight;
   }
+
+  recordConnectCall(instanceName);
 
   const request = (async () => {
     const response = await evolutionRequest(`/instance/connect/${instanceName}`);
@@ -53,6 +117,14 @@ async function getConnectResponse(instanceName: string) {
 
 async function getConnectionStateSafe(instanceName: string) {
   const now = Date.now();
+
+  // Circuit breaker: if open, return "close" immediately without hitting API
+  const openUntil = circuitOpenUntil.get(instanceName);
+  if (openUntil && now < openUntil) {
+    console.log(`[evolution-api] Circuit breaker active for ${instanceName}, returning close`);
+    return { instance: { instanceName, state: "close" } };
+  }
+
   const cached = connectionStateCache.get(instanceName);
 
   if (cached && now - cached.at < CONNECTION_STATE_CACHE_MS) {
@@ -67,6 +139,11 @@ async function getConnectionStateSafe(instanceName: string) {
   const request = (async () => {
     const response = await evolutionRequest(`/instance/connectionState/${instanceName}`, "GET", undefined, false);
     const safeResponse = response || { instance: { state: "close" } };
+
+    // Check circuit breaker based on returned state
+    const state = safeResponse?.instance?.state || "close";
+    checkCircuitBreaker(instanceName, state);
+
     connectionStateCache.set(instanceName, { at: Date.now(), payload: safeResponse });
     return safeResponse;
   })().finally(() => {
@@ -159,6 +236,59 @@ app.get("/connection-state/:instanceName", async (c) => {
   }
 });
 
+// === AUTO-HEAL: Restart instance (logout + recreate) ===
+app.post("/restart-instance/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+
+    console.log(`[evolution-api] 🔧 Auto-heal: restarting instance ${instanceName}`);
+
+    // Step 1: Logout (clears corrupted session)
+    try {
+      await evolutionRequest(`/instance/logout/${instanceName}`, "DELETE", undefined, false);
+      console.log(`[evolution-api] Logout OK for ${instanceName}`);
+    } catch (e) {
+      console.warn(`[evolution-api] Logout failed (may be already disconnected):`, e);
+    }
+
+    // Step 2: Wait 2s for cleanup
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Step 3: Recreate instance
+    let createResult;
+    try {
+      createResult = await evolutionRequest("/instance/create", "POST", {
+        instanceName,
+        qrcode: true,
+        integration: "WHATSAPP-BAILEYS",
+      });
+    } catch (e) {
+      // Instance may already exist, try connecting directly
+      console.warn(`[evolution-api] Create failed (may exist), trying connect:`, e);
+      createResult = await evolutionRequest(`/instance/connect/${instanceName}`);
+    }
+
+    // Step 4: Clear all caches and circuit breaker for this instance
+    connectResponseCache.delete(instanceName);
+    connectionStateCache.delete(instanceName);
+    connectingStartedAt.delete(instanceName);
+    circuitOpenUntil.delete(instanceName);
+    connectCallLog.delete(instanceName);
+
+    console.log(`[evolution-api] ✅ Auto-heal complete for ${instanceName}`);
+
+    return c.json({
+      success: true,
+      instanceName,
+      qrcode: createResult?.qrcode || createResult,
+    }, 200, corsHeaders);
+  } catch (error) {
+    console.error(`[evolution-api] ❌ Auto-heal failed:`, error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to restart instance" }, 500, corsHeaders);
+  }
+});
+
 app.get("/fetch-instances", async (c) => {
   try {
     const result = await evolutionRequest("/instance/fetchInstances");
@@ -195,7 +325,7 @@ app.post("/chats/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const result = await evolutionRequest(`/chat/findChats/${instanceName}`, "POST", {}, false);
-    if (!result) return c.json([], 200, corsHeaders); // Instance not found - return empty
+    if (!result) return c.json([], 200, corsHeaders);
     const chats = Array.isArray(result) ? result : [];
     chats.sort((a: any, b: any) => {
       const tsA = a.lastMessage?.messageTimestamp || 0;
@@ -216,7 +346,7 @@ app.post("/messages/:instanceName", async (c) => {
     if (!remoteJid || typeof remoteJid !== "string" || remoteJid.length > 100) return c.json({ error: "Invalid remoteJid" }, 400, corsHeaders);
     const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
     const result = await evolutionRequest(`/chat/findMessages/${instanceName}`, "POST", { where: { key: { remoteJid } }, limit: safeLimit }, false);
-    if (!result) return c.json({ messages: { records: [] } }, 200, corsHeaders); // Instance not found - return empty
+    if (!result) return c.json({ messages: { records: [] } }, 200, corsHeaders);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ messages: { records: [] } }, 200, corsHeaders);
@@ -329,7 +459,6 @@ app.post("/setup-webhook/:instanceName", async (c) => {
     const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?apikey=${encodeURIComponent(evolutionApiKey)}`;
     console.log("[evolution-api] Setting webhook for", instanceName, "→", webhookUrl);
     
-    // Evolution API v2 expects "webhook" wrapper property
     const webhookBody = {
       webhook: {
         enabled: true,
@@ -339,7 +468,6 @@ app.post("/setup-webhook/:instanceName", async (c) => {
         events: ["MESSAGES_UPSERT"],
       }
     };
-    // Also try flat format as fallback
     const flatBody = {
       url: webhookUrl,
       webhook_by_events: false,
@@ -348,10 +476,8 @@ app.post("/setup-webhook/:instanceName", async (c) => {
     };
     
     let lastResult = null;
-    // Try wrapped format first (v2)
     lastResult = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", webhookBody, false);
     if (!lastResult) {
-      // Try flat format (v1)
       lastResult = await evolutionRequest(`/webhook/set/${instanceName}`, "POST", flatBody as any, false);
     }
     
