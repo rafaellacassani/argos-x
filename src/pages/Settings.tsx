@@ -28,8 +28,10 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
+import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
@@ -211,7 +213,7 @@ export default function Settings() {
     try {
       const { data } = await supabase
         .from("whatsapp_cloud_connections")
-        .select("id, inbox_name, phone_number, is_active, status")
+        .select("id, inbox_name, phone_number, is_active, status, webhook_verify_token, meta_page_id, created_at, last_webhook_at")
         .eq("workspace_id", workspaceId)
         .eq("is_active", true);
       setCloudConnections(data || []);
@@ -825,6 +827,39 @@ export default function Settings() {
                     </div>
                   )}
                 </motion.div>
+              ))}
+            </div>
+          )}
+
+          {/* WABA Cloud API Section */}
+          <Separator className="my-6" />
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display font-semibold text-lg">WhatsApp API Oficial (Cloud)</h3>
+              <p className="text-muted-foreground text-sm">Conexões via API oficial da Meta</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Nova Conexão
+            </Button>
+          </div>
+
+          {cloudConnections.length === 0 ? (
+            <div className="inboxia-card p-8 text-center">
+              <Phone className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-muted-foreground text-sm">
+                Nenhuma conexão via API oficial. Conecte na aba Integrações.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cloudConnections.map((conn: any, index: number) => (
+                <WABAConnectionCard
+                  key={conn.id}
+                  conn={conn}
+                  index={index}
+                  workspaceId={workspaceId}
+                  onRefresh={fetchCloudConnections}
+                />
               ))}
             </div>
           )}
