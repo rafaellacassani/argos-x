@@ -30,6 +30,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
 const AdminMindMap = lazy(() => import("./pages/AdminMindMap"));
@@ -82,6 +83,7 @@ const App = () => (
                     </ProtectedRoute>
                   } />
                   <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+                  <Route path="/terms" element={<TermsOfService />} />
                   <Route path="/admin/panel" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <AdminPanel />
