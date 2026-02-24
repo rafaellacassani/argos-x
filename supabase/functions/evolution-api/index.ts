@@ -15,6 +15,68 @@ const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
+const CONNECT_QR_CACHE_MS = 60_000;
+const CONNECTION_STATE_CACHE_MS = 5_000;
+
+const connectResponseCache = new Map<string, { at: number; payload: unknown }>();
+const connectInFlight = new Map<string, Promise<unknown>>();
+
+const connectionStateCache = new Map<string, { at: number; payload: unknown }>();
+const connectionStateInFlight = new Map<string, Promise<unknown>>();
+
+
+
+async function getConnectResponse(instanceName: string) {
+  const now = Date.now();
+  const cached = connectResponseCache.get(instanceName);
+
+  if (cached && now - cached.at < CONNECT_QR_CACHE_MS) {
+    return cached.payload;
+  }
+
+  const inFlight = connectInFlight.get(instanceName);
+  if (inFlight) {
+    return await inFlight;
+  }
+
+  const request = (async () => {
+    const response = await evolutionRequest(`/instance/connect/${instanceName}`);
+    connectResponseCache.set(instanceName, { at: Date.now(), payload: response });
+    return response;
+  })().finally(() => {
+    connectInFlight.delete(instanceName);
+  });
+
+  connectInFlight.set(instanceName, request);
+  return await request;
+}
+
+async function getConnectionStateSafe(instanceName: string) {
+  const now = Date.now();
+  const cached = connectionStateCache.get(instanceName);
+
+  if (cached && now - cached.at < CONNECTION_STATE_CACHE_MS) {
+    return cached.payload;
+  }
+
+  const inFlight = connectionStateInFlight.get(instanceName);
+  if (inFlight) {
+    return await inFlight;
+  }
+
+  const request = (async () => {
+    const response = await evolutionRequest(`/instance/connectionState/${instanceName}`, "GET", undefined, false);
+    const safeResponse = response || { instance: { state: "close" } };
+    connectionStateCache.set(instanceName, { at: Date.now(), payload: safeResponse });
+    return safeResponse;
+  })().finally(() => {
+    connectionStateInFlight.delete(instanceName);
+  });
+
+  connectionStateInFlight.set(instanceName, request);
+  return await request;
+}
+
 // Auth middleware
 async function requireAuth(c: any, next: () => Promise<void>) {
   const authHeader = c.req.header("authorization");
@@ -79,7 +141,7 @@ app.get("/connect/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/instance/connect/${instanceName}`);
+    const result = await getConnectResponse(instanceName);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to get QR code" }, 500, corsHeaders);
@@ -90,10 +152,9 @@ app.get("/connection-state/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/instance/connectionState/${instanceName}`, "GET", undefined, false);
-    if (!result) return c.json({ instance: { state: "close" } }, 200, corsHeaders);
+    const result = await getConnectionStateSafe(instanceName);
     return c.json(result, 200, corsHeaders);
-  } catch (error) {
+  } catch (_error) {
     return c.json({ instance: { state: "close" } }, 200, corsHeaders);
   }
 });
