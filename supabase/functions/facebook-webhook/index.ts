@@ -32,16 +32,38 @@ async function verifySignature(rawBody: string, signatureHeader: string | null):
 }
 
 // GET - Meta webhook verification (challenge)
-app.get("/", (c) => {
+app.get("/", async (c) => {
   const mode = c.req.query("hub.mode");
   const token = c.req.query("hub.verify_token");
   const challenge = c.req.query("hub.challenge");
 
   console.log("[Facebook Webhook] Verification request:", { mode, token, challenge });
 
+  // First try the default verify token
   if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    console.log("[Facebook Webhook] ✅ Verification successful");
+    console.log("[Facebook Webhook] ✅ Verification successful (default token)");
     return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+  }
+
+  // Then try dynamic tokens from whatsapp_cloud_connections
+  if (mode === "subscribe" && token) {
+    const { data: conn } = await supabase
+      .from("whatsapp_cloud_connections")
+      .select("id")
+      .eq("webhook_verify_token", token)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    if (conn) {
+      await supabase
+        .from("whatsapp_cloud_connections")
+        .update({ last_webhook_at: new Date().toISOString(), status: "active" })
+        .eq("id", conn.id);
+
+      console.log("[Facebook Webhook] ✅ Verification successful (WABA token, conn:", conn.id, ")");
+      return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
   }
 
   console.log("[Facebook Webhook] ❌ Verification failed");
