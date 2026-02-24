@@ -23,6 +23,7 @@ import {
   Loader2,
   Lock,
   Unplug,
+  Wrench,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -126,7 +127,13 @@ export default function Settings() {
     deleteInstance,
     logoutInstance,
     getConnectionState,
+    restartInstance,
   } = useEvolutionAPI();
+
+  // Track consecutive "connecting" counts per instance for loop detection
+  const connectingCountRef = useRef<Record<string, number>>({});
+  const [loopDetected, setLoopDetected] = useState<Record<string, boolean>>({});
+  const [repairingInstance, setRepairingInstance] = useState<string | null>(null);
 
   // Track previous instance states for auto-sync
   const prevStatesRef = useRef<Record<string, string>>({});
@@ -232,22 +239,37 @@ export default function Settings() {
 
   // Fetch instances on mount and when tab changes — SEQUENTIAL state checks to avoid hammering Evolution API
   const fetchInstances = async () => {
-    if (fetchingRef.current) return; // prevent concurrent fetches
+    if (fetchingRef.current) return;
     fetchingRef.current = true;
     setLoadingInstances(true);
     try {
       const data = await listInstances();
-      // Fetch connection state SEQUENTIALLY with small delay to avoid overwhelming Evolution API
       const instancesWithState: EvolutionInstance[] = [];
+      const newConnectingCounts = { ...connectingCountRef.current };
+      const newLoopDetected = { ...loopDetected };
+
       for (let i = 0; i < data.length; i++) {
         const instance = data[i];
-        // Add 500ms delay between state checks (except for the first one)
         if (i > 0) await new Promise(r => setTimeout(r, 500));
         try {
           const state = await getConnectionState(instance.instanceName);
+          const currentState = state?.instance?.state || "open";
+          
+          // Loop detection: count consecutive "connecting" states
+          if (currentState === "connecting") {
+            newConnectingCounts[instance.instanceName] = (newConnectingCounts[instance.instanceName] || 0) + 1;
+            if (newConnectingCounts[instance.instanceName] >= 3) {
+              newLoopDetected[instance.instanceName] = true;
+              console.warn(`[Settings] Loop detected for ${instance.instanceName} (${newConnectingCounts[instance.instanceName]} consecutive connecting states)`);
+            }
+          } else {
+            newConnectingCounts[instance.instanceName] = 0;
+            newLoopDetected[instance.instanceName] = false;
+          }
+
           instancesWithState.push({
             ...instance,
-            connectionStatus: state?.instance?.state || "open",
+            connectionStatus: currentState,
           });
         } catch {
           instancesWithState.push({
@@ -256,6 +278,9 @@ export default function Settings() {
           });
         }
       }
+      
+      connectingCountRef.current = newConnectingCounts;
+      setLoopDetected(newLoopDetected);
       setInstances(instancesWithState);
     } catch (err) {
       console.error("Error fetching instances:", err);
@@ -341,6 +366,29 @@ export default function Settings() {
     }
     prevStatesRef.current = newStates;
   }, [instances, workspaceId]);
+
+  const handleRepairInstance = async (instanceName: string) => {
+    setRepairingInstance(instanceName);
+    toast({ title: "Reparando conexão...", description: `Limpando sessão corrompida de "${instanceName}"` });
+    
+    try {
+      const result = await restartInstance(instanceName);
+      if (result?.success) {
+        toast({ title: "Conexão reparada ✓", description: `"${instanceName}" foi resetada. Reconecte via QR Code.` });
+        // Clear loop detection
+        connectingCountRef.current[instanceName] = 0;
+        setLoopDetected(prev => ({ ...prev, [instanceName]: false }));
+        // Refresh instances
+        await fetchInstances();
+      } else {
+        toast({ title: "Erro ao reparar", description: "Tente novamente ou entre em contato com o suporte.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erro ao reparar", variant: "destructive" });
+    } finally {
+      setRepairingInstance(null);
+    }
+  };
 
   const handleRefreshInstance = async (instanceName: string) => {
     try {
@@ -826,11 +874,37 @@ export default function Settings() {
                     </div>
                   )}
                   {instance.connectionStatus === "connecting" && (
-                    <div className="mt-4 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20 flex items-center gap-3">
-                      <Loader2 className="w-5 h-5 text-yellow-600 animate-spin" />
-                      <p className="text-sm text-yellow-600">
-                        Conectando... aguarde enquanto o WhatsApp se reconecta automaticamente.
-                      </p>
+                    <div className="mt-4 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
+                      <div className="flex items-center gap-3">
+                        {loopDetected[instance.instanceName] ? (
+                          <AlertCircle className="w-5 h-5 text-yellow-600" />
+                        ) : (
+                          <Loader2 className="w-5 h-5 text-yellow-600 animate-spin" />
+                        )}
+                        <p className="text-sm text-yellow-600 flex-1">
+                          {loopDetected[instance.instanceName]
+                            ? "Sessão corrompida detectada. Esta instância está presa em loop de reconexão."
+                            : "Conectando... aguarde enquanto o WhatsApp se reconecta automaticamente."}
+                        </p>
+                      </div>
+                      {loopDetected[instance.instanceName] && (
+                        <div className="mt-3 flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="gap-2"
+                            onClick={() => handleRepairInstance(instance.instanceName)}
+                            disabled={repairingInstance === instance.instanceName}
+                          >
+                            {repairingInstance === instance.instanceName ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Wrench className="w-4 h-4" />
+                            )}
+                            Reparar Conexão
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </motion.div>

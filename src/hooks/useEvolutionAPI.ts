@@ -641,6 +641,35 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const restartInstance = useCallback(async (instanceName: string): Promise<{ success: boolean; qrcode?: QRCodeResponse } | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      console.log(`[useEvolutionAPI] restartInstance (auto-heal): ${instanceName}`);
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/restart-instance/${instanceName}`, {
+        method: "POST",
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao reparar conexão";
+      setError(message);
+      console.error("[useEvolutionAPI] restartInstance error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -650,6 +679,7 @@ export function useEvolutionAPI() {
     listInstances,
     deleteInstance,
     logoutInstance,
+    restartInstance,
     fetchChats,
     fetchMessages,
     downloadMedia,
