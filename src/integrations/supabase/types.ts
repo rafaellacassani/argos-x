@@ -2049,6 +2049,72 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_cloud_connections: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          id: string
+          inbox_name: string
+          is_active: boolean | null
+          last_webhook_at: string | null
+          meta_page_id: string | null
+          phone_number: string
+          phone_number_id: string
+          status: string | null
+          updated_at: string | null
+          waba_id: string
+          webhook_verify_token: string
+          workspace_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          id?: string
+          inbox_name: string
+          is_active?: boolean | null
+          last_webhook_at?: string | null
+          meta_page_id?: string | null
+          phone_number: string
+          phone_number_id: string
+          status?: string | null
+          updated_at?: string | null
+          waba_id: string
+          webhook_verify_token?: string
+          workspace_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          id?: string
+          inbox_name?: string
+          is_active?: boolean | null
+          last_webhook_at?: string | null
+          meta_page_id?: string | null
+          phone_number?: string
+          phone_number_id?: string
+          status?: string | null
+          updated_at?: string | null
+          waba_id?: string
+          webhook_verify_token?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_cloud_connections_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_cloud_connections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_instances: {
         Row: {
           created_at: string | null
@@ -2321,7 +2387,7 @@ export type Database = {
     Enums: {
       app_role: "admin" | "manager" | "seller"
       lead_status: "active" | "won" | "lost" | "archived"
-      meta_platform: "facebook" | "instagram" | "both"
+      meta_platform: "facebook" | "instagram" | "both" | "whatsapp_business"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2451,7 +2517,7 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "manager", "seller"],
       lead_status: ["active", "won", "lost", "archived"],
-      meta_platform: ["facebook", "instagram", "both"],
+      meta_platform: ["facebook", "instagram", "both", "whatsapp_business"],
     },
   },
 } as const
