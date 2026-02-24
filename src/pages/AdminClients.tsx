@@ -316,7 +316,7 @@ export default function AdminClients() {
     }
     try {
       const { data, error } = await supabase.functions.invoke("admin-clients", {
-        body: { action: "resend-invite", email: client.owner.email },
+        body: { action: "resend-invite", email: client.owner.email, redirectTo: window.location.origin },
       });
       if (error) throw error;
       if (data?.error) {

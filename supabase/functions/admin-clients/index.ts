@@ -340,11 +340,12 @@ serve(async (req) => {
       // 6. Generate password reset link for the client
       let recoveryLink = null;
       try {
+        const redirectBase = body.redirectTo || "https://argosx.com.br";
         const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
           type: "recovery",
           email,
           options: {
-            redirectTo: "https://argos-x.lovable.app/auth/reset-password",
+            redirectTo: `${redirectBase}/auth/reset-password`,
           },
         });
         if (linkData?.properties?.action_link) {
@@ -374,11 +375,12 @@ serve(async (req) => {
 
       let recoveryLink = null;
       try {
+        const redirectBase = body.redirectTo || "https://argosx.com.br";
         const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
           type: "recovery",
           email,
           options: {
-            redirectTo: "https://argos-x.lovable.app/auth/reset-password",
+            redirectTo: `${redirectBase}/auth/reset-password`,
           },
         });
         if (linkData?.properties?.action_link) {
