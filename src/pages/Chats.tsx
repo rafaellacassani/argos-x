@@ -1844,7 +1844,9 @@ export default function Chats() {
                       selectedChat.isMeta
                         ? selectedChat.metaPlatform === "instagram"
                           ? "meta_instagram"
-                          : "meta_facebook"
+                          : selectedChat.metaPlatform === "whatsapp_business"
+                            ? "meta_whatsapp"
+                            : "meta_facebook"
                         : "whatsapp"
                     }
                     instanceName={selectedChat.instanceName || selectedInstance || undefined}
@@ -1933,6 +1935,15 @@ export default function Chats() {
               onSendMedia={handleSendMedia}
               onSendAudio={handleSendAudio}
               disabled={apiLoading}
+              placeholder={
+                selectedChat?.isMeta
+                  ? selectedChat.metaPlatform === "instagram"
+                    ? "Responder via Instagram..."
+                    : selectedChat.metaPlatform === "whatsapp_business"
+                      ? "Responder via WhatsApp API..."
+                      : "Responder via Facebook..."
+                  : undefined
+              }
             />
           </>
         ) : (
