@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
+import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -130,13 +130,16 @@ export default function Contacts() {
     try {
       // Get connected instances
       const allInstances = await listInstances();
-      const stateResults = await Promise.all(
-        allInstances.map(async (inst) => {
-          const state = await getConnectionState(inst.instanceName);
-          return { inst, connected: state?.instance?.state === "open" };
-        })
-      );
-      const connectedInstance = stateResults.find((r) => r.connected)?.inst;
+      let connectedInstance: EvolutionInstance | undefined;
+      for (let i = 0; i < allInstances.length; i++) {
+        const inst = allInstances[i];
+        if (i > 0) await new Promise((resolve) => setTimeout(resolve, 400));
+        const state = await getConnectionState(inst.instanceName);
+        if (state?.instance?.state === "open") {
+          connectedInstance = inst;
+          break;
+        }
+      }
       if (!connectedInstance) {
         toast({ title: "Nenhuma instância conectada", description: "Conecte o WhatsApp primeiro.", variant: "destructive" });
         return;

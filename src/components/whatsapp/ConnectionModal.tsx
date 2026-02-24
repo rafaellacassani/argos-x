@@ -49,12 +49,14 @@ export function ConnectionModal({
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingInFlightRef = useRef(false);
 
   // Clean up polling on unmount or close
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      pollingInFlightRef.current = false;
     };
   }, []);
 
@@ -69,6 +71,7 @@ export function ConnectionModal({
         setErrorMessage(null);
         if (pollingRef.current) clearInterval(pollingRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        pollingInFlightRef.current = false;
       }, 300);
     } else if (open && instanceToReconnect) {
       // Reconnect mode: skip name step, go straight to QR code
@@ -165,8 +168,11 @@ export function ConnectionModal({
       setStep("error");
     }, 120000);
 
-    // Poll every 3 seconds
+    // Poll every 5 seconds with single-flight guard (prevents stacked checks)
     pollingRef.current = setInterval(async () => {
+      if (pollingInFlightRef.current) return;
+      pollingInFlightRef.current = true;
+
       try {
         const state = await getConnectionState(name);
         console.log("[ConnectionModal] Polling state:", state);
@@ -174,6 +180,7 @@ export function ConnectionModal({
         if (state?.instance?.state === "open") {
           if (pollingRef.current) clearInterval(pollingRef.current);
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          pollingInFlightRef.current = false;
           
           // Only save to DB if creating new instance (not reconnecting)
           if (!instanceToReconnect) {
@@ -246,8 +253,10 @@ export function ConnectionModal({
         }
       } catch (err) {
         console.error("[ConnectionModal] Polling error:", err);
+      } finally {
+        pollingInFlightRef.current = false;
       }
-    }, 3000);
+    }, 5000);
   };
 
   const handleRefreshQR = async () => {

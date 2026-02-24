@@ -628,17 +628,18 @@ export default function Chats() {
       let connectedInstances: EvolutionInstance[] = [];
       try {
         const data = await listInstances();
-        const stateResults = await Promise.all(
-          data.map(async (instance) => {
-            try {
-              const state = await getConnectionState(instance.instanceName);
-              return { instance, state };
-            } catch {
-              // If state check fails, assume connected to keep chats visible
-              return { instance, state: { instance: { instanceName: instance.instanceName, state: "open" as const } } };
-            }
-          })
-        );
+        const stateResults: Array<{ instance: EvolutionInstance; state: { instance: { instanceName: string; state: "open" | "close" | "connecting" } } | null }> = [];
+        for (let i = 0; i < data.length; i++) {
+          const instance = data[i];
+          if (i > 0) await new Promise((resolve) => setTimeout(resolve, 400));
+          try {
+            const state = await getConnectionState(instance.instanceName);
+            stateResults.push({ instance, state });
+          } catch {
+            // If state check fails, assume connected to keep chats visible
+            stateResults.push({ instance, state: { instance: { instanceName: instance.instanceName, state: "open" as const } } });
+          }
+        }
         // Include ALL instances regardless of connection state — chats must never disappear
         connectedInstances = stateResults.map(({ instance, state }) => ({
           ...instance,
