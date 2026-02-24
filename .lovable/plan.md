@@ -1,167 +1,96 @@
 
 
-# Integração de Email Real (Gmail / Outlook)
+# Plano: Correção Definitiva do Loop na Evolution API
 
-## Visao Geral
+## O que aconteceu (explicação simples)
 
-Transformar a tela de Email (atualmente mockup) em um cliente de email funcional onde cada workspace pode conectar sua conta Gmail ou Outlook e ler, responder e enviar emails diretamente pelo Argos X.
+A Evolution API roda **dentro de um container Docker**. Quando uma instancia WhatsApp tem a sessao corrompida, o servico fica tentando reconectar infinitamente (o loop que voce ve nos logs: "ChannelStartupService" repetindo sem parar).
 
----
-
-## Fase 1 — Infraestrutura (Backend)
-
-### 1.1 Tabela `email_accounts`
-Armazena as credenciais OAuth de cada conta de email conectada por workspace.
-
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid | PK |
-| workspace_id | uuid | FK |
-| user_id | uuid | Quem conectou |
-| provider | text | "gmail" ou "outlook" |
-| email_address | text | Email da conta |
-| access_token | text | Token OAuth |
-| refresh_token | text | Refresh token |
-| token_expiry | timestamptz | Quando expira |
-| sync_cursor | text | Cursor/pageToken de sincronizacao |
-| last_synced_at | timestamptz | Ultima sincronizacao |
-| is_active | boolean | Conta ativa |
-| created_at / updated_at | timestamptz | Timestamps |
-
-RLS: Apenas membros do workspace podem ver; apenas admin pode inserir/deletar.
-
-### 1.2 Tabela `emails`
-Cache local dos emails sincronizados.
-
-| Coluna | Tipo | Descricao |
-|--------|------|-----------|
-| id | uuid | PK |
-| email_account_id | uuid | FK para email_accounts |
-| workspace_id | uuid | FK |
-| provider_id | text | ID do email no Gmail/Outlook |
-| thread_id | text | ID da thread (agrupamento) |
-| from_name / from_email | text | Remetente |
-| to_emails | jsonb | Destinatarios |
-| cc_emails | jsonb | CC |
-| subject | text | Assunto |
-| body_text / body_html | text | Corpo |
-| snippet | text | Preview |
-| folder | text | inbox, sent, drafts, trash, archive |
-| is_read | boolean | Lido |
-| is_starred | boolean | Com estrela |
-| has_attachments | boolean | Tem anexo |
-| attachments | jsonb | Metadados dos anexos |
-| received_at | timestamptz | Data do email |
-| created_at | timestamptz | Quando foi cacheado |
-
-RLS: Membros do workspace podem ler/atualizar.
-
-### 1.3 Secrets necessarios
-- `GOOGLE_CLIENT_ID` — ja existe
-- `GOOGLE_CLIENT_SECRET` — ja existe
-- `MICROSOFT_CLIENT_ID` — novo (para Outlook no futuro)
-- `MICROSOFT_CLIENT_SECRET` — novo (para Outlook no futuro)
-
-O Google ja esta configurado, entao comecamos pelo Gmail.
+Os comandos `rm -rf` que voce rodou apagaram pastas na **maquina host** (o sistema operacional da VPS), mas as sessoes ficam **dentro do container Docker** -- por isso nao teve efeito e o loop continuou.
 
 ---
 
-## Fase 2 — Edge Functions
+## PARTE 1: Correcao Imediata (voce executa no servidor)
 
-### 2.1 `gmail-oauth`
-- Gera URL de autorizacao com escopos de Gmail (`gmail.readonly`, `gmail.send`, `gmail.modify`)
-- Recebe callback com code, troca por tokens
-- Salva na tabela `email_accounts`
+Rode estes comandos na VPS, nesta ordem:
 
-### 2.2 `sync-emails`
-- Busca emails via Gmail API (usando `messages.list` + `messages.get`)
-- Usa `pageToken` / `historyId` para sincronizacao incremental
-- Salva/atualiza na tabela `emails`
-- Pode ser chamado manualmente ou via cron
-
-### 2.3 `send-email`
-- Recebe destinatario, assunto, corpo, attachments
-- Envia via Gmail API (`messages.send`)
-- Suporta Reply (com `In-Reply-To` e `References` headers)
-- Salva copia na tabela `emails` com folder = "sent"
-
-### 2.4 `email-actions`
-- Marcar como lido/nao lido
-- Arquivar, mover para lixeira
-- Marcar com estrela
-- Todas as acoes refletidas via Gmail API + tabela local
-
----
-
-## Fase 3 — Frontend
-
-### 3.1 Tela de Configuracao (conexao)
-- Botao "Conectar Gmail" na pagina de Email (quando nenhuma conta conectada)
-- Fluxo OAuth: redireciona para Google, retorna com tokens
-- Estado visual de conta conectada com email exibido
-
-### 3.2 Hook `useEmails`
-- `fetchEmails(folder, page)` — busca do banco local
-- `syncEmails()` — dispara sincronizacao via edge function
-- `sendEmail(to, subject, body)` — envia via edge function
-- `replyEmail(emailId, body)` — responde
-- `updateEmail(id, { is_read, is_starred, folder })` — acoes
-- Realtime subscription na tabela `emails` para atualizacoes live
-
-### 3.3 Refatoracao da pagina `Email.tsx`
-- Substituir dados hardcoded por dados reais do hook
-- Manter o layout atual (ja esta bom)
-- Adicionar composer (modal para novo email / resposta)
-- Adicionar estado vazio quando sem conta conectada
-- Busca funcional com filtro por subject/from/snippet
-
----
-
-## Fase 4 — Preparacao para Salesbot
-
-### 4.1 Acao "Enviar Email" no Salesbot
-- Novo tipo de no no builder: `send_email`
-- Usa a mesma edge function `send-email`
-- Permite template com variaveis (nome do lead, empresa, etc.)
-- Requer que o workspace tenha conta de email conectada
-
----
-
-## Ordem de Implementacao
-
-1. Criar tabelas `email_accounts` e `emails` com RLS
-2. Criar edge function `gmail-oauth` (conexao)
-3. Criar edge function `sync-emails` (leitura)
-4. Criar edge function `send-email` (envio)
-5. Criar hook `useEmails` e refatorar `Email.tsx`
-6. Adicionar tela de conexao e composer
-7. (Futuro) Adicionar no de email ao salesbot
-8. (Futuro) Integrar Outlook via Microsoft Graph API
-
----
-
-## Detalhes Tecnicos
-
-### Escopos OAuth do Gmail necessarios
 ```text
-https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/gmail.send
-https://www.googleapis.com/auth/gmail.modify
+# 1. Descobrir o nome/ID do container da Evolution API
+docker ps | grep -i evolution
+
+# 2. Entrar no container (substituir CONTAINER_ID pelo resultado acima)
+docker exec -it CONTAINER_ID sh
+
+# 3. Dentro do container, encontrar onde ficam as instancias
+find / -type d -name "lia27" 2>/dev/null
+
+# 4. Navegar ate a pasta (geralmente /evolution/instances ou /app/instances)
+# Exemplo: cd /evolution/instances
+
+# 5. Apagar as sessoes corrompidas
+rm -rf lia27/session
+rm -rf iara-mkt-boost/session
+rm -rf ana-nutriscience-curso/session
+rm -rf ana-nutri/session
+
+# 6. Sair do container
+exit
+
+# 7. Reiniciar o container
+docker restart CONTAINER_ID
 ```
 
-### Redirect URL do OAuth
-```text
-https://qczmdbqwpshioooncpjd.supabase.co/functions/v1/gmail-oauth?action=callback
-```
-(Precisa ser registrado no Google Cloud Console junto com os escopos de Gmail)
+Apos o restart, as instancias vao aparecer como "desconectadas" e voce reconecta escaneando o QR Code normalmente no CRM.
 
-### Sincronizacao incremental
-- Primeira sync: busca ultimos 50 emails
-- Syncs seguintes: usa `historyId` do Gmail para buscar apenas novos/alterados
-- Cursor salvo em `email_accounts.sync_cursor`
+---
 
-### Seguranca
-- Tokens armazenados apenas no banco com RLS restritivo
-- Edge functions validam JWT antes de qualquer operacao
-- Refresh automatico de tokens expirados
+## PARTE 2: Solucao Permanente no App (eu implemento)
+
+Para que isso **nunca mais** precise de intervencao manual, vou implementar um mecanismo de auto-recuperacao:
+
+### 2.1 Endpoint de auto-heal na Edge Function
+
+Novo endpoint `POST /restart-instance/:instanceName` na Edge Function `evolution-api`:
+
+- Chama `DELETE /instance/logout/{name}` na Evolution API para limpar a sessao
+- Aguarda 2 segundos
+- Chama `POST /instance/create` para recriar a instancia limpa
+- Retorna o novo QR Code para reconexao imediata
+
+### 2.2 Deteccao automatica de loop no frontend
+
+No `Settings.tsx` e `ConnectionModal.tsx`:
+
+- Quando `getConnectionState` retorna `"connecting"` por **mais de 3 verificacoes consecutivas** (ou seja, ~90 segundos), o sistema entende que a instancia esta em loop
+- Exibe automaticamente um botao "Reparar Conexao" que chama o endpoint de auto-heal
+- O usuario so precisa escanear o QR Code novamente -- sem acessar servidor
+
+### 2.3 Cooldown agressivo no endpoint /connect
+
+Aumentar o cache do endpoint `/connect` de 60s para **120s** e adicionar um cooldown: se a mesma instancia receber mais de 3 chamadas `/connect` em 5 minutos, bloquear com resposta cached por 5 minutos inteiros. Isso impede que mesmo com multiplos usuarios abrindo a pagina, o servidor seja bombardeado.
+
+### 2.4 Circuit breaker por instancia
+
+Se uma instancia retornar estado `"connecting"` por mais de 5 minutos seguidos nos checks de estado, o proxy automaticamente para de fazer chamadas a Evolution API para aquela instancia e retorna `{ state: "close" }` por 10 minutos. Isso protege o servidor de ser sobrecarregado por instancias problematicas.
+
+---
+
+## Arquivos que serao modificados
+
+| Arquivo | Alteracao |
+|---|---|
+| `supabase/functions/evolution-api/index.ts` | Novo endpoint `/restart-instance`, circuit breaker por instancia, cooldown agressivo no `/connect` |
+| `src/pages/Settings.tsx` | Deteccao de loop (3+ checks em "connecting") e botao "Reparar Conexao" |
+| `src/hooks/useEvolutionAPI.ts` | Nova funcao `restartInstance()` que chama o endpoint de auto-heal |
+
+---
+
+## Resumo
+
+| Problema | Solucao |
+|---|---|
+| Sessoes corrompidas causam loop | Comandos Docker corretos para limpar agora |
+| App nao detecta instancia em loop | Deteccao automatica apos 3 checks consecutivos em "connecting" |
+| Nao tem como resolver sem acessar servidor | Endpoint de auto-heal que faz logout + recriacao automaticamente |
+| Muitas chamadas simultaneas sobrecarregam | Circuit breaker + cooldown agressivo no proxy |
 
