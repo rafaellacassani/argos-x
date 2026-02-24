@@ -93,6 +93,7 @@ export default function Contacts() {
   const [newBulkTagColor, setNewBulkTagColor] = useState("#3B82F6");
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  const [allGlobalSelected, setAllGlobalSelected] = useState(false);
   const PAGE_SIZE = 100;
 
   useEffect(() => { fetchTags(); }, [fetchTags]);
@@ -261,6 +262,7 @@ export default function Contacts() {
     if (page < 1 || page > totalPages) return;
     setCurrentPage(page);
     setSelectedContacts([]);
+    setAllGlobalSelected(false);
   };
 
   const filteredContacts = useMemo(() => {
@@ -284,13 +286,20 @@ export default function Contacts() {
     return result;
   }, [contacts, searchTerm, selectedTagFilter]);
 
+  const allPageSelected = filteredContacts.length > 0 && selectedContacts.length === filteredContacts.length;
+
   const toggleSelectAll = () => {
-    setSelectedContacts((prev) =>
-      prev.length === filteredContacts.length ? [] : filteredContacts.map((c) => c.id)
-    );
+    if (allPageSelected) {
+      setSelectedContacts([]);
+      setAllGlobalSelected(false);
+    } else {
+      setSelectedContacts(filteredContacts.map((c) => c.id));
+      setAllGlobalSelected(false);
+    }
   };
 
   const toggleSelect = (id: string) => {
+    setAllGlobalSelected(false);
     setSelectedContacts((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
     );
@@ -405,9 +414,41 @@ export default function Contacts() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="inboxia-card p-4 flex items-center justify-between bg-secondary/5 border-secondary/20"
+          className="inboxia-card p-4 space-y-2 bg-secondary/5 border-secondary/20"
         >
-          <span className="text-sm font-medium">{selectedContacts.length} contato(s) selecionado(s)</span>
+          {/* Gmail-style "select all" banner */}
+          {allPageSelected && totalCount > filteredContacts.length && (
+            <div className="text-center text-sm py-1.5 px-3 rounded-md bg-primary/10 border border-primary/20">
+              {allGlobalSelected ? (
+                <span>
+                  Todos os <strong>{totalCount}</strong> contatos estão selecionados.{" "}
+                  <button
+                    className="text-primary underline font-medium hover:text-primary/80"
+                    onClick={() => {
+                      setAllGlobalSelected(false);
+                      setSelectedContacts(filteredContacts.map((c) => c.id));
+                    }}
+                  >
+                    Limpar seleção
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  Todos os <strong>{filteredContacts.length}</strong> contatos desta página estão selecionados.{" "}
+                  <button
+                    className="text-primary underline font-medium hover:text-primary/80"
+                    onClick={() => setAllGlobalSelected(true)}
+                  >
+                    Selecionar todos os {totalCount} contatos
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">
+              {allGlobalSelected ? totalCount : selectedContacts.length} contato(s) selecionado(s)
+            </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm">
               <MessageCircle className="w-4 h-4 mr-2" />
@@ -465,8 +506,9 @@ export default function Contacts() {
               </PopoverContent>
             </Popover>
             <Button variant="outline" size="sm" className="text-destructive" disabled={!canDeleteContacts}>
-              Excluir
+              Excluir{allGlobalSelected ? ` todos (${totalCount})` : ""}
             </Button>
+            </div>
           </div>
         </motion.div>
       )}
@@ -483,7 +525,7 @@ export default function Contacts() {
               <TableRow className="bg-muted/50">
                 <TableHead className="w-12">
                   <Checkbox
-                    checked={filteredContacts.length > 0 && selectedContacts.length === filteredContacts.length}
+                    checked={allPageSelected}
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
