@@ -227,34 +227,41 @@ export default function Settings() {
     fetchCloudConnections();
   }, [workspaceId]);
 
-  // Fetch instances on mount and when tab changes
+  // Guard against concurrent fetches
+  const fetchingRef = useRef(false);
+
+  // Fetch instances on mount and when tab changes — SEQUENTIAL state checks to avoid hammering Evolution API
   const fetchInstances = async () => {
+    if (fetchingRef.current) return; // prevent concurrent fetches
+    fetchingRef.current = true;
     setLoadingInstances(true);
     try {
       const data = await listInstances();
-      // Fetch connection state for each instance
-      const instancesWithState = await Promise.all(
-        data.map(async (instance) => {
-          try {
-            const state = await getConnectionState(instance.instanceName);
-            return {
-              ...instance,
-              connectionStatus: state?.instance?.state || "open",
-            };
-          } catch {
-            // Fail-open: assume connected if state check fails
-            return {
-              ...instance,
-              connectionStatus: "open" as const,
-            };
-          }
-        })
-      );
+      // Fetch connection state SEQUENTIALLY with small delay to avoid overwhelming Evolution API
+      const instancesWithState: EvolutionInstance[] = [];
+      for (let i = 0; i < data.length; i++) {
+        const instance = data[i];
+        // Add 500ms delay between state checks (except for the first one)
+        if (i > 0) await new Promise(r => setTimeout(r, 500));
+        try {
+          const state = await getConnectionState(instance.instanceName);
+          instancesWithState.push({
+            ...instance,
+            connectionStatus: state?.instance?.state || "open",
+          });
+        } catch {
+          instancesWithState.push({
+            ...instance,
+            connectionStatus: "open" as const,
+          });
+        }
+      }
       setInstances(instancesWithState);
     } catch (err) {
       console.error("Error fetching instances:", err);
     } finally {
       setLoadingInstances(false);
+      fetchingRef.current = false;
     }
   };
 
@@ -264,10 +271,10 @@ export default function Settings() {
     }
   }, [activeTab]);
 
-  // Bug 4: Auto-polling every 30s when on WhatsApp tab
+  // Auto-polling every 60s (was 30s) when on WhatsApp tab — less pressure on Evolution API
   useEffect(() => {
     if (activeTab !== "whatsapp") return;
-    const interval = setInterval(() => fetchInstances(), 30000);
+    const interval = setInterval(() => fetchInstances(), 60000);
     return () => clearInterval(interval);
   }, [activeTab]);
 
