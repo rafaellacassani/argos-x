@@ -23,7 +23,8 @@ export function BotBuilderCanvas({
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [showNodeSelector, setShowNodeSelector] = useState(false);
   const [nodeSelectorPosition, setNodeSelectorPosition] = useState({ x: 0, y: 0 });
-  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [connectingFrom, setConnectingFrom] = useState<{ nodeId: string; handle?: string } | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [testLeads, setTestLeads] = useState<TestLead[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -79,15 +80,17 @@ export function BotBuilderCanvas({
     onNodesChange(nodes.map(n => n.id === nodeId ? { ...n, position } : n));
   }, [nodes, onNodesChange]);
 
-  const handleConnect = useCallback((sourceId: string, targetId: string) => {
+  const handleConnect = useCallback((sourceId: string, targetId: string, sourceHandle?: string) => {
     if (sourceId === targetId) return;
-    const existingEdge = edges.find(e => e.source === sourceId && e.target === targetId);
+    const existingEdge = edges.find(e => e.source === sourceId && e.target === targetId && e.sourceHandle === sourceHandle);
     if (existingEdge) return;
 
     const newEdge: BotEdge = {
       id: `edge_${Date.now()}`,
       source: sourceId,
       target: targetId,
+      sourceHandle,
+      label: sourceHandle === 'yes' ? 'Sim' : sourceHandle === 'no' ? 'Não' : undefined,
     };
     onEdgesChange([...edges, newEdge]);
   }, [edges, onEdgesChange]);
@@ -97,6 +100,13 @@ export function BotBuilderCanvas({
       setSelectedNode(null);
       setConnectingFrom(null);
     }
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (!connectingFrom) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setMousePos({ x: e.clientX - rect.left + canvasRef.current!.scrollLeft, y: e.clientY - rect.top + canvasRef.current!.scrollTop });
   };
 
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
@@ -150,6 +160,8 @@ export function BotBuilderCanvas({
         }}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDoubleClick}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={() => setConnectingFrom(null)}
       >
         {/* Edges */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '2000px', minHeight: '1500px' }}>
@@ -158,7 +170,10 @@ export function BotBuilderCanvas({
             const targetNode = nodes.find(n => n.id === edge.target);
             if (!sourceNode || !targetNode) return null;
 
-            const sourceX = sourceNode.position.x + 150;
+            // Adjust source X based on sourceHandle for condition/validate dual outputs
+            let sourceX = sourceNode.position.x + 150;
+            if (edge.sourceHandle === 'yes') sourceX = sourceNode.position.x + 75;
+            else if (edge.sourceHandle === 'no') sourceX = sourceNode.position.x + 225;
             const sourceY = sourceNode.position.y + 60;
             const targetX = targetNode.position.x + 150;
             const targetY = targetNode.position.y;
@@ -166,21 +181,27 @@ export function BotBuilderCanvas({
             const midY = (sourceY + targetY) / 2;
             const path = `M ${sourceX} ${sourceY} C ${sourceX} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
 
+            const edgeColor = edge.sourceHandle === 'yes' ? '#22c55e' : edge.sourceHandle === 'no' ? '#ef4444' : 'hsl(var(--primary))';
+
             return (
               <g key={edge.id}>
                 <path
                   d={path}
                   fill="none"
-                  stroke="hsl(var(--primary))"
+                  stroke={edgeColor}
                   strokeWidth="2"
                   strokeDasharray="5,5"
-                  className="animate-pulse"
                 />
+                {edge.label && (
+                  <text x={(sourceX + targetX) / 2} y={midY - 6} fill={edgeColor} fontSize="11" fontWeight="bold" textAnchor="middle">
+                    {edge.label}
+                  </text>
+                )}
                 <circle
                   cx={targetX}
                   cy={targetY}
                   r="4"
-                  fill="hsl(var(--primary))"
+                  fill={edgeColor}
                 />
               </g>
             );
@@ -189,14 +210,14 @@ export function BotBuilderCanvas({
           {/* Connection preview line */}
           {connectingFrom && (
             <line
-              x1={nodes.find(n => n.id === connectingFrom)?.position.x ?? 0 + 150}
-              y1={nodes.find(n => n.id === connectingFrom)?.position.y ?? 0 + 60}
-              x2={nodeSelectorPosition.x}
-              y2={nodeSelectorPosition.y}
+              x1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.x ?? 0) + 150}
+              y1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.y ?? 0) + 60}
+              x2={mousePos.x}
+              y2={mousePos.y}
               stroke="hsl(var(--primary))"
               strokeWidth="2"
               strokeDasharray="5,5"
-              opacity="0.5"
+              opacity="0.7"
             />
           )}
         </svg>
@@ -207,14 +228,14 @@ export function BotBuilderCanvas({
             key={node.id}
             node={node}
             isSelected={selectedNode === node.id}
-            isConnecting={connectingFrom === node.id}
+            isConnecting={connectingFrom?.nodeId === node.id}
             onSelect={() => setSelectedNode(node.id)}
             onUpdate={(data) => handleNodeUpdate(node.id, data)}
             onMove={(position) => handleNodeMove(node.id, position)}
-            onStartConnect={() => setConnectingFrom(node.id)}
+            onStartConnect={(handle) => setConnectingFrom({ nodeId: node.id, handle })}
             onEndConnect={(targetId) => {
-              if (connectingFrom && connectingFrom !== targetId) {
-                handleConnect(connectingFrom, targetId);
+              if (connectingFrom && connectingFrom.nodeId !== targetId) {
+                handleConnect(connectingFrom.nodeId, targetId, connectingFrom.handle);
               }
               setConnectingFrom(null);
             }}
