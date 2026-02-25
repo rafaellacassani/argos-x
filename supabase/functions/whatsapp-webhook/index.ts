@@ -500,6 +500,27 @@ app.post("/", async (c) => {
       data.message?.extendedTextMessage?.text ||
       "";
 
+    // --- MULTIMODAL: Detect media type ---
+    let mediaType: string | null = null;
+    let mediaCaption: string | null = null;
+
+    if (data.message?.imageMessage) {
+      mediaType = "image";
+      mediaCaption = data.message.imageMessage.caption || null;
+    } else if (data.message?.audioMessage) {
+      mediaType = "audio";
+    } else if (data.message?.videoMessage) {
+      mediaType = "video";
+      mediaCaption = data.message.videoMessage.caption || null;
+    } else if (data.message?.documentMessage) {
+      mediaType = "document";
+      mediaCaption = data.message.documentMessage.caption || null;
+    }
+
+    if (mediaType) {
+      console.log(`[whatsapp-webhook] 🖼️ Media detected: type=${mediaType}, caption="${mediaCaption?.substring(0, 50) || 'none'}"`);
+    }
+
     const pushName = data.pushName || "";
 
     // FIX: For @lid contacts, try to resolve real phone from message metadata
@@ -565,7 +586,7 @@ app.post("/", async (c) => {
         console.log(`[whatsapp-webhook] ⚠️ No agent matched for instance "${instanceName}". Agent instances: ${agents.map((a: any) => a.instance_name || 'all').join(', ')}`);
       }
 
-      if (matchingAgent && messageText) {
+      if (matchingAgent && (messageText || mediaType)) {
         // ============ WEBHOOK DEDUPLICATION ============
         if (msgId) {
           const { error: dupError } = await supabase
@@ -617,7 +638,56 @@ app.post("/", async (c) => {
           // Call ai-agent-chat internally
           try {
             const agentUrl = `${SUPABASE_URL}/functions/v1/ai-agent-chat`;
-            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}, msgId ${msgId}`);
+
+            // --- MULTIMODAL: Download media base64 if image or audio ---
+            let mediaBase64: string | null = null;
+            let mediaMimetype: string | null = null;
+
+            if (mediaType && (mediaType === "image" || mediaType === "audio") && msgId) {
+              console.log(`[whatsapp-webhook] 📥 Downloading ${mediaType} base64 via Evolution API...`);
+              try {
+                const mediaController = new AbortController();
+                const mediaTimeout = setTimeout(() => mediaController.abort(), 25000);
+
+                const mediaRes = await fetch(`${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/${instanceName}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                  body: JSON.stringify({ message: { key: data.key }, convertToMp4: false }),
+                  signal: mediaController.signal,
+                });
+                clearTimeout(mediaTimeout);
+
+                if (mediaRes.ok) {
+                  const mediaData = await mediaRes.json();
+                  const b64 = mediaData.base64 || mediaData.data?.base64 || "";
+                  const mime = mediaData.mimetype || mediaData.data?.mimetype || "";
+
+                  // Guardrail: ~5MB limit (base64 is ~33% larger than binary)
+                  const sizeBytes = (b64.length * 3) / 4;
+                  if (sizeBytes > 5 * 1024 * 1024) {
+                    console.warn(`[whatsapp-webhook] ⚠️ Media too large (${(sizeBytes / 1024 / 1024).toFixed(1)}MB), skipping`);
+                    mediaBase64 = null;
+                  } else {
+                    mediaBase64 = b64;
+                    mediaMimetype = mime;
+                    console.log(`[whatsapp-webhook] ✅ Media downloaded: ${mime}, ${(sizeBytes / 1024).toFixed(0)}KB`);
+                  }
+                } else {
+                  console.error(`[whatsapp-webhook] ❌ Media download failed: ${mediaRes.status}`);
+                }
+              } catch (mediaErr: any) {
+                if (mediaErr.name === "AbortError") {
+                  console.error("[whatsapp-webhook] ❌ Media download timeout (25s)");
+                } else {
+                  console.error("[whatsapp-webhook] ❌ Media download error:", mediaErr);
+                }
+              }
+            }
+
+            // Build message text for the agent
+            const agentMessage = messageText || mediaCaption || (mediaType ? `[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Áudio" : "Mídia"} enviada pelo lead]` : "");
+
+            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
             
             const agentRes = await fetch(agentUrl, {
               method: "POST",
@@ -628,12 +698,15 @@ app.post("/", async (c) => {
               body: JSON.stringify({
                 agent_id: matchingAgent.id,
                 session_id: remoteJid,
-                message: messageText,
+                message: agentMessage,
                 lead_id: leadId,
                 message_id: msgId,
                 phone_number: phoneNumber,
                 instance_name: instanceName,
                 _internal_webhook: true,
+                media_type: mediaType,
+                media_base64: mediaBase64,
+                media_mimetype: mediaMimetype,
               }),
             });
 

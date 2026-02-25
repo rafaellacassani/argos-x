@@ -169,7 +169,7 @@ serve(async (req) => {
     if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
 
     const body = await req.json();
-    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName } = body;
+    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
 
     // FIX: Auth check — allow internal webhook calls with service role key
     const authHeader = req.headers.get("authorization");
@@ -199,8 +199,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (!agent_id || !session_id || !message) {
-      return new Response(JSON.stringify({ error: "agent_id, session_id and message are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!agent_id || !session_id || (!message && !media_type)) {
+      return new Response(JSON.stringify({ error: "agent_id, session_id and (message or media_type) are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (!isValidUUID(agent_id)) {
       return new Response(JSON.stringify({ error: "Invalid agent_id format" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -208,11 +208,16 @@ serve(async (req) => {
     if (typeof session_id !== "string" || session_id.length > 200) {
       return new Response(JSON.stringify({ error: "Invalid session_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (typeof message !== "string" || message.length > 4000 || message.trim().length === 0) {
-      return new Response(JSON.stringify({ error: "Message must be 1-4000 characters" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const messageText = message || "";
+    if (messageText.length > 4000) {
+      return new Response(JSON.stringify({ error: "Message must be at most 4000 characters" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (lead_id && !isValidUUID(lead_id)) {
       return new Response(JSON.stringify({ error: "Invalid lead_id format" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (media_type) {
+      console.log(`[ai-agent-chat] 🖼️ Media received: type=${media_type}, mimetype=${media_mimetype}, base64_length=${media_base64?.length || 0}`);
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -385,7 +390,7 @@ serve(async (req) => {
       }
 
       if (memory.is_paused) {
-        if (message.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
+        if (messageText.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
           await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);
           memory.is_paused = false;
           console.log("[ai-agent-chat] ▶️ Session resumed");
@@ -395,9 +400,9 @@ serve(async (req) => {
         }
       }
 
-      if (agent.pause_code && message.includes(agent.pause_code)) {
+      if (agent.pause_code && messageText.includes(agent.pause_code)) {
         await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
-        await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+        await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
         console.log("[ai-agent-chat] ⏸️ Paused by code");
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -417,12 +422,12 @@ serve(async (req) => {
         } else {
           const currentField = activeQFields[qualificationStep];
           if (currentField) {
-            qualificationData[currentField.field_type === "custom" ? currentField.label : currentField.field_type] = message;
+            qualificationData[currentField.field_type === "custom" ? currentField.label : currentField.field_type] = messageText;
             if (lead_id && isValidUUID(lead_id)) {
               const fieldMap: Record<string, string> = { name: "name", company: "company", email: "email", phone: "phone" };
               const leadField = fieldMap[currentField.field_type];
               if (leadField) {
-                await supabase.from("leads").update({ [leadField]: message }).eq("id", lead_id);
+                await supabase.from("leads").update({ [leadField]: messageText }).eq("id", lead_id);
               }
             }
             qualificationStep++;
@@ -436,7 +441,7 @@ serve(async (req) => {
 
       let responseContent = "";
       const messages: ChatMessage[] = memory.messages || [];
-      messages.push({ role: "user", content: message, timestamp: new Date().toISOString() });
+      messages.push({ role: "user", content: messageText || `[${media_type === "image" ? "Imagem" : media_type === "audio" ? "Áudio" : "Mídia"}]`, timestamp: new Date().toISOString() });
 
       if (isQualifying && qualificationStep !== "completed") {
         const nextField = activeQFields[qualificationStep];
@@ -448,10 +453,51 @@ serve(async (req) => {
 
         const contextWindow = memory.context_window || agent.max_tokens || 50;
         const recentMessages = messages.slice(-contextWindow);
-        const aiMessages = [
+
+        // --- Build AI messages with multimodal support ---
+        const aiMessages: any[] = [
           { role: "system", content: systemPrompt },
-          ...recentMessages.map(m => ({ role: m.role, content: m.content }))
         ];
+
+        for (let i = 0; i < recentMessages.length; i++) {
+          const m = recentMessages[i];
+          const isLastUserMessage = (i === recentMessages.length - 1) && m.role === "user";
+
+          if (isLastUserMessage && media_type && media_base64) {
+            // Multimodal message: image or audio
+            if (media_type === "image") {
+              const dataUrl = `data:${media_mimetype || "image/jpeg"};base64,${media_base64}`;
+              aiMessages.push({
+                role: "user",
+                content: [
+                  { type: "text", text: messageText || "[Imagem enviada pelo lead. Descreva o que vê e responda de acordo.]" },
+                  { type: "image_url", image_url: { url: dataUrl } }
+                ]
+              });
+              console.log("[ai-agent-chat] 🖼️ Multimodal image content built for AI");
+            } else if (media_type === "audio") {
+              // Gemini supports inline_data for audio natively
+              aiMessages.push({
+                role: "user",
+                content: [
+                  { type: "text", text: "[Áudio enviado pelo lead. Ouça e responda de acordo.]" },
+                  { 
+                    type: "input_audio", 
+                    input_audio: { 
+                      data: media_base64, 
+                      format: (media_mimetype || "audio/ogg").includes("ogg") ? "ogg" : "mp3"
+                    } 
+                  }
+                ]
+              });
+              console.log("[ai-agent-chat] 🎵 Multimodal audio content built for AI");
+            } else {
+              aiMessages.push({ role: m.role, content: m.content });
+            }
+          } else {
+            aiMessages.push({ role: m.role, content: m.content });
+          }
+        }
 
         const tools = getToolDefinitions(agent.tools || []);
 
@@ -594,7 +640,7 @@ serve(async (req) => {
       const latencyMs = Date.now() - startTime;
       const tokensUsed = 0;
 
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: message, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
 
       console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
 
