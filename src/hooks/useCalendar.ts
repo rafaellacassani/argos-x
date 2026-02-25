@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -36,6 +36,46 @@ export interface CreateEventData {
   location?: string;
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
+}
+
+async function callSyncFunction(path: string, method: string, body?: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-google-calendar${path}`, {
+    method,
+    headers,
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Sync function error");
+  }
+  return res.json();
+}
+
+async function callOAuthFunction(path: string, method: string, body?: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/google-calendar-oauth${path}`, {
+    method,
+    headers,
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "OAuth function error");
+  }
+  return res.json();
+}
+
 export function useCalendar() {
   const { user } = useAuth();
   const { workspaceId } = useWorkspace();
@@ -44,6 +84,7 @@ export function useCalendar() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
+  const autoPulledRef = useRef(false);
 
   // Check Google connection status
   useEffect(() => {
@@ -130,10 +171,7 @@ export function useCalendar() {
       // Auto-push to Google if connected
       if (googleConnected && newEvent) {
         try {
-          await supabase.functions.invoke("sync-google-calendar/push", {
-            method: "POST",
-            body: { eventId: (newEvent as any).id },
-          });
+          await callSyncFunction("/push", "POST", { eventId: (newEvent as any).id });
         } catch (syncErr) {
           console.error("Auto-sync to Google failed:", syncErr);
         }
@@ -160,10 +198,7 @@ export function useCalendar() {
       // Auto-push to Google if connected
       if (googleConnected) {
         try {
-          await supabase.functions.invoke("sync-google-calendar/push", {
-            method: "POST",
-            body: { eventId: id },
-          });
+          await callSyncFunction("/push", "POST", { eventId: id });
         } catch (syncErr) {
           console.error("Auto-sync to Google failed:", syncErr);
         }
@@ -183,10 +218,7 @@ export function useCalendar() {
       // Sync delete to Google first
       if (googleConnected) {
         try {
-          await supabase.functions.invoke("sync-google-calendar/delete", {
-            method: "DELETE",
-            body: { eventId: id },
-          });
+          await callSyncFunction("/delete", "DELETE", { eventId: id });
         } catch (syncErr) {
           console.error("Google sync delete failed:", syncErr);
         }
@@ -210,12 +242,7 @@ export function useCalendar() {
   const connectGoogle = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const { data, error } = await supabase.functions.invoke("google-calendar-oauth/url", {
-        method: "POST",
-        body: { workspaceId },
-      });
-
-      if (error) throw error;
+      const data = await callOAuthFunction("/url", "POST", { workspaceId });
       if (data?.url) {
         window.location.href = data.url;
       }
@@ -228,11 +255,7 @@ export function useCalendar() {
   // Disconnect Google Calendar
   const disconnectGoogle = useCallback(async () => {
     try {
-      const { error } = await supabase.functions.invoke("google-calendar-oauth/disconnect", {
-        method: "DELETE",
-      });
-
-      if (error) throw error;
+      await callOAuthFunction("/disconnect", "DELETE");
       setGoogleConnected(false);
       setGoogleEmail(null);
       toast({ title: "Google Calendar desconectado" });
@@ -246,12 +269,12 @@ export function useCalendar() {
   const pullFromGoogle = useCallback(async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase.functions.invoke("sync-google-calendar/pull", {
-        method: "POST",
-        body: { userId: user.id, daysAhead: 60 },
+      const data = await callSyncFunction("/pull", "POST", {
+        userId: user.id,
+        daysAhead: 60,
+        daysBehind: 90,
       });
 
-      if (error) throw error;
       toast({
         title: "Sincronização concluída",
         description: `${data?.imported || 0} novos eventos importados.`,
@@ -261,6 +284,14 @@ export function useCalendar() {
       toast({ title: "Erro ao sincronizar", variant: "destructive" });
     }
   }, [user]);
+
+  // Auto-pull after Google connection is detected
+  useEffect(() => {
+    if (googleConnected && user && !autoPulledRef.current) {
+      autoPulledRef.current = true;
+      pullFromGoogle();
+    }
+  }, [googleConnected, user, pullFromGoogle]);
 
   // Realtime subscription
   useEffect(() => {

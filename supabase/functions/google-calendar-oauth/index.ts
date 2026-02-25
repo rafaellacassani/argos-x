@@ -185,6 +185,22 @@ app.get("/callback", async (c) => {
     }
 
     console.log("[Google Calendar OAuth] 🎉 Connected successfully!");
+
+    // Auto-pull events after connection
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/sync-google-calendar/pull`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({ userId, daysAhead: 60, daysBehind: 90 }),
+      });
+      console.log("[Google Calendar OAuth] Auto-pull triggered for user:", userId);
+    } catch (pullErr) {
+      console.error("[Google Calendar OAuth] Auto-pull failed:", pullErr);
+    }
+
     return c.redirect(`${APP_URL}/settings?google_calendar=connected`);
   } catch (err) {
     console.error("[Google Calendar OAuth] Unexpected error:", err);

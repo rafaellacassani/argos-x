@@ -231,7 +231,8 @@ app.post("/pull", async (c) => {
     }
 
     const calendarId = tokenRow.google_calendar_id || "primary";
-    const timeMin = new Date().toISOString();
+    const daysBehind = body.daysBehind || 0;
+    const timeMin = new Date(Date.now() - daysBehind * 24 * 60 * 60 * 1000).toISOString();
     const timeMax = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
 
     const url = new URL(`${GOOGLE_CALENDAR_API}/calendars/${calendarId}/events`);
