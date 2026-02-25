@@ -1,5 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BotNode, BotEdge } from '@/hooks/useSalesBots';
@@ -13,6 +12,9 @@ interface BotBuilderCanvasProps {
   onNodesChange: (nodes: BotNode[]) => void;
   onEdgesChange: (edges: BotEdge[]) => void;
 }
+
+const NODE_WIDTH = 340;
+const NODE_ESTIMATED_HEIGHT = 120;
 
 export function BotBuilderCanvas({
   nodes,
@@ -34,7 +36,6 @@ export function BotBuilderCanvas({
     testNodeExecution,
   } = useBotExecution();
 
-  // Load test leads on mount
   useEffect(() => {
     const loadTestLeads = async () => {
       const leads = await fetchTestLeads();
@@ -42,6 +43,13 @@ export function BotBuilderCanvas({
     };
     loadTestLeads();
   }, [fetchTestLeads]);
+
+  // Build node index map for numbering
+  const nodeIndexMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    nodes.forEach((n, i) => { map[n.id] = i + 1; });
+    return map;
+  }, [nodes]);
 
   const handleTestNode = useCallback(async (
     nodeId: string,
@@ -51,7 +59,6 @@ export function BotBuilderCanvas({
   ) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node) return;
-
     await testNodeExecution(node, leadId, instanceName, forceWithoutConversation);
   }, [nodes, testNodeExecution]);
 
@@ -113,7 +120,6 @@ export function BotBuilderCanvas({
     if (e.target !== canvasRef.current) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
     setNodeSelectorPosition({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
@@ -132,7 +138,7 @@ export function BotBuilderCanvas({
             setNodeSelectorPosition({ x: 200, y: 200 });
             setShowNodeSelector(true);
           }}
-          className="gap-2"
+          className="gap-2 bg-card shadow-sm"
         >
           <Plus className="w-4 h-4" />
           Adicionar bloco
@@ -142,7 +148,7 @@ export function BotBuilderCanvas({
             variant="outline"
             size="sm"
             onClick={() => handleDeleteNode(selectedNode)}
-            className="gap-2 text-destructive hover:text-destructive"
+            className="gap-2 text-destructive hover:text-destructive bg-card shadow-sm"
           >
             <Trash2 className="w-4 h-4" />
             Excluir
@@ -153,10 +159,14 @@ export function BotBuilderCanvas({
       {/* Canvas */}
       <div
         ref={canvasRef}
-        className="w-full h-full bg-muted/30 overflow-auto relative"
+        className="w-full h-full overflow-auto relative"
         style={{
-          backgroundImage: 'radial-gradient(circle, hsl(var(--border)) 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
+          backgroundColor: 'hsl(var(--muted) / 0.3)',
+          backgroundImage: `
+            linear-gradient(hsl(var(--border) / 0.3) 1px, transparent 1px),
+            linear-gradient(90deg, hsl(var(--border) / 0.3) 1px, transparent 1px)
+          `,
+          backgroundSize: '24px 24px',
         }}
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDoubleClick}
@@ -164,24 +174,38 @@ export function BotBuilderCanvas({
         onMouseUp={() => setConnectingFrom(null)}
       >
         {/* Edges */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '2000px', minHeight: '1500px' }}>
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '3000px', minHeight: '2000px' }}>
+          <defs>
+            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <path d="M 0 0 L 8 3 L 0 6 Z" fill="hsl(var(--muted-foreground) / 0.4)" />
+            </marker>
+            <marker id="arrowhead-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <path d="M 0 0 L 8 3 L 0 6 Z" fill="#22c55e" />
+            </marker>
+            <marker id="arrowhead-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+              <path d="M 0 0 L 8 3 L 0 6 Z" fill="#ef4444" />
+            </marker>
+          </defs>
           {edges.map(edge => {
             const sourceNode = nodes.find(n => n.id === edge.source);
             const targetNode = nodes.find(n => n.id === edge.target);
             if (!sourceNode || !targetNode) return null;
 
-            // Adjust source X based on sourceHandle for condition/validate dual outputs
-            let sourceX = sourceNode.position.x + 150;
-            if (edge.sourceHandle === 'yes') sourceX = sourceNode.position.x + 75;
-            else if (edge.sourceHandle === 'no') sourceX = sourceNode.position.x + 225;
-            const sourceY = sourceNode.position.y + 60;
-            const targetX = targetNode.position.x + 150;
+            const halfW = NODE_WIDTH / 2;
+            let sourceX = sourceNode.position.x + halfW;
+            if (edge.sourceHandle === 'yes') sourceX = sourceNode.position.x + halfW * 0.5;
+            else if (edge.sourceHandle === 'no') sourceX = sourceNode.position.x + halfW * 1.5;
+            const sourceY = sourceNode.position.y + NODE_ESTIMATED_HEIGHT;
+            const targetX = targetNode.position.x + halfW;
             const targetY = targetNode.position.y;
 
             const midY = (sourceY + targetY) / 2;
             const path = `M ${sourceX} ${sourceY} C ${sourceX} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
 
-            const edgeColor = edge.sourceHandle === 'yes' ? '#22c55e' : edge.sourceHandle === 'no' ? '#ef4444' : 'hsl(var(--primary))';
+            const isYes = edge.sourceHandle === 'yes';
+            const isNo = edge.sourceHandle === 'no';
+            const edgeColor = isYes ? '#22c55e' : isNo ? '#ef4444' : 'hsl(var(--muted-foreground) / 0.4)';
+            const markerId = isYes ? 'arrowhead-green' : isNo ? 'arrowhead-red' : 'arrowhead';
 
             return (
               <g key={edge.id}>
@@ -189,20 +213,22 @@ export function BotBuilderCanvas({
                   d={path}
                   fill="none"
                   stroke={edgeColor}
-                  strokeWidth="2"
-                  strokeDasharray="5,5"
+                  strokeWidth="1.5"
+                  markerEnd={`url(#${markerId})`}
                 />
                 {edge.label && (
-                  <text x={(sourceX + targetX) / 2} y={midY - 6} fill={edgeColor} fontSize="11" fontWeight="bold" textAnchor="middle">
+                  <text
+                    x={(sourceX + targetX) / 2}
+                    y={midY - 8}
+                    fill={edgeColor}
+                    fontSize="11"
+                    fontWeight="600"
+                    textAnchor="middle"
+                    className="select-none"
+                  >
                     {edge.label}
                   </text>
                 )}
-                <circle
-                  cx={targetX}
-                  cy={targetY}
-                  r="4"
-                  fill={edgeColor}
-                />
               </g>
             );
           })}
@@ -210,14 +236,14 @@ export function BotBuilderCanvas({
           {/* Connection preview line */}
           {connectingFrom && (
             <line
-              x1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.x ?? 0) + 150}
-              y1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.y ?? 0) + 60}
+              x1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.x ?? 0) + NODE_WIDTH / 2}
+              y1={(nodes.find(n => n.id === connectingFrom.nodeId)?.position.y ?? 0) + NODE_ESTIMATED_HEIGHT}
               x2={mousePos.x}
               y2={mousePos.y}
               stroke="hsl(var(--primary))"
               strokeWidth="2"
-              strokeDasharray="5,5"
-              opacity="0.7"
+              strokeDasharray="6,4"
+              opacity="0.6"
             />
           )}
         </svg>
@@ -227,6 +253,7 @@ export function BotBuilderCanvas({
           <BotNodeCard
             key={node.id}
             node={node}
+            nodeIndex={nodeIndexMap[node.id] || 0}
             isSelected={selectedNode === node.id}
             isConnecting={connectingFrom?.nodeId === node.id}
             onSelect={() => setSelectedNode(node.id)}
@@ -250,12 +277,13 @@ export function BotBuilderCanvas({
         {/* Empty state */}
         {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center p-8">
-              <p className="text-muted-foreground mb-4">
+            <div className="text-center p-8 bg-card/80 rounded-xl border border-border/50 shadow-sm">
+              <p className="text-muted-foreground mb-4 text-sm">
                 Clique duas vezes no canvas para adicionar um bloco
               </p>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => {
                   setNodeSelectorPosition({ x: 300, y: 200 });
                   setShowNodeSelector(true);
