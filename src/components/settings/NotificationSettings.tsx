@@ -209,7 +209,10 @@ export function NotificationSettings() {
       .select("personal_whatsapp")
       .eq("id", member.id)
       .single();
-    setMemberWhatsapp((profile as any)?.personal_whatsapp || "");
+    // Strip country code 55 prefix for display
+    const rawWa = (profile as any)?.personal_whatsapp || "";
+    const stripped = rawWa.replace(/\D/g, "");
+    setMemberWhatsapp(stripped.startsWith("55") ? stripped.slice(2) : stripped);
 
     // Load notification preferences
     const { data: prefs } = await supabase
@@ -258,10 +261,11 @@ export function NotificationSettings() {
 
     setSavingPrefs(true);
     try {
-      // Save personal_whatsapp
+      // Save personal_whatsapp with country code 55
+      const phoneToSave = cleanedPhone ? `55${cleanedPhone}` : null;
       await supabase
         .from("user_profiles")
-        .update({ personal_whatsapp: memberWhatsapp || null } as any)
+        .update({ personal_whatsapp: phoneToSave } as any)
         .eq("id", selectedMember.id);
 
       // Upsert notification preferences

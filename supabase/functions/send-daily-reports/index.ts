@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -24,26 +24,23 @@ function formatCurrency(value: number): string {
 }
 
 function getNowSP(): Date {
-  // Get current time in São Paulo timezone
   const now = new Date();
   const spStr = now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
   return new Date(spStr);
+}
+
+function getOffsetMinutes(): number {
+  return 180;
 }
 
 function getTodayRangeSP(): { start: string; end: string } {
   const sp = getNowSP();
   const start = new Date(sp.getFullYear(), sp.getMonth(), sp.getDate(), 0, 0, 0);
   const end = new Date(sp.getFullYear(), sp.getMonth(), sp.getDate(), 23, 59, 59, 999);
-  // Convert back to UTC ISO strings for DB queries
   const offset = getOffsetMinutes();
   const startUTC = new Date(start.getTime() + offset * 60000);
   const endUTC = new Date(end.getTime() + offset * 60000);
   return { start: startUTC.toISOString(), end: endUTC.toISOString() };
-}
-
-function getOffsetMinutes(): number {
-  // São Paulo is UTC-3 (no DST since 2019)
-  return 180;
 }
 
 function getPeriodRange(frequency: string, dayOfWeek: number): { start: string; end: string; label: string } | null {
@@ -59,7 +56,6 @@ function getPeriodRange(frequency: string, dayOfWeek: number): { start: string; 
   }
 
   if (frequency === "weekly") {
-    // Check if today is the configured day
     if (sp.getDay() !== dayOfWeek) return null;
     const weekStart = new Date(todayStart);
     weekStart.setDate(weekStart.getDate() - 7);
@@ -70,7 +66,6 @@ function getPeriodRange(frequency: string, dayOfWeek: number): { start: string; 
   }
 
   if (frequency === "monthly") {
-    // Check if today is the configured day of month (use dayOfWeek field as day of month)
     if (sp.getDate() !== dayOfWeek) return null;
     const monthStart = new Date(sp.getFullYear(), sp.getMonth() - 1, sp.getDate(), 0, 0, 0);
     const startUTC = new Date(monthStart.getTime() + offset * 60000);
@@ -80,6 +75,36 @@ function getPeriodRange(frequency: string, dayOfWeek: number): { start: string; 
   }
 
   return null;
+}
+
+// Force variant: always returns daily range regardless of frequency
+function getForcedPeriodRange(frequency: string): { start: string; end: string; label: string } {
+  const sp = getNowSP();
+  const todayStart = new Date(sp.getFullYear(), sp.getMonth(), sp.getDate(), 0, 0, 0);
+  const offset = getOffsetMinutes();
+
+  if (frequency === "weekly") {
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(weekStart.getDate() - 7);
+    const startUTC = new Date(weekStart.getTime() + offset * 60000);
+    const endUTC = new Date(todayStart.getTime() + offset * 60000 + 24 * 60 * 60 * 1000);
+    const label = `${weekStart.toLocaleDateString("pt-BR")} a ${sp.toLocaleDateString("pt-BR")}`;
+    return { start: startUTC.toISOString(), end: endUTC.toISOString(), label };
+  }
+
+  if (frequency === "monthly") {
+    const monthStart = new Date(sp.getFullYear(), sp.getMonth(), 1, 0, 0, 0);
+    const startUTC = new Date(monthStart.getTime() + offset * 60000);
+    const endUTC = new Date(todayStart.getTime() + offset * 60000 + 24 * 60 * 60 * 1000);
+    const label = `${monthStart.toLocaleDateString("pt-BR")} a ${sp.toLocaleDateString("pt-BR")}`;
+    return { start: startUTC.toISOString(), end: endUTC.toISOString(), label };
+  }
+
+  // daily
+  const startUTC = new Date(todayStart.getTime() + offset * 60000);
+  const endUTC = new Date(startUTC.getTime() + 24 * 60 * 60 * 1000);
+  const label = sp.toLocaleDateString("pt-BR");
+  return { start: startUTC.toISOString(), end: endUTC.toISOString(), label };
 }
 
 function isWithinWindow(configuredTime: string): boolean {
@@ -114,7 +139,6 @@ async function sendLongMessage(instanceName: string, phone: string, message: str
   if (message.length <= MAX_MESSAGE_LENGTH) {
     return sendWhatsApp(instanceName, phone, message);
   }
-  // Split at the separator line closest to midpoint
   const mid = Math.floor(message.length / 2);
   const sepPattern = "━━━━━━━━━━━━━━━";
   let bestIdx = -1;
@@ -132,7 +156,6 @@ async function sendLongMessage(instanceName: string, phone: string, message: str
     const r2 = await sendWhatsApp(instanceName, phone, part2);
     return r1 && r2;
   }
-  // Fallback: just send truncated
   return sendWhatsApp(instanceName, phone, message.substring(0, MAX_MESSAGE_LENGTH));
 }
 
@@ -161,7 +184,6 @@ async function getStagesForWorkspace(supabase: any, workspaceId: string) {
 
   const funnelId = funnels?.[0]?.id;
   if (!funnelId) {
-    // Fallback: get first funnel
     const { data: allFunnels } = await supabase
       .from("funnels").select("id").eq("workspace_id", workspaceId).limit(1);
     if (!allFunnels?.[0]) return [];
@@ -180,11 +202,9 @@ async function getStagesForWorkspace(supabase: any, workspaceId: string) {
 async function getSellerMetrics(
   supabase: any, workspaceId: string, profileId: string, stages: any[], periodStart: string, periodEnd: string
 ): Promise<SellerMetrics> {
-  // Get profile name
   const { data: profile } = await supabase
     .from("user_profiles").select("full_name").eq("id", profileId).single();
 
-  // Stage moves from lead_history
   const { data: history } = await supabase
     .from("lead_history")
     .select("to_stage_id")
@@ -205,7 +225,6 @@ async function getSellerMetrics(
     moves: moveCounts[s.id] || 0,
   }));
 
-  // Sales
   const { data: sales } = await supabase
     .from("lead_sales")
     .select("value, leads!inner(responsible_user)")
@@ -216,7 +235,6 @@ async function getSellerMetrics(
   const salesCount = sales?.length || 0;
   const salesValue = (sales || []).reduce((s: number, r: any) => s + Number(r.value || 0), 0);
 
-  // No-response leads (current, not period-based)
   const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   const lossStageIds = stages.filter((s: any) => s.is_loss_stage).map((s: any) => s.id);
 
@@ -286,7 +304,6 @@ function buildManagerReport(
     `⚠️ Sem resposta agora: ${totalNoResponse}`,
   ];
 
-  // For weekly/monthly, add ranking
   if (frequency !== "daily" && allMetrics.length > 0) {
     const ranked = [...allMetrics].sort((a, b) => b.sales_value - a.sales_value);
     const medals = ["🥇", "🥈", "🥉"];
@@ -299,7 +316,6 @@ function buildManagerReport(
     });
   }
 
-  // Per-seller detail
   for (const m of allMetrics) {
     lines.push("");
     lines.push("━━━━━━━━━━━━━━━");
@@ -319,6 +335,117 @@ function buildManagerReport(
   return lines.join("\n");
 }
 
+// ===== FORCED SEND for a specific user =====
+async function handleForcedSend(supabase: any, workspaceId: string, userProfileId: string): Promise<{ message: string; sent: boolean }> {
+  // Get workspace alert instance
+  const { data: ws } = await supabase
+    .from("workspaces").select("alert_instance_name").eq("id", workspaceId).single();
+  if (!ws?.alert_instance_name) {
+    return { message: "Nenhuma instância de alertas configurada no workspace", sent: false };
+  }
+
+  const instanceName = ws.alert_instance_name;
+
+  // Get user profile with personal_whatsapp
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id, full_name, personal_whatsapp").eq("id", userProfileId).single();
+  if (!profile?.personal_whatsapp) {
+    return { message: "Usuário sem WhatsApp pessoal cadastrado", sent: false };
+  }
+
+  // Get stages
+  const stages = await getStagesForWorkspace(supabase, workspaceId);
+  if (stages.length === 0) {
+    return { message: "Nenhuma etapa de funil encontrada", sent: false };
+  }
+
+  // Load notification preferences to know what to send
+  const { data: prefs } = await supabase
+    .from("notification_preferences")
+    .select("*")
+    .eq("user_profile_id", userProfileId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  const frequency = prefs?.manager_report_frequency || "daily";
+  const period = getForcedPeriodRange(frequency);
+
+  // Check what reports are enabled
+  const sendDashboard = prefs?.daily_report_enabled ?? true;
+  const sendManagerReport = prefs?.manager_report_enabled ?? false;
+
+  const messages: string[] = [];
+
+  if (sendDashboard || sendManagerReport) {
+    // Get all sellers for manager report
+    const { data: members } = await supabase
+      .from("workspace_members")
+      .select("user_id, role")
+      .eq("workspace_id", workspaceId)
+      .not("accepted_at", "is", null);
+
+    const userIds = (members || []).map((m: any) => m.user_id);
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("id, user_id, full_name, personal_whatsapp")
+      .in("user_id", userIds);
+
+    const profileByUserId: Record<string, any> = {};
+    for (const p of profiles || []) {
+      profileByUserId[p.user_id] = p;
+    }
+
+    const sellerMembers = (members || []).filter((m: any) => m.role === "seller");
+
+    // Gather seller metrics
+    const allMetrics: SellerMetrics[] = [];
+    for (const sm of sellerMembers) {
+      const sp = profileByUserId[sm.user_id];
+      if (!sp) continue;
+      const m = await getSellerMetrics(supabase, workspaceId, sp.id, stages, period.start, period.end);
+      allMetrics.push(m);
+    }
+
+    // New leads in period
+    const { count: newLeads } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", period.start)
+      .lt("created_at", period.end);
+
+    const totalNoResponse = allMetrics.reduce((s, m) => s + m.no_response_count, 0);
+
+    if (sendManagerReport || sendDashboard) {
+      const message = buildManagerReport(allMetrics, period.label, frequency, newLeads || 0, totalNoResponse);
+      messages.push(message);
+    }
+  } else {
+    // Fallback: send a personal seller report
+    const metrics = await getSellerMetrics(supabase, workspaceId, userProfileId, stages, period.start, period.end);
+    const message = buildSellerReport(metrics, period.label);
+    messages.push(message);
+  }
+
+  let allSent = true;
+  for (const msg of messages) {
+    const sent = await sendLongMessage(instanceName, profile.personal_whatsapp, msg);
+    if (!sent) allSent = false;
+  }
+
+  if (allSent && messages.length > 0) {
+    await supabase.from("alert_log").insert({
+      workspace_id: workspaceId,
+      user_profile_id: userProfileId,
+      alert_type: "daily_report",
+      message_preview: messages[0].substring(0, 200),
+    });
+  }
+
+  return { message: allSent ? "Relatório enviado com sucesso" : "Falha ao enviar relatório", sent: allSent };
+}
+
+// ===== MAIN HANDLER =====
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -326,9 +453,27 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Check if this is a forced send request
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      // No body = cron invocation
+    }
+
+    if (body?.force && body?.workspace_id && body?.user_profile_id) {
+      console.log(`[send-daily-reports] Force send for user ${body.user_profile_id} in workspace ${body.workspace_id}`);
+      const result = await handleForcedSend(supabase, body.workspace_id, body.user_profile_id);
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ===== SCHEDULED (CRON) FLOW =====
     let reportsSent = 0;
 
-    // 1. Load all notification_preferences with daily or manager reports enabled
     const { data: prefs, error: prefsErr } = await supabase
       .from("notification_preferences")
       .select("*")
@@ -339,7 +484,6 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ message: "No reports configured" }), { headers: corsHeaders });
     }
 
-    // Group by workspace
     const byWorkspace: Record<string, any[]> = {};
     for (const p of prefs) {
       if (!byWorkspace[p.workspace_id]) byWorkspace[p.workspace_id] = [];
@@ -349,7 +493,6 @@ Deno.serve(async (req) => {
     for (const [workspaceId, wsPrefs] of Object.entries(byWorkspace)) {
       if (reportsSent >= MAX_REPORTS_PER_RUN) break;
 
-      // Get workspace alert instance
       const { data: ws } = await supabase
         .from("workspaces").select("alert_instance_name").eq("id", workspaceId).single();
 
@@ -362,14 +505,12 @@ Deno.serve(async (req) => {
       const stages = await getStagesForWorkspace(supabase, workspaceId);
       if (stages.length === 0) continue;
 
-      // Get all sellers in workspace
       const { data: members } = await supabase
         .from("workspace_members")
         .select("user_id, role")
         .eq("workspace_id", workspaceId)
         .not("accepted_at", "is", null);
 
-      // Map user_id -> profile
       const userIds = (members || []).map((m: any) => m.user_id);
       const { data: profiles } = await supabase
         .from("user_profiles")
@@ -384,7 +525,6 @@ Deno.serve(async (req) => {
       }
 
       const sellerMembers = (members || []).filter((m: any) => m.role === "seller");
-      const managerMembers = (members || []).filter((m: any) => m.role === "admin" || m.role === "manager");
 
       for (const pref of wsPrefs) {
         if (reportsSent >= MAX_REPORTS_PER_RUN) break;
@@ -397,7 +537,6 @@ Deno.serve(async (req) => {
           const configTime = pref.daily_report_time || "19:00";
           if (!isWithinWindow(configTime)) continue;
 
-          // Dedup check
           const todayRange = getTodayRangeSP();
           const { count: alreadySent } = await supabase
             .from("alert_log")
@@ -436,7 +575,6 @@ Deno.serve(async (req) => {
           const period = getPeriodRange(frequency, dayOfWeek);
           if (!period) continue;
 
-          // Dedup: use frequency-specific alert_type
           const alertType = frequency === "daily" ? "daily_report" : frequency === "weekly" ? "weekly_report" : "monthly_report";
           const todayRange = getTodayRangeSP();
           const { count: alreadySent } = await supabase
@@ -449,7 +587,6 @@ Deno.serve(async (req) => {
 
           if ((alreadySent || 0) > 0) continue;
 
-          // Gather metrics for all sellers
           const allMetrics: SellerMetrics[] = [];
           for (const sm of sellerMembers) {
             const sp = profileByUserId[sm.user_id];
@@ -458,7 +595,6 @@ Deno.serve(async (req) => {
             allMetrics.push(m);
           }
 
-          // New leads in period
           const { count: newLeads } = await supabase
             .from("leads")
             .select("id", { count: "exact", head: true })
