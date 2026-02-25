@@ -19,7 +19,6 @@ import {
   WifiOff,
   Trash2,
   Plus,
-  Tag,
   Loader2,
   Lock,
   Unplug,
@@ -33,7 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
-import { AutoTagRules } from "@/components/settings/AutoTagRules";
+
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -515,21 +514,8 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="auto-tags" disabled={isSeller}>
-            <Tag className="w-4 h-4 mr-1" />
-            Tags Automáticas
-            {isSeller && <Lock className="w-3 h-3 ml-1" />}
-          </TabsTrigger>
           <TabsTrigger value="general" disabled={isSeller}>
             Geral
-            {isSeller && <Lock className="w-3 h-3 ml-1" />}
-          </TabsTrigger>
-          <TabsTrigger value="team" disabled={isSeller}>
-            Equipe
-            {isSeller && <Lock className="w-3 h-3 ml-1" />}
-          </TabsTrigger>
-          <TabsTrigger value="billing" disabled={isSeller}>
-            Plano & Faturamento
             {isSeller && <Lock className="w-3 h-3 ml-1" />}
           </TabsTrigger>
         </TabsList>
@@ -1018,37 +1004,6 @@ export default function Settings() {
           </div>
         </TabsContent>
 
-        {/* Auto Tags Tab */}
-        <TabsContent value="auto-tags">
-          <AutoTagRules />
-        </TabsContent>
-
-        {/* Team Tab */}
-        <TabsContent value="team">
-          <div className="inboxia-card p-12 text-center">
-            <h3 className="font-display font-semibold text-lg mb-2">
-              Gestão de Equipe
-            </h3>
-            <p className="text-muted-foreground">
-              Em breve você poderá gerenciar sua equipe aqui
-            </p>
-          </div>
-        </TabsContent>
-
-        {/* Billing Tab */}
-        <TabsContent value="billing">
-          <div className="inboxia-card p-12 text-center space-y-4">
-            <h3 className="font-display font-semibold text-lg mb-2">
-              Plano & Faturamento
-            </h3>
-            <p className="text-muted-foreground">
-              Gerencie seu plano e informações de pagamento
-            </p>
-            <Button variant="default" onClick={() => window.location.href = "/planos"}>
-              Ver planos e pacotes
-            </Button>
-          </div>
-        </TabsContent>
       </Tabs>
 
       {/* Connection Modal */}
