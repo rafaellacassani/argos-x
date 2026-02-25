@@ -1,88 +1,75 @@
 
+# Plano: Corrigir Integracao Google Calendar
 
-# Plano: IA Multimodal - Leitura de Imagens e Audio no WhatsApp
+## Problemas Identificados
 
-## Objetivo
-Permitir que o Agente de IA processe imagens e audios recebidos no WhatsApp, respondendo com base no conteudo visual ou falado.
+### 1. Pull automatico nao acontece apos conexao
+Quando o usuario conecta o Google Calendar via OAuth, o callback redireciona para `/settings?google_calendar=connected` mas **nenhum pull automatico e disparado**. O usuario precisa ir manualmente ao Calendario e clicar "Sincronizar" -- e mesmo assim, o pull so busca eventos **futuros** (`timeMin = now()`), ignorando eventos passados.
 
-## Como funciona hoje
-1. O webhook recebe a mensagem e extrai APENAS texto (`data.message?.conversation` ou `extendedTextMessage`)
-2. Se a mensagem for imagem/audio/video, `messageText` fica vazio (`""`)
-3. A condicao `if (matchingAgent && messageText)` falha e a IA nunca e acionada
-4. O lead envia uma foto ou audio e nao recebe resposta
+### 2. Push nao funciona - chamada incorreta ao invoke
+No `useCalendar.ts`, o push e chamado assim:
+```
+supabase.functions.invoke("sync-google-calendar/push", { method: "POST", body: {...} })
+```
+Porem, `supabase.functions.invoke` trata o primeiro argumento como o **nome da funcao**, nao como path. O correto seria invocar `sync-google-calendar` com o path `/push` no body ou usar fetch direto. Isso explica por que eventos criados localmente **nao vao para o Google**.
 
-## Solucao proposta
+### 3. Pull ignora eventos passados
+O endpoint `/pull` usa `timeMin = new Date().toISOString()`, ou seja, so importa eventos futuros. Eventos que ja existem no Google Calendar do usuario nao sao importados.
 
-### Etapa 1: Extrair tipo de midia no webhook
-**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
+### 4. Nome "qczmdbqwpshioooncpjd.supabase.co" na tela de autorizacao
+Esse e o dominio do backend que aparece como "redirect URI" na tela de consentimento do Google. Para mudar, seria necessario configurar um dominio customizado no backend -- o que nao e possivel diretamente no Lovable Cloud. Porem, podemos melhorar a **app name** no Google Cloud Console (isso e configuracao externa).
 
-Apos a extracao do texto, detectar se a mensagem contem imagem, audio, video ou documento:
-- `data.message?.imageMessage` (imagem)
-- `data.message?.audioMessage` (audio/voz)
-- `data.message?.videoMessage` (video)
-- `data.message?.documentMessage` (documento)
+## Solucao Proposta
 
-Extrair o `mediaType` e o caption (legenda) se existir.
+### Arquivo: `supabase/functions/sync-google-calendar/index.ts`
+- Alterar o endpoint `/pull` para aceitar um parametro `daysBehind` (padrao: 90) para importar eventos passados tambem
+- Mudar `timeMin` para `now() - daysBehind` dias
 
-### Etapa 2: Baixar a midia via Evolution API
-**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
+### Arquivo: `src/hooks/useCalendar.ts`
+- **Corrigir as chamadas `supabase.functions.invoke`** para usar fetch direto com a URL completa da funcao, ja que o Hono espera sub-rotas (`/push`, `/pull`, `/delete`)
+- Adicionar **auto-pull apos detectar conexao** - quando `googleConnected` mudar para `true`, disparar automaticamente um pull com `daysBehind: 90`
+- Passar `daysBehind: 90` no pull para importar eventos passados
 
-Quando for imagem ou audio:
-1. Chamar o endpoint `getBase64FromMediaMessage` da Evolution API (ja existe no proxy) passando o `msgId`
-2. Obter o base64 + mimetype da midia
-3. Para audio: converter para texto usando a Lovable AI (Gemini suporta audio nativo)
-4. Para imagem: enviar o base64 direto para o modelo multimodal
+### Arquivo: `supabase/functions/google-calendar-oauth/index.ts`
+- No callback de sucesso, apos salvar o token, **disparar automaticamente o pull** chamando o endpoint `/pull` com o `userId` e `daysAhead: 60` + eventos passados
 
-### Etapa 3: Adaptar a chamada ao ai-agent-chat
-**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
+### Sobre o nome na tela de autorizacao
+O dominio `qczmdbqwpshioooncpjd.supabase.co` aparece porque o redirect URI do OAuth aponta para la. Isso nao pode ser alterado diretamente no Lovable Cloud. Para personalizar o nome do app ("Argos X") que aparece na tela de consentimento do Google, voce precisa acessar o **Google Cloud Console** e editar o nome do app na tela de consentimento OAuth. O dominio de redirect continuara sendo o do backend, mas o nome e logo exibidos serao os que voce configurar la.
 
-Alterar o payload enviado ao `ai-agent-chat` para incluir:
-```text
-{
-  message: "texto ou descricao",
-  media_type: "image" | "audio" | null,
-  media_base64: "base64...",
-  media_mimetype: "image/jpeg" | "audio/ogg" | etc
-}
+## Detalhes Tecnicos
+
+### Correcao do invoke (useCalendar.ts)
+Trocar de:
+```typescript
+supabase.functions.invoke("sync-google-calendar/push", { method: "POST", body: {...} })
+```
+Para:
+```typescript
+fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-google-calendar/push`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+  body: JSON.stringify({ eventId: id })
+})
 ```
 
-A condicao `if (matchingAgent && messageText)` sera alterada para `if (matchingAgent && (messageText || mediaType))`.
+O mesmo para `/pull` e `/delete`.
 
-### Etapa 4: Processar midia no ai-agent-chat
-**Arquivo:** `supabase/functions/ai-agent-chat/index.ts`
+### Auto-pull apos conexao
+Adicionar useEffect que detecta `googleConnected === true` e dispara `pullFromGoogle()` automaticamente na primeira vez.
 
-1. Receber os novos campos `media_type`, `media_base64`, `media_mimetype`
-2. Adaptar a validacao para aceitar mensagem vazia quando ha midia
-3. Para **imagem**: montar o conteudo multimodal no formato da API:
-```text
-{
-  role: "user",
-  content: [
-    { type: "text", text: "caption ou '[Imagem enviada pelo lead]'" },
-    { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
-  ]
-}
+### Pull com eventos passados
+Alterar o endpoint pull para:
+```typescript
+const daysBehind = body.daysBehind || 0;
+const timeMin = new Date(Date.now() - daysBehind * 24 * 60 * 60 * 1000).toISOString();
 ```
-4. Para **audio**: transcrever primeiro usando Gemini (que suporta audio nativo) e depois enviar como texto com prefixo "[Audio transcrito]: ..."
-5. Para **video**: extrair um frame ou descrever como "[Video recebido]" (limitacao de tamanho)
-
-### Etapa 5: Guardrails e protecoes
-
-- Limitar tamanho de base64 a ~5MB (imagens muito grandes serao ignoradas com mensagem amigavel)
-- Timeout de 25s para download de midia (se falhar, IA responde que nao conseguiu ver a midia)
-- Audios longos (>2 min) serao truncados
-- Adicionar log detalhado de cada etapa para debug
-- Manter compatibilidade total com mensagens de texto (sem regressao)
-
-### Modelo utilizado
-- **google/gemini-2.5-flash** (ja configurado) suporta nativamente tanto imagens quanto audio em formato multimodal, sem necessidade de servico externo de transcricao
 
 ## Resumo das alteracoes
 
 | Arquivo | Alteracao |
 |---------|-----------|
-| `supabase/functions/whatsapp-webhook/index.ts` | Detectar midia, baixar base64, enviar ao ai-agent-chat |
-| `supabase/functions/ai-agent-chat/index.ts` | Receber midia, montar conteudo multimodal, enviar ao Gemini |
+| `src/hooks/useCalendar.ts` | Corrigir invoke para fetch direto; auto-pull apos conexao; pull com dias passados |
+| `supabase/functions/sync-google-calendar/index.ts` | Suportar `daysBehind` no pull |
+| `supabase/functions/google-calendar-oauth/index.ts` | Disparar pull automatico no callback |
 
-Nenhuma migration de banco necessaria. Nenhuma alteracao no frontend.
-
+Nenhuma migration necessaria.
