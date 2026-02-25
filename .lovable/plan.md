@@ -1,117 +1,88 @@
 
-# Pagina de Treinamento para Vendedoras - Argos X
+
+# Plano: IA Multimodal - Leitura de Imagens e Audio no WhatsApp
 
 ## Objetivo
-Criar uma pagina interna `/treinamento` com conteudo de treinamento completo, visual e didatico, para que as vendedoras possam:
-1. Aprender a apresentar o Argos X para empresarios leigos
-2. Consultar duvidas frequentes rapidamente
-3. Seguir um roteiro de demonstracao na ordem ideal
+Permitir que o Agente de IA processe imagens e audios recebidos no WhatsApp, respondendo com base no conteudo visual ou falado.
 
-## Estrutura da Pagina
+## Como funciona hoje
+1. O webhook recebe a mensagem e extrai APENAS texto (`data.message?.conversation` ou `extendedTextMessage`)
+2. Se a mensagem for imagem/audio/video, `messageText` fica vazio (`""`)
+3. A condicao `if (matchingAgent && messageText)` falha e a IA nunca e acionada
+4. O lead envia uma foto ou audio e nao recebe resposta
 
-A pagina tera formato de "guia interativo" com secoes colapsaveis (accordion), usando linguagem simples e sem termos tecnicos. Cada secao tera icones ilustrativos e explicacoes curtas e diretas.
+## Solucao proposta
 
-### Secoes do Treinamento (na ordem de apresentacao ideal)
+### Etapa 1: Extrair tipo de midia no webhook
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
 
-**1. O que e o Argos X? (Elevator Pitch)**
-- Frase pronta para usar com o cliente: "O Argos X e como ter uma secretaria inteligente no seu WhatsApp que nunca esquece de responder ninguem"
-- 3 beneficios principais em linguagem simples
-- Para quem serve (exemplos de negocios)
+Apos a extracao do texto, detectar se a mensagem contem imagem, audio, video ou documento:
+- `data.message?.imageMessage` (imagem)
+- `data.message?.audioMessage` (audio/voz)
+- `data.message?.videoMessage` (video)
+- `data.message?.documentMessage` (documento)
 
-**2. Conectar o WhatsApp (Integracoes)**
-- Passo a passo visual de como escanear o QR Code
-- Explicar que o WhatsApp do cliente continua funcionando normal
-- Resposta para duvida: "Vou perder minhas conversas?" → Nao
+Extrair o `mediaType` e o caption (legenda) se existir.
 
-**3. Funil de Vendas (Leads)**
-- O que e um funil em linguagem simples: "E como um quadro de post-its onde voce arrasta cada cliente pela jornada de compra"
-- Explicar etapas: Novo → Qualificado → Proposta → Negociacao → Fechado
-- Como criar um lead manualmente
-- Filtro "Minha Carteira" - o que e e para que serve
-- Vista Kanban vs Lista
+### Etapa 2: Baixar a midia via Evolution API
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
 
-**4. Chats Centralizado**
-- Explicar: "Todas as conversas do WhatsApp, Instagram e Facebook em um so lugar"
-- Como responder mensagens
-- Como enviar audio, imagem e agendar mensagem
-- Painel lateral do lead (ver historico, tags, dados)
+Quando for imagem ou audio:
+1. Chamar o endpoint `getBase64FromMediaMessage` da Evolution API (ja existe no proxy) passando o `msgId`
+2. Obter o base64 + mimetype da midia
+3. Para audio: converter para texto usando a Lovable AI (Gemini suporta audio nativo)
+4. Para imagem: enviar o base64 direto para o modelo multimodal
 
-**5. Agentes de IA**
-- Explicar em linguagem simples: "Um robo que responde seus clientes automaticamente, 24 horas, como se fosse voce"
-- O que ele faz: responde perguntas, qualifica o lead, agenda reunioes
-- Como criar um agente: nome, personalidade, base de conhecimento (FAQ)
+### Etapa 3: Adaptar a chamada ao ai-agent-chat
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts`
 
-**6. SalesBots (Automacoes)**
-- Explicar: "Sequencias automaticas de mensagens, tipo um funil no WhatsApp"
-- Exemplo pratico: "Quando alguem manda 'oi', o bot responde, pergunta o interesse e move o lead pra etapa certa"
-- Templates prontos disponiveis
+Alterar o payload enviado ao `ai-agent-chat` para incluir:
+```text
+{
+  message: "texto ou descricao",
+  media_type: "image" | "audio" | null,
+  media_base64: "base64...",
+  media_mimetype: "image/jpeg" | "audio/ogg" | etc
+}
+```
 
-**7. Campanhas em Massa**
-- Explicar: "Enviar a mesma mensagem pra varios clientes de uma vez, tipo um disparo"
-- Cuidados: nao e spam, respeitar limites
+A condicao `if (matchingAgent && messageText)` sera alterada para `if (matchingAgent && (messageText || mediaType))`.
 
-**8. Dashboard e Estatisticas**
-- O que o empresario ve: mensagens recebidas, leads novos, vendas, ranking da equipe
-- Explicar valor: "Voce sabe exatamente quem ta vendendo mais e quem ta deixando cliente sem resposta"
+### Etapa 4: Processar midia no ai-agent-chat
+**Arquivo:** `supabase/functions/ai-agent-chat/index.ts`
 
-**9. Contatos**
-- Importar contatos de planilha
-- Enriquecer perfis automaticamente
-- Tags para organizar
+1. Receber os novos campos `media_type`, `media_base64`, `media_mimetype`
+2. Adaptar a validacao para aceitar mensagem vazia quando ha midia
+3. Para **imagem**: montar o conteudo multimodal no formato da API:
+```text
+{
+  role: "user",
+  content: [
+    { type: "text", text: "caption ou '[Imagem enviada pelo lead]'" },
+    { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
+  ]
+}
+```
+4. Para **audio**: transcrever primeiro usando Gemini (que suporta audio nativo) e depois enviar como texto com prefixo "[Audio transcrito]: ..."
+5. Para **video**: extrair um frame ou descrever como "[Video recebido]" (limitacao de tamanho)
 
-**10. Calendario e Email**
-- Integracoes disponiveis (Google Calendar)
-- Centralizar emails
+### Etapa 5: Guardrails e protecoes
 
-**11. Configuracoes Essenciais**
-- Equipe: convidar vendedores, definir permissoes
-- Tags: organizar clientes por categoria
-- Notificacoes: alertas de cliente sem resposta
+- Limitar tamanho de base64 a ~5MB (imagens muito grandes serao ignoradas com mensagem amigavel)
+- Timeout de 25s para download de midia (se falhar, IA responde que nao conseguiu ver a midia)
+- Audios longos (>2 min) serao truncados
+- Adicionar log detalhado de cada etapa para debug
+- Manter compatibilidade total com mensagens de texto (sem regressao)
 
-**12. Planos e Precos**
-- Tabela comparativa simples dos 3 planos: Semente (R$97), Negocio (R$297), Escala (R$697)
-- Pacotes extras de leads
-- Como responder "e caro?" - argumentos de valor
+### Modelo utilizado
+- **google/gemini-2.5-flash** (ja configurado) suporta nativamente tanto imagens quanto audio em formato multimodal, sem necessidade de servico externo de transcricao
 
-### Secao de FAQ para Vendedoras
-Accordion separado com perguntas frequentes que os CLIENTES fazem:
-- "Vou perder minhas conversas do WhatsApp?"
-- "Funciona no celular?"
-- "Posso usar meu numero pessoal?"
-- "Meus funcionarios vao ver minhas conversas pessoais?"
-- "E se eu cancelar, perco meus dados?"
-- "Preciso de computador pra usar?"
-- "Quantas pessoas podem usar?"
-- "Tem contrato de fidelidade?"
-- "Como funciona o robo de IA?"
-- "O que acontece se eu atingir o limite de leads?"
-- "Posso testar antes de pagar?"
-- "Consigo disparar mensagens em massa?"
-- "Integra com Instagram e Facebook?"
-- "E seguro? Meus dados ficam protegidos?"
-- "Quanto tempo leva pra configurar tudo?"
+## Resumo das alteracoes
 
-## Implementacao Tecnica
+| Arquivo | Alteracao |
+|---------|-----------|
+| `supabase/functions/whatsapp-webhook/index.ts` | Detectar midia, baixar base64, enviar ao ai-agent-chat |
+| `supabase/functions/ai-agent-chat/index.ts` | Receber midia, montar conteudo multimodal, enviar ao Gemini |
 
-### Arquivo novo: `src/pages/Treinamento.tsx`
-- Pagina protegida (precisa estar logado)
-- Layout com `AppLayout` (sidebar + topbar)
-- Usa componentes existentes: `Accordion`, `Card`, `Badge`, `Tabs`
-- Secao de treinamento com accordions expansiveis
-- Secao de FAQ separada com accordions
-- Botao "Imprimir / Exportar PDF" usando `window.print()` (mesmo padrao do ProjectDocs)
-- Design limpo e visual, com icones do Lucide para cada secao
-- Responsivo para mobile (vendedoras podem consultar pelo celular)
+Nenhuma migration de banco necessaria. Nenhuma alteracao no frontend.
 
-### Rota nova no `App.tsx`
-- Adicionar rota `/treinamento` dentro das rotas protegidas com `AppLayout`
-
-### Link no menu lateral (`AppSidebar.tsx`)
-- Adicionar item "Treinamento" com icone `GraduationCap` no menu, apos "Configuracoes"
-
-### Estilo
-- Sem termos tecnicos na interface
-- Textos curtos e diretos
-- Cada secao com icone colorido para facilitar a navegacao visual
-- Destaques em cards coloridos para "dicas de venda" e "respostas prontas"
-- Tons amigaveis e motivacionais
