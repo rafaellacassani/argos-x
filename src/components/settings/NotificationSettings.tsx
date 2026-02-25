@@ -202,12 +202,7 @@ export function NotificationSettings() {
 
   // Open member alert config modal
   const openMemberAlerts = async (member: UserProfile) => {
-    // Sellers can't edit their own alerts
-    if (isSeller && member.user_id === user?.id) {
-      toast({ title: "Acesso restrito", description: "Seus alertas são configurados pelo seu gestor." });
-      return;
-    }
-
+    // All users can configure their own alerts
     setSelectedMember(member);
     setLoadingPrefs(true);
 
@@ -433,9 +428,8 @@ export function NotificationSettings() {
               {teamMembers.map((member) => {
                 const roleKey = member.roles[0] || "seller";
                 const { label: roleLabel, color: roleColor } = ROLE_LABELS[roleKey];
-                const canEdit = isAdmin || (isAdminOrManager && isMemberSeller(member));
                 const isSelf = member.user_id === user?.id;
-                const canOpenModal = isAdmin || (isAdminOrManager && (isMemberSeller(member) || isSelf));
+                const canOpenModal = isAdmin || isAdminOrManager || isSelf;
 
                 return (
                   <div
@@ -466,22 +460,23 @@ export function NotificationSettings() {
 
                     {canOpenModal ? (
                       <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0 text-xs"
                         onClick={() => openMemberAlerts(member)}
                       >
-                        <Settings2 className="h-4 w-4" />
+                        <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                        Definir alertas
                       </Button>
                     ) : (
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0 opacity-50"
+                        size="sm"
+                        className="shrink-0 text-xs opacity-50"
                         disabled
-                        title="Seus alertas são configurados pelo seu gestor"
                       >
-                        <Settings2 className="h-4 w-4" />
+                        <Settings2 className="h-3.5 w-3.5 mr-1.5" />
+                        Definir alertas
                       </Button>
                     )}
                   </div>
@@ -494,7 +489,7 @@ export function NotificationSettings() {
 
       {/* Member Alert Config Modal */}
       <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Alertas de {selectedMember?.full_name}
@@ -512,7 +507,7 @@ export function NotificationSettings() {
               )}
             </DialogTitle>
             <DialogDescription>
-              Configure quais alertas este membro recebe via WhatsApp
+              Defina quais alertas e relatórios este membro recebe via WhatsApp
             </DialogDescription>
           </DialogHeader>
 
@@ -536,221 +531,198 @@ export function NotificationSettings() {
                   }}
                   placeholder="+55 (27) 99999-0000"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Número que receberá os alertas e relatórios
+                </p>
               </div>
 
               <Separator />
 
-              {/* Seller-specific alerts */}
-              {selectedMember && isMemberSeller(selectedMember) && (
-                <>
-                  {/* No-response alert */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Alerta sem resposta</Label>
-                      <Switch
-                        checked={memberPrefs.no_response_enabled}
-                        onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, no_response_enabled: v })}
-                      />
+              {/* 1. No-response alerts */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <Label className="font-medium">Alerta de leads sem resposta</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Receba um alerta quando seus leads ficarem sem resposta
+                </p>
+                <RadioGroup
+                  value={memberPrefs.no_response_enabled ? String(memberPrefs.no_response_minutes) : "none"}
+                  onValueChange={(v) => {
+                    if (v === "none") {
+                      setMemberPrefs({ ...memberPrefs, no_response_enabled: false });
+                    } else {
+                      setMemberPrefs({ ...memberPrefs, no_response_enabled: true, no_response_minutes: Number(v) });
+                    }
+                  }}
+                  className="grid grid-cols-2 gap-2"
+                >
+                  {[
+                    { value: "10", label: "10 minutos" },
+                    { value: "30", label: "30 minutos" },
+                    { value: "60", label: "60 minutos" },
+                    { value: "none", label: "Nenhum" },
+                  ].map((opt) => (
+                    <div
+                      key={opt.value}
+                      className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                        (memberPrefs.no_response_enabled ? String(memberPrefs.no_response_minutes) : "none") === opt.value
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/30"
+                      }`}
+                      onClick={() => {
+                        if (opt.value === "none") {
+                          setMemberPrefs({ ...memberPrefs, no_response_enabled: false });
+                        } else {
+                          setMemberPrefs({ ...memberPrefs, no_response_enabled: true, no_response_minutes: Number(opt.value) });
+                        }
+                      }}
+                    >
+                      <RadioGroupItem value={opt.value} id={`nr-${opt.value}`} />
+                      <Label htmlFor={`nr-${opt.value}`} className="text-sm cursor-pointer">
+                        {opt.label}
+                      </Label>
                     </div>
-                    {memberPrefs.no_response_enabled && (
-                      <div className="ml-1">
-                        <Label className="text-xs text-muted-foreground">Lead fica sem resposta por:</Label>
-                        <Select
-                          value={String(memberPrefs.no_response_minutes)}
-                          onValueChange={(v) => setMemberPrefs({ ...memberPrefs, no_response_minutes: Number(v) })}
-                        >
-                          <SelectTrigger className="w-32 h-8 mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="10">10 min</SelectItem>
-                            <SelectItem value="30">30 min</SelectItem>
-                            <SelectItem value="60">60 min</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
+                  ))}
+                </RadioGroup>
+              </div>
 
-                  {/* Daily report */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Relatório diário</Label>
-                      <Switch
-                        checked={memberPrefs.daily_report_enabled}
-                        onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, daily_report_enabled: v })}
-                      />
-                    </div>
-                    {memberPrefs.daily_report_enabled && (
-                      <div className="ml-1">
-                        <Label className="text-xs text-muted-foreground">Horário:</Label>
-                        <Select
-                          value={memberPrefs.daily_report_time}
-                          onValueChange={(v) => setMemberPrefs({ ...memberPrefs, daily_report_time: v })}
-                        >
-                          <SelectTrigger className="w-32 h-8 mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {["08:00", "09:00", "12:00", "17:00", "18:00", "19:00", "20:00"].map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground mt-1">Resumo do dia enviado no WhatsApp</p>
-                      </div>
-                    )}
-                  </div>
+              <Separator />
 
-                  {/* New lead alert */}
-                  <div className="flex items-center justify-between">
+              {/* 2. Dashboard geral da empresa */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-blue-500" />
+                    <Label className="font-medium">Dashboard geral da empresa</Label>
+                  </div>
+                  <Switch
+                    checked={memberPrefs.daily_report_enabled}
+                    onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, daily_report_enabled: v })}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Resumo com leads novos, movimentações por etapa do funil e valores totais
+                </p>
+                {memberPrefs.daily_report_enabled && (
+                  <div className="space-y-3 ml-1 p-3 bg-muted/30 rounded-lg">
                     <div>
-                      <Label>Alerta de novo lead</Label>
-                      <p className="text-xs text-muted-foreground">Notificar quando novo lead chegar</p>
-                    </div>
-                    <Switch
-                      checked={memberPrefs.new_lead_alert_enabled}
-                      onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, new_lead_alert_enabled: v })}
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Admin/Manager-specific alerts */}
-              {selectedMember && !isMemberSeller(selectedMember) && (
-                <>
-                  {/* Manager report */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Relatório da equipe</Label>
-                      <Switch
-                        checked={memberPrefs.manager_report_enabled}
-                        onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_enabled: v })}
-                      />
-                    </div>
-                    {memberPrefs.manager_report_enabled && (
-                      <div className="ml-1 space-y-2">
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Frequência:</Label>
-                          <Select
-                            value={memberPrefs.manager_report_frequency}
-                            onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_frequency: v })}
+                      <Label className="text-xs text-muted-foreground">Frequência:</Label>
+                      <RadioGroup
+                        value={memberPrefs.manager_report_frequency || "daily"}
+                        onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_frequency: v })}
+                        className="flex gap-2 mt-1"
+                      >
+                        {[
+                          { value: "daily", label: "Diário" },
+                          { value: "weekly", label: "Semanal" },
+                          { value: "monthly", label: "Mensal" },
+                        ].map((opt) => (
+                          <div
+                            key={opt.value}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md border cursor-pointer text-xs transition-colors ${
+                              (memberPrefs.manager_report_frequency || "daily") === opt.value
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-muted/50"
+                            }`}
+                            onClick={() => setMemberPrefs({ ...memberPrefs, manager_report_frequency: opt.value })}
                           >
-                            <SelectTrigger className="w-32 h-8 mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="daily">Diário</SelectItem>
-                              <SelectItem value="weekly">Semanal</SelectItem>
-                              <SelectItem value="monthly">Mensal</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-xs text-muted-foreground">Horário:</Label>
-                          <Select
-                            value={memberPrefs.manager_report_time}
-                            onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_time: v })}
-                          >
-                            <SelectTrigger className="w-32 h-8 mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {["08:00", "09:00", "12:00", "17:00", "18:00", "19:00", "20:00"].map((t) => (
-                                <SelectItem key={t} value={t}>{t}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {memberPrefs.manager_report_frequency === "weekly" && (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Dia da semana:</Label>
-                            <Select
-                              value={String(memberPrefs.manager_report_day_of_week)}
-                              onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_day_of_week: Number(v) })}
-                            >
-                              <SelectTrigger className="w-32 h-8 mt-1">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="0">Domingo</SelectItem>
-                                <SelectItem value="1">Segunda</SelectItem>
-                                <SelectItem value="2">Terça</SelectItem>
-                                <SelectItem value="3">Quarta</SelectItem>
-                                <SelectItem value="4">Quinta</SelectItem>
-                                <SelectItem value="5">Sexta</SelectItem>
-                                <SelectItem value="6">Sábado</SelectItem>
-                              </SelectContent>
-                            </Select>
+                            <RadioGroupItem value={opt.value} id={`df-${opt.value}`} className="h-3 w-3" />
+                            <Label htmlFor={`df-${opt.value}`} className="text-xs cursor-pointer">{opt.label}</Label>
                           </div>
-                        )}
-                        {memberPrefs.manager_report_frequency === "monthly" && (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Dia do mês:</Label>
-                            <Select
-                              value={String(memberPrefs.manager_report_day_of_week)}
-                              onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_day_of_week: Number(v) })}
-                            >
-                              <SelectTrigger className="w-32 h-8 mt-1">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {Array.from({ length: 28 }, (_, i) => (
-                                  <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* New lead alert */}
-                  <div className="flex items-center justify-between">
+                        ))}
+                      </RadioGroup>
+                    </div>
                     <div>
-                      <Label>Alerta de novo lead</Label>
-                      <p className="text-xs text-muted-foreground">Notificar quando novo lead chegar</p>
+                      <Label className="text-xs text-muted-foreground">Horário:</Label>
+                      <Select
+                        value={memberPrefs.daily_report_time}
+                        onValueChange={(v) => setMemberPrefs({ ...memberPrefs, daily_report_time: v })}
+                      >
+                        <SelectTrigger className="w-28 h-8 mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["08:00", "09:00", "12:00", "17:00", "18:00", "19:00", "20:00"].map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Switch
-                      checked={memberPrefs.new_lead_alert_enabled}
-                      onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, new_lead_alert_enabled: v })}
-                    />
-                  </div>
-
-                  {/* No-response alert for team */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    {(memberPrefs.manager_report_frequency || "daily") === "weekly" && (
                       <div>
-                        <Label>Alerta sem resposta da equipe</Label>
-                        <p className="text-xs text-muted-foreground">Receber alerta quando leads dos seus vendedores ficam sem resposta</p>
-                      </div>
-                      <Switch
-                        checked={memberPrefs.no_response_enabled}
-                        onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, no_response_enabled: v })}
-                      />
-                    </div>
-                    {memberPrefs.no_response_enabled && (
-                      <div className="ml-1">
-                        <Label className="text-xs text-muted-foreground">Tempo:</Label>
+                        <Label className="text-xs text-muted-foreground">Dia da semana:</Label>
                         <Select
-                          value={String(memberPrefs.no_response_minutes)}
-                          onValueChange={(v) => setMemberPrefs({ ...memberPrefs, no_response_minutes: Number(v) })}
+                          value={String(memberPrefs.manager_report_day_of_week)}
+                          onValueChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_day_of_week: Number(v) })}
                         >
-                          <SelectTrigger className="w-32 h-8 mt-1">
+                          <SelectTrigger className="w-28 h-8 mt-1">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="10">10 min</SelectItem>
-                            <SelectItem value="30">30 min</SelectItem>
-                            <SelectItem value="60">60 min</SelectItem>
+                            <SelectItem value="1">Segunda</SelectItem>
+                            <SelectItem value="2">Terça</SelectItem>
+                            <SelectItem value="3">Quarta</SelectItem>
+                            <SelectItem value="4">Quinta</SelectItem>
+                            <SelectItem value="5">Sexta</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     )}
+                    {(memberPrefs.manager_report_frequency || "daily") === "monthly" && (
+                      <p className="text-xs text-muted-foreground italic">
+                        📅 Enviado no último dia útil do mês
+                      </p>
+                    )}
                   </div>
-                </>
-              )}
+                )}
+              </div>
+
+              <Separator />
+
+              {/* 3. Relatório por vendedor */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-4 w-4 text-violet-500" />
+                    <Label className="font-medium">Relatório por vendedor</Label>
+                  </div>
+                  <Switch
+                    checked={memberPrefs.manager_report_enabled}
+                    onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, manager_report_enabled: v })}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Detalhamento por vendedor: leads atendidos, sem resposta, movimentações por etapa e valores
+                </p>
+                {memberPrefs.manager_report_enabled && (
+                  <div className="ml-1 p-3 bg-muted/30 rounded-lg">
+                    <p className="text-xs text-muted-foreground">
+                      Será enviado na mesma frequência e horário do Dashboard geral acima
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* 4. New lead alert */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-emerald-500" />
+                    <div>
+                      <Label className="font-medium">Alerta de novo lead</Label>
+                      <p className="text-xs text-muted-foreground">Notificar em tempo real quando um novo lead chegar</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={memberPrefs.new_lead_alert_enabled}
+                    onCheckedChange={(v) => setMemberPrefs({ ...memberPrefs, new_lead_alert_enabled: v })}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
