@@ -36,7 +36,7 @@ interface BotNodeCardProps {
   onSelect: () => void;
   onUpdate: (data: Record<string, unknown>) => void;
   onMove: (position: { x: number; y: number }) => void;
-  onStartConnect: () => void;
+  onStartConnect: (sourceHandle?: string) => void;
   onEndConnect: (targetId: string) => void;
   onDelete: () => void;
   executionStatus?: ExecutionStatus;
@@ -137,20 +137,26 @@ export function BotNodeCard({
       </div>
 
       {/* Connection Points */}
-      <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-background border-2 border-primary cursor-pointer hover:scale-125 transition-transform no-drag" onMouseUp={() => onEndConnect(node.id)} />
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-background border-2 border-primary cursor-pointer hover:scale-150 transition-transform no-drag z-10" onMouseUp={() => onEndConnect(node.id)} />
 
       {!hasDualOutputs && (
-        <div className={cn('absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-primary cursor-pointer hover:scale-125 transition-transform no-drag', isConnecting && 'animate-pulse')} onMouseDown={(e) => { e.stopPropagation(); onStartConnect(); }}>
+        <div className={cn('absolute -bottom-3 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-primary cursor-pointer hover:scale-150 transition-transform no-drag z-10', isConnecting && 'animate-pulse')} onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect(); }}>
           <Circle className="w-full h-full text-primary-foreground" />
         </div>
       )}
 
       {hasDualOutputs && (
         <>
-          <div className="absolute -bottom-2 left-1/4 -translate-x-1/2 w-4 h-4 rounded-full bg-green-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center">
+          <div
+            className={cn('absolute -bottom-2 left-1/4 -translate-x-1/2 w-5 h-5 rounded-full bg-green-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center', isConnecting && 'animate-pulse')}
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect('yes'); }}
+          >
             S
           </div>
-          <div className="absolute -bottom-2 left-3/4 -translate-x-1/2 w-4 h-4 rounded-full bg-red-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center">
+          <div
+            className={cn('absolute -bottom-2 left-3/4 -translate-x-1/2 w-5 h-5 rounded-full bg-red-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center', isConnecting && 'animate-pulse')}
+            onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect('no'); }}
+          >
             N
           </div>
         </>
