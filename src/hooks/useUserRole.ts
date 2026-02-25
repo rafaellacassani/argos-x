@@ -1,7 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from './useAuth';
 import { useWorkspace } from './useWorkspace';
-import { supabase } from '@/integrations/supabase/client';
 
 export type AppRole = 'admin' | 'manager' | 'seller';
 
@@ -27,33 +24,9 @@ interface UserRoleData {
 }
 
 export function useUserRole(): UserRoleData {
-  const { user } = useAuth();
-  const { membership } = useWorkspace();
-  const [userProfileId, setUserProfileId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { membership, userProfileId, loading } = useWorkspace();
 
   const role: AppRole = (membership?.role as AppRole) || 'seller';
-
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      if (!user) {
-        setUserProfileId(null);
-        setLoading(false);
-        return;
-      }
-      
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      setUserProfileId(data?.id || null);
-      setLoading(false);
-    };
-
-    fetchProfileId();
-  }, [user]);
 
   const isAdmin = role === 'admin';
   const isManager = role === 'manager';

@@ -10,6 +10,20 @@ export interface Workspace {
   created_at: string;
   alert_instance_name?: string | null;
   logo_url?: string | null;
+  // Plan/access fields for local validation
+  plan_type?: string;
+  subscription_status?: string;
+  trial_end?: string | null;
+  blocked_at?: string | null;
+  updated_at?: string;
+  // Limits fields
+  plan_name?: string | null;
+  lead_limit?: number | null;
+  extra_leads?: number | null;
+  whatsapp_limit?: number | null;
+  user_limit?: number | null;
+  ai_interactions_limit?: number | null;
+  ai_interactions_used?: number | null;
 }
 
 export interface WorkspaceMember {
@@ -26,6 +40,7 @@ interface WorkspaceContextType {
   workspace: Workspace | null;
   workspaceId: string | null;
   membership: WorkspaceMember | null;
+  userProfileId: string | null;
   loading: boolean;
   hasWorkspace: boolean;
   createWorkspace: (name: string) => Promise<Workspace | null>;
@@ -33,6 +48,7 @@ interface WorkspaceContextType {
   fetchMembers: () => Promise<WorkspaceMember[]>;
   removeMember: (memberId: string) => Promise<boolean>;
   updateMemberRole: (memberId: string, role: "admin" | "manager" | "seller") => Promise<boolean>;
+  refreshWorkspace: () => void;
 }
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
@@ -41,82 +57,96 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [membership, setMembership] = useState<WorkspaceMember | null>(null);
+  const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load workspace for current user
-  useEffect(() => {
+  const loadWorkspace = useCallback(async () => {
     if (!user) {
       setWorkspace(null);
       setMembership(null);
+      setUserProfileId(null);
       setLoading(false);
       return;
     }
 
-    const loadWorkspace = async () => {
-      setLoading(true);
-      try {
-        // Find user's accepted membership
-        const { data: memberData, error: memberError } = await supabase
+    setLoading(true);
+    try {
+      // Fetch membership and profile in parallel
+      const [memberResult, profileResult] = await Promise.all([
+        supabase
           .from("workspace_members")
           .select("*")
           .eq("user_id", user.id)
           .not("accepted_at", "is", null)
           .limit(1)
-          .maybeSingle();
+          .maybeSingle(),
+        supabase
+          .from("user_profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+      ]);
 
-        if (memberError) throw memberError;
+      if (profileResult.data) {
+        setUserProfileId(profileResult.data.id);
+      }
 
-        if (memberData) {
-          setMembership(memberData as WorkspaceMember);
-          
-          // Fetch workspace details
-          const { data: wsData, error: wsError } = await supabase
-            .from("workspaces")
+      if (memberResult.error) throw memberResult.error;
+
+      if (memberResult.data) {
+        setMembership(memberResult.data as WorkspaceMember);
+        
+        // Fetch workspace with ALL needed fields (plan, limits, access)
+        const { data: wsData, error: wsError } = await supabase
+          .from("workspaces")
+          .select("*")
+          .eq("id", memberResult.data.workspace_id)
+          .single();
+
+        if (wsError) throw wsError;
+        setWorkspace(wsData as Workspace);
+      } else {
+        // Check for pending invitations by email
+        const userEmail = user.email;
+        if (userEmail) {
+          const { data: invite } = await supabase
+            .from("workspace_members")
             .select("*")
-            .eq("id", memberData.workspace_id)
-            .single();
+            .eq("invited_email", userEmail)
+            .is("accepted_at", null)
+            .limit(1)
+            .maybeSingle();
 
-          if (wsError) throw wsError;
-          setWorkspace(wsData as Workspace);
-        } else {
-          // Check for pending invitations by email
-          const userEmail = user.email;
-          if (userEmail) {
-            const { data: invite } = await supabase
-              .from("workspace_members")
-              .select("*")
-              .eq("invited_email", userEmail)
-              .is("accepted_at", null)
-              .limit(1)
-              .maybeSingle();
+          if (invite) {
+            const { data: acceptData, error: acceptError } = await supabase.functions.invoke("accept-invite");
 
-            if (invite) {
-              // Auto-accept via edge function (bypasses RLS)
-              const { data: acceptData, error: acceptError } = await supabase.functions.invoke("accept-invite");
-
-              if (!acceptError && acceptData?.workspace_id) {
-                // Reload with accepted workspace
-                loadWorkspace();
-                return;
-              } else {
-                console.error("Error accepting invite via edge function:", acceptError);
-              }
+            if (!acceptError && acceptData?.workspace_id) {
+              loadWorkspace();
+              return;
+            } else {
+              console.error("Error accepting invite via edge function:", acceptError);
             }
           }
-          setWorkspace(null);
-          setMembership(null);
         }
-      } catch (err) {
-        console.error("Error loading workspace:", err);
         setWorkspace(null);
         setMembership(null);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    loadWorkspace();
+    } catch (err) {
+      console.error("Error loading workspace:", err);
+      setWorkspace(null);
+      setMembership(null);
+    } finally {
+      setLoading(false);
+    }
   }, [user]);
+
+  useEffect(() => {
+    loadWorkspace();
+  }, [loadWorkspace]);
+
+  const refreshWorkspace = useCallback(() => {
+    loadWorkspace();
+  }, [loadWorkspace]);
 
   const createWorkspace = useCallback(async (name: string): Promise<Workspace | null> => {
     if (!user) return null;
@@ -169,7 +199,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         .from("workspace_members")
         .insert({
           workspace_id: workspace.id,
-          user_id: "00000000-0000-0000-0000-000000000000", // placeholder until accepted
+          user_id: "00000000-0000-0000-0000-000000000000",
           role,
           invited_email: email,
         });
@@ -234,6 +264,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       workspace,
       workspaceId: workspace?.id ?? null,
       membership,
+      userProfileId,
       loading,
       hasWorkspace: !!workspace,
       createWorkspace,
@@ -241,6 +272,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       fetchMembers,
       removeMember,
       updateMemberRole,
+      refreshWorkspace,
     }}>
       {children}
     </WorkspaceContext.Provider>

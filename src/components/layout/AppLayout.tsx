@@ -5,7 +5,6 @@ import { useWorkspaceAccess } from "@/hooks/useWorkspaceAccess";
 import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
-import { Loader2 } from "lucide-react";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -14,19 +13,13 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { allowed, reason, daysRemaining, loading } = useWorkspaceAccess();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!allowed) {
+  // Non-blocking: show layout immediately, only block if explicitly not allowed
+  if (!loading && !allowed) {
     return <WorkspaceBlockedScreen reason={reason as "blocked" | "canceled" | "past_due"} />;
   }
 
   const showTrialBanner =
+    !loading &&
     (reason === "trialing" || reason === "trial_manual") &&
     daysRemaining !== null &&
     daysRemaining <= 3;

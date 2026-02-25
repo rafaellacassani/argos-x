@@ -79,12 +79,13 @@ const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 interface CacheEntry {
   data: Omit<PlanLimits, "canAddWhatsapp" | "canAddUser" | "loading" | "refetch">;
   timestamp: number;
+  wsUpdatedAt: string | undefined;
 }
 
 const cache = new Map<string, CacheEntry>();
 
 export function usePlanLimits(): PlanLimits {
-  const { workspaceId } = useWorkspace();
+  const { workspace, workspaceId } = useWorkspace();
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<Omit<PlanLimits, "canAddWhatsapp" | "canAddUser" | "loading" | "refetch">>({
     planName: "semente",
@@ -104,11 +105,14 @@ export function usePlanLimits(): PlanLimits {
   const fetchingRef = useRef(false);
 
   const fetchLimits = useCallback(async (force = false) => {
-    if (!workspaceId || fetchingRef.current) return;
+    if (!workspaceId || !workspace || fetchingRef.current) return;
+
+    // PROTEÇÃO 2: Use workspace.updated_at as cache key
+    const wsUpdatedAt = (workspace as any).updated_at;
 
     if (!force) {
       const cached = cache.get(workspaceId);
-      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL && cached.wsUpdatedAt === wsUpdatedAt) {
         setState(cached.data);
         setLoading(false);
         return;
@@ -117,12 +121,18 @@ export function usePlanLimits(): PlanLimits {
 
     fetchingRef.current = true;
     try {
-      const [wsResult, countResult, packsResult] = await Promise.all([
-        supabase
-          .from("workspaces")
-          .select("plan_name, lead_limit, extra_leads, whatsapp_limit, user_limit, ai_interactions_limit, ai_interactions_used")
-          .eq("id", workspaceId)
-          .single(),
+      // Reuse workspace data for limits instead of separate query
+      const ws = workspace;
+      const leadLimit = ws.lead_limit ?? 300;
+      const wsExtraLeads = ws.extra_leads ?? 0;
+      const whatsappLimit = ws.whatsapp_limit ?? 1;
+      const userLimit = ws.user_limit ?? 1;
+      const aiInteractionsLimit = ws.ai_interactions_limit ?? 100;
+      const aiInteractionsUsed = ws.ai_interactions_used ?? 0;
+      const planName = ws.plan_name ?? "semente";
+
+      // Only 2 queries instead of 3 (leads count + lead_packs)
+      const [countResult, packsResult] = await Promise.all([
         supabase
           .from("leads")
           .select("id", { count: "exact", head: true })
@@ -134,18 +144,14 @@ export function usePlanLimits(): PlanLimits {
           .eq("active", true),
       ]);
 
-      const ws = wsResult.data;
-      if (!ws) return;
-
       const currentLeadCount = countResult.count ?? 0;
       const packExtra = (packsResult.data ?? []).reduce((sum, p) => sum + (p.pack_size ?? 0), 0);
-      const leadLimit = ws.lead_limit ?? 300;
-      const extraLeads = (ws.extra_leads ?? 0) + packExtra;
+      const extraLeads = wsExtraLeads + packExtra;
       const totalLeadLimit = leadLimit + extraLeads;
       const leadUsagePercent = totalLeadLimit > 0 ? Math.round((currentLeadCount / totalLeadLimit) * 100) : 0;
 
       const data = {
-        planName: ws.plan_name ?? "semente",
+        planName,
         leadLimit,
         extraLeads,
         totalLeadLimit,
@@ -153,14 +159,14 @@ export function usePlanLimits(): PlanLimits {
         leadUsagePercent,
         isNearLeadLimit: leadUsagePercent >= 80,
         isAtLeadLimit: leadUsagePercent >= 100,
-        whatsappLimit: ws.whatsapp_limit ?? 1,
-        userLimit: ws.user_limit ?? 1,
-        aiInteractionsLimit: ws.ai_interactions_limit ?? 100,
-        aiInteractionsUsed: ws.ai_interactions_used ?? 0,
+        whatsappLimit,
+        userLimit,
+        aiInteractionsLimit,
+        aiInteractionsUsed,
         canAddLead: currentLeadCount < totalLeadLimit,
       };
 
-      cache.set(workspaceId, { data, timestamp: Date.now() });
+      cache.set(workspaceId, { data, timestamp: Date.now(), wsUpdatedAt });
       setState(data);
     } catch (err) {
       console.error("usePlanLimits error:", err);
@@ -168,7 +174,7 @@ export function usePlanLimits(): PlanLimits {
       fetchingRef.current = false;
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, workspace]);
 
   useEffect(() => {
     fetchLimits();
