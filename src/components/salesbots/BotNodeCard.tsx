@@ -20,11 +20,19 @@ import {
   StickyNote,
   MoreHorizontal,
   Plus,
+  Play,
+  Pencil,
+  Copy,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
 import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
-import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SendMessageNodeContent } from './SendMessageNodeContent';
 import { WaitNodeContent } from './WaitNodeContent';
 import { ConditionNodeContent } from './ConditionNodeContent';
@@ -41,6 +49,8 @@ interface BotNodeCardProps {
   onStartConnect: (sourceHandle?: string) => void;
   onEndConnect: (targetId: string) => void;
   onDelete: () => void;
+  onDuplicate?: () => void;
+  onRename?: () => void;
   executionStatus?: ExecutionStatus;
   onTestNode?: (nodeId: string, leadId: string, instanceName: string, forceWithoutConversation: boolean) => void;
   testLeads?: TestLead[];
@@ -76,6 +86,8 @@ export function BotNodeCard({
   onStartConnect,
   onEndConnect,
   onDelete,
+  onDuplicate,
+  onRename,
   executionStatus,
   onTestNode,
   testLeads = [],
@@ -131,14 +143,39 @@ export function BotNodeCard({
           {nodeIndex}
         </span>
         <span className="text-sm font-medium text-foreground flex-1">{config.label}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 no-drag text-muted-foreground hover:text-destructive"
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        >
-          <MoreHorizontal className="w-4 h-4" />
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="h-6 w-6 no-drag inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem onClick={() => { /* TODO: preview from here */ }}>
+              <Play className="w-4 h-4 mr-2" />
+              Iniciar pré-visualização aqui
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              const newLabel = prompt('Novo nome do bloco:', config.label);
+              if (newLabel) onUpdate({ customLabel: newLabel });
+            }}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Renomear
+            </DropdownMenuItem>
+            {onDuplicate && (
+              <DropdownMenuItem onClick={onDuplicate}>
+                <Copy className="w-4 h-4 mr-2" />
+                Duplicar
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Content area */}
