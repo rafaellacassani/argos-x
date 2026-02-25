@@ -79,6 +79,18 @@ export function BotBuilderCanvas({
     setSelectedNode(null);
   }, [nodes, edges, onNodesChange, onEdgesChange]);
 
+  const handleDuplicateNode = useCallback((nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    const newNode: BotNode = {
+      id: `node_${Date.now()}`,
+      type: node.type,
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      data: { ...node.data },
+    };
+    onNodesChange([...nodes, newNode]);
+  }, [nodes, onNodesChange]);
+
   const handleNodeUpdate = useCallback((nodeId: string, data: Record<string, unknown>) => {
     onNodesChange(nodes.map(n => n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n));
   }, [nodes, onNodesChange]);
@@ -267,6 +279,7 @@ export function BotBuilderCanvas({
               setConnectingFrom(null);
             }}
             onDelete={() => handleDeleteNode(node.id)}
+            onDuplicate={() => handleDuplicateNode(node.id)}
             executionStatus={executionStatuses[node.id]}
             onTestNode={handleTestNode}
             testLeads={testLeads}
