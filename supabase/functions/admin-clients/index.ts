@@ -451,6 +451,44 @@ serve(async (req) => {
     }
 
     // ──────────────────────────────────────
+    // ACTION: UPDATE-LIMITS
+    // ──────────────────────────────────────
+    if (action === "update-limits") {
+      const { workspaceId, leadLimit, extraLeads, whatsappLimit, userLimit, aiInteractionsLimit } = body;
+      if (!workspaceId) {
+        return new Response(
+          JSON.stringify({ error: "workspaceId required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const updates: Record<string, number> = {};
+      if (leadLimit !== undefined) updates.lead_limit = Number(leadLimit);
+      if (extraLeads !== undefined) updates.extra_leads = Number(extraLeads);
+      if (whatsappLimit !== undefined) updates.whatsapp_limit = Number(whatsappLimit);
+      if (userLimit !== undefined) updates.user_limit = Number(userLimit);
+      if (aiInteractionsLimit !== undefined) updates.ai_interactions_limit = Number(aiInteractionsLimit);
+
+      if (Object.keys(updates).length === 0) {
+        return new Response(
+          JSON.stringify({ error: "No limits to update" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from("workspaces")
+        .update(updates)
+        .eq("id", workspaceId);
+
+      if (updateError) throw updateError;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ──────────────────────────────────────
     // ACTION: UPDATE-WORKSPACE
     // ──────────────────────────────────────
     if (action === "update-workspace") {

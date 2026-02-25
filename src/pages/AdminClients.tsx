@@ -150,6 +150,15 @@ export default function AdminClients() {
   const [planClient, setPlanClient] = useState<ClientData | null>(null);
   const [planSelected, setPlanSelected] = useState("semente");
 
+  // Limits editor state
+  const [limitsClient, setLimitsClient] = useState<ClientData | null>(null);
+  const [limitsWhatsapp, setLimitsWhatsapp] = useState(1);
+  const [limitsUsers, setLimitsUsers] = useState(1);
+  const [limitsLeads, setLimitsLeads] = useState(300);
+  const [limitsExtraLeads, setLimitsExtraLeads] = useState(0);
+  const [limitsAI, setLimitsAI] = useState(100);
+  const [limitsLoading, setLimitsLoading] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     checkAccess();
@@ -396,6 +405,45 @@ export default function AdminClients() {
   const handleActivatePlan = () => {
     toast({ title: "Em breve!", description: `Ativação do plano "${planSelected}" será implementada em breve.` });
     setPlanClient(null);
+  };
+
+  const openLimitsDialog = (client: ClientData) => {
+    setLimitsClient(client);
+    setLimitsWhatsapp(client.whatsapp_limit);
+    setLimitsUsers(client.user_limit);
+    setLimitsLeads(client.lead_limit);
+    setLimitsExtraLeads(client.extra_leads || 0);
+    setLimitsAI(client.ai_interactions_limit);
+  };
+
+  const handleUpdateLimits = async () => {
+    if (!limitsClient) return;
+    setLimitsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: {
+          action: "update-limits",
+          workspaceId: limitsClient.id,
+          leadLimit: limitsLeads,
+          extraLeads: limitsExtraLeads,
+          whatsappLimit: limitsWhatsapp,
+          userLimit: limitsUsers,
+          aiInteractionsLimit: limitsAI,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) {
+        toast({ title: "Erro", description: data.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: "Limites atualizados!", description: `Recursos de "${limitsClient.name}" foram ajustados.` });
+      setLimitsClient(null);
+      fetchClients();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setLimitsLoading(false);
+    }
   };
 
   if (loading) {
@@ -791,6 +839,10 @@ export default function AdminClients() {
                               <CreditCard className="w-4 h-4 mr-2" />
                               Ativar plano
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openLimitsDialog(client)}>
+                              <TrendingUp className="w-4 h-4 mr-2" />
+                              Ajustar limites
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
@@ -1124,6 +1176,82 @@ export default function AdminClients() {
               {inviteLinkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ───────── LIMITS EDITOR DIALOG ───────── */}
+      <Dialog open={!!limitsClient} onOpenChange={(open) => !open && setLimitsClient(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Ajustar Limites
+            </DialogTitle>
+            <DialogDescription>
+              Altere os recursos disponíveis para <strong>{limitsClient?.name}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Limite de leads</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={limitsLeads}
+                  onChange={(e) => setLimitsLeads(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Leads extras</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={limitsExtraLeads}
+                  onChange={(e) => setLimitsExtraLeads(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Instâncias WhatsApp</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={limitsWhatsapp}
+                  onChange={(e) => setLimitsWhatsapp(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Usuários</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={limitsUsers}
+                  onChange={(e) => setLimitsUsers(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Interações IA</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={limitsAI}
+                  onChange={(e) => setLimitsAI(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Use 999999 para leads ou 999 para WhatsApp caso queira liberar ilimitado.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLimitsClient(null)} disabled={limitsLoading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleUpdateLimits} disabled={limitsLoading}>
+              {limitsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar limites
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
