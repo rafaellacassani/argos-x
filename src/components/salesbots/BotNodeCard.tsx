@@ -12,13 +12,14 @@ import {
   Tag,
   ArrowRight,
   GripVertical,
-  Circle,
   Trash2,
   ShieldCheck,
   CornerDownRight,
   StopCircle,
   UserCheck,
   StickyNote,
+  MoreHorizontal,
+  Plus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
@@ -33,6 +34,7 @@ interface BotNodeCardProps {
   node: BotNode;
   isSelected: boolean;
   isConnecting: boolean;
+  nodeIndex: number;
   onSelect: () => void;
   onUpdate: (data: Record<string, unknown>) => void;
   onMove: (position: { x: number; y: number }) => void;
@@ -45,28 +47,29 @@ interface BotNodeCardProps {
   allNodes?: BotNode[];
 }
 
-const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; color: string }> = {
-  send_message: { icon: MessageSquare, label: 'Enviar Mensagem', color: 'border-blue-500 bg-blue-500/10' },
-  react: { icon: ThumbsUp, label: 'Reagir', color: 'border-yellow-500 bg-yellow-500/10' },
-  comment: { icon: MessageCircle, label: 'Comentário', color: 'border-gray-500 bg-gray-500/10' },
-  whatsapp_list: { icon: List, label: 'Lista WhatsApp', color: 'border-green-500 bg-green-500/10' },
-  condition: { icon: GitBranch, label: 'Condição', color: 'border-purple-500 bg-purple-500/10' },
-  action: { icon: Zap, label: 'Ação', color: 'border-orange-500 bg-orange-500/10' },
-  round_robin: { icon: Users, label: 'Round Robin', color: 'border-pink-500 bg-pink-500/10' },
-  wait: { icon: Clock, label: 'Aguardar', color: 'border-indigo-500 bg-indigo-500/10' },
-  tag: { icon: Tag, label: 'Aplicar Tag', color: 'border-teal-500 bg-teal-500/10' },
-  move_stage: { icon: ArrowRight, label: 'Mover Etapa', color: 'border-cyan-500 bg-cyan-500/10' },
-  validate: { icon: ShieldCheck, label: 'Validação', color: 'border-emerald-500 bg-emerald-500/10' },
-  goto: { icon: CornerDownRight, label: 'Ir para etapa', color: 'border-slate-500 bg-slate-500/10' },
-  stop: { icon: StopCircle, label: 'Parar bot', color: 'border-red-500 bg-red-500/10' },
-  change_responsible: { icon: UserCheck, label: 'Mudar Responsável', color: 'border-violet-500 bg-violet-500/10' },
-  add_note: { icon: StickyNote, label: 'Adicionar Nota', color: 'border-amber-500 bg-amber-500/10' },
+const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; accent: string }> = {
+  send_message: { icon: MessageSquare, label: 'Message', accent: 'bg-blue-500' },
+  react: { icon: ThumbsUp, label: 'Reagir', accent: 'bg-yellow-500' },
+  comment: { icon: MessageCircle, label: 'Comentário', accent: 'bg-gray-500' },
+  whatsapp_list: { icon: List, label: 'Lista WhatsApp', accent: 'bg-green-500' },
+  condition: { icon: GitBranch, label: 'Condição', accent: 'bg-purple-500' },
+  action: { icon: Zap, label: 'Ação', accent: 'bg-orange-500' },
+  round_robin: { icon: Users, label: 'Round Robin', accent: 'bg-pink-500' },
+  wait: { icon: Clock, label: 'Aguardar', accent: 'bg-indigo-500' },
+  tag: { icon: Tag, label: 'Aplicar Tag', accent: 'bg-teal-500' },
+  move_stage: { icon: ArrowRight, label: 'Mover Etapa', accent: 'bg-cyan-500' },
+  validate: { icon: ShieldCheck, label: 'Validação', accent: 'bg-emerald-500' },
+  goto: { icon: CornerDownRight, label: 'Ir para etapa', accent: 'bg-slate-500' },
+  stop: { icon: StopCircle, label: 'Parar bot', accent: 'bg-red-500' },
+  change_responsible: { icon: UserCheck, label: 'Mudar Responsável', accent: 'bg-violet-500' },
+  add_note: { icon: StickyNote, label: 'Adicionar Nota', accent: 'bg-amber-500' },
 };
 
 export function BotNodeCard({
   node,
   isSelected,
   isConnecting,
+  nodeIndex,
   onSelect,
   onUpdate,
   onMove,
@@ -109,52 +112,75 @@ export function BotNodeCard({
   return (
     <motion.div
       ref={cardRef}
-      initial={{ opacity: 0, scale: 0.8 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.2 }}
       className={cn(
-        'absolute w-[300px] rounded-lg border-2 bg-card shadow-lg cursor-move transition-shadow',
-        config.color,
-        isSelected && 'ring-2 ring-primary ring-offset-2',
-        isDragging && 'shadow-xl z-50'
+        'absolute w-[340px] rounded-xl bg-card shadow-md cursor-move transition-all border border-border/60',
+        isSelected && 'ring-2 ring-primary/50 shadow-lg',
+        isDragging && 'shadow-xl z-50 scale-[1.02]'
       )}
       style={{ left: node.position.x, top: node.position.y }}
       onMouseDown={handleMouseDown}
       onClick={(e) => { e.stopPropagation(); onSelect(); }}
     >
-      {/* Header */}
-      <div className="flex items-center gap-2 p-3 border-b border-border/50">
-        <GripVertical className="w-4 h-4 text-muted-foreground" />
-        <Icon className="w-4 h-4" />
-        <span className="font-medium text-sm flex-1">{config.label}</span>
-        <Button variant="ghost" size="icon" className="h-6 w-6 no-drag text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(); }}>
-          <Trash2 className="w-3 h-3" />
+      {/* Header bar */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/40">
+        <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50" />
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-muted text-xs font-bold text-muted-foreground">
+          {nodeIndex}
+        </span>
+        <span className="text-sm font-medium text-foreground flex-1">{config.label}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 no-drag text-muted-foreground hover:text-destructive"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        >
+          <MoreHorizontal className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Content */}
+      {/* Content area */}
       <div className="p-3 no-drag">
         <NodeContent node={node} onUpdate={onUpdate} executionStatus={executionStatus} onTestNode={onTestNode} testLeads={testLeads} allNodes={allNodes} />
       </div>
 
-      {/* Connection Points */}
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-background border-2 border-primary cursor-pointer hover:scale-150 transition-transform no-drag z-10" onMouseUp={() => onEndConnect(node.id)} />
+      {/* Connection input (top) */}
+      <div
+        className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-card border-2 border-muted-foreground/30 cursor-pointer hover:border-primary hover:scale-125 transition-all no-drag z-10"
+        onMouseUp={() => onEndConnect(node.id)}
+      />
 
+      {/* Connection output (bottom) */}
       {!hasDualOutputs && (
-        <div className={cn('absolute -bottom-3 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-primary cursor-pointer hover:scale-150 transition-transform no-drag z-10', isConnecting && 'animate-pulse')} onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect(); }}>
-          <Circle className="w-full h-full text-primary-foreground" />
+        <div
+          className={cn(
+            'absolute -bottom-2.5 left-1/2 -translate-x-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-muted-foreground/20 border-2 border-muted-foreground/30 cursor-pointer hover:bg-primary hover:border-primary hover:scale-125 transition-all no-drag z-10',
+            isConnecting && 'bg-primary border-primary animate-pulse'
+          )}
+          onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect(); }}
+        >
+          <Plus className="w-3 h-3 text-muted-foreground" />
         </div>
       )}
 
       {hasDualOutputs && (
         <>
           <div
-            className={cn('absolute -bottom-2 left-1/4 -translate-x-1/2 w-5 h-5 rounded-full bg-green-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center', isConnecting && 'animate-pulse')}
+            className={cn(
+              'absolute -bottom-2.5 left-1/4 -translate-x-1/2 w-5 h-5 rounded-full bg-green-500 cursor-pointer hover:scale-125 transition-all no-drag text-[8px] font-bold text-white flex items-center justify-center z-10',
+              isConnecting && 'animate-pulse'
+            )}
             onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect('yes'); }}
           >
             S
           </div>
           <div
-            className={cn('absolute -bottom-2 left-3/4 -translate-x-1/2 w-5 h-5 rounded-full bg-red-500 cursor-pointer hover:scale-125 transition-transform no-drag text-[8px] font-bold text-white flex items-center justify-center', isConnecting && 'animate-pulse')}
+            className={cn(
+              'absolute -bottom-2.5 left-3/4 -translate-x-1/2 w-5 h-5 rounded-full bg-red-500 cursor-pointer hover:scale-125 transition-all no-drag text-[8px] font-bold text-white flex items-center justify-center z-10',
+              isConnecting && 'animate-pulse'
+            )}
             onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect('no'); }}
           >
             N
