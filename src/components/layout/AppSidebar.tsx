@@ -52,7 +52,6 @@ const menuItems: MenuItem[] = [
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
-  { icon: GraduationCap, label: "Treinamento", path: "/treinamento" },
 ];
 
 export function AppSidebar() {
@@ -78,7 +77,10 @@ export function AppSidebar() {
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
-    ...(isSuperAdmin ? [{ icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem] : []),
+    ...(isSuperAdmin ? [
+      { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
+      { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
+    ] : []),
   ];
 
   return (
