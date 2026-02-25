@@ -84,17 +84,13 @@ const DEFAULT_PREFS: Omit<NotificationPrefs, "user_profile_id" | "workspace_id">
   new_lead_alert_enabled: false,
 };
 
-const formatPhone = (value: string) => {
-  const numbers = value.replace(/\D/g, "");
-  if (numbers.length <= 2) return `+55 (${numbers}`;
-  if (numbers.length <= 4) return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
-  if (numbers.length <= 9)
-    return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
-  return `+55 (${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7, 11)}`;
-};
-
-const cleanPhoneInput = (value: string) => {
-  return value.replace(/\D/g, "").slice(0, 11);
+const formatPhoneDisplay = (raw: string) => {
+  // raw is stored as pure digits (DDD + number), e.g. "27999990000"
+  const numbers = raw.replace(/\D/g, "").slice(0, 11);
+  if (!numbers) return "";
+  if (numbers.length <= 2) return `(${numbers}`;
+  if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+  return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
 };
 
 export function NotificationSettings() {
@@ -118,6 +114,7 @@ export function NotificationSettings() {
   const [memberWhatsapp, setMemberWhatsapp] = useState("");
   const [savingPrefs, setSavingPrefs] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(false);
+  const [sendingReport, setSendingReport] = useState(false);
 
   // Load instances and alert config
   const loadInstances = useCallback(async () => {
@@ -291,6 +288,41 @@ export function NotificationSettings() {
   };
 
   const isMemberSeller = (member: UserProfile) => member.roles.includes("seller") && !member.roles.includes("admin") && !member.roles.includes("manager");
+
+  // Send report now
+  const handleSendReportNow = async () => {
+    if (!selectedMember || !workspaceId) return;
+    
+    const cleanedPhone = memberWhatsapp.replace(/\D/g, "");
+    if (cleanedPhone.length < 10) {
+      toast({ title: "WhatsApp obrigatório", description: "Informe o WhatsApp pessoal primeiro.", variant: "destructive" });
+      return;
+    }
+    if (!alertInstanceName) {
+      toast({ title: "Instância não configurada", description: "Configure o WhatsApp de alertas primeiro.", variant: "destructive" });
+      return;
+    }
+
+    setSendingReport(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-daily-reports", {
+        body: {
+          workspace_id: workspaceId,
+          user_profile_id: selectedMember.id,
+          force: true,
+        },
+      });
+
+      if (error) throw error;
+
+      toast({ title: "Relatório enviado!", description: `O relatório foi enviado para o WhatsApp de ${selectedMember.full_name}.` });
+    } catch (err: any) {
+      console.error("Error sending report:", err);
+      toast({ title: "Erro ao enviar", description: err?.message || "Não foi possível enviar o relatório.", variant: "destructive" });
+    } finally {
+      setSendingReport(false);
+    }
+  };
 
   const commercialInstances = instances.filter((i) => i.instanceType === "commercial");
   const alertInstances = instances.filter((i) => i.instanceType === "alerts");
@@ -524,12 +556,12 @@ export function NotificationSettings() {
                   WhatsApp pessoal
                 </Label>
                 <Input
-                  value={memberWhatsapp ? formatPhone(cleanPhoneInput(memberWhatsapp)) : ""}
+                  value={formatPhoneDisplay(memberWhatsapp)}
                   onChange={(e) => {
                     const cleaned = e.target.value.replace(/\D/g, "").slice(0, 11);
                     setMemberWhatsapp(cleaned);
                   }}
-                  placeholder="+55 (27) 99999-0000"
+                  placeholder="(27) 99999-0000"
                 />
                 <p className="text-xs text-muted-foreground">
                   Número que receberá os alertas e relatórios
@@ -726,13 +758,33 @@ export function NotificationSettings() {
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedMember(null)}>
-              Cancelar
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="secondary"
+              onClick={handleSendReportNow}
+              disabled={sendingReport}
+              className="w-full sm:w-auto"
+            >
+              {sendingReport ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Receber relatório agora
+                </>
+              )}
             </Button>
-            <Button onClick={handleSavePrefs} disabled={savingPrefs}>
-              {savingPrefs ? "Salvando..." : "Salvar"}
-            </Button>
+            <div className="flex gap-2 ml-auto">
+              <Button variant="outline" onClick={() => setSelectedMember(null)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSavePrefs} disabled={savingPrefs}>
+                {savingPrefs ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
