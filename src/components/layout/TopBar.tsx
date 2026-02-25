@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Bell, Search, Moon, Sun, User, ChevronDown, LogOut, Lock } from "lucide-react";
+import { Bell, Search, Moon, Sun, User, ChevronDown, LogOut, Lock, CreditCard } from "lucide-react";
 import { SetPasswordDialog } from "@/components/shared/SetPasswordDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +100,10 @@ export function TopBar() {
               Definir senha
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/configuracoes")}>Configurações</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/planos")}>
+              <CreditCard className="w-4 h-4 mr-2" />
+              Plano & Faturamento
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive" onClick={handleSignOut}>
               <LogOut className="w-4 h-4 mr-2" />
