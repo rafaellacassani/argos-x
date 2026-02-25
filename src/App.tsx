@@ -38,6 +38,7 @@ const ProjectDocs = lazy(() => import("./pages/ProjectDocs"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Planos = lazy(() => import("./pages/Planos"));
 const AdminClients = lazy(() => import("./pages/AdminClients"));
+const Treinamento = lazy(() => import("./pages/Treinamento"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,7 @@ const App = () => (
                             <Route path="/configuracoes" element={<Configuracoes />} />
                             <Route path="/planos" element={<Planos />} />
                             <Route path="/admin/clients" element={<AdminClients />} />
+                            <Route path="/treinamento" element={<Treinamento />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
