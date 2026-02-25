@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "./useWorkspace";
 
@@ -10,75 +10,123 @@ interface WorkspaceAccess {
   loading: boolean;
 }
 
-const CACHE_KEY = "workspace_access_cache";
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const RECHECK_INTERVAL = 60 * 60 * 1000; // 60 minutes
 
+/**
+ * Calculates access locally from workspace data (instant, no network).
+ * Edge Function runs in background as source of truth — if it disagrees, it wins.
+ */
+function computeLocalAccess(workspace: {
+  plan_type?: string;
+  trial_end?: string | null;
+  blocked_at?: string | null;
+}): Omit<WorkspaceAccess, "loading"> {
+  const now = new Date();
+  const trialEnd = workspace.trial_end ? new Date(workspace.trial_end) : null;
+  const daysRemaining = trialEnd
+    ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
+    : null;
+
+  const planType = workspace.plan_type || "trial_manual";
+
+  // If blocked_at is set, always blocked
+  if (workspace.blocked_at) {
+    return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+  }
+
+  switch (planType) {
+    case "trial_manual":
+      if (!trialEnd || trialEnd > now) {
+        return { allowed: true, reason: "trial_manual", trialEnd: workspace.trial_end || null, daysRemaining };
+      }
+      return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+
+    case "trialing":
+      if (trialEnd && trialEnd > now) {
+        return { allowed: true, reason: "trialing", trialEnd: workspace.trial_end || null, daysRemaining };
+      }
+      return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+
+    case "active":
+      return { allowed: true, reason: "active", trialEnd: workspace.trial_end || null, daysRemaining };
+
+    case "past_due":
+      return { allowed: false, reason: "past_due", trialEnd: workspace.trial_end || null, daysRemaining };
+
+    case "canceled":
+    case "blocked":
+      return { allowed: false, reason: planType as "canceled" | "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+
+    default:
+      return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+  }
+}
+
 export function useWorkspaceAccess(): WorkspaceAccess {
-  const { workspaceId } = useWorkspace();
-  const [state, setState] = useState<Omit<WorkspaceAccess, "loading">>({
-    allowed: true,
-    reason: "trial_manual",
-    trialEnd: null,
-    daysRemaining: null,
-  });
-  const [loading, setLoading] = useState(true);
+  const { workspace, workspaceId, loading: wsLoading } = useWorkspace();
+  const [override, setOverride] = useState<Omit<WorkspaceAccess, "loading"> | null>(null);
+  const bgCheckDone = useRef(false);
 
-  const checkAccess = useCallback(async (force = false) => {
+  // Local computation — instant, no loading state
+  const localAccess = workspace
+    ? computeLocalAccess(workspace)
+    : { allowed: true, reason: "trial_manual" as const, trialEnd: null, daysRemaining: null };
+
+  // Background Edge Function check (PROTEÇÃO 1)
+  const checkBackground = useCallback(async () => {
     if (!workspaceId) return;
-
-    // Check sessionStorage cache
-    if (!force) {
-      try {
-        const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < CACHE_TTL) {
-            setState(data);
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {}
-    }
 
     try {
       const { data, error } = await supabase.functions.invoke("check-workspace-access", {
         body: { workspaceId },
       });
 
-      if (error) {
-        console.error("check-workspace-access error:", error);
-        // Default to allowed on error to avoid blocking users
-        setLoading(false);
+      if (error || !data) {
+        console.error("check-workspace-access background error:", error);
         return;
       }
 
-      const result = {
+      const remote = {
         allowed: data.allowed,
         reason: data.reason,
         trialEnd: data.trial_end,
         daysRemaining: data.days_remaining,
       };
 
-      setState(result);
-      sessionStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({ data: result, timestamp: Date.now() })
-      );
+      // If Edge Function disagrees with local, Edge Function wins
+      if (remote.allowed !== localAccess.allowed || remote.reason !== localAccess.reason) {
+        console.log("[useWorkspaceAccess] Edge Function override:", remote);
+        setOverride(remote);
+      }
     } catch (err) {
-      console.error("check-workspace-access error:", err);
-    } finally {
-      setLoading(false);
+      console.error("check-workspace-access background error:", err);
     }
-  }, [workspaceId]);
+  }, [workspaceId, localAccess.allowed, localAccess.reason]);
 
   useEffect(() => {
-    checkAccess();
+    if (!workspaceId || wsLoading) return;
 
-    const interval = setInterval(() => checkAccess(true), RECHECK_INTERVAL);
-    return () => clearInterval(interval);
-  }, [checkAccess]);
+    // Reset override when workspace changes
+    setOverride(null);
+    bgCheckDone.current = false;
 
-  return { ...state, loading };
+    // Run background check once after mount
+    const timer = setTimeout(() => {
+      if (!bgCheckDone.current) {
+        bgCheckDone.current = true;
+        checkBackground();
+      }
+    }, 500); // Small delay to not compete with initial render
+
+    // Periodic recheck
+    const interval = setInterval(() => checkBackground(), RECHECK_INTERVAL);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [workspaceId, wsLoading]); // intentionally not including checkBackground to avoid loops
+
+  const result = override || localAccess;
+  return { ...result, loading: wsLoading };
 }

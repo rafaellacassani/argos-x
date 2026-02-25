@@ -181,7 +181,7 @@ export function useDashboardData(period: string, userId: string | null = null) {
       // Build lead queries with optional userId filter
       let leadsQuery = supabase
         .from("leads")
-        .select("*")
+        .select("id, name, phone, source, stage_id, created_at, responsible_user, value, status")
         .eq("workspace_id", workspaceId!)
         .gte("created_at", startISO)
         .order("created_at", { ascending: false });
@@ -210,7 +210,7 @@ export function useDashboardData(period: string, userId: string | null = null) {
         prevMetaMessagesRes,
         activeLeadsRes,
         membersRes,
-        profilesRes,
+        _profilesPlaceholder,
         salesRes,
         waMessagesRes,
         prevWaMessagesRes,
@@ -236,7 +236,8 @@ export function useDashboardData(period: string, userId: string | null = null) {
           .select("user_id, role")
           .eq("workspace_id", workspaceId!)
           .not("accepted_at", "is", null),
-        supabase.from("user_profiles").select("id, user_id, full_name, avatar_url"),
+        // Placeholder — will resolve profiles after members are fetched
+        Promise.resolve({ data: null, error: null }),
         supabase
           .from("lead_sales")
           .select("id, lead_id, created_at, value")
@@ -273,6 +274,17 @@ export function useDashboardData(period: string, userId: string | null = null) {
       }));
       const allPrevMessages = [...prevMetaMsgs, ...prevWaMsgs];
 
+      // Fetch profiles filtered by workspace member user_ids
+      const memberUserIds = (membersRes.data || []).map((m: any) => m.user_id);
+      let profilesData: any[] = [];
+      if (memberUserIds.length > 0) {
+        const { data } = await supabase
+          .from("user_profiles")
+          .select("id, user_id, full_name, avatar_url")
+          .in("user_id", memberUserIds);
+        profilesData = data || [];
+      }
+
       return {
         leads: leadsRes.data || [],
         prevLeads: prevLeadsRes.data || [],
@@ -281,7 +293,7 @@ export function useDashboardData(period: string, userId: string | null = null) {
         prevMessages: allPrevMessages,
         activeLeads: activeLeadsRes.data || [],
         members: membersRes.data || [],
-        profiles: profilesRes.data || [],
+        profiles: profilesData,
         sales: salesRes.data || [],
       };
     },
