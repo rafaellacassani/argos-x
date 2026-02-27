@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_attachments: {
+        Row: {
+          agent_id: string
+          created_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          mime_type: string | null
+          workspace_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          mime_type?: string | null
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          mime_type?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_attachments_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_attachments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_executions: {
         Row: {
           agent_id: string
@@ -254,6 +305,7 @@ export type Database = {
           response_delay_seconds: number | null
           response_length: string | null
           resume_keyword: string | null
+          style_analysis: string | null
           system_prompt: string
           temperature: number | null
           tone_of_voice: string | null
@@ -263,6 +315,7 @@ export type Database = {
           type: string
           updated_at: string
           use_emojis: boolean | null
+          website_url: string | null
           workspace_id: string
         }
         Insert: {
@@ -297,6 +350,7 @@ export type Database = {
           response_delay_seconds?: number | null
           response_length?: string | null
           resume_keyword?: string | null
+          style_analysis?: string | null
           system_prompt: string
           temperature?: number | null
           tone_of_voice?: string | null
@@ -306,6 +360,7 @@ export type Database = {
           type?: string
           updated_at?: string
           use_emojis?: boolean | null
+          website_url?: string | null
           workspace_id: string
         }
         Update: {
@@ -340,6 +395,7 @@ export type Database = {
           response_delay_seconds?: number | null
           response_length?: string | null
           resume_keyword?: string | null
+          style_analysis?: string | null
           system_prompt?: string
           temperature?: number | null
           tone_of_voice?: string | null
@@ -349,6 +405,7 @@ export type Database = {
           type?: string
           updated_at?: string
           use_emojis?: boolean | null
+          website_url?: string | null
           workspace_id?: string
         }
         Relationships: [
