@@ -8,6 +8,226 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
 
+// Plan definitions by Stripe Price ID
+function getPlanConfig(priceId: string, env: Record<string, string | undefined>) {
+  const priceEssencial = env.STRIPE_PRICE_ESSENCIAL;
+  const priceNegocio = env.STRIPE_PRICE_NEGOCIO;
+  const priceEscala = env.STRIPE_PRICE_ESCALA;
+
+  if (priceId === priceEssencial) {
+    return { plan_name: "essencial", lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };
+  }
+  if (priceId === priceNegocio) {
+    return { plan_name: "negocio", lead_limit: 2000, whatsapp_limit: 3, user_limit: 1, ai_interactions_limit: 2000 };
+  }
+  if (priceId === priceEscala) {
+    return { plan_name: "escala", lead_limit: 999999, whatsapp_limit: 999, user_limit: 3, ai_interactions_limit: 10000 };
+  }
+  return { plan_name: "essencial", lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };
+}
+
+async function createWorkspaceForCustomer(
+  supabaseAdmin: any,
+  stripeCustomerId: string,
+  subscriptionId: string,
+  priceId: string | null
+) {
+  // Check if workspace already exists for this customer
+  const { data: existingWs } = await supabaseAdmin
+    .from("workspaces")
+    .select("id")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .maybeSingle();
+
+  if (existingWs) {
+    console.log("Workspace already exists for customer:", stripeCustomerId);
+    return;
+  }
+
+  const env = {
+    STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+    STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+    STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+  };
+
+  const planConfig = getPlanConfig(priceId || "", env);
+
+  // Get customer info from Stripe
+  const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" });
+  const customer = await stripe.customers.retrieve(stripeCustomerId) as Stripe.Customer;
+
+  const email = customer.email;
+  const fullName = customer.name || customer.email || "Cliente";
+
+  if (!email) {
+    console.error("Customer has no email, cannot create workspace:", stripeCustomerId);
+    return;
+  }
+
+  // 1. Create or find user
+  let userId: string;
+  const randomPassword = crypto.randomUUID() + "Aa1!";
+
+  const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password: randomPassword,
+    email_confirm: true,
+  });
+
+  if (createError) {
+    if (
+      createError.message?.includes("already been registered") ||
+      createError.message?.includes("already exists")
+    ) {
+      const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const foundUser = allUsers?.users?.find((u: any) => u.email === email);
+      if (!foundUser) {
+        console.error("User exists but could not be found:", email);
+        return;
+      }
+      userId = foundUser.id;
+    } else {
+      throw createError;
+    }
+  } else {
+    userId = newUser.user.id;
+  }
+
+  // 2. Upsert user_profiles
+  await supabaseAdmin.from("user_profiles").upsert(
+    { user_id: userId, full_name: fullName, email, phone: (customer as any).phone || null },
+    { onConflict: "user_id" }
+  );
+
+  // 3. Create workspace
+  const slug = fullName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  const { data: workspace, error: wsError } = await supabaseAdmin
+    .from("workspaces")
+    .insert({
+      name: fullName,
+      slug: `${slug}-${Date.now()}`,
+      created_by: userId,
+      plan_name: planConfig.plan_name,
+      plan_type: "trialing",
+      subscription_status: "trialing",
+      stripe_customer_id: stripeCustomerId,
+      stripe_subscription_id: subscriptionId,
+      stripe_price_id: priceId,
+      lead_limit: planConfig.lead_limit,
+      whatsapp_limit: planConfig.whatsapp_limit,
+      user_limit: planConfig.user_limit,
+      ai_interactions_limit: planConfig.ai_interactions_limit,
+    })
+    .select()
+    .single();
+
+  if (wsError) throw wsError;
+
+  // 4. Add user as admin member
+  await supabaseAdmin.from("workspace_members").insert({
+    workspace_id: workspace.id,
+    user_id: userId,
+    role: "admin",
+    accepted_at: new Date().toISOString(),
+  });
+
+  // 5. Create default funnel + stages
+  const { data: funnel } = await supabaseAdmin
+    .from("funnels")
+    .insert({ name: "Funil de Vendas", workspace_id: workspace.id, is_default: true })
+    .select()
+    .single();
+
+  if (funnel) {
+    const defaultStages = [
+      { name: "Leads de Entrada", color: "#6B7280", position: 0 },
+      { name: "Em Qualificação", color: "#0171C3", position: 1 },
+      { name: "Lixo", color: "#EF4444", position: 2, is_loss_stage: true },
+      { name: "Reunião Agendada", color: "#F59E0B", position: 3 },
+      { name: "Venda Realizada", color: "#22C55E", position: 4, is_win_stage: true },
+      { name: "No Show", color: "#8B5CF6", position: 5 },
+    ];
+
+    for (const stage of defaultStages) {
+      await supabaseAdmin.from("funnel_stages").insert({
+        funnel_id: funnel.id,
+        workspace_id: workspace.id,
+        ...stage,
+      });
+    }
+  }
+
+  // 6. Generate password recovery link
+  try {
+    const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo: "https://argosx.com.br/auth/reset-password" },
+    });
+
+    if (linkData?.properties?.action_link) {
+      // Send welcome email with password setup link
+      const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+      if (RESEND_API_KEY) {
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: "Argos X <onboarding@resend.dev>",
+            to: [email],
+            subject: `Bem-vindo ao Argos X, ${fullName}! 🎉`,
+            html: `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr><td style="background:#0171C3;padding:32px 40px;text-align:center;">
+          <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;">Argos X</h1>
+        </td></tr>
+        <tr><td style="padding:40px;">
+          <h2 style="margin:0 0 16px;color:#18181b;font-size:20px;">Bem-vindo(a), ${fullName}! 🎉</h2>
+          <p style="margin:0 0 16px;color:#52525b;font-size:15px;line-height:1.6;">
+            Sua assinatura do plano <strong>${planConfig.plan_name.charAt(0).toUpperCase() + planConfig.plan_name.slice(1)}</strong> foi confirmada com sucesso!
+          </p>
+          <p style="margin:0 0 24px;color:#52525b;font-size:15px;line-height:1.6;">
+            Para acessar sua conta, clique no botão abaixo e defina sua senha:
+          </p>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td align="center">
+              <a href="${linkData.properties.action_link}" target="_blank" style="display:inline-block;background:#0171C3;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                Definir Senha e Acessar
+              </a>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:24px 40px;background:#fafafa;text-align:center;">
+          <p style="margin:0;color:#a1a1aa;font-size:12px;">© ${new Date().getFullYear()} Argos X</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`,
+          }),
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("Could not send welcome email:", e);
+  }
+
+  console.log("Workspace created successfully for customer:", stripeCustomerId, "workspace:", workspace.id);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -47,21 +267,48 @@ serve(async (req) => {
 
   try {
     switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const customerId = session.customer as string;
+        const subscriptionId = session.subscription as string;
+
+        if (customerId && subscriptionId) {
+          // Get subscription to find price ID
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+          const priceId = subscription.items?.data?.[0]?.price?.id || null;
+
+          await createWorkspaceForCustomer(supabaseAdmin, customerId, subscriptionId, priceId);
+        }
+        break;
+      }
+
       case "customer.subscription.created": {
         const subscription = event.data.object as Stripe.Subscription;
-        await supabaseAdmin
+        const customerId = subscription.customer as string;
+        const priceId = (subscription as any).items?.data?.[0]?.price?.id || null;
+
+        // Update existing workspace if it exists
+        const { data: existingWs } = await supabaseAdmin
           .from("workspaces")
-          .update({
-            subscription_status: "trialing",
-            plan_type: "trialing",
-            stripe_subscription_id: subscription.id,
-            stripe_price_id: (subscription as any).items?.data?.[0]?.price?.id || null,
-            trial_end: subscription.trial_end
-              ? new Date(subscription.trial_end * 1000).toISOString()
-              : null,
-            blocked_at: null,
-          })
-          .eq("stripe_customer_id", subscription.customer as string);
+          .select("id")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+
+        if (existingWs) {
+          await supabaseAdmin
+            .from("workspaces")
+            .update({
+              subscription_status: "trialing",
+              plan_type: "trialing",
+              stripe_subscription_id: subscription.id,
+              stripe_price_id: priceId,
+              trial_end: subscription.trial_end
+                ? new Date(subscription.trial_end * 1000).toISOString()
+                : null,
+              blocked_at: null,
+            })
+            .eq("id", existingWs.id);
+        }
         break;
       }
 
@@ -112,7 +359,6 @@ serve(async (req) => {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
 
-        // Check if already past_due for more than 3 days
         const { data: ws } = await supabaseAdmin
           .from("workspaces")
           .select("subscription_status, blocked_at")
@@ -124,7 +370,6 @@ serve(async (req) => {
         };
 
         if (ws?.subscription_status === "past_due" && !ws?.blocked_at) {
-          // Already past_due, block now
           updates.blocked_at = new Date().toISOString();
           updates.plan_type = "blocked";
         }

@@ -238,9 +238,12 @@ export default function AdminClients() {
 
       if (data?.url) {
         setGeneratedUrl(data.url);
+        const emailMsg = data.emailSent
+          ? "Link gerado e e-mail enviado ao cliente!"
+          : "Link gerado! Copie e envie ao cliente manualmente.";
         toast({
-          title: "Link gerado!",
-          description: "Copie o link e envie ao cliente.",
+          title: data.emailSent ? "E-mail enviado! ✉️" : "Link gerado!",
+          description: emailMsg,
         });
       }
     } catch (err: any) {

@@ -184,11 +184,39 @@ serve(async (req) => {
           cancelUrl || "https://argosx.com.br/admin/clients",
       });
 
+      // Send email with checkout link via Resend
+      let emailSent = false;
+      const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+      if (RESEND_API_KEY && session.url) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const emailRes = await fetch(`${supabaseUrl}/functions/v1/send-onboarding-email`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${serviceRoleKey}`,
+            },
+            body: JSON.stringify({
+              to: email,
+              fullName,
+              checkoutUrl: session.url,
+              plan,
+            }),
+          });
+          const emailData = await emailRes.json();
+          emailSent = !!emailData?.success;
+        } catch (e) {
+          console.warn("Failed to send onboarding email:", e);
+        }
+      }
+
       return new Response(
         JSON.stringify({
           url: session.url,
           customerId: customer.id,
           sessionId: session.id,
+          emailSent,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
