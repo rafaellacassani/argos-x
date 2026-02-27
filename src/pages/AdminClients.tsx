@@ -120,7 +120,7 @@ export default function AdminClients() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Form state
-  const [formPlan, setFormPlan] = useState("semente");
+  const [formPlan, setFormPlan] = useState("essencial");
   const [formEmail, setFormEmail] = useState("");
   const [formName, setFormName] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -148,7 +148,7 @@ export default function AdminClients() {
   const [inviteLink, setInviteLink] = useState("");
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [planClient, setPlanClient] = useState<ClientData | null>(null);
-  const [planSelected, setPlanSelected] = useState("semente");
+  const [planSelected, setPlanSelected] = useState("essencial");
 
   // Limits editor state
   const [limitsClient, setLimitsClient] = useState<ClientData | null>(null);
@@ -306,7 +306,7 @@ export default function AdminClients() {
   };
 
   const handleResetForm = () => {
-    setFormPlan("semente");
+    setFormPlan("essencial");
     setFormEmail("");
     setFormName("");
     setFormPhone("");
@@ -835,7 +835,7 @@ export default function AdminClients() {
                               <Pencil className="w-4 h-4 mr-2" />
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setPlanClient(client); setPlanSelected("semente"); }}>
+                            <DropdownMenuItem onClick={() => { setPlanClient(client); setPlanSelected("essencial"); }}>
                               <CreditCard className="w-4 h-4 mr-2" />
                               Ativar plano
                             </DropdownMenuItem>

@@ -9,13 +9,13 @@ import { toast } from "@/hooks/use-toast";
 const WHATSAPP_NUMBER = "5500000000000"; // configurar número real
 
 const planIcons: Record<string, React.ReactNode> = {
-  semente: <Zap className="w-6 h-6" />,
+  essencial: <Zap className="w-6 h-6" />,
   negocio: <Crown className="w-6 h-6" />,
   escala: <Rocket className="w-6 h-6" />,
 };
 
 const planFeatures: Record<string, string[]> = {
-  semente: [
+  essencial: [
     "1 conexão WhatsApp",
     "300 leads",
     "1 usuário",
@@ -39,7 +39,7 @@ const planFeatures: Record<string, string[]> = {
 };
 
 const planColorClasses: Record<string, { border: string; bg: string; text: string; button: string }> = {
-  semente: {
+  essencial: {
     border: "border-emerald-500/40",
     bg: "bg-emerald-500/10",
     text: "text-emerald-600 dark:text-emerald-400",

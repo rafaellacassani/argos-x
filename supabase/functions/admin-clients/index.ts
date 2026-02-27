@@ -142,7 +142,7 @@ serve(async (req) => {
       });
 
       const priceMap: Record<string, string | undefined> = {
-        semente: Deno.env.get("STRIPE_PRICE_SEMENTE"),
+        essencial: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
         negocio: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
         escala: Deno.env.get("STRIPE_PRICE_ESCALA"),
       };

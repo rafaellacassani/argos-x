@@ -362,7 +362,7 @@ const trainingSections: Section[] = [
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left py-2 px-3 font-semibold">Plano</th>
-                <th className="text-center py-2 px-3 font-semibold">Semente</th>
+                <th className="text-center py-2 px-3 font-semibold">Essencial</th>
                 <th className="text-center py-2 px-3 font-semibold">Negócio</th>
                 <th className="text-center py-2 px-3 font-semibold">Escala</th>
               </tr>
@@ -415,7 +415,7 @@ const trainingSections: Section[] = [
           Quanto você perde por mês quando um cliente manda mensagem e ninguém responde? O Argos se paga no primeiro cliente que você não perde.
         </ReadyPhrase>
         <ReadyPhrase>
-          É menos de R$ 3 por dia no plano Semente. Custa menos que um cafezinho e resolve um problema que te custa milhares.
+          É menos de R$ 3 por dia no plano Essencial. Custa menos que um cafezinho e resolve um problema que te custa milhares.
         </ReadyPhrase>
       </>
     ),
@@ -430,7 +430,7 @@ const faqItems = [
   { q: "Meus funcionários vão ver minhas conversas pessoais?", a: "Não! Cada vendedor só vê as conversas dos clientes atribuídos a ele. O dono controla quem vê o quê." },
   { q: "E se eu cancelar, perco meus dados?", a: "Seus dados ficam guardados por 90 dias após o cancelamento. Você pode exportar seus contatos e conversas a qualquer momento." },
   { q: "Preciso de computador pra usar?", a: "Não é obrigatório. Funciona no celular. Mas recomendamos o computador pra quem tem muitas conversas, porque a tela maior facilita." },
-  { q: "Quantas pessoas podem usar?", a: "Depende do plano: Semente (2 usuários), Negócio (5 usuários), Escala (15 usuários). Cada pessoa tem seu login individual." },
+  { q: "Quantas pessoas podem usar?", a: "Depende do plano: Essencial (2 usuários), Negócio (5 usuários), Escala (15 usuários). Cada pessoa tem seu login individual." },
   { q: "Tem contrato de fidelidade?", a: "Não! É mensal, sem fidelidade. Você pode cancelar quando quiser, sem multa." },
   { q: "Como funciona o robô de IA?", a: "Você ensina o robô com as perguntas e respostas mais comuns do seu negócio. Ele responde automaticamente usando linguagem natural, como se fosse uma pessoa de verdade." },
   { q: "O que acontece se eu atingir o limite de leads?", a: "Você pode comprar pacotes extras de leads a qualquer momento, ou fazer upgrade para um plano maior. Os leads existentes continuam normais." },
