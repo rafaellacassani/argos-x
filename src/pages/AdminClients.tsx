@@ -253,12 +253,15 @@ export default function AdminClients() {
 
       if (data?.url) {
         setGeneratedUrl(data.url);
-        const emailMsg = data.emailSent
-          ? "Link gerado e e-mail enviado ao cliente!"
+        const channels: string[] = [];
+        if (data.emailSent) channels.push("e-mail");
+        if (data.whatsappSent) channels.push("WhatsApp");
+        const channelMsg = channels.length > 0
+          ? `Link enviado via ${channels.join(" e ")}!`
           : "Link gerado! Copie e envie ao cliente manualmente.";
         toast({
-          title: data.emailSent ? "E-mail enviado! ✉️" : "Link gerado!",
-          description: emailMsg,
+          title: channels.length > 0 ? "Convite enviado! ✉️" : "Link gerado!",
+          description: channelMsg,
         });
       }
     } catch (err: any) {
@@ -313,7 +316,8 @@ export default function AdminClients() {
         setFreeRecoveryLink(data.recoveryLink);
       }
 
-      toast({ title: "Workspace criado!", description: `Workspace gratuito criado para ${freeName}.` });
+      const waMsg = data?.whatsappSent ? " Convite também enviado via WhatsApp!" : "";
+      toast({ title: "Workspace criado!", description: `Workspace gratuito criado para ${freeName}.${waMsg}` });
       fetchClients();
     } catch (err: any) {
       console.error("Error creating free workspace:", err);
