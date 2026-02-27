@@ -81,7 +81,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "Argos X <onboarding@resend.dev>",
+        from: "Argos X <noreply@argosx.com.br>",
         to: [to],
         subject: `${fullName}, sua assinatura do Argos X está pronta!`,
         html,
