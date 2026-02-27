@@ -63,6 +63,122 @@ serve(async (req) => {
     const action = body.action || "list";
 
     // ──────────────────────────────────────
+    // Helper: create lead in admin workspace with tag
+    // ──────────────────────────────────────
+    const createLeadForInvite = async (adminUserId: string, name: string, email: string, phone: string, plan: string) => {
+      try {
+        // Get admin's workspace
+        const { data: adminMember } = await supabaseAdmin
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", adminUserId)
+          .not("accepted_at", "is", null)
+          .limit(1)
+          .single();
+
+        if (!adminMember) return;
+
+        const workspaceId = adminMember.workspace_id;
+
+        // Get default funnel's first stage
+        const { data: funnel } = await supabaseAdmin
+          .from("funnels")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("is_default", true)
+          .limit(1)
+          .single();
+
+        if (!funnel) return;
+
+        const { data: stage } = await supabaseAdmin
+          .from("funnel_stages")
+          .select("id")
+          .eq("funnel_id", funnel.id)
+          .order("position", { ascending: true })
+          .limit(1)
+          .single();
+
+        if (!stage) return;
+
+        // Create or find tag "convite enviado"
+        let tagId: string;
+        const { data: existingTag } = await supabaseAdmin
+          .from("lead_tags")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("name", "convite enviado")
+          .limit(1)
+          .single();
+
+        if (existingTag) {
+          tagId = existingTag.id;
+        } else {
+          const { data: newTag } = await supabaseAdmin
+            .from("lead_tags")
+            .insert({ workspace_id: workspaceId, name: "convite enviado", color: "#F59E0B" })
+            .select("id")
+            .single();
+          if (!newTag) return;
+          tagId = newTag.id;
+        }
+
+        // Check if lead with this phone/email already exists
+        const phoneClean = (phone || "").replace(/\D/g, "");
+        let existingLead = null;
+        if (phoneClean) {
+          const { data } = await supabaseAdmin
+            .from("leads")
+            .select("id")
+            .eq("workspace_id", workspaceId)
+            .eq("phone", phoneClean)
+            .limit(1)
+            .single();
+          existingLead = data;
+        }
+
+        let leadId: string;
+        if (existingLead) {
+          leadId = existingLead.id;
+        } else {
+          const { data: newLead } = await supabaseAdmin
+            .from("leads")
+            .insert({
+              workspace_id: workspaceId,
+              name,
+              phone: phoneClean || "sem-telefone",
+              email: email || null,
+              stage_id: stage.id,
+              source: "admin",
+              notes: `Plano: ${plan}`,
+              responsible_user: adminUserId,
+            })
+            .select("id")
+            .single();
+          if (!newLead) return;
+          leadId = newLead.id;
+        }
+
+        // Assign tag
+        const { data: existingAssignment } = await supabaseAdmin
+          .from("lead_tag_assignments")
+          .select("id")
+          .eq("lead_id", leadId)
+          .eq("tag_id", tagId)
+          .limit(1)
+          .single();
+
+        if (!existingAssignment) {
+          await supabaseAdmin
+            .from("lead_tag_assignments")
+            .insert({ lead_id: leadId, tag_id: tagId, workspace_id: workspaceId });
+        }
+      } catch (e) {
+        console.warn("createLeadForInvite failed:", e);
+      }
+    };
+
+    // ──────────────────────────────────────
     // ACTION: LIST
     // ──────────────────────────────────────
     if (action === "list") {
@@ -114,7 +230,14 @@ serve(async (req) => {
         })
       );
 
-      return new Response(JSON.stringify({ clients: enriched }), {
+      // Fetch pending invites (no workspace yet)
+      const { data: invites } = await supabaseAdmin
+        .from("client_invites")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      return new Response(JSON.stringify({ clients: enriched, invites: invites || [] }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -210,6 +333,22 @@ serve(async (req) => {
           console.warn("Failed to send onboarding email:", e);
         }
       }
+
+      // Save invite record
+      await supabaseAdmin.from("client_invites").insert({
+        email,
+        full_name: fullName,
+        phone: phone || null,
+        plan,
+        invite_type: "checkout",
+        status: "pending",
+        checkout_url: session.url,
+        stripe_customer_id: customer.id,
+        created_by: user.id,
+      });
+
+      // Auto-create lead in admin's funnel with tag "convite enviado"
+      await createLeadForInvite(user.id, fullName, email, phone || "", plan);
 
       return new Response(
         JSON.stringify({
@@ -382,6 +521,21 @@ serve(async (req) => {
       } catch (e) {
         console.warn("Could not generate recovery link:", e);
       }
+
+      // Save invite record (completed since workspace was created immediately)
+      await supabaseAdmin.from("client_invites").insert({
+        email,
+        full_name: fullName,
+        phone: phone || null,
+        plan: "gratuito",
+        invite_type: "free",
+        status: "completed",
+        workspace_id: workspace.id,
+        created_by: user.id,
+      });
+
+      // Auto-create lead in admin's funnel with tag "convite enviado"
+      await createLeadForInvite(user.id, fullName, email, phone || "", "gratuito");
 
       return new Response(
         JSON.stringify({ success: true, workspace, recoveryLink }),

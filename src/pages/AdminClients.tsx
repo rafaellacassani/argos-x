@@ -109,12 +109,27 @@ interface ClientData {
   instances_count: number;
 }
 
+interface InviteData {
+  id: string;
+  email: string;
+  full_name: string;
+  phone: string | null;
+  plan: string;
+  invite_type: string;
+  status: string;
+  checkout_url: string | null;
+  stripe_customer_id: string | null;
+  workspace_id: string | null;
+  created_at: string;
+}
+
 export default function AdminClients() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientData[]>([]);
+  const [invites, setInvites] = useState<InviteData[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedClient, setSelectedClient] = useState<ClientData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -185,8 +200,8 @@ export default function AdminClients() {
         body: { action: "list" },
       });
 
-      if (error) throw error;
       setClients(data?.clients || []);
+      setInvites(data?.invites || []);
     } catch (err) {
       console.error("Error fetching clients:", err);
       toast({
@@ -512,6 +527,10 @@ export default function AdminClients() {
           <TabsTrigger value="clients" className="gap-2">
             <Users className="w-4 h-4" />
             Clientes ({clients.length})
+          </TabsTrigger>
+          <TabsTrigger value="invites" className="gap-2">
+            <Mail className="w-4 h-4" />
+            Convites Pendentes ({invites.length})
           </TabsTrigger>
         </TabsList>
 
@@ -856,6 +875,72 @@ export default function AdminClients() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </TabsContent>
+
+        {/* ───────── TAB: CONVITES PENDENTES ───────── */}
+        <TabsContent value="invites" className="space-y-4">
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>E-mail</TableHead>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Criado em</TableHead>
+                  <TableHead className="w-10"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invites.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      Nenhum convite pendente.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  invites.map((invite) => (
+                    <TableRow key={invite.id}>
+                      <TableCell className="font-medium">{invite.full_name}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{invite.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize">{invite.plan}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={invite.invite_type === "checkout" ? "secondary" : "outline"}>
+                          {invite.invite_type === "checkout" ? "Stripe" : "Gratuito"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="destructive" className="bg-amber-500/10 text-amber-600 border-amber-200">
+                          Aguardando
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {format(new Date(invite.created_at), "dd/MM/yyyy HH:mm")}
+                      </TableCell>
+                      <TableCell>
+                        {invite.checkout_url && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={async () => {
+                              await navigator.clipboard.writeText(invite.checkout_url!);
+                              toast({ title: "Link de checkout copiado!" });
+                            }}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
