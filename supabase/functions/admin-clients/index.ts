@@ -63,6 +63,90 @@ serve(async (req) => {
     const action = body.action || "list";
 
     // ──────────────────────────────────────
+    // Helper: send WhatsApp invite message
+    // ──────────────────────────────────────
+    const sendWhatsAppInvite = async (phone: string, name: string, plan: string, link: string) => {
+      try {
+        const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+        const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+        if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+          console.warn("Evolution API not configured, skipping WhatsApp invite");
+          return false;
+        }
+
+        // Find the admin's alert instance or any available instance
+        const { data: adminMember } = await supabaseAdmin
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", user.id)
+          .not("accepted_at", "is", null)
+          .limit(1)
+          .single();
+
+        if (!adminMember) return false;
+
+        // Try alert instance first, then any commercial instance
+        const { data: alertWs } = await supabaseAdmin
+          .from("workspaces")
+          .select("alert_instance_name")
+          .eq("id", adminMember.workspace_id)
+          .single();
+
+        let instanceName = alertWs?.alert_instance_name;
+
+        if (!instanceName) {
+          const { data: instances } = await supabaseAdmin
+            .from("whatsapp_instances")
+            .select("instance_name")
+            .eq("workspace_id", adminMember.workspace_id)
+            .limit(1)
+            .single();
+          instanceName = instances?.instance_name;
+        }
+
+        if (!instanceName) {
+          console.warn("No WhatsApp instance available for admin workspace");
+          return false;
+        }
+
+        // Clean phone number
+        let cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+          cleanPhone = "55" + cleanPhone;
+        }
+
+        const planLabel = plan === "gratuito" ? "Gratuito" : plan.charAt(0).toUpperCase() + plan.slice(1);
+
+        const message = `Olá, ${name}! 👋\n\nSua conta *Argos X* (Plano ${planLabel}) está quase pronta!\n\nClique no link abaixo para concluir seu cadastro:\n${link}\n\nQualquer dúvida, estamos à disposição! 🚀`;
+
+        const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+        const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: EVOLUTION_API_KEY,
+          },
+          body: JSON.stringify({
+            number: cleanPhone,
+            text: message,
+          }),
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn("WhatsApp send failed:", response.status, errText);
+          return false;
+        }
+
+        console.log("WhatsApp invite sent to", cleanPhone);
+        return true;
+      } catch (e) {
+        console.warn("sendWhatsAppInvite failed:", e);
+        return false;
+      }
+    };
+
+    // ──────────────────────────────────────
     // Helper: create lead in admin workspace with tag
     // ──────────────────────────────────────
     const createLeadForInvite = async (adminUserId: string, name: string, email: string, phone: string, plan: string) => {
@@ -350,12 +434,19 @@ serve(async (req) => {
       // Auto-create lead in admin's funnel with tag "convite enviado"
       await createLeadForInvite(user.id, fullName, email, phone || "", plan);
 
+      // Send WhatsApp invite if phone is provided
+      let whatsappSent = false;
+      if (phone && session.url) {
+        whatsappSent = await sendWhatsAppInvite(phone, fullName, plan, session.url);
+      }
+
       return new Response(
         JSON.stringify({
           url: session.url,
           customerId: customer.id,
           sessionId: session.id,
           emailSent,
+          whatsappSent,
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -537,8 +628,14 @@ serve(async (req) => {
       // Auto-create lead in admin's funnel with tag "convite enviado"
       await createLeadForInvite(user.id, fullName, email, phone || "", "gratuito");
 
+      // Send WhatsApp invite if phone is provided
+      let whatsappSent = false;
+      if (phone && recoveryLink) {
+        whatsappSent = await sendWhatsAppInvite(phone, fullName, "gratuito", recoveryLink);
+      }
+
       return new Response(
-        JSON.stringify({ success: true, workspace, recoveryLink }),
+        JSON.stringify({ success: true, workspace, recoveryLink, whatsappSent }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
