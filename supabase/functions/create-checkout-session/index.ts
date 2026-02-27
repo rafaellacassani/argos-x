@@ -8,6 +8,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const PLAN_PRICE_MAP: Record<string, string> = {
+  essencial: "STRIPE_PRICE_ESSENCIAL",
+  negocio: "STRIPE_PRICE_NEGOCIO",
+  escala: "STRIPE_PRICE_ESCALA",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -33,20 +39,50 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseUser.auth.getUser();
+
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claimsData.claims.sub;
 
-    const { workspaceId, priceId, successUrl, cancelUrl } = await req.json();
-    if (!workspaceId || !priceId || !successUrl || !cancelUrl) {
+    const body = await req.json();
+    const { workspaceId, plan, priceId: directPriceId, successUrl, cancelUrl } = body;
+
+    if (!workspaceId || !successUrl || !cancelUrl) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
+        JSON.stringify({ error: "Missing required fields: workspaceId, successUrl, cancelUrl" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Resolve priceId: either from plan name or direct priceId
+    let priceId = directPriceId;
+    if (!priceId && plan) {
+      const envKey = PLAN_PRICE_MAP[plan];
+      if (!envKey) {
+        return new Response(
+          JSON.stringify({ error: `Plano inválido: "${plan}". Use: essencial, negocio ou escala.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      priceId = Deno.env.get(envKey);
+      if (!priceId) {
+        return new Response(
+          JSON.stringify({ error: `Stripe Price ID não configurado para o plano "${plan}". Configure o secret ${envKey}.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    if (!priceId) {
+      return new Response(
+        JSON.stringify({ error: "Informe 'plan' ou 'priceId'." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -69,7 +105,7 @@ serve(async (req) => {
     const { data: profile } = await supabaseAdmin
       .from("user_profiles")
       .select("email, full_name")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .single();
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
@@ -100,9 +136,9 @@ serve(async (req) => {
       mode: "subscription",
       subscription_data: {
         trial_period_days: 7,
-        metadata: { workspace_id: workspaceId },
+        metadata: { workspace_id: workspaceId, plan: plan || "unknown" },
       },
-      success_url: successUrl + "?session_id={CHECKOUT_SESSION_ID}",
+      success_url: successUrl + (successUrl.includes("?") ? "&" : "?") + "session_id={CHECKOUT_SESSION_ID}",
       cancel_url: cancelUrl,
       metadata: { workspace_id: workspaceId },
     });

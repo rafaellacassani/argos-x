@@ -1,42 +1,18 @@
 import { Lock, CreditCard, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "@/hooks/useWorkspace";
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 interface WorkspaceBlockedScreenProps {
   reason: "blocked" | "canceled" | "past_due";
 }
 
 export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) {
-  const { workspaceId } = useWorkspace();
-  const [loading, setLoading] = useState(false);
-
-  const handleActivatePlan = async () => {
-    if (!workspaceId) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: {
-          workspaceId,
-          priceId: import.meta.env.VITE_STRIPE_PRICE_ID || "",
-          successUrl: window.location.origin + "/dashboard",
-          cancelUrl: window.location.origin + "/dashboard",
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      console.error("Error creating checkout session:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const navigate = useNavigate();
   const isPastDue = reason === "past_due";
+
+  const handleActivatePlan = () => {
+    navigate("/planos");
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">
@@ -63,15 +39,10 @@ export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) 
         <div className="space-y-3">
           <Button
             onClick={handleActivatePlan}
-            disabled={loading}
             className="w-full"
             size="lg"
           >
-            {loading
-              ? "Redirecionando..."
-              : isPastDue
-              ? "Atualizar pagamento"
-              : "Ativar plano"}
+            {isPastDue ? "Ver planos" : "Escolher plano"}
           </Button>
 
           <Button
