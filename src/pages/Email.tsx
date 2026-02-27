@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search,
@@ -17,6 +17,7 @@ import {
   Mail,
   LogOut,
   X,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, isToday, isYesterday } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const folders = [
   { id: "inbox", icon: Inbox, label: "Caixa de Entrada" },
@@ -152,6 +155,51 @@ function ComposeDialog({
 }
 
 export default function EmailPage() {
+  const { user } = useAuth();
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .then(({ data }) => setIsSuperAdmin(!!(data && data.length > 0)));
+  }, [user]);
+
+  if (isSuperAdmin === false) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-md space-y-4"
+        >
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mx-auto">
+            <Clock className="w-10 h-10 text-muted-foreground" />
+          </div>
+          <h2 className="text-2xl font-display font-bold">Em breve</h2>
+          <p className="text-muted-foreground">
+            O módulo de Email está sendo desenvolvido e estará disponível em breve.
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (isSuperAdmin === null) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+        <Mail className="w-8 h-8 animate-pulse text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return <EmailPageContent />;
+}
+
+function EmailPageContent() {
   const {
     emailAccount,
     emails,
