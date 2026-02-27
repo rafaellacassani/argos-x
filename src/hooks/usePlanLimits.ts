@@ -13,8 +13,8 @@ export const PLAN_DEFINITIONS = {
     color: 'gray',
     description: 'Plano gratuito',
   },
-  semente: {
-    name: 'Semente',
+  essencial: {
+    name: 'Essencial',
     price: 47,
     leadLimit: 300,
     whatsappLimit: 1,
@@ -88,7 +88,7 @@ export function usePlanLimits(): PlanLimits {
   const { workspace, workspaceId } = useWorkspace();
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<Omit<PlanLimits, "canAddWhatsapp" | "canAddUser" | "loading" | "refetch">>({
-    planName: "semente",
+    planName: "essencial",
     leadLimit: 300,
     extraLeads: 0,
     totalLeadLimit: 300,
@@ -129,7 +129,7 @@ export function usePlanLimits(): PlanLimits {
       const userLimit = ws.user_limit ?? 1;
       const aiInteractionsLimit = ws.ai_interactions_limit ?? 100;
       const aiInteractionsUsed = ws.ai_interactions_used ?? 0;
-      const planName = ws.plan_name ?? "semente";
+      const planName = ws.plan_name ?? "essencial";
 
       // Only 2 queries instead of 3 (leads count + lead_packs)
       const [countResult, packsResult] = await Promise.all([
