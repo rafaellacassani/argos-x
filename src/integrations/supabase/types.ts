@@ -690,6 +690,62 @@ export type Database = {
           },
         ]
       }
+      client_invites: {
+        Row: {
+          checkout_url: string | null
+          created_at: string
+          created_by: string
+          email: string
+          full_name: string
+          id: string
+          invite_type: string
+          phone: string | null
+          plan: string
+          status: string
+          stripe_customer_id: string | null
+          updated_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          checkout_url?: string | null
+          created_at?: string
+          created_by: string
+          email: string
+          full_name: string
+          id?: string
+          invite_type?: string
+          phone?: string | null
+          plan?: string
+          status?: string
+          stripe_customer_id?: string | null
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          checkout_url?: string | null
+          created_at?: string
+          created_by?: string
+          email?: string
+          full_name?: string
+          id?: string
+          invite_type?: string
+          phone?: string | null
+          plan?: string
+          status?: string
+          stripe_customer_id?: string | null
+          updated_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_invites_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_accounts: {
         Row: {
           access_token: string
