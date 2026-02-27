@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
-import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock } from "lucide-react";
+import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
 import { KnowledgeTab } from "./tabs/KnowledgeTab";
@@ -15,6 +15,8 @@ import { QualificationTab } from "./tabs/QualificationTab";
 import { ToolsTab } from "./tabs/ToolsTab";
 import { FollowupTab } from "./tabs/FollowupTab";
 import { AdvancedTab } from "./tabs/AdvancedTab";
+import { AttachmentsTab } from "./tabs/AttachmentsTab";
+import { StyleTab } from "./tabs/StyleTab";
 
 interface AgentDetailDialogProps {
   agent: AIAgent | null;
@@ -26,6 +28,8 @@ interface AgentDetailDialogProps {
 const tabs = [
   { id: "personality", label: "Personalidade", icon: Bot },
   { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen },
+  { id: "attachments", label: "Anexos & Site", icon: Paperclip },
+  { id: "style", label: "Estilo de Atendimento", icon: MessageSquareText },
   { id: "faq", label: "FAQ", icon: HelpCircle },
   { id: "behavior", label: "Comportamento", icon: Settings },
   { id: "qualification", label: "Qualificação", icon: Target },
@@ -68,6 +72,8 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         qualification_fields: (agent as any).qualification_fields || [],
         tools: agent.tools || [],
         on_start_actions: (agent as any).on_start_actions || [],
+        website_url: (agent as any).website_url || "",
+        style_analysis: (agent as any).style_analysis || "",
         trainer_phone: (agent as any).trainer_phone || "",
         followup_enabled: (agent as any).followup_enabled ?? false,
         followup_sequence: (agent as any).followup_sequence || [],
@@ -125,6 +131,8 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
     if (formData.knowledge_products) prompt += `\nProdutos/Serviços:\n${formData.knowledge_products}\n`;
     if (formData.knowledge_rules) prompt += `\nRegras:\n${formData.knowledge_rules}\n`;
     if (formData.knowledge_extra) prompt += `\n${formData.knowledge_extra}\n`;
+    if (formData.website_url) prompt += `\nSite para consulta de produtos/preços: ${formData.website_url}\n`;
+    if (formData.style_analysis) prompt += `\nEstilo de comunicação do atendente (replique este estilo):\n${formData.style_analysis}\n`;
 
     return prompt;
   };
@@ -158,6 +166,8 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
       qualification_fields: formData.qualification_fields,
       tools: formData.tools,
       on_start_actions: formData.on_start_actions,
+      website_url: formData.website_url || null,
+      style_analysis: formData.style_analysis || null,
       trainer_phone: formData.trainer_phone,
       followup_enabled: formData.followup_enabled,
       followup_sequence: formData.followup_sequence,
@@ -242,6 +252,12 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
             )}
             {activeTab === "knowledge" && (
               <KnowledgeTab formData={formData} updateField={updateField} />
+            )}
+            {activeTab === "attachments" && agent && (
+              <AttachmentsTab agentId={agent.id} formData={formData} updateField={updateField} />
+            )}
+            {activeTab === "style" && agent && (
+              <StyleTab agentId={agent.id} formData={formData} updateField={updateField} />
             )}
             {activeTab === "faq" && (
               <FaqTab formData={formData} updateField={updateField} />
