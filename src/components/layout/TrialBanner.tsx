@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useWorkspace } from "@/hooks/useWorkspace";
+import { useNavigate } from "react-router-dom";
 
 interface TrialBannerProps {
   daysRemaining: number;
@@ -11,14 +10,13 @@ interface TrialBannerProps {
 const DISMISS_KEY = "trial_banner_dismissed_at";
 
 export function TrialBanner({ daysRemaining }: TrialBannerProps) {
-  const { workspaceId } = useWorkspace();
+  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(() => {
     const dismissedAt = localStorage.getItem(DISMISS_KEY);
     if (!dismissedAt) return false;
     const elapsed = Date.now() - parseInt(dismissedAt, 10);
     return elapsed < 24 * 60 * 60 * 1000; // 24h
   });
-  const [loading, setLoading] = useState(false);
 
   if (dismissed) return null;
 
@@ -27,26 +25,8 @@ export function TrialBanner({ daysRemaining }: TrialBannerProps) {
     setDismissed(true);
   };
 
-  const handleActivate = async () => {
-    if (!workspaceId) return;
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: {
-          workspaceId,
-          priceId: import.meta.env.VITE_STRIPE_PRICE_ID || "",
-          successUrl: window.location.origin + "/dashboard",
-          cancelUrl: window.location.origin + "/dashboard",
-        },
-      });
-      if (!error && data?.url) {
-        window.location.href = data.url;
-      }
-    } catch (err) {
-      console.error("Error creating checkout:", err);
-    } finally {
-      setLoading(false);
-    }
+  const handleActivate = () => {
+    navigate("/planos");
   };
 
   return (
@@ -63,10 +43,9 @@ export function TrialBanner({ daysRemaining }: TrialBannerProps) {
           size="sm"
           variant="default"
           onClick={handleActivate}
-          disabled={loading}
           className="h-7 text-xs"
         >
-          {loading ? "..." : "Ativar agora"}
+          Ativar agora
         </Button>
         <button
           onClick={handleDismiss}

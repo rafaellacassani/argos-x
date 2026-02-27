@@ -15,7 +15,7 @@ export const PLAN_DEFINITIONS = {
   },
   essencial: {
     name: 'Essencial',
-    price: 47,
+    price: 47.90,
     leadLimit: 300,
     whatsappLimit: 1,
     userLimit: 1,
@@ -25,7 +25,7 @@ export const PLAN_DEFINITIONS = {
   },
   negocio: {
     name: 'Negócio',
-    price: 97,
+    price: 97.90,
     extraUserPrice: 37,
     leadLimit: 2000,
     whatsappLimit: 3,
@@ -36,7 +36,7 @@ export const PLAN_DEFINITIONS = {
   },
   escala: {
     name: 'Escala',
-    price: 197,
+    price: 197.90,
     extraUserPrice: 57,
     leadLimit: 999999,
     whatsappLimit: 999,

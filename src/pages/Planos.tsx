@@ -1,12 +1,18 @@
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Crown, Zap, Rocket, Package } from "lucide-react";
+import { Check, Crown, Zap, Rocket, Package, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePlanLimits, PLAN_DEFINITIONS, LEAD_PACK_DEFINITIONS } from "@/hooks/usePlanLimits";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
-const WHATSAPP_NUMBER = "5500000000000"; // configurar número real
+const PLAN_PRICE_ENV_MAP: Record<string, string> = {
+  essencial: "STRIPE_PRICE_ESSENCIAL",
+  negocio: "STRIPE_PRICE_NEGOCIO",
+  escala: "STRIPE_PRICE_ESCALA",
+};
 
 const planIcons: Record<string, React.ReactNode> = {
   essencial: <Zap className="w-6 h-6" />,
@@ -59,15 +65,41 @@ const planColorClasses: Record<string, { border: string; bg: string; text: strin
   },
 };
 
-function showComingSoon() {
-  toast({
-    title: "Em breve!",
-    description: "Entre em contato pelo WhatsApp para ativar.",
-  });
-}
-
 export default function Planos() {
   const { planName, currentLeadCount, totalLeadLimit, leadUsagePercent } = usePlanLimits();
+  const { workspaceId } = useWorkspace();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+
+  const handleSubscribe = async (planKey: string) => {
+    if (!workspaceId) return;
+    setLoadingPlan(planKey);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: {
+          workspaceId,
+          plan: planKey,
+          successUrl: window.location.origin + "/dashboard?checkout=success",
+          cancelUrl: window.location.origin + "/planos",
+        },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("Nenhuma URL de checkout retornada.");
+      }
+    } catch (err: any) {
+      console.error("Checkout error:", err);
+      toast({
+        title: "Erro ao iniciar checkout",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
 
   return (
     <div className="space-y-10">
@@ -86,8 +118,10 @@ export default function Planos() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {(Object.entries(PLAN_DEFINITIONS) as [string, typeof PLAN_DEFINITIONS[keyof typeof PLAN_DEFINITIONS]][]).map(
             ([key, plan], index) => {
+              if (key === "gratuito") return null;
               const isCurrent = planName === key;
               const colors = planColorClasses[key];
+              const isLoading = loadingPlan === key;
 
               return (
                 <motion.div
@@ -116,7 +150,9 @@ export default function Planos() {
                   </div>
 
                   <div className="mb-5">
-                    <span className="text-3xl font-bold text-foreground">R$ {plan.price}</span>
+                    <span className="text-3xl font-bold text-foreground">
+                      R$ {plan.price.toFixed(2).replace(".", ",")}
+                    </span>
                     <span className="text-muted-foreground text-sm">/mês</span>
                     {"extraUserPrice" in plan && (
                       <p className="text-xs text-muted-foreground mt-1">
@@ -137,10 +173,16 @@ export default function Planos() {
                   <Button
                     className={isCurrent ? "" : colors.button}
                     variant={isCurrent ? "outline" : "default"}
-                    disabled={isCurrent}
-                    onClick={showComingSoon}
+                    disabled={isCurrent || isLoading || !!loadingPlan}
+                    onClick={() => handleSubscribe(key)}
                   >
-                    {isCurrent ? "Plano atual" : "Fazer upgrade"}
+                    {isLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Redirecionando...</>
+                    ) : isCurrent ? (
+                      "Plano atual"
+                    ) : (
+                      "Assinar"
+                    )}
                   </Button>
                 </motion.div>
               );
@@ -177,8 +219,8 @@ export default function Planos() {
                 R$ {pack.price}
                 <span className="text-sm font-normal text-muted-foreground">/mês</span>
               </p>
-              <Button className="mt-4 w-full" variant="outline" onClick={showComingSoon}>
-                Adicionar ao plano
+              <Button className="mt-4 w-full" variant="outline" disabled>
+                Em breve
               </Button>
             </motion.div>
           ))}
