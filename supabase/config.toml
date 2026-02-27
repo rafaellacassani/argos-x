@@ -86,3 +86,6 @@ verify_jwt = false
 
 [functions.admin-clients]
 verify_jwt = false
+
+[functions.send-onboarding-email]
+verify_jwt = false
