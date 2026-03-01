@@ -39,6 +39,8 @@ const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Planos = lazy(() => import("./pages/Planos"));
 const AdminClients = lazy(() => import("./pages/AdminClients"));
 const Treinamento = lazy(() => import("./pages/Treinamento"));
+const Cadastro = lazy(() => import("./pages/Cadastro"));
+const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +87,8 @@ const App = () => (
                   } />
                   <Route path="/privacy-policy" element={<PrivacyPolicy />} />
                   <Route path="/terms" element={<TermsOfService />} />
+                  <Route path="/cadastro" element={<Cadastro />} />
+                  <Route path="/cadastro/sucesso" element={<CadastroSucesso />} />
                   <Route path="/admin/panel" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <AdminPanel />
