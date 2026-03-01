@@ -72,36 +72,53 @@ serve(async (req) => {
     const filterStageIds: string[] = campaign.filter_stage_ids || [];
     const filterResponsibleIds: string[] = campaign.filter_responsible_ids || [];
 
-    let query = supabase
-      .from("leads")
-      .select("id, name, phone, email, company")
-      .eq("workspace_id", campaign.workspace_id)
-      .eq("status", "active");
+    // Fetch ALL leads with pagination (Supabase default limit is 1000)
+    let allLeads: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    while (true) {
+      let query = supabase
+        .from("leads")
+        .select("id, name, phone, email, company")
+        .eq("workspace_id", campaign.workspace_id)
+        .eq("status", "active")
+        .range(from, from + pageSize - 1);
 
-    // Stage filter
-    if (filterStageIds.length > 0) {
-      query = query.in("stage_id", filterStageIds);
+      if (filterStageIds.length > 0) {
+        query = query.in("stage_id", filterStageIds);
+      }
+      if (filterResponsibleIds.length > 0) {
+        query = query.in("responsible_user", filterResponsibleIds);
+      }
+
+      const { data: page, error: pageError } = await query;
+      if (pageError) throw pageError;
+      if (!page || page.length === 0) break;
+      allLeads = allLeads.concat(page);
+      if (page.length < pageSize) break;
+      from += pageSize;
     }
 
-    // Responsible filter
-    if (filterResponsibleIds.length > 0) {
-      query = query.in("responsible_user", filterResponsibleIds);
-    }
-
-    const { data: leads, error: leadsError } = await query;
-    if (leadsError) throw leadsError;
-
-    let filteredLeads = leads || [];
+    let filteredLeads = allLeads;
 
     // Tag filter: leads with ANY of the selected tags
     if (filterTagIds.length > 0) {
-      const { data: tagAssignments } = await supabase
-        .from("lead_tag_assignments")
-        .select("lead_id")
-        .eq("workspace_id", campaign.workspace_id)
-        .in("tag_id", filterTagIds);
+      let allTagAssignments: any[] = [];
+      let tagFrom = 0;
+      while (true) {
+        const { data: tagPage } = await supabase
+          .from("lead_tag_assignments")
+          .select("lead_id")
+          .eq("workspace_id", campaign.workspace_id)
+          .in("tag_id", filterTagIds)
+          .range(tagFrom, tagFrom + pageSize - 1);
+        if (!tagPage || tagPage.length === 0) break;
+        allTagAssignments = allTagAssignments.concat(tagPage);
+        if (tagPage.length < pageSize) break;
+        tagFrom += pageSize;
+      }
 
-      const leadIdsWithTags = new Set((tagAssignments || []).map(t => t.lead_id));
+      const leadIdsWithTags = new Set(allTagAssignments.map(t => t.lead_id));
       filteredLeads = filteredLeads.filter(l => leadIdsWithTags.has(l.id));
     }
 
