@@ -89,3 +89,9 @@ verify_jwt = false
 
 [functions.send-onboarding-email]
 verify_jwt = false
+
+[functions.public-signup]
+verify_jwt = false
+
+[functions.public-checkout]
+verify_jwt = false
