@@ -300,9 +300,59 @@ export function useCampaigns() {
   ): Promise<number> => {
     if (!workspaceId) return 0;
     try {
+      // When tag filter is active, start from tag assignments to avoid the 1000-row limit
+      if (filterTagIds.length > 0) {
+        // Get lead IDs that have any of the selected tags
+        // Paginate tag assignments to handle >1000 rows
+        let allTagAssignments: any[] = [];
+        let tagFrom = 0;
+        const tagPageSize = 1000;
+        while (true) {
+          const { data: tagPage } = await supabase
+            .from('lead_tag_assignments')
+            .select('lead_id')
+            .eq('workspace_id', workspaceId)
+            .in('tag_id', filterTagIds)
+            .range(tagFrom, tagFrom + tagPageSize - 1);
+          if (!tagPage || tagPage.length === 0) break;
+          allTagAssignments = allTagAssignments.concat(tagPage);
+          if (tagPage.length < tagPageSize) break;
+          tagFrom += tagPageSize;
+        }
+
+        const tagLeadIds = [...new Set(allTagAssignments.map(t => t.lead_id))];
+        if (tagLeadIds.length === 0) return 0;
+
+        // Count in batches of 500 to avoid URL length limits
+        let total = 0;
+        for (let i = 0; i < tagLeadIds.length; i += 500) {
+          const batch = tagLeadIds.slice(i, i + 500);
+          let query = supabase
+            .from('leads')
+            .select('id', { count: 'exact', head: true })
+            .eq('workspace_id', workspaceId)
+            .eq('status', 'active')
+            .neq('phone', '')
+            .in('id', batch);
+
+          if (filterStageIds.length > 0) {
+            query = query.in('stage_id', filterStageIds);
+          }
+          if (filterResponsibleIds.length > 0) {
+            query = query.in('responsible_user', filterResponsibleIds);
+          }
+
+          const { count, error } = await query;
+          if (error) throw error;
+          total += count || 0;
+        }
+        return total;
+      }
+
+      // No tag filter — use head:true count (no row limit)
       let query = supabase
         .from('leads')
-        .select('id, phone', { count: 'exact', head: false })
+        .select('id', { count: 'exact', head: true })
         .eq('workspace_id', workspaceId)
         .eq('status', 'active')
         .neq('phone', '');
@@ -314,22 +364,9 @@ export function useCampaigns() {
         query = query.in('responsible_user', filterResponsibleIds);
       }
 
-      const { data: leads, error } = await query;
+      const { count, error } = await query;
       if (error) throw error;
-
-      let filtered = (leads || []).filter(l => (l.phone || '').replace(/\D/g, '').length >= 10);
-
-      if (filterTagIds.length > 0) {
-      const { data: tagAssignments } = await supabase
-          .from('lead_tag_assignments')
-          .select('lead_id')
-          .in('tag_id', filterTagIds);
-
-        const tagLeadIds = new Set((tagAssignments || []).map(t => t.lead_id));
-        filtered = filtered.filter(l => tagLeadIds.has(l.id));
-      }
-
-      return filtered.length;
+      return count || 0;
     } catch {
       return 0;
     }
