@@ -1,129 +1,43 @@
 
-# Documento de Treinamento da Agente de IA -- Argos X CRM
+# Nova Tool: Agendar Follow-up Contextual para Agente de IA
 
-## Objetivo
+## Problema
+Quando um lead diz "me chama depois das 9h amanha", a agente de IA nao tem como agendar esse recontato automaticamente. Hoje isso se perde e depende de acao manual.
 
-Criar um documento completo e pronto para colar na **Base de Conhecimento** da agente de IA, dividido nas 4 seções que o sistema espera:
+## Solucao
+Adicionar uma nova ferramenta (tool) `agendar_followup` ao sistema de IA, permitindo que ela interprete pedidos de agendamento do lead e crie automaticamente uma mensagem programada na tabela `scheduled_messages`.
 
-1. **Produtos, Servicos e Precos** (campo `knowledge_products`)
-2. **Regras e Restricoes** (campo `knowledge_rules`)
-3. **Contexto Adicional** (campo `knowledge_extra`)
-4. **FAQ** (campo `knowledge_faq` -- array de perguntas/respostas)
+## Como vai funcionar (fluxo)
+1. Lead diz: "Me chama depois das 9h amanha"
+2. A IA interpreta e chama a tool `agendar_followup` com data/hora e mensagem
+3. O sistema insere na tabela `scheduled_messages`
+4. O cron `send-scheduled-messages` (ja existe, roda a cada minuto) envia automaticamente no horario correto
+5. O lead recebe a mensagem no WhatsApp no horario combinado
 
-O documento sera escrito em linguagem informal e didatica ("para leigos"), sem termos em ingles, com foco em **vender** o Argos X como solucao.
+## Mudancas Tecnicas
 
----
+### 1. Edge Function `ai-agent-chat/index.ts`
+- Adicionar nova tool `agendar_followup` no `getToolDefinitions()`:
+  - Parametros: `lead_id`, `scheduled_at` (ISO datetime), `message` (texto a enviar)
+- Adicionar handler de execucao da tool que insere na tabela `scheduled_messages` com os dados corretos (instance_name, remote_jid, channel_type, workspace_id)
+- Adicionar instrucao no system prompt para a IA saber interpretar pedidos de horario relativo ("amanha as 9h", "daqui 2 horas", "segunda-feira")
 
-## Secao 1: Produtos, Servicos e Precos
+### 2. Tab de Ferramentas (`src/components/agents/tabs/ToolsTab.tsx`)
+- Adicionar `agendar_followup` na lista `availableTools` com label "Agendar Follow-up" e descricao "Agendar uma mensagem para ser enviada em um horario especifico"
 
-Conteudo que sera gerado cobrindo:
+### 3. Instrucoes no Prompt (automatico via `ai-agent-chat`)
+- Ao detectar a tool `agendar_followup` habilitada, injetar instrucao no system prompt:
+  - "Quando o lead pedir para ser contactado em um horario especifico, use a tool agendar_followup. Interprete expressoes como 'amanha as 9h', 'daqui 1 hora', 'na segunda'. Sempre confirme o agendamento na resposta."
+  - Incluir o timezone do workspace (ou default BRT -3) para calculos corretos
 
-**O que e o Argos X:**
-- Plataforma de gestao comercial e atendimento ao cliente
-- Centraliza todos os canais de comunicacao (WhatsApp, Instagram, Facebook, Email) em um so lugar
-- Organiza leads num funil de vendas visual (tipo arrastar e soltar)
-- Tem agente de inteligencia artificial que atende 24h
-- Tem automacoes que trabalham sozinhas enquanto voce dorme
+### 4. Nenhuma migracao de banco necessaria
+- A tabela `scheduled_messages` ja existe e suporta todos os campos necessarios
+- O cron `send-scheduled-messages` ja processa e envia automaticamente
 
-**Funcionalidades principais detalhadas (cada uma explicada de forma simples):**
-- Funil de Vendas (Kanban visual, etapas customizaveis, arrastar leads, filtros, carteira do vendedor, automacoes por etapa)
-- Chats unificados (todas as conversas num lugar so, etiquetas, agendamento de mensagens, painel do lead ao lado)
-- Agente de IA (atende sozinha 24h, qualifica leads, 6 modelos prontos, base de conhecimento, FAQ, tom de voz customizavel)
-- SalesBots (fluxos automatizados tipo "receita de bolo", disparo por gatilhos, condicoes, esperas)
-- Campanhas em massa (envio para listas filtradas, agendamento, personalizacao com nome do lead, anexos)
-- Calendario (eventos, tarefas, sincronizacao com Google Agenda)
-- Contatos (base centralizada, importacao CSV, enriquecimento de perfil, tags em lote)
-- Email (caixa de entrada integrada, envio, resposta, sincronizacao Gmail)
-- Dashboard (metricas em tempo real, ranking de equipe, graficos de atividade)
-- Estatisticas (taxa de conversao, receita por periodo, desempenho por vendedor)
-- Integracoes (WhatsApp via QR Code, WhatsApp API oficial, Instagram, Facebook, Google Calendar)
-- Configuracoes (gestao de equipe com permissoes, tags automaticas, notificacoes)
-
-**Planos e precos:**
-- Gratuito: R$ 0 (teste de 7 dias) -- 300 leads, 1 WhatsApp, 1 usuario, 100 interacoes de IA
-- Essencial: R$ 47,90/mes -- 300 leads, 1 WhatsApp, 1 usuario, 100 interacoes de IA
-- Negocio: R$ 97,90/mes -- 2.000 leads, 3 WhatsApps, 1 usuario (adicional R$ 37/mes), 500 interacoes de IA
-- Escala: R$ 197,90/mes -- Leads ilimitados, WhatsApps ilimitados, 3 usuarios (adicional R$ 57/mes), 2.000 interacoes de IA
-
-**Pacotes extras de leads:**
-- +1.000 leads: R$ 17/mes
-- +5.000 leads: R$ 47/mes
-- +20.000 leads: R$ 97/mes
-- +50.000 leads: R$ 197/mes
-
----
-
-## Secao 2: Regras e Restricoes
-
-Conteudo cobrindo:
-- Nunca inventar funcionalidades que nao existem
-- Nunca mencionar concorrentes pelo nome
-- Nunca prometer prazos de implementacao de funcoes novas
-- Sempre recomendar o plano mais adequado ao tamanho do negocio do lead
-- Quando o lead pedir algo fora do escopo, encaminhar para atendimento humano
-- Nao dar suporte tecnico aprofundado (ex: configurar API, resolver bugs); encaminhar para equipe
-- Nunca compartilhar dados de outros clientes
-- Sempre manter tom amigavel e nao pressionar demais
-- Quando nao souber a resposta, dizer "vou confirmar com a equipe e te retorno"
-- Funcoes em desenvolvimento (TikTok, Google Business, Zoom, Calendly) devem ser mencionadas como "em breve"
-
----
-
-## Secao 3: Contexto Adicional
-
-Conteudo cobrindo:
-- Publico-alvo: empresarios, autonomos, MEIs, pequenas e medias empresas
-- Diferenciais vs planilhas e anotacoes manuais
-- Proposta de valor: "Voce nunca mais vai perder um cliente por esquecimento"
-- Argos X funciona no navegador, celular e computador
-- Suporta multiplos WhatsApps numa mesma conta (planos superiores)
-- A agente de IA pode ser treinada com o jeito de falar do proprio dono do negocio
-- Dados seguros e armazenados na nuvem
-- Pagamento via cartao de credito (recorrente mensal)
-
----
-
-## Secao 4: FAQ (minimo 25 perguntas)
-
-Perguntas cobrindo todas as areas:
-- "O que e o Argos X?" / "Como funciona?"
-- "Quanto custa?" / "Tem teste gratis?"
-- "Funciona no celular?"
-- "Consigo conectar meu WhatsApp?" / "E seguro?"
-- "O que e o funil de vendas?"
-- "Como a agente de IA funciona?"
-- "Ela responde sozinha no WhatsApp?"
-- "Posso usar no Instagram e Facebook tambem?"
-- "Quantas pessoas podem usar?"
-- "O que sao SalesBots?"
-- "Consigo enviar mensagem para todos os clientes de uma vez?"
-- "Tem calendario?"
-- "Consigo importar meus contatos?"
-- "O que acontece quando acaba meus leads?"
-- "Como cancelo?"
-- "Precisa instalar algo?"
-- "Funciona para qualquer tipo de negocio?"
-- "Consigo ver relatorios de vendas?"
-- "O que e a carteira do vendedor?"
-- "Posso agendar mensagens?"
-- "A IA vai substituir meus vendedores?"
-- "Meus dados ficam seguros?"
-- "Consigo personalizar as etapas do funil?"
-- "Como faco para comecar?"
-- "Tem suporte?"
-
----
-
-## Implementacao Tecnica
-
-O documento sera criado como uma **nova pagina** (`src/pages/AgentTrainingDoc.tsx`) que:
-
-1. Exibe o conteudo completo formatado e organizado
-2. Tem botao "Copiar" para cada secao, facilitando colar na base de conhecimento da agente
-3. Sera acessivel via rota `/agent-training` (protegida, apenas admin)
-4. Tambem adicionaremos link no sidebar para super admins
-
-**Arquivos a criar/editar:**
-- `src/pages/AgentTrainingDoc.tsx` (novo) -- pagina com todo o conteudo
-- `src/App.tsx` -- adicionar rota
-- `src/components/layout/AppSidebar.tsx` -- adicionar link no menu (super admin)
+## Resultado Esperado
+A IA vai conseguir:
+- Interpretar "me chama amanha depois das 9h" -> agendar para o dia seguinte as 09:00
+- Interpretar "daqui 2 horas" -> agendar para now() + 2h
+- Confirmar ao lead: "Combinado! Te chamo amanha as 9h"
+- A mensagem aparece na aba Follow-ups do lead
+- No horario, o sistema envia automaticamente pelo WhatsApp
