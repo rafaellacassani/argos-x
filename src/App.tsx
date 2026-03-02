@@ -39,6 +39,7 @@ const AdminPanel = lazy(() => import("./pages/AdminPanel"));
 const Planos = lazy(() => import("./pages/Planos"));
 const AdminClients = lazy(() => import("./pages/AdminClients"));
 const Treinamento = lazy(() => import("./pages/Treinamento"));
+const AgentTrainingDoc = lazy(() => import("./pages/AgentTrainingDoc"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
 
@@ -124,6 +125,7 @@ const App = () => (
                             <Route path="/planos" element={<Planos />} />
                             <Route path="/admin/clients" element={<AdminClients />} />
                             <Route path="/treinamento" element={<Treinamento />} />
+                            <Route path="/agent-training" element={<AgentTrainingDoc />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
