@@ -128,14 +128,13 @@ serve(async (req) => {
         .eq("id", workspaceId);
     }
 
-    // Create checkout session
+    // Create checkout session — no trial here, trial is free without card
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       subscription_data: {
-        trial_period_days: 7,
         metadata: { workspace_id: workspaceId, plan: plan || "unknown" },
       },
       success_url: successUrl + (successUrl.includes("?") ? "&" : "?") + "session_id={CHECKOUT_SESSION_ID}",
