@@ -29,6 +29,7 @@ const availableTools = [
   { id: "mover_etapa", label: "Mover Etapa", description: "Mover o lead para outra etapa do funil" },
   { id: "pausar_ia", label: "Pausar IA", description: "Transferir atendimento para um humano" },
   { id: "chamar_n8n", label: "Chamar Webhook", description: "Executar workflow externo via n8n/webhook" },
+  { id: "agendar_followup", label: "Agendar Follow-up", description: "Agendar uma mensagem para ser enviada em um horário específico" },
 ];
 
 const actionTypes = [

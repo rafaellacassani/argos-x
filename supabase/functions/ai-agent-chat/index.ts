@@ -65,6 +65,21 @@ function getToolDefinitions(enabledTools: string[]) {
         parameters: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] }
       }
     },
+    {
+      type: "function",
+      function: {
+        name: "agendar_followup",
+        description: "Agenda uma mensagem de follow-up para ser enviada automaticamente em um horário específico. Use quando o lead pedir para ser contactado em outro momento.",
+        parameters: {
+          type: "object",
+          properties: {
+            scheduled_at: { type: "string", description: "Data e hora no formato ISO 8601 (ex: 2026-03-03T09:00:00-03:00)" },
+            message: { type: "string", description: "Mensagem a ser enviada no horário agendado" }
+          },
+          required: ["scheduled_at", "message"]
+        }
+      }
+    },
   ];
   if (!enabledTools || enabledTools.length === 0) return allTools;
   return allTools.filter(t => enabledTools.includes(t.function.name));
@@ -449,7 +464,11 @@ serve(async (req) => {
         console.log(`[ai-agent-chat] 📋 Qualification step ${qualificationStep}: asking "${responseContent.substring(0, 50)}"`);
       } else {
         // Normal AI conversation
-        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + GUARDRAILS;
+        const enabledTools: string[] = agent.tools || [];
+        const followupInstruction = enabledTools.includes("agendar_followup")
+          ? "\n\nAGENDAMENTO DE FOLLOW-UP: Quando o lead pedir para ser contactado em outro horário (ex: 'me chama amanhã às 9h', 'daqui 2 horas', 'na segunda'), use a tool agendar_followup. Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Sempre confirme o agendamento na sua resposta (ex: 'Combinado! Te chamo amanhã às 9h 😊')."
+          : "";
+        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + GUARDRAILS;
 
         const contextWindow = memory.context_window || agent.max_tokens || 50;
         const recentMessages = messages.slice(-contextWindow);
@@ -590,6 +609,36 @@ serve(async (req) => {
               await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
               responseContent += `\n\n[Atendimento transferido para humano. Motivo: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}]`;
               break;
+            case "agendar_followup": {
+              const targetLeadId = lead_id || toolArgs.lead_id;
+              if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.scheduled_at === "string" && typeof toolArgs.message === "string") {
+                // Get lead info for routing
+                const { data: leadInfo } = await supabase.from("leads").select("phone, whatsapp_jid, instance_name, source").eq("id", targetLeadId).single();
+                if (leadInfo) {
+                  const channelType = (leadInfo.source === "meta_facebook" || leadInfo.source === "meta_instagram") ? leadInfo.source : "whatsapp";
+                  const insertData: Record<string, unknown> = {
+                    workspace_id: agent.workspace_id,
+                    message: toolArgs.message.substring(0, 2000),
+                    scheduled_at: toolArgs.scheduled_at,
+                    channel_type: channelType,
+                    status: "pending",
+                    contact_name: leadInfo.phone,
+                  };
+                  if (channelType === "whatsapp") {
+                    insertData.instance_name = leadInfo.instance_name || reqInstanceName || agent.instance_name;
+                    insertData.remote_jid = leadInfo.whatsapp_jid;
+                    insertData.phone_number = leadInfo.phone;
+                  }
+                  const { error: schedErr } = await supabase.from("scheduled_messages").insert(insertData);
+                  if (schedErr) {
+                    console.error("[ai-agent-chat] ❌ Failed to schedule followup:", schedErr);
+                  } else {
+                    console.log(`[ai-agent-chat] 📅 Follow-up scheduled for ${toolArgs.scheduled_at}`);
+                  }
+                }
+              }
+              break;
+            }
           }
         }
       }
