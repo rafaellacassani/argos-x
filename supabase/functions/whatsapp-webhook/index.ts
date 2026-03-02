@@ -59,7 +59,7 @@ async function wasRecentlyExecuted(
 ): Promise<boolean> {
   let minutesWindow = 5;
   if (triggerType === "keyword") minutesWindow = 60;
-  if (triggerType === "new_lead") minutesWindow = 1440; // 24h
+  if (triggerType === "new_lead") minutesWindow = 1440;
 
   const since = new Date(Date.now() - minutesWindow * 60 * 1000).toISOString();
 
@@ -107,9 +107,31 @@ function getNextNode(currentId: string, nodes: any[], edges: any[], label?: stri
   const matchingEdges = edges.filter((e: any) => e.source === currentId);
   let edge: any = null;
   if (label) {
-    edge = matchingEdges.find((e: any) => (e.label || e.sourceHandle || "").toLowerCase() === label.toLowerCase());
+    // Match by sourceHandle first, then by label text
+    edge = matchingEdges.find((e: any) => {
+      const handle = (e.sourceHandle || "").toLowerCase();
+      const edgeLabel = (e.label || "").toLowerCase();
+      const target = label.toLowerCase();
+      return handle === target || edgeLabel === target;
+    });
+    // Fallback: also try "yes"/"no" mapping for "true"/"false"
+    if (!edge && (label === "true" || label === "false")) {
+      const handleName = label === "true" ? "yes" : "no";
+      const labelName = label === "true" ? "sim" : "não";
+      edge = matchingEdges.find((e: any) =>
+        (e.sourceHandle || "").toLowerCase() === handleName ||
+        (e.label || "").toLowerCase() === labelName
+      );
+    }
   }
   if (!edge) edge = matchingEdges[0];
+  if (!edge) return null;
+  return nodes.find((n: any) => n.id === edge.target) || null;
+}
+
+// --- Get next node by sourceHandle (for wait conditions) ---
+function getNextNodeByHandle(currentId: string, nodes: any[], edges: any[], handleId: string): any | null {
+  const edge = edges.find((e: any) => e.source === currentId && e.sourceHandle === handleId);
   if (!edge) return null;
   return nodes.find((n: any) => n.id === edge.target) || null;
 }
@@ -146,6 +168,22 @@ async function evaluateCondition(
   return false;
 }
 
+// --- Migrate legacy wait data to conditions ---
+function migrateWaitConditionsBackend(data: any): any[] {
+  if (Array.isArray(data.conditions) && data.conditions.length > 0) {
+    return data.conditions;
+  }
+  const waitMode = data.wait_mode || "timer";
+  if (waitMode === "message" || data.wait_for === "message" || data.wait_mode === "wait_message") {
+    return [{ id: "legacy_msg", type: "message_received", label: "Se responder", config: {}, order: 0 }];
+  }
+  if (waitMode === "business_hours" || data.wait_for === "business_hours") {
+    return [{ id: "legacy_bh", type: "business_hours", label: "Horário comercial", config: { days: data.days || ["mon","tue","wed","thu","fri"], start: data.start || "09:00", end: data.end || "18:00" }, order: 0 }];
+  }
+  const seconds = Number(data.seconds || data.duration || 5);
+  return [{ id: "legacy_timer", type: "timer", label: "Cronômetro", config: { seconds }, order: 0 }];
+}
+
 // --- Execute a single node ---
 async function executeNode(
   supabase: ReturnType<typeof createClient>,
@@ -155,7 +193,7 @@ async function executeNode(
   messageId: string,
   botId: string,
   workspaceId: string
-): Promise<{ success: boolean; conditionResult?: boolean }> {
+): Promise<{ success: boolean; conditionResult?: boolean; waitPaused?: boolean }> {
   const nodeType = node.type || node.data?.type || "";
 
   try {
@@ -177,10 +215,58 @@ async function executeNode(
       }
 
       case "wait": {
-        const seconds = Math.min(Number(node.data?.seconds || node.data?.duration || 5), 30);
-        await new Promise((r) => setTimeout(r, seconds * 1000));
-        await logExecution(supabase, botId, lead.id, node.id, "success", `Waited ${seconds}s`, workspaceId);
-        return { success: true };
+        // New multi-condition wait: enqueue conditions and pause
+        const conditions = migrateWaitConditionsBackend(node.data || {});
+        const edges_data = node._edges || []; // injected by executeFlow
+
+        // If only a single legacy timer with no conditions structure, do inline wait (backward compat for <=30s)
+        if (conditions.length === 1 && conditions[0].type === "timer" && !Array.isArray(node.data?.conditions)) {
+          const seconds = Math.min(Number(conditions[0].config?.seconds || node.data?.seconds || node.data?.duration || 5), 30);
+          await new Promise((r) => setTimeout(r, seconds * 1000));
+          await logExecution(supabase, botId, lead.id, node.id, "success", `Waited ${seconds}s`, workspaceId);
+          return { success: true };
+        }
+
+        // Enqueue each condition into salesbot_wait_queue
+        for (const cond of conditions) {
+          // Find target node for this condition
+          const targetEdge = edges_data.find((e: any) => e.source === node.id && e.sourceHandle === cond.id);
+          // Fallback: if only one condition and one edge, use that edge
+          const fallbackEdge = conditions.length === 1 ? edges_data.find((e: any) => e.source === node.id) : null;
+          const edge = targetEdge || fallbackEdge;
+          if (!edge) continue;
+
+          let executeAt: string | null = null;
+          if (cond.type === "timer") {
+            const delaySec = Number(cond.config?.seconds || 0);
+            if (delaySec > 0) {
+              executeAt = new Date(Date.now() + delaySec * 1000).toISOString();
+            }
+          } else if (cond.type === "business_hours") {
+            // Calculate next business hour window
+            const start = cond.config?.start || "09:00";
+            const end = cond.config?.end || "18:00";
+            const days = cond.config?.days || ["mon","tue","wed","thu","fri"];
+            executeAt = calculateNextBusinessHour(start, end, days);
+          }
+          // message_received: no execute_at (triggered by incoming message)
+
+          await supabase.from("salesbot_wait_queue").insert({
+            workspace_id: workspaceId,
+            bot_id: botId,
+            lead_id: lead.id,
+            wait_node_id: node.id,
+            target_node_id: edge.target,
+            condition_id: cond.id,
+            condition_type: cond.type,
+            session_id: lead.whatsapp_jid || "",
+            execute_at: executeAt,
+            status: "pending",
+          });
+        }
+
+        await logExecution(supabase, botId, lead.id, node.id, "success", `Wait paused: ${conditions.length} conditions enqueued`, workspaceId);
+        return { success: true, waitPaused: true };
       }
 
       case "tag": {
@@ -387,6 +473,65 @@ async function executeNode(
   }
 }
 
+// --- Calculate next business hour ---
+function calculateNextBusinessHour(start: string, end: string, days: string[]): string {
+  const dayMap: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  const activeDays = new Set(days.map(d => dayMap[d]).filter(d => d !== undefined));
+  
+  const now = new Date();
+  const [startH, startM] = start.split(":").map(Number);
+  
+  // Check up to 7 days ahead
+  for (let offset = 0; offset < 8; offset++) {
+    const candidate = new Date(now.getTime() + offset * 86400000);
+    if (activeDays.has(candidate.getDay())) {
+      candidate.setHours(startH, startM, 0, 0);
+      if (candidate > now) return candidate.toISOString();
+    }
+  }
+  
+  // Fallback: 24h from now
+  return new Date(Date.now() + 86400000).toISOString();
+}
+
+// --- Resume flow from a specific node ---
+async function resumeFlowFromNode(
+  supabase: ReturnType<typeof createClient>,
+  botId: string,
+  lead: any,
+  startNodeId: string,
+  instanceName: string,
+  workspaceId: string
+) {
+  const { data: bot } = await supabase.from("salesbots").select("flow_data").eq("id", botId).single();
+  if (!bot?.flow_data) return;
+
+  const flowData = bot.flow_data as any;
+  const nodes = flowData.nodes || [];
+  const edges = flowData.edges || [];
+
+  let currentNode = nodes.find((n: any) => n.id === startNodeId);
+  let executed = 0;
+  const maxNodes = 50;
+
+  while (currentNode && executed < maxNodes) {
+    executed++;
+    // Inject edges into node for wait processing
+    currentNode._edges = edges;
+    const result = await executeNode(supabase, currentNode, lead, instanceName, "", botId, workspaceId);
+
+    if (!result.success) break;
+    if (result.waitPaused) break; // Flow paused at another wait node
+
+    if (currentNode.type === "condition" || (currentNode.data?.type === "condition")) {
+      const label = result.conditionResult ? "true" : "false";
+      currentNode = getNextNode(currentNode.id, nodes, edges, label);
+    } else {
+      currentNode = getNextNode(currentNode.id, nodes, edges);
+    }
+  }
+}
+
 // --- Execute full bot flow ---
 async function executeFlow(
   supabase: ReturnType<typeof createClient>,
@@ -421,9 +566,12 @@ async function executeFlow(
 
   while (currentNode && executed < maxNodes) {
     executed++;
+    // Inject edges into node for wait processing
+    currentNode._edges = edges;
     const result = await executeNode(supabase, currentNode, lead, instanceName, messageId, botId, workspaceId);
 
     if (!result.success) break;
+    if (result.waitPaused) break; // Flow paused at wait node — will be resumed by webhook or cron
 
     if (currentNode.type === "condition" || (currentNode.data?.type === "condition")) {
       const label = result.conditionResult ? "true" : "false";
@@ -455,7 +603,7 @@ app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 // --- Main webhook endpoint ---
 app.post("/", async (c) => {
   try {
-    // Validate apikey from header OR query parameter (Evolution API sends via query param)
+    // Validate apikey from header OR query parameter
     const apiKey = c.req.header("apikey") || c.req.query("apikey");
     if (!apiKey || apiKey !== EVOLUTION_API_KEY) {
       console.warn("[whatsapp-webhook] ❌ Invalid apikey - header:", !!c.req.header("apikey"), "query:", !!c.req.query("apikey"));
@@ -466,7 +614,6 @@ app.post("/", async (c) => {
     console.log("[whatsapp-webhook] 📩 Webhook received from instance:", payload.instance, "event:", payload.event);
     const event = (payload.event || "").toUpperCase().replace(/\./g, "_");
 
-    // Only process MESSAGES_UPSERT (Evolution API v2 sends "messages.upsert")
     if (event !== "MESSAGES_UPSERT") {
       console.log("[whatsapp-webhook] ⏭️ Skipping event:", payload.event, "→ normalized:", event);
       return c.json({ received: true, skipped: true }, 200, corsHeaders);
@@ -484,23 +631,19 @@ app.post("/", async (c) => {
     const fromMe: boolean = key.fromMe || false;
     const msgId: string = key.id || "";
 
-    // Skip own messages
     if (fromMe) {
       return c.json({ received: true, skipped: "fromMe" }, 200, corsHeaders);
     }
 
-    // Skip groups
     if (remoteJid.endsWith("@g.us")) {
       return c.json({ received: true, skipped: "group" }, 200, corsHeaders);
     }
 
-    // Extract message text
     const messageText =
       data.message?.conversation ||
       data.message?.extendedTextMessage?.text ||
       "";
 
-    // --- MULTIMODAL: Detect media type ---
     let mediaType: string | null = null;
     let mediaCaption: string | null = null;
 
@@ -523,19 +666,16 @@ app.post("/", async (c) => {
 
     const pushName = data.pushName || "";
 
-    // FIX: For @lid contacts, try to resolve real phone from message metadata
     let resolvedRemoteJid = remoteJid;
     let phoneNumber = "";
     
     if (remoteJid.endsWith("@lid")) {
-      // Try to get the real number from participant or other metadata
       const participant = data.participant || data.key?.participant || "";
       if (participant && !participant.endsWith("@lid")) {
         resolvedRemoteJid = participant;
         phoneNumber = jidToNumber(participant);
         console.log(`[whatsapp-webhook] 🔄 @lid resolved: ${remoteJid} → ${participant}`);
       } else {
-        // Use the lid as identifier — don't skip anymore
         phoneNumber = jidToNumber(remoteJid);
         console.log(`[whatsapp-webhook] ⚠️ @lid contact, using as-is: ${remoteJid}`);
       }
@@ -546,6 +686,65 @@ app.post("/", async (c) => {
     console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
 
     const supabase = getSupabase();
+
+    // ============ CHECK SALESBOT WAIT QUEUE FOR INBOUND MESSAGE ============
+    try {
+      const { data: pendingWaits } = await supabase
+        .from("salesbot_wait_queue")
+        .select("*")
+        .eq("session_id", remoteJid)
+        .eq("status", "pending")
+        .eq("condition_type", "message_received");
+
+      if (pendingWaits && pendingWaits.length > 0) {
+        console.log(`[whatsapp-webhook] 🔄 Found ${pendingWaits.length} pending wait(s) for session ${remoteJid}`);
+        
+        // Group by wait_node_id to cancel siblings
+        const byWaitNode = new Map<string, any[]>();
+        for (const pw of pendingWaits) {
+          const arr = byWaitNode.get(pw.wait_node_id) || [];
+          arr.push(pw);
+          byWaitNode.set(pw.wait_node_id, arr);
+        }
+
+        for (const [waitNodeId, items] of byWaitNode) {
+          const msgItem = items[0]; // The message_received condition
+
+          // Cancel ALL siblings (same wait_node_id, same lead)
+          await supabase
+            .from("salesbot_wait_queue")
+            .update({ status: "canceled", canceled_reason: "sibling_triggered", executed_at: new Date().toISOString() })
+            .eq("wait_node_id", waitNodeId)
+            .eq("lead_id", msgItem.lead_id)
+            .eq("status", "pending")
+            .neq("id", msgItem.id);
+
+          // Mark this one as executed
+          await supabase
+            .from("salesbot_wait_queue")
+            .update({ status: "executed", executed_at: new Date().toISOString() })
+            .eq("id", msgItem.id);
+
+          // Resume flow from target node
+          const { data: lead } = await supabase
+            .from("leads")
+            .select("*")
+            .eq("id", msgItem.lead_id)
+            .single();
+
+          if (lead) {
+            const leadInstanceName = lead.instance_name || instanceName;
+            await resumeFlowFromNode(supabase, msgItem.bot_id, lead, msgItem.target_node_id, leadInstanceName, msgItem.workspace_id);
+            console.log(`[whatsapp-webhook] ✅ Resumed flow for lead ${lead.name} from node ${msgItem.target_node_id}`);
+          }
+        }
+
+        // Message was handled by wait queue — return
+        return c.json({ received: true, handler: "salesbot_wait_resume" }, 200, corsHeaders);
+      }
+    } catch (waitErr) {
+      console.error("[whatsapp-webhook] Wait queue check error:", waitErr);
+    }
 
     // Find workspace for this instance
     const { data: instanceRecord } = await supabase
@@ -564,7 +763,6 @@ app.post("/", async (c) => {
     console.log(`[whatsapp-webhook] ✅ Workspace found: ${workspaceId}`);
 
     // --- STEP 1: Check for active AI Agent ---
-    // FIX: Select instance_name from ai_agents directly (not trigger_config)
     const { data: agents } = await supabase
       .from("ai_agents")
       .select("id, instance_name, respond_to, respond_to_stages")
@@ -574,9 +772,7 @@ app.post("/", async (c) => {
     console.log(`[whatsapp-webhook] 🤖 Active agents found: ${agents?.length || 0}`);
 
     if (agents && agents.length > 0) {
-      // FIX: Match using agent.instance_name column (not trigger_config)
       const matchingAgent = agents.find((a: any) => {
-        // Empty or null instance_name means "all instances"
         return !a.instance_name || a.instance_name === "" || a.instance_name === instanceName;
       });
 
@@ -603,7 +799,6 @@ app.post("/", async (c) => {
         // Check respond_to filter
         let shouldRespond = true;
         
-        // Find or create lead for agent context
         let leadId: string | null = null;
         const { data: existingLead } = await supabase
           .from("leads")
@@ -614,7 +809,6 @@ app.post("/", async (c) => {
           .single();
         leadId = existingLead?.id || null;
 
-        // Check respond_to rules
         if (matchingAgent.respond_to === "specific_stages" && existingLead) {
           const stages = matchingAgent.respond_to_stages || [];
           if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
@@ -639,7 +833,6 @@ app.post("/", async (c) => {
           try {
             const agentUrl = `${SUPABASE_URL}/functions/v1/ai-agent-chat`;
 
-            // --- MULTIMODAL: Download media base64 if image or audio ---
             let mediaBase64: string | null = null;
             let mediaMimetype: string | null = null;
 
@@ -662,7 +855,6 @@ app.post("/", async (c) => {
                   const b64 = mediaData.base64 || mediaData.data?.base64 || "";
                   const mime = mediaData.mimetype || mediaData.data?.mimetype || "";
 
-                  // Guardrail: ~5MB limit (base64 is ~33% larger than binary)
                   const sizeBytes = (b64.length * 3) / 4;
                   if (sizeBytes > 5 * 1024 * 1024) {
                     console.warn(`[whatsapp-webhook] ⚠️ Media too large (${(sizeBytes / 1024 / 1024).toFixed(1)}MB), skipping`);
@@ -684,7 +876,6 @@ app.post("/", async (c) => {
               }
             }
 
-            // Build message text for the agent
             const agentMessage = messageText || mediaCaption || (mediaType ? `[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Áudio" : "Mídia"} enviada pelo lead]` : "");
 
             console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
@@ -717,7 +908,6 @@ app.post("/", async (c) => {
               console.error(`[whatsapp-webhook] ❌ Agent error: ${agentData.error}`);
             }
 
-            // If agent responded, send the chunks via Evolution API
             if (agentData.chunks && Array.isArray(agentData.chunks)) {
               console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${phoneNumber}`);
               for (const chunk of agentData.chunks) {
@@ -731,7 +921,6 @@ app.post("/", async (c) => {
                   if (!sendResult) {
                     console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${phoneNumber}`);
                   }
-                  // Small delay between chunks
                   if (agentData.chunks.length > 1) {
                     await new Promise((r) => setTimeout(r, 1000));
                   }
@@ -789,7 +978,6 @@ app.post("/", async (c) => {
             console.error("[whatsapp-webhook] ❌ AI Agent call exception:", err);
           }
 
-          // AI Agent handled it — don't continue to SalesBots
           return c.json({ received: true, handler: "ai_agent" }, 200, corsHeaders);
         }
       }
@@ -808,7 +996,6 @@ app.post("/", async (c) => {
       return c.json({ received: true, no_bots: true }, 200, corsHeaders);
     }
 
-    // Check if lead exists for this jid
     let { data: existingLead } = await supabase
       .from("leads")
       .select("*")
@@ -819,14 +1006,12 @@ app.post("/", async (c) => {
 
     const isNewLead = !existingLead;
 
-    // Find matching bot
     let matchedBot: any = null;
 
     for (const bot of bots) {
       const triggerType = bot.trigger_type;
       const triggerConfig = (bot.trigger_config || {}) as Record<string, any>;
 
-      // Check instance_name filter
       if (triggerConfig.instance_name && triggerConfig.instance_name !== instanceName) {
         continue;
       }
