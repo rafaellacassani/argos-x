@@ -647,6 +647,86 @@ export function useLeads() {
     }
   }, [currentFunnel, workspaceId, planLimits.canAddLead]);
 
+  // Silent version of createLead for auto-creation (no toasts)
+  const createLeadSilent = useCallback(async (leadData: Partial<Lead>): Promise<Lead | null> => {
+    if (!workspaceId) return null;
+    if (!planLimits.canAddLead) return null;
+    try {
+      let stageId = leadData.stage_id;
+      if (!stageId && currentFunnel) {
+        const { data: firstStage } = await supabase
+          .from('funnel_stages')
+          .select('id')
+          .eq('funnel_id', currentFunnel.id)
+          .order('position', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        stageId = firstStage?.id;
+      }
+      if (!stageId) return null;
+
+      const { data: maxPosData } = await supabase
+        .from('leads')
+        .select('position')
+        .eq('stage_id', stageId)
+        .order('position', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newPosition = (maxPosData?.position || 0) + 1;
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert({
+          name: leadData.name || 'Novo Lead',
+          phone: leadData.phone || '',
+          email: leadData.email,
+          avatar_url: leadData.avatar_url,
+          company: leadData.company,
+          value: leadData.value || 0,
+          stage_id: stageId,
+          source: leadData.source || 'manual',
+          whatsapp_jid: leadData.whatsapp_jid,
+          instance_name: leadData.instance_name,
+          responsible_user: leadData.responsible_user,
+          notes: leadData.notes,
+          position: newPosition,
+          workspace_id: workspaceId
+        })
+        .select()
+        .single();
+      if (error) throw error;
+
+      await supabase.from('lead_history').insert({
+        lead_id: data.id,
+        action: 'created',
+        to_stage_id: stageId,
+        metadata: { source: leadData.source || 'manual' },
+        workspace_id: workspaceId
+      });
+
+      if (leadData.source === 'whatsapp') {
+        const { data: whatsappTag } = await supabase
+          .from('lead_tags')
+          .select('id')
+          .eq('name', 'WhatsApp')
+          .maybeSingle();
+        if (whatsappTag) {
+          await supabase.from('lead_tag_assignments').insert({
+            lead_id: data.id,
+            tag_id: whatsappTag.id,
+            workspace_id: workspaceId
+          });
+        }
+      }
+
+      setLeads(prev => [...prev, { ...data, tags: [] }]);
+      return data;
+    } catch (err) {
+      console.error('Error creating lead (silent):', err);
+      return null;
+    }
+  }, [currentFunnel, workspaceId, planLimits.canAddLead]);
+
   // Update a lead
   const updateLead = useCallback(async (leadId: string, updates: Partial<Lead>) => {
     try {
@@ -1334,6 +1414,7 @@ export function useLeads() {
     getTagUsageCount,
     getTagsWithCounts,
     createLead,
+    createLeadSilent,
     updateLead,
     moveLead,
     deleteLead,
