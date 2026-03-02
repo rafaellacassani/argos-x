@@ -648,10 +648,55 @@ export function useLeads() {
   }, [currentFunnel, workspaceId, planLimits.canAddLead]);
 
   // Silent version of createLead for auto-creation (no toasts)
+  // Includes pre-check by normalized phone to avoid duplicates
   const createLeadSilent = useCallback(async (leadData: Partial<Lead>): Promise<Lead | null> => {
     if (!workspaceId) return null;
     if (!planLimits.canAddLead) return null;
     try {
+      // Normalize phone: digits only
+      const rawPhone = leadData.phone || '';
+      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const normalizedPhone = phoneDigits.length >= 8 && phoneDigits.length <= 13 ? phoneDigits : '';
+
+      // Pre-check: search for existing lead by JID or normalized phone (last 10 digits)
+      const orFilters: string[] = [];
+      if (leadData.whatsapp_jid) {
+        orFilters.push(`whatsapp_jid.eq.${leadData.whatsapp_jid}`);
+      }
+      if (normalizedPhone.length >= 10) {
+        // Use ilike with suffix match to find leads with same last 10 digits
+        orFilters.push(`phone.like.%${normalizedPhone.slice(-10)}`);
+      }
+      
+      if (orFilters.length > 0) {
+        const { data: existingLeads } = await supabase
+          .from('leads')
+          .select('id, whatsapp_jid, phone')
+          .eq('workspace_id', workspaceId)
+          .or(orFilters.join(','))
+          .limit(1);
+        
+        if (existingLeads && existingLeads.length > 0) {
+          const existing = existingLeads[0];
+          // Lead already exists — update its JID if we have a better one
+          if (leadData.whatsapp_jid && existing.whatsapp_jid !== leadData.whatsapp_jid) {
+            // Prefer @s.whatsapp.net over @lid
+            const shouldUpdate = 
+              !existing.whatsapp_jid || // no JID yet
+              (leadData.whatsapp_jid.endsWith('@s.whatsapp.net') && existing.whatsapp_jid.endsWith('@lid'));
+            if (shouldUpdate) {
+              await supabase.from('leads').update({ whatsapp_jid: leadData.whatsapp_jid }).eq('id', existing.id);
+            }
+          }
+          // Update phone if missing
+          if (normalizedPhone && (!existing.phone || existing.phone.replace(/[^0-9]/g, '').length < 8)) {
+            await supabase.from('leads').update({ phone: normalizedPhone }).eq('id', existing.id);
+          }
+          console.log(`[createLeadSilent] Found existing lead ${existing.id} for ${leadData.whatsapp_jid || normalizedPhone}, skipping creation`);
+          return null; // Don't create duplicate
+        }
+      }
+
       let stageId = leadData.stage_id;
       if (!stageId && currentFunnel) {
         const { data: firstStage } = await supabase
@@ -678,7 +723,7 @@ export function useLeads() {
         .from('leads')
         .insert({
           name: leadData.name || 'Novo Lead',
-          phone: leadData.phone || '',
+          phone: normalizedPhone,
           email: leadData.email,
           avatar_url: leadData.avatar_url,
           company: leadData.company,

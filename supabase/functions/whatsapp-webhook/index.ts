@@ -800,11 +800,17 @@ app.post("/", async (c) => {
         let shouldRespond = true;
         
         let leadId: string | null = null;
+        // Search by JID + phone suffix to avoid missing leads with different JID format
+        const agentLeadOrFilters = [`whatsapp_jid.eq.${remoteJid}`];
+        if (resolvedRemoteJid !== remoteJid) agentLeadOrFilters.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
+        if (phoneNumber.length >= 10 && phoneNumber.length <= 13) {
+          agentLeadOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
+        }
         const { data: existingLead } = await supabase
           .from("leads")
           .select("id, stage_id")
           .eq("workspace_id", workspaceId)
-          .or(`whatsapp_jid.eq.${remoteJid}${resolvedRemoteJid !== remoteJid ? `,whatsapp_jid.eq.${resolvedRemoteJid}` : ''}`)
+          .or(agentLeadOrFilters.join(','))
           .limit(1)
           .single();
         leadId = existingLead?.id || null;
@@ -996,11 +1002,17 @@ app.post("/", async (c) => {
       return c.json({ received: true, no_bots: true }, 200, corsHeaders);
     }
 
+    // Search for existing lead by JID OR normalized phone (last 10 digits)
+    const leadOrFilters = [`whatsapp_jid.eq.${remoteJid}`];
+    if (resolvedRemoteJid !== remoteJid) leadOrFilters.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
+    if (phoneNumber.length >= 10 && phoneNumber.length <= 13) {
+      leadOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
+    }
     let { data: existingLead } = await supabase
       .from("leads")
       .select("*")
       .eq("workspace_id", workspaceId)
-      .or(`whatsapp_jid.eq.${remoteJid}${resolvedRemoteJid !== remoteJid ? `,whatsapp_jid.eq.${resolvedRemoteJid}` : ''}`)
+      .or(leadOrFilters.join(','))
       .limit(1)
       .single();
 

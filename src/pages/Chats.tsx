@@ -493,11 +493,24 @@ export default function Chats() {
     if (success) {
       autoAssignLead(selectedChat);
       // Fire-and-forget: persist outbound WA message for dashboard metrics
+      // Use lead's whatsapp_jid if available so inbound+outbound share the same remote_jid
       if (workspaceId && !selectedChat.isMeta) {
+        const stripDigitsOut = (s: string) => s.replace(/[^0-9]/g, "");
+        const chatDigitsOut = stripDigitsOut(selectedChat.phone || "");
+        const outboundLead = leadsRef.current.find((l) => {
+          if (l.whatsapp_jid === selectedChat.remoteJid) return true;
+          if (selectedChat.remoteJidAlt && l.whatsapp_jid === selectedChat.remoteJidAlt) return true;
+          if (chatDigitsOut.length >= 10) {
+            const ld = stripDigitsOut(l.phone || "");
+            return ld.length >= 10 && ld.slice(-10) === chatDigitsOut.slice(-10);
+          }
+          return false;
+        });
+        const outboundJid = outboundLead?.whatsapp_jid || selectedChat.remoteJid;
         supabase.from('whatsapp_messages').insert({
           workspace_id: workspaceId,
           instance_name: selectedChat.instanceName || selectedInstance || '',
-          remote_jid: selectedChat.remoteJid,
+          remote_jid: outboundJid,
           from_me: true,
           direction: 'outbound',
           content: text,
@@ -826,52 +839,90 @@ export default function Chats() {
       const { data: msgs, error } = await query;
       if (error || !msgs || msgs.length === 0) return [];
 
-      // Group by remote_jid, keep last message info
+      // Group by LEAD (via phone suffix or JID match) instead of exact remote_jid
+      // This merges conversations from different JID formats (@lid vs @s.whatsapp.net)
       const chatMap = new Map<string, {
         remoteJid: string;
+        allJids: string[];
         name: string;
         lastMessage: string;
         timestamp: string;
         fromMe: boolean;
         instanceName: string;
+        leadId?: string;
       }>();
+
+      // Build a lookup from leads for fast matching
+      const currentLeads = leadsRef.current;
+      const leadByJid = new Map<string, typeof currentLeads[0]>();
+      const leadByPhone10 = new Map<string, typeof currentLeads[0]>();
+      for (const lead of currentLeads) {
+        if (lead.whatsapp_jid) leadByJid.set(lead.whatsapp_jid, lead);
+        const ld = (lead.phone || '').replace(/[^0-9]/g, '');
+        if (ld.length >= 10) leadByPhone10.set(ld.slice(-10), lead);
+      }
 
       for (const msg of msgs) {
         if (!msg.remote_jid || msg.remote_jid.endsWith('@g.us')) continue;
-        if (!chatMap.has(msg.remote_jid)) {
-          chatMap.set(msg.remote_jid, {
+
+        // Find the matching lead for this message's remote_jid
+        let matchedLead = leadByJid.get(msg.remote_jid);
+        if (!matchedLead) {
+          const msgDigits = cleanPhoneNumber(msg.remote_jid);
+          if (msgDigits.length >= 10 && msgDigits.length <= 13) {
+            matchedLead = leadByPhone10.get(msgDigits.slice(-10));
+          }
+        }
+
+        // Dedup key: lead.id if found, otherwise phone suffix, otherwise raw JID
+        const msgDigits = cleanPhoneNumber(msg.remote_jid);
+        const dedupKey = matchedLead?.id
+          || (msgDigits.length >= 10 && msgDigits.length <= 13 ? `phone:${msgDigits.slice(-10)}` : msg.remote_jid);
+
+        const existing = chatMap.get(dedupKey);
+        if (!existing) {
+          chatMap.set(dedupKey, {
             remoteJid: msg.remote_jid,
+            allJids: [msg.remote_jid],
             name: msg.push_name || '',
             lastMessage: msg.content || '',
             timestamp: msg.timestamp,
             fromMe: msg.from_me || msg.direction === 'outbound',
             instanceName: msg.instance_name,
+            leadId: matchedLead?.id,
           });
+        } else {
+          // Track all JIDs for this contact
+          if (!existing.allJids.includes(msg.remote_jid)) {
+            existing.allJids.push(msg.remote_jid);
+          }
         }
       }
 
       // Convert to Chat objects
       const chats: (Chat & { _timestamp?: number })[] = [];
-      for (const [jid, info] of chatMap) {
+      for (const [dedupKey, info] of chatMap) {
         const ts = new Date(info.timestamp).getTime() / 1000;
-        const phoneDigits = cleanPhoneNumber(jid);
+        const phoneDigits = cleanPhoneNumber(info.remoteJid);
         const phone = formatPhoneDisplay(phoneDigits);
         
-        // Check for matching lead
-        const matchingLead = leadsRef.current.find((l) => {
-          if (l.whatsapp_jid === jid) return true;
-          const leadDigits = cleanPhoneNumber(l.phone || '');
-          if (phoneDigits.length >= 10 && leadDigits.length >= 10) {
-            return leadDigits.endsWith(phoneDigits.slice(-10)) || phoneDigits.endsWith(leadDigits.slice(-10));
-          }
-          return false;
-        });
+        // Use already-matched lead or find one
+        const matchingLead = info.leadId
+          ? currentLeads.find(l => l.id === info.leadId)
+          : currentLeads.find((l) => {
+              if (l.whatsapp_jid === info.remoteJid) return true;
+              const leadDigits = cleanPhoneNumber(l.phone || '');
+              if (phoneDigits.length >= 10 && leadDigits.length >= 10) {
+                return leadDigits.endsWith(phoneDigits.slice(-10)) || phoneDigits.endsWith(leadDigits.slice(-10));
+              }
+              return false;
+            });
 
         const displayName = matchingLead?.name || info.name || phone || 'Contato WhatsApp';
 
         chats.push({
-          id: info.instanceName ? `${info.instanceName}:${jid}` : jid,
-          remoteJid: jid,
+          id: info.instanceName ? `${info.instanceName}:${info.remoteJid}` : info.remoteJid,
+          remoteJid: info.remoteJid,
           name: displayName,
           lastMessage: info.lastMessage,
           time: formatTime(ts),
@@ -982,12 +1033,21 @@ export default function Chats() {
             }
           }
           
-          // Deduplicate by normalized phone digits — prevents split conversations for same contact with different JIDs
+          // Deduplicate by lead.id > phone digits > remoteJid
           const deduped = new Map<string, (Chat & { _timestamp?: number })>();
           for (const c of allChats) {
-            // Normalize key: use phone digits if available, else remoteJid
-            const phoneDigits = cleanPhoneNumber(c.phone || "");
-            const key = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : c.remoteJid;
+            // Find matching lead for best dedup key
+            const chatDigits = cleanPhoneNumber(c.phone || "");
+            const matchedLead = leadsRef.current.find((l) => {
+              if (l.whatsapp_jid === c.remoteJid) return true;
+              if (c.remoteJidAlt && l.whatsapp_jid === c.remoteJidAlt) return true;
+              if (chatDigits.length >= 10) {
+                const ld = (l.phone || "").replace(/[^0-9]/g, "");
+                return ld.length >= 10 && ld.slice(-10) === chatDigits.slice(-10);
+              }
+              return false;
+            });
+            const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
             const existing = deduped.get(key);
             if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
               deduped.set(key, c);
@@ -1016,12 +1076,21 @@ export default function Chats() {
             // API unavailable — DB chats are sufficient
           }
           
-          // Merge DB + API, deduplicate by phone digits keeping most recent
+          // Merge DB + API, deduplicate by lead.id > phone digits
           const merged = [...dbChats, ...apiChats];
           const deduped = new Map<string, (Chat & { _timestamp?: number })>();
           for (const c of merged) {
-            const phoneDigits = cleanPhoneNumber(c.phone || "");
-            const key = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : c.remoteJid;
+            const chatDigits = cleanPhoneNumber(c.phone || "");
+            const matchedLead = leadsRef.current.find((l) => {
+              if (l.whatsapp_jid === c.remoteJid) return true;
+              if (c.remoteJidAlt && l.whatsapp_jid === c.remoteJidAlt) return true;
+              if (chatDigits.length >= 10) {
+                const ld = (l.phone || "").replace(/[^0-9]/g, "");
+                return ld.length >= 10 && ld.slice(-10) === chatDigits.slice(-10);
+              }
+              return false;
+            });
+            const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
             const existing = deduped.get(key);
             if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
               deduped.set(key, c);
@@ -1039,12 +1108,15 @@ export default function Chats() {
         }
         
         // Auto-create leads for ALL WhatsApp conversations (including outbound/prospecting)
+        // ALSO: if a lead exists but has a different JID, link the new JID to it
         const currentLeads = leadsRef.current;
         const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
-        const chatsNeedingLeads = allChats.filter((chat) => {
-          if (chat.isMeta) return false;
-          if (processedJidsRef.current.has(chat.remoteJid)) return false;
-          // Match by exact JID, remoteJidAlt, or phone digits (normalized)
+        const chatsNeedingLeads: { chat: typeof allChats[0]; existingLead?: typeof currentLeads[0] }[] = [];
+        
+        for (const chat of allChats) {
+          if (chat.isMeta) continue;
+          if (processedJidsRef.current.has(chat.remoteJid)) continue;
+          
           const chatDigits = stripDigits(chat.phone || "");
           const existingLead = currentLeads.find((lead) => {
             if (lead.whatsapp_jid === chat.remoteJid) return true;
@@ -1055,26 +1127,42 @@ export default function Chats() {
             }
             return false;
           });
-          return !existingLead;
-        });
+          
+          if (!existingLead) {
+            // Need to create a new lead
+            chatsNeedingLeads.push({ chat });
+          } else if (existingLead.whatsapp_jid !== chat.remoteJid) {
+            // Lead exists with a different JID — link the current JID
+            // Prefer @s.whatsapp.net over @lid
+            processedJidsRef.current.add(chat.remoteJid);
+            if (chat.remoteJid.endsWith("@s.whatsapp.net") && existingLead.whatsapp_jid?.endsWith("@lid")) {
+              // Upgrade: replace @lid with @s.whatsapp.net
+              updateLead(existingLead.id, { whatsapp_jid: chat.remoteJid }).catch(() => {});
+            }
+          } else {
+            processedJidsRef.current.add(chat.remoteJid);
+          }
+        }
         
         if (chatsNeedingLeads.length > 0) {
           console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads`);
           const BATCH_SIZE = 20;
           for (let i = 0; i < chatsNeedingLeads.length; i += BATCH_SIZE) {
             const batch = chatsNeedingLeads.slice(i, i + BATCH_SIZE);
-            for (const chat of batch) {
+            for (const { chat } of batch) {
               try {
                 processedJidsRef.current.add(chat.remoteJid);
                 const phoneDigits = cleanPhoneNumber(chat.phone || "");
                 const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
+                // Normalize phone to digits-only for DB storage
+                const normalizedPhone = validPhone ? validPhone.replace(/[^0-9+]/g, "") : "";
                 const isLidChat = chat.remoteJid?.endsWith("@lid");
                 const rawName = chat.name || "";
                 const nameIsJid = rawName.includes("@") || /^\d{14,}$/.test(rawName.replace(/[^0-9]/g, ""));
-                const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (validPhone || "Contato WhatsApp")) : (rawName || validPhone || "Contato WhatsApp");
+                const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (normalizedPhone || "Contato WhatsApp")) : (rawName || normalizedPhone || "Contato WhatsApp");
                 const newLead = await createLeadSilentRef.current({
                   name: leadName,
-                  phone: validPhone,
+                  phone: normalizedPhone,
                   whatsapp_jid: chat.remoteJid,
                   instance_name: chat.instanceName,
                   source: 'whatsapp',
@@ -1326,21 +1414,35 @@ export default function Chats() {
           }
         } else {
           // FALLBACK: Load messages from local DB when Evolution API has no data
-          // Try to find all JIDs for this contact (e.g. @s.whatsapp.net and @lid variants)
+          // Collect ALL known JIDs for this contact (lead's JID + chat JID + remoteJidAlt)
           console.log(`[Chats] No API messages for ${selectedChat.remoteJid}, falling back to local DB`);
           const phoneDigits = cleanPhoneNumber(selectedChat.phone || "");
+          const allJids = new Set<string>([selectedChat.remoteJid]);
+          if (selectedChat.remoteJidAlt) allJids.add(selectedChat.remoteJidAlt);
+          // Find linked lead and add its JID too
+          const linkedLead = leadsRef.current.find((l) => {
+            if (l.whatsapp_jid === selectedChat.remoteJid) return true;
+            if (selectedChat.remoteJidAlt && l.whatsapp_jid === selectedChat.remoteJidAlt) return true;
+            if (phoneDigits.length >= 10) {
+              const ld = (l.phone || "").replace(/[^0-9]/g, "");
+              return ld.length >= 10 && ld.slice(-10) === phoneDigits.slice(-10);
+            }
+            return false;
+          });
+          if (linkedLead?.whatsapp_jid) allJids.add(linkedLead.whatsapp_jid);
+
+          // Build OR filter with all known JIDs + phone suffix
+          const jidFilters = Array.from(allJids).map(j => `remote_jid.eq.${j}`);
+          if (phoneDigits.length >= 10) {
+            jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
+          }
+
           let dbQuery = supabase
             .from('whatsapp_messages')
             .select('*')
+            .or(jidFilters.join(','))
             .order('timestamp', { ascending: true })
-            .limit(100);
-          
-          // Match by remoteJid OR by phone number suffix (last 10 digits in remote_jid)
-          if (phoneDigits.length >= 10) {
-            dbQuery = dbQuery.or(`remote_jid.eq.${selectedChat.remoteJid},remote_jid.like.%${phoneDigits.slice(-10)}%`);
-          } else {
-            dbQuery = dbQuery.eq('remote_jid', selectedChat.remoteJid);
-          }
+            .limit(200);
           
           const { data: dbMsgs } = await dbQuery;
           
