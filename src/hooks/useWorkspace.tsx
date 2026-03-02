@@ -59,6 +59,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [membership, setMembership] = useState<WorkspaceMember | null>(null);
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const loadWorkspace = useCallback(async () => {
     if (!user) {
@@ -69,7 +70,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setLoading(true);
+    // Only show loading spinner on initial load, not on background refreshes
+    if (!initialLoadDone) {
+      setLoading(true);
+    }
     try {
       // Fetch membership and profile in parallel
       const [memberResult, profileResult] = await Promise.all([
@@ -137,6 +141,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setMembership(null);
     } finally {
       setLoading(false);
+      setInitialLoadDone(true);
     }
   }, [user]);
 
