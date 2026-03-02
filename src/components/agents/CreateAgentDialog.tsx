@@ -49,6 +49,7 @@ import {
   Dice5,
   Loader2,
   X,
+  TrendingUp,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +97,7 @@ const objectives = [
   { id: "atendimento", icon: MessageCircle, label: "Atendimento geral", desc: "Responde dúvidas e qualifica leads", type: "sdr" },
   { id: "agendar", icon: Calendar, label: "Agendamento", desc: "Marca reuniões e consultas automaticamente", type: "scheduler" },
   { id: "sdr", icon: Target, label: "Pré-venda (SDR)", desc: "Qualifica e aquece leads para o time comercial", type: "sdr" },
+  { id: "vendedora", icon: TrendingUp, label: "Vendedora", desc: "Fecha vendas com persuasão e urgência", type: "closer" },
   { id: "followup", icon: RefreshCw, label: "Follow-up", desc: "Reativa leads que pararam de responder", type: "followup" },
   { id: "cobranca", icon: DollarSign, label: "Cobrança", desc: "Envia lembretes de pagamento amigáveis", type: "collector" },
   { id: "personalizado", icon: Sparkles, label: "Personalizado", desc: "Definirei tudo manualmente", type: "custom" },
@@ -251,8 +253,28 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       premium: "Premium e exclusivo",
     };
     const objLabel = objectiveData?.label || "Atendimento";
-    let prompt = `Você é ${agentRole || "Atendente"}, ${agentName}, da empresa ${companyName || "[Empresa]"}.\n`;
-    prompt += `Tom: ${toneMap[tone] || tone}. ${useEmojis ? "Pode usar emojis com moderação." : "Não use emojis."}\n`;
+    let prompt = "";
+
+    if (selectedObjective === "vendedora") {
+      prompt += `Você é ${agentName}, ${agentRole || "Closer de Vendas"} da empresa ${companyName || "[Empresa]"}.\n`;
+      prompt += `Tom: Persuasivo, confiante e enérgico — inspirado no estilo Jordan Belfort.\n`;
+      prompt += `${useEmojis ? "Use emojis estrategicamente para criar conexão e urgência." : "Não use emojis."}\n\n`;
+      prompt += `## MENTALIDADE VENDEDORA\n`;
+      prompt += `- Sempre conduza a conversa com CONFIANÇA INABALÁVEL no produto/serviço.\n`;
+      prompt += `- Use a técnica "Straight Line Selling": mantenha o lead na linha reta rumo ao fechamento.\n`;
+      prompt += `- Crie URGÊNCIA real e ESCASSEZ genuína em cada interação.\n`;
+      prompt += `- Quebre objeções rapidamente com empatia + lógica + emoção.\n`;
+      prompt += `- Nunca aceite um "não" como resposta final — sempre tenha uma contra-argumentação.\n`;
+      prompt += `- Use perguntas estratégicas para descobrir a dor real do cliente.\n`;
+      prompt += `- Faça o lead SENTIR que está perdendo uma oportunidade única ao não agir agora.\n`;
+      prompt += `- Seja assertivo mas nunca agressivo. A persuasão vem da convicção, não da pressão.\n`;
+      prompt += `- Use storytelling e provas sociais para aumentar credibilidade.\n`;
+      prompt += `- Sempre proponha o próximo passo concreto (agendar, comprar, testar).\n\n`;
+    } else {
+      prompt += `Você é ${agentRole || "Atendente"}, ${agentName}, da empresa ${companyName || "[Empresa]"}.\n`;
+      prompt += `Tom: ${toneMap[tone] || tone}. ${useEmojis ? "Pode usar emojis com moderação." : "Não use emojis."}\n`;
+    }
+
     prompt += `Objetivo: ${objLabel}.\n`;
     if (niche) prompt += `Nicho: ${niche}.\n`;
     prompt += "\nInformações da empresa:\n";
@@ -266,7 +288,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       prompt += `- Endereço: ${address}\n`;
     }
     return prompt;
-  }, [agentName, agentRole, companyName, niche, tone, useEmojis, instagram, site, phone, email, isDigital, address, objectiveData]);
+  }, [agentName, agentRole, companyName, niche, tone, useEmojis, instagram, site, phone, email, isDigital, address, objectiveData, selectedObjective]);
 
   const handleCreate = () => {
     const data: CreateAgentWizardData = {
