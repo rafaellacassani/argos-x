@@ -1743,6 +1743,86 @@ export type Database = {
           },
         ]
       }
+      reactivation_cadence_config: {
+        Row: {
+          cadence_days: Json
+          created_at: string
+          email_subject: string
+          email_template: string
+          id: string
+          is_active: boolean
+          send_email: boolean
+          send_whatsapp: boolean
+          updated_at: string
+          whatsapp_instance_name: string | null
+          whatsapp_template: string
+        }
+        Insert: {
+          cadence_days?: Json
+          created_at?: string
+          email_subject?: string
+          email_template?: string
+          id?: string
+          is_active?: boolean
+          send_email?: boolean
+          send_whatsapp?: boolean
+          updated_at?: string
+          whatsapp_instance_name?: string | null
+          whatsapp_template?: string
+        }
+        Update: {
+          cadence_days?: Json
+          created_at?: string
+          email_subject?: string
+          email_template?: string
+          id?: string
+          is_active?: boolean
+          send_email?: boolean
+          send_whatsapp?: boolean
+          updated_at?: string
+          whatsapp_instance_name?: string | null
+          whatsapp_template?: string
+        }
+        Relationships: []
+      }
+      reactivation_log: {
+        Row: {
+          cadence_day: number
+          channel: string
+          error_message: string | null
+          id: string
+          sent_at: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          cadence_day: number
+          channel: string
+          error_message?: string | null
+          id?: string
+          sent_at?: string
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          cadence_day?: number
+          channel?: string
+          error_message?: string | null
+          id?: string
+          sent_at?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reactivation_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salesbot_wait_queue: {
         Row: {
           bot_id: string
