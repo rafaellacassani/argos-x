@@ -301,19 +301,86 @@ export function useCampaigns() {
     if (!workspaceId) return 0;
 
     try {
-      const pageSize = 1000;
+      // If no tag filter, use exact count directly from leads
+      if (filterTagIds.length === 0) {
+        let query = supabase
+          .from('leads')
+          .select('id, phone', { count: 'exact' })
+          .eq('workspace_id', workspaceId)
+          .eq('status', 'active')
+          .order('id', { ascending: true });
 
-      // Fetch active leads with optional stage/responsible filters using pagination
-      let filteredLeads: Array<{ id: string; phone: string | null }> = [];
-      let leadsFrom = 0;
+        if (filterStageIds.length > 0) {
+          query = query.in('stage_id', filterStageIds);
+        }
+
+        if (filterResponsibleIds.length > 0) {
+          query = query.in('responsible_user', filterResponsibleIds);
+        }
+
+        // We still validate phone exactly in app logic for consistency with campaign preparation
+        let from = 0;
+        const pageSize = 1000;
+        let validCount = 0;
+
+        while (true) {
+          const { data: page, error } = await query.range(from, from + pageSize - 1);
+          if (error) throw error;
+          if (!page || page.length === 0) break;
+
+          validCount += page.filter((lead) => {
+            const cleanPhone = (lead.phone || '').replace(/\D/g, '');
+            return cleanPhone.length >= 10;
+          }).length;
+
+          if (page.length < pageSize) break;
+          from += pageSize;
+        }
+
+        return validCount;
+      }
+
+      // With tag filters, first get all lead IDs for selected tags (paginated + deterministic ordering)
+      const pageSize = 1000;
+      let tagFrom = 0;
+      const tagLeadIdSet = new Set<string>();
 
       while (true) {
+        const { data: tagPage, error: tagError } = await supabase
+          .from('lead_tag_assignments')
+          .select('lead_id')
+          .eq('workspace_id', workspaceId)
+          .in('tag_id', filterTagIds)
+          .order('lead_id', { ascending: true })
+          .range(tagFrom, tagFrom + pageSize - 1);
+
+        if (tagError) throw tagError;
+        if (!tagPage || tagPage.length === 0) break;
+
+        for (const item of tagPage) {
+          tagLeadIdSet.add(item.lead_id);
+        }
+
+        if (tagPage.length < pageSize) break;
+        tagFrom += pageSize;
+      }
+
+      const uniqueLeadIds = Array.from(tagLeadIdSet);
+      if (uniqueLeadIds.length === 0) return 0;
+
+      // Then count valid leads in chunks to avoid URL/query size limits
+      let validCount = 0;
+      const chunkSize = 500;
+
+      for (let i = 0; i < uniqueLeadIds.length; i += chunkSize) {
+        const idChunk = uniqueLeadIds.slice(i, i + chunkSize);
+
         let leadsQuery = supabase
           .from('leads')
           .select('id, phone')
           .eq('workspace_id', workspaceId)
           .eq('status', 'active')
-          .range(leadsFrom, leadsFrom + pageSize - 1);
+          .in('id', idChunk);
 
         if (filterStageIds.length > 0) {
           leadsQuery = leadsQuery.in('stage_id', filterStageIds);
@@ -323,47 +390,14 @@ export function useCampaigns() {
           leadsQuery = leadsQuery.in('responsible_user', filterResponsibleIds);
         }
 
-        const { data: leadPage, error: leadError } = await leadsQuery;
-        if (leadError) throw leadError;
-        if (!leadPage || leadPage.length === 0) break;
+        const { data: leadsChunk, error: leadsError } = await leadsQuery;
+        if (leadsError) throw leadsError;
 
-        filteredLeads = filteredLeads.concat(leadPage as Array<{ id: string; phone: string | null }>);
-
-        if (leadPage.length < pageSize) break;
-        leadsFrom += pageSize;
+        validCount += (leadsChunk || []).filter((lead) => {
+          const cleanPhone = (lead.phone || '').replace(/\D/g, '');
+          return cleanPhone.length >= 10;
+        }).length;
       }
-
-      // If tag filters are active, fetch all matching lead IDs via pagination and intersect in memory
-      if (filterTagIds.length > 0) {
-        let tagLeadIds: string[] = [];
-        let tagFrom = 0;
-
-        while (true) {
-          const { data: tagPage, error: tagError } = await supabase
-            .from('lead_tag_assignments')
-            .select('lead_id')
-            .eq('workspace_id', workspaceId)
-            .in('tag_id', filterTagIds)
-            .range(tagFrom, tagFrom + pageSize - 1);
-
-          if (tagError) throw tagError;
-          if (!tagPage || tagPage.length === 0) break;
-
-          tagLeadIds = tagLeadIds.concat(tagPage.map((t) => t.lead_id));
-
-          if (tagPage.length < pageSize) break;
-          tagFrom += pageSize;
-        }
-
-        const tagLeadSet = new Set(tagLeadIds);
-        filteredLeads = filteredLeads.filter((lead) => tagLeadSet.has(lead.id));
-      }
-
-      // Keep estimate aligned with real campaign preparation logic
-      const validCount = filteredLeads.filter((lead) => {
-        const cleanPhone = (lead.phone || '').replace(/\D/g, '');
-        return cleanPhone.length >= 10;
-      }).length;
 
       return validCount;
     } catch (error) {
