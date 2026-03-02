@@ -528,21 +528,26 @@ export function useLeads() {
         .order('name', { ascending: true });
 
       if (tagsError) throw tagsError;
+      if (!tagsData || tagsData.length === 0) return [];
 
-      const { data: countsData, error: countsError } = await supabase
-        .from('lead_tag_assignments')
-        .select('tag_id');
+      // Use exact count per tag (head=true) to avoid row-limit truncation on large datasets
+      const countResults = await Promise.all(
+        tagsData.map(async (tag) => {
+          const { count, error } = await supabase
+            .from('lead_tag_assignments')
+            .select('id', { count: 'exact', head: true })
+            .eq('tag_id', tag.id);
 
-      if (countsError) throw countsError;
+          if (error) throw error;
+          return { tagId: tag.id, usageCount: count || 0 };
+        })
+      );
 
-      const countMap = new Map<string, number>();
-      (countsData || []).forEach(item => {
-        countMap.set(item.tag_id, (countMap.get(item.tag_id) || 0) + 1);
-      });
+      const countMap = new Map<string, number>(countResults.map((item) => [item.tagId, item.usageCount]));
 
-      return (tagsData || []).map(tag => ({
+      return tagsData.map((tag) => ({
         ...tag,
-        usageCount: countMap.get(tag.id) || 0
+        usageCount: countMap.get(tag.id) || 0,
       }));
     } catch (err) {
       console.error('Error fetching tags with counts:', err);
