@@ -198,6 +198,7 @@ export default function AdminClients() {
   const [cadenceLoading, setCadenceLoading] = useState(false);
   const [cadenceSaving, setCadenceSaving] = useState(false);
   const [reactivationLog, setReactivationLog] = useState<any[]>([]);
+  const [evolutionInstances, setEvolutionInstances] = useState<{ instance_name: string; display_name: string | null; instance_type: string; workspace_id: string }[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -224,25 +225,20 @@ export default function AdminClients() {
   const fetchCadenceConfig = async () => {
     setCadenceLoading(true);
     try {
-      const { data, error } = await supabase
-        .from("reactivation_cadence_config")
-        .select("*")
-        .limit(1)
-        .single();
-      if (data) {
+      const [configRes, logsRes, instancesRes] = await Promise.all([
+        supabase.from("reactivation_cadence_config").select("*").limit(1).single(),
+        supabase.from("reactivation_log").select("*").order("sent_at", { ascending: false }).limit(50),
+        supabase.from("whatsapp_instances").select("instance_name, display_name, instance_type, workspace_id"),
+      ]);
+
+      if (configRes.data) {
         setCadenceConfig({
-          ...data,
-          cadence_days: Array.isArray(data.cadence_days) ? data.cadence_days as number[] : [6, 7, 9, 14, 21],
+          ...configRes.data,
+          cadence_days: Array.isArray(configRes.data.cadence_days) ? configRes.data.cadence_days as number[] : [6, 7, 9, 14, 21],
         });
       }
-
-      // Fetch recent reactivation logs
-      const { data: logs } = await supabase
-        .from("reactivation_log")
-        .select("*")
-        .order("sent_at", { ascending: false })
-        .limit(50);
-      setReactivationLog(logs || []);
+      setReactivationLog(logsRes.data || []);
+      setEvolutionInstances(instancesRes.data || []);
     } catch (err) {
       console.error("Error fetching cadence config:", err);
     } finally {
@@ -1163,15 +1159,36 @@ export default function AdminClients() {
                   {cadenceConfig.send_whatsapp && (
                     <div className="space-y-2">
                       <Label>Instância WhatsApp (Evolution API)</Label>
-                      <Input
-                        placeholder="Nome da instância (ex: argos-alerts)"
+                      <Select
                         value={cadenceConfig.whatsapp_instance_name || ""}
-                        onChange={(e) =>
-                          setCadenceConfig({ ...cadenceConfig, whatsapp_instance_name: e.target.value })
+                        onValueChange={(v) =>
+                          setCadenceConfig({ ...cadenceConfig, whatsapp_instance_name: v })
                         }
-                      />
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma instância" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {evolutionInstances.length === 0 ? (
+                            <SelectItem value="__none" disabled>
+                              Nenhuma instância encontrada
+                            </SelectItem>
+                          ) : (
+                            evolutionInstances.map((inst) => (
+                              <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                                <div className="flex items-center gap-2">
+                                  <span>{inst.display_name || inst.instance_name}</span>
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                    {inst.instance_type}
+                                  </Badge>
+                                </div>
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
                       <p className="text-xs text-muted-foreground">
-                        Nome da instância configurada na Evolution API para disparar as mensagens.
+                        Selecione a instância configurada na Evolution API para disparar as mensagens.
                       </p>
                     </div>
                   )}
