@@ -5,6 +5,7 @@ import { BotNode, BotEdge } from '@/hooks/useSalesBots';
 import { useBotExecution, TestLead } from '@/hooks/useBotExecution';
 import { BotNodeCard } from './BotNodeCard';
 import { NodeTypeSelector } from './NodeTypeSelector';
+import { migrateWaitConditions } from './WaitNodeContent';
 
 interface BotBuilderCanvasProps {
   nodes: BotNode[];
@@ -15,6 +16,11 @@ interface BotBuilderCanvasProps {
 
 const NODE_WIDTH = 340;
 const NODE_ESTIMATED_HEIGHT = 120;
+
+const HANDLE_COLORS_HEX = [
+  '#22c55e', '#3b82f6', '#f97316', '#a855f7',
+  '#ec4899', '#06b6d4', '#eab308', '#ef4444',
+];
 
 export function BotBuilderCanvas({
   nodes,
@@ -104,15 +110,31 @@ export function BotBuilderCanvas({
     const existingEdge = edges.find(e => e.source === sourceId && e.target === targetId && e.sourceHandle === sourceHandle);
     if (existingEdge) return;
 
+    // Determine label for the edge
+    let label: string | undefined;
+    if (sourceHandle === 'yes') {
+      label = 'Sim';
+    } else if (sourceHandle === 'no') {
+      label = 'Não';
+    } else if (sourceHandle) {
+      // Dynamic wait condition handle — find the condition label
+      const sourceNode = nodes.find(n => n.id === sourceId);
+      if (sourceNode?.type === 'wait') {
+        const conditions = migrateWaitConditions(sourceNode.data);
+        const cond = conditions.find(c => c.id === sourceHandle);
+        if (cond) label = cond.label;
+      }
+    }
+
     const newEdge: BotEdge = {
       id: `edge_${Date.now()}`,
       source: sourceId,
       target: targetId,
       sourceHandle,
-      label: sourceHandle === 'yes' ? 'Sim' : sourceHandle === 'no' ? 'Não' : undefined,
+      label,
     };
     onEdgesChange([...edges, newEdge]);
-  }, [edges, onEdgesChange]);
+  }, [edges, nodes, onEdgesChange]);
 
   const handleCanvasClick = (e: React.MouseEvent) => {
     if (e.target === canvasRef.current) {
@@ -137,6 +159,50 @@ export function BotBuilderCanvas({
       y: e.clientY - rect.top,
     });
     setShowNodeSelector(true);
+  };
+
+  /**
+   * Compute the source X position for an edge based on its sourceHandle
+   */
+  const getSourceX = (sourceNode: BotNode, edge: BotEdge): number => {
+    const halfW = NODE_WIDTH / 2;
+
+    // Standard yes/no handles
+    if (edge.sourceHandle === 'yes') return sourceNode.position.x + halfW * 0.5;
+    if (edge.sourceHandle === 'no') return sourceNode.position.x + halfW * 1.5;
+
+    // Dynamic wait condition handles
+    if (edge.sourceHandle && sourceNode.type === 'wait') {
+      const conditions = migrateWaitConditions(sourceNode.data);
+      const condIndex = conditions.findIndex(c => c.id === edge.sourceHandle);
+      if (condIndex >= 0 && conditions.length > 0) {
+        const totalWidth = conditions.length * 28; // gap between handles
+        const startX = sourceNode.position.x + halfW - totalWidth / 2 + 14;
+        return startX + condIndex * 28;
+      }
+    }
+
+    // Default: center
+    return sourceNode.position.x + halfW;
+  };
+
+  /**
+   * Get edge color based on sourceHandle
+   */
+  const getEdgeStyle = (edge: BotEdge, sourceNode: BotNode): { color: string; markerId: string } => {
+    if (edge.sourceHandle === 'yes') return { color: '#22c55e', markerId: 'arrowhead-green' };
+    if (edge.sourceHandle === 'no') return { color: '#ef4444', markerId: 'arrowhead-red' };
+
+    if (edge.sourceHandle && sourceNode.type === 'wait') {
+      const conditions = migrateWaitConditions(sourceNode.data);
+      const condIndex = conditions.findIndex(c => c.id === edge.sourceHandle);
+      if (condIndex >= 0) {
+        const color = HANDLE_COLORS_HEX[condIndex % HANDLE_COLORS_HEX.length];
+        return { color, markerId: `arrowhead-cond-${condIndex}` };
+      }
+    }
+
+    return { color: 'hsl(var(--muted-foreground) / 0.4)', markerId: 'arrowhead' };
   };
 
   return (
@@ -197,27 +263,28 @@ export function BotBuilderCanvas({
             <marker id="arrowhead-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
               <path d="M 0 0 L 8 3 L 0 6 Z" fill="#ef4444" />
             </marker>
+            {/* Dynamic condition arrowheads */}
+            {HANDLE_COLORS_HEX.map((color, i) => (
+              <marker key={i} id={`arrowhead-cond-${i}`} markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <path d="M 0 0 L 8 3 L 0 6 Z" fill={color} />
+              </marker>
+            ))}
           </defs>
           {edges.map(edge => {
             const sourceNode = nodes.find(n => n.id === edge.source);
             const targetNode = nodes.find(n => n.id === edge.target);
             if (!sourceNode || !targetNode) return null;
 
-            const halfW = NODE_WIDTH / 2;
-            let sourceX = sourceNode.position.x + halfW;
-            if (edge.sourceHandle === 'yes') sourceX = sourceNode.position.x + halfW * 0.5;
-            else if (edge.sourceHandle === 'no') sourceX = sourceNode.position.x + halfW * 1.5;
+            const sourceX = getSourceX(sourceNode, edge);
             const sourceY = sourceNode.position.y + NODE_ESTIMATED_HEIGHT;
+            const halfW = NODE_WIDTH / 2;
             const targetX = targetNode.position.x + halfW;
             const targetY = targetNode.position.y;
 
             const midY = (sourceY + targetY) / 2;
             const path = `M ${sourceX} ${sourceY} C ${sourceX} ${midY}, ${targetX} ${midY}, ${targetX} ${targetY}`;
 
-            const isYes = edge.sourceHandle === 'yes';
-            const isNo = edge.sourceHandle === 'no';
-            const edgeColor = isYes ? '#22c55e' : isNo ? '#ef4444' : 'hsl(var(--muted-foreground) / 0.4)';
-            const markerId = isYes ? 'arrowhead-green' : isNo ? 'arrowhead-red' : 'arrowhead';
+            const { color: edgeColor, markerId } = getEdgeStyle(edge, sourceNode);
 
             return (
               <g key={edge.id}>
@@ -339,7 +406,15 @@ function getDefaultNodeData(type: string): Record<string, unknown> {
     case 'round_robin':
       return { users: [], currentIndex: 0 };
     case 'wait':
-      return { duration: 1, unit: 'hours' };
+      return {
+        conditions: [{
+          id: `cond_${Date.now()}_1`,
+          type: 'message_received',
+          label: 'Se responder',
+          config: {},
+          order: 0,
+        }],
+      };
     case 'tag':
       return { tagId: '', action: 'add' };
     case 'move_stage':

@@ -8,6 +8,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { migrateWaitConditions } from './WaitNodeContent';
 
 interface BotPreviewDialogProps {
   open: boolean;
@@ -22,17 +23,25 @@ function findStartNode(nodes: BotNode[], edges: BotEdge[]): BotNode | null {
   return start || nodes[0] || null;
 }
 
-function getNextNodes(nodeId: string, edges: BotEdge[], nodes: BotNode[]): { node: BotNode; label?: string }[] {
+function getNextNodes(nodeId: string, edges: BotEdge[], nodes: BotNode[]): { node: BotNode; label?: string; sourceHandle?: string }[] {
   return edges
     .filter(e => e.source === nodeId)
     .map(e => {
       const node = nodes.find(n => n.id === e.target);
-      return node ? { node, label: e.label } : null;
+      return node ? { node, label: e.label, sourceHandle: e.sourceHandle } : null;
     })
-    .filter(Boolean) as { node: BotNode; label?: string }[];
+    .filter(Boolean) as { node: BotNode; label?: string; sourceHandle?: string }[];
 }
 
-function walkFlow(startNode: BotNode, nodes: BotNode[], edges: BotEdge[], branch?: string): FlowStep[] {
+interface FlowStep {
+  type: string;
+  content: string;
+  isBotMessage: boolean;
+  isAction: boolean;
+  branches?: { label: string; steps: FlowStep[] }[];
+}
+
+function walkFlow(startNode: BotNode, nodes: BotNode[], edges: BotEdge[]): FlowStep[] {
   const steps: FlowStep[] = [];
   const visited = new Set<string>();
   let current: BotNode | null = startNode;
@@ -41,15 +50,32 @@ function walkFlow(startNode: BotNode, nodes: BotNode[], edges: BotEdge[], branch
     visited.add(current.id);
     steps.push(nodeToStep(current));
 
+    // Branching nodes: condition, validate
     if (current.type === 'condition' || current.type === 'validate') {
       const nexts = getNextNodes(current.id, edges, nodes);
-      const trueNext = nexts.find(n => n.label === 'true') || nexts[0];
-      const falseNext = nexts.find(n => n.label === 'false') || nexts[1];
-      steps[steps.length - 1].branches = {
-        trueBranch: trueNext ? walkFlow(trueNext.node, nodes, edges) : [],
-        falseBranch: falseNext ? walkFlow(falseNext.node, nodes, edges) : [],
-      };
+      const trueNext = nexts.find(n => n.sourceHandle === 'yes' || n.label === 'true' || n.label === 'Sim') || nexts[0];
+      const falseNext = nexts.find(n => n.sourceHandle === 'no' || n.label === 'false' || n.label === 'Não') || nexts[1];
+      steps[steps.length - 1].branches = [
+        { label: '✅ Caminho Sim', steps: trueNext ? walkFlow(trueNext.node, nodes, edges) : [] },
+        { label: '❌ Caminho Não', steps: falseNext ? walkFlow(falseNext.node, nodes, edges) : [] },
+      ];
       break;
+    }
+
+    // Wait node with multiple conditions → branching
+    if (current.type === 'wait') {
+      const conditions = migrateWaitConditions(current.data);
+      if (conditions.length > 1) {
+        const nexts = getNextNodes(current.id, edges, nodes);
+        steps[steps.length - 1].branches = conditions.map(cond => {
+          const matchingNext = nexts.find(n => n.sourceHandle === cond.id);
+          return {
+            label: cond.label,
+            steps: matchingNext ? walkFlow(matchingNext.node, nodes, edges) : [],
+          };
+        });
+        break;
+      }
     }
 
     if (current.type === 'stop') break;
@@ -60,24 +86,20 @@ function walkFlow(startNode: BotNode, nodes: BotNode[], edges: BotEdge[], branch
   return steps;
 }
 
-interface FlowStep {
-  type: string;
-  content: string;
-  isBotMessage: boolean;
-  isAction: boolean;
-  branches?: { trueBranch: FlowStep[]; falseBranch: FlowStep[] };
-}
-
 function nodeToStep(node: BotNode): FlowStep {
   switch (node.type) {
     case 'send_message':
       return { type: 'send_message', content: (node.data.message as string) || 'Mensagem vazia', isBotMessage: true, isAction: false };
     case 'wait': {
-      const mode = (node.data.wait_mode as string) || 'timer';
-      if (mode === 'message') return { type: 'wait', content: '⏸ Aguardando resposta do lead...', isBotMessage: false, isAction: true };
-      if (mode === 'business_hours') return { type: 'wait', content: `🏢 Aguardando horário comercial (${node.data.start || '09:00'} — ${node.data.end || '18:00'})`, isBotMessage: false, isAction: true };
-      const s = (node.data.seconds as number) || 0;
-      return { type: 'wait', content: `⏱ Esperar ${s > 3600 ? Math.floor(s/3600)+'h ' : ''}${Math.floor((s%3600)/60)}min ${s%60}s`, isBotMessage: false, isAction: true };
+      const conditions = migrateWaitConditions(node.data);
+      if (conditions.length === 1) {
+        const c = conditions[0];
+        if (c.type === 'message_received') return { type: 'wait', content: '⏸ Aguardando resposta do lead...', isBotMessage: false, isAction: true };
+        if (c.type === 'business_hours') return { type: 'wait', content: `🏢 Aguardando horário comercial (${c.config.start || '09:00'} — ${c.config.end || '18:00'})`, isBotMessage: false, isAction: true };
+        const s = (c.config.seconds as number) || 0;
+        return { type: 'wait', content: `⏱ Esperar ${s > 3600 ? Math.floor(s/3600)+'h ' : ''}${Math.floor((s%3600)/60)}min ${s%60}s`, isBotMessage: false, isAction: true };
+      }
+      return { type: 'wait', content: `⏸ Aguardar (${conditions.length} condições)`, isBotMessage: false, isAction: true };
     }
     case 'condition':
       return { type: 'condition', content: `Condição: ${node.data.field} ${node.data.operator} "${node.data.value}"`, isBotMessage: false, isAction: true };
@@ -103,7 +125,7 @@ function nodeToStep(node: BotNode): FlowStep {
 }
 
 function StepBubble({ step }: { step: FlowStep }) {
-  if (step.branches) {
+  if (step.branches && step.branches.length > 0) {
     return (
       <div className="space-y-2">
         <div className="flex justify-center">
@@ -111,17 +133,17 @@ function StepBubble({ step }: { step: FlowStep }) {
             {step.content}
           </Badge>
         </div>
-        <Tabs defaultValue="true" className="w-full">
-          <TabsList className="w-full grid grid-cols-2 h-7">
-            <TabsTrigger value="true" className="text-xs h-6">✅ Caminho Sim</TabsTrigger>
-            <TabsTrigger value="false" className="text-xs h-6">❌ Caminho Não</TabsTrigger>
+        <Tabs defaultValue="0" className="w-full">
+          <TabsList className={cn("w-full h-7", `grid grid-cols-${Math.min(step.branches.length, 4)}`)}>
+            {step.branches.map((b, i) => (
+              <TabsTrigger key={i} value={String(i)} className="text-xs h-6">{b.label}</TabsTrigger>
+            ))}
           </TabsList>
-          <TabsContent value="true" className="space-y-2 mt-2">
-            {step.branches.trueBranch.length > 0 ? step.branches.trueBranch.map((s, i) => <StepBubble key={i} step={s} />) : <p className="text-xs text-muted-foreground text-center">Nenhum nó conectado</p>}
-          </TabsContent>
-          <TabsContent value="false" className="space-y-2 mt-2">
-            {step.branches.falseBranch.length > 0 ? step.branches.falseBranch.map((s, i) => <StepBubble key={i} step={s} />) : <p className="text-xs text-muted-foreground text-center">Nenhum nó conectado</p>}
-          </TabsContent>
+          {step.branches.map((b, i) => (
+            <TabsContent key={i} value={String(i)} className="space-y-2 mt-2">
+              {b.steps.length > 0 ? b.steps.map((s, j) => <StepBubble key={j} step={s} />) : <p className="text-xs text-muted-foreground text-center">Nenhum nó conectado</p>}
+            </TabsContent>
+          ))}
         </Tabs>
       </div>
     );

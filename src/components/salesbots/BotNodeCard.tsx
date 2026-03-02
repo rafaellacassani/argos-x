@@ -34,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SendMessageNodeContent } from './SendMessageNodeContent';
-import { WaitNodeContent } from './WaitNodeContent';
+import { WaitNodeContent, migrateWaitConditions, WaitCondition } from './WaitNodeContent';
 import { ConditionNodeContent } from './ConditionNodeContent';
 import { NewNodeContents } from './NewNodeContents';
 
@@ -74,6 +74,11 @@ const nodeConfig: Record<string, { icon: typeof MessageSquare; label: string; ac
   change_responsible: { icon: UserCheck, label: 'Mudar Responsável', accent: 'bg-violet-500' },
   add_note: { icon: StickyNote, label: 'Adicionar Nota', accent: 'bg-amber-500' },
 };
+
+const HANDLE_COLORS = [
+  'bg-green-500', 'bg-blue-500', 'bg-orange-500', 'bg-purple-500',
+  'bg-pink-500', 'bg-cyan-500', 'bg-yellow-500', 'bg-red-500',
+];
 
 export function BotNodeCard({
   node,
@@ -120,6 +125,9 @@ export function BotNodeCard({
   }, [isDragging, dragOffset, onMove]);
 
   const hasDualOutputs = node.type === 'condition' || node.type === 'validate';
+  const isWaitNode = node.type === 'wait';
+  const waitConditions: WaitCondition[] = isWaitNode ? migrateWaitConditions(node.data) : [];
+  const hasMultipleOutputs = isWaitNode && waitConditions.length > 0;
 
   return (
     <motion.div
@@ -189,8 +197,8 @@ export function BotNodeCard({
         onMouseUp={() => onEndConnect(node.id)}
       />
 
-      {/* Connection output (bottom) */}
-      {!hasDualOutputs && (
+      {/* Connection output: single (default) */}
+      {!hasDualOutputs && !hasMultipleOutputs && (
         <div
           className={cn(
             'absolute -bottom-2.5 left-1/2 -translate-x-1/2 flex items-center justify-center w-5 h-5 rounded-full bg-muted-foreground/20 border-2 border-muted-foreground/30 cursor-pointer hover:bg-primary hover:border-primary hover:scale-125 transition-all no-drag z-10',
@@ -202,6 +210,7 @@ export function BotNodeCard({
         </div>
       )}
 
+      {/* Connection output: dual (condition/validate) */}
       {hasDualOutputs && (
         <>
           <div
@@ -223,6 +232,34 @@ export function BotNodeCard({
             N
           </div>
         </>
+      )}
+
+      {/* Connection output: dynamic (wait conditions) */}
+      {hasMultipleOutputs && (
+        <div className="absolute -bottom-3 left-0 right-0 flex justify-center gap-2 no-drag z-10">
+          {waitConditions.map((cond, idx) => {
+            const colorClass = HANDLE_COLORS[idx % HANDLE_COLORS.length];
+            const shortLabel = cond.label.length > 8 ? cond.label.slice(0, 8) + '…' : cond.label;
+            return (
+              <div key={cond.id} className="flex flex-col items-center gap-0.5">
+                <div
+                  className={cn(
+                    'w-5 h-5 rounded-full cursor-pointer hover:scale-125 transition-all text-[7px] font-bold text-white flex items-center justify-center',
+                    colorClass,
+                    isConnecting && 'animate-pulse'
+                  )}
+                  onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartConnect(cond.id); }}
+                  title={cond.label}
+                >
+                  {idx + 1}
+                </div>
+                <span className="text-[8px] text-muted-foreground whitespace-nowrap max-w-[60px] truncate">
+                  {shortLabel}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       )}
     </motion.div>
   );

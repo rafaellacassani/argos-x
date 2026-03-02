@@ -1743,6 +1743,82 @@ export type Database = {
           },
         ]
       }
+      salesbot_wait_queue: {
+        Row: {
+          bot_id: string
+          canceled_reason: string | null
+          condition_id: string
+          condition_type: string
+          created_at: string | null
+          execute_at: string | null
+          executed_at: string | null
+          id: string
+          lead_id: string
+          session_id: string | null
+          started_at: string
+          status: string
+          target_node_id: string
+          wait_node_id: string
+          workspace_id: string
+        }
+        Insert: {
+          bot_id: string
+          canceled_reason?: string | null
+          condition_id: string
+          condition_type: string
+          created_at?: string | null
+          execute_at?: string | null
+          executed_at?: string | null
+          id?: string
+          lead_id: string
+          session_id?: string | null
+          started_at?: string
+          status?: string
+          target_node_id: string
+          wait_node_id: string
+          workspace_id: string
+        }
+        Update: {
+          bot_id?: string
+          canceled_reason?: string | null
+          condition_id?: string
+          condition_type?: string
+          created_at?: string | null
+          execute_at?: string | null
+          executed_at?: string | null
+          id?: string
+          lead_id?: string
+          session_id?: string | null
+          started_at?: string
+          status?: string
+          target_node_id?: string
+          wait_node_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salesbot_wait_queue_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "salesbots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salesbot_wait_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salesbot_wait_queue_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salesbots: {
         Row: {
           conversions_count: number

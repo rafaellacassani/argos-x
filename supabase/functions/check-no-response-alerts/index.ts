@@ -46,11 +46,274 @@ function getFollowupDelayMs(value: number, unit: string): number {
   }
 }
 
+// --- Find start node ---
+function findStartNode(nodes: any[], edges: any[]): any | null {
+  const targetIds = new Set(edges.map((e: any) => e.target));
+  return nodes.find((n: any) => !targetIds.has(n.id)) || null;
+}
+
+// --- Get next node ---
+function getNextNode(currentId: string, nodes: any[], edges: any[], label?: string): any | null {
+  const matchingEdges = edges.filter((e: any) => e.source === currentId);
+  let edge: any = null;
+  if (label) {
+    edge = matchingEdges.find((e: any) => {
+      const handle = (e.sourceHandle || "").toLowerCase();
+      const edgeLabel = (e.label || "").toLowerCase();
+      const target = label.toLowerCase();
+      return handle === target || edgeLabel === target;
+    });
+    if (!edge && (label === "true" || label === "false")) {
+      const handleName = label === "true" ? "yes" : "no";
+      const labelName = label === "true" ? "sim" : "não";
+      edge = matchingEdges.find((e: any) =>
+        (e.sourceHandle || "").toLowerCase() === handleName ||
+        (e.label || "").toLowerCase() === labelName
+      );
+    }
+  }
+  if (!edge) edge = matchingEdges[0];
+  if (!edge) return null;
+  return nodes.find((n: any) => n.id === edge.target) || null;
+}
+
+// --- Variable substitution ---
+function replaceVars(text: string, lead: Record<string, unknown>, instanceName: string): string {
+  return text
+    .replace(/\{\{lead\.name\}\}/gi, (lead.name as string) || "")
+    .replace(/\{\{lead\.phone\}\}/gi, (lead.phone as string) || "")
+    .replace(/\{\{lead\.email\}\}/gi, (lead.email as string) || "")
+    .replace(/\{\{lead\.company\}\}/gi, (lead.company as string) || "")
+    .replace(/\{\{instance\}\}/gi, instanceName);
+}
+
+function jidToNumber(jid: string): string {
+  return jid.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
+}
+
+// --- Migrate wait conditions ---
+function migrateWaitConditionsBackend(data: any): any[] {
+  if (Array.isArray(data.conditions) && data.conditions.length > 0) return data.conditions;
+  const waitMode = data.wait_mode || "timer";
+  if (waitMode === "message" || data.wait_for === "message" || data.wait_mode === "wait_message") {
+    return [{ id: "legacy_msg", type: "message_received", config: {}, order: 0 }];
+  }
+  if (waitMode === "business_hours" || data.wait_for === "business_hours") {
+    return [{ id: "legacy_bh", type: "business_hours", config: { days: data.days, start: data.start, end: data.end }, order: 0 }];
+  }
+  return [{ id: "legacy_timer", type: "timer", config: { seconds: Number(data.seconds || data.duration || 5) }, order: 0 }];
+}
+
+// --- Resume flow from a specific node (simplified for cron context) ---
+async function resumeFlowFromNode(
+  supabase: ReturnType<typeof createClient>,
+  botId: string,
+  lead: any,
+  startNodeId: string,
+  instanceName: string,
+  workspaceId: string
+) {
+  const { data: bot } = await supabase.from("salesbots").select("flow_data").eq("id", botId).single();
+  if (!bot?.flow_data) return;
+
+  const flowData = bot.flow_data as any;
+  const nodes = flowData.nodes || [];
+  const edges = flowData.edges || [];
+
+  let currentNode = nodes.find((n: any) => n.id === startNodeId);
+  let executed = 0;
+  const maxNodes = 50;
+
+  while (currentNode && executed < maxNodes) {
+    executed++;
+    const nodeType = currentNode.type || "";
+
+    try {
+      switch (nodeType) {
+        case "send_message": {
+          const rawText = currentNode.data?.message || currentNode.data?.text || "";
+          if (rawText) {
+            const text = replaceVars(rawText, lead, instanceName);
+            const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
+            if (number) {
+              await sendWhatsApp(instanceName, number, text);
+              await supabase.from("bot_execution_logs").insert({
+                bot_id: botId, lead_id: lead.id, node_id: currentNode.id,
+                status: "success", message: text.substring(0, 200), workspace_id: workspaceId,
+              });
+            }
+          }
+          break;
+        }
+
+        case "wait": {
+          // Enqueue new wait conditions and stop
+          const conditions = migrateWaitConditionsBackend(currentNode.data || {});
+          for (const cond of conditions) {
+            const targetEdge = edges.find((e: any) => e.source === currentNode.id && e.sourceHandle === cond.id);
+            const fallbackEdge = conditions.length === 1 ? edges.find((e: any) => e.source === currentNode.id) : null;
+            const edge = targetEdge || fallbackEdge;
+            if (!edge) continue;
+
+            let executeAt: string | null = null;
+            if (cond.type === "timer") {
+              const delaySec = Number(cond.config?.seconds || 0);
+              if (delaySec > 0) executeAt = new Date(Date.now() + delaySec * 1000).toISOString();
+            } else if (cond.type === "business_hours") {
+              executeAt = new Date(Date.now() + 86400000).toISOString(); // simplified
+            }
+
+            await supabase.from("salesbot_wait_queue").insert({
+              workspace_id: workspaceId, bot_id: botId, lead_id: lead.id,
+              wait_node_id: currentNode.id, target_node_id: edge.target,
+              condition_id: cond.id, condition_type: cond.type,
+              session_id: lead.whatsapp_jid || "", execute_at: executeAt, status: "pending",
+            });
+          }
+          return; // Stop execution — paused at wait
+        }
+
+        case "tag": {
+          const action = currentNode.data?.action || "add";
+          const tagName = currentNode.data?.tag_name || currentNode.data?.tagName || "";
+          if (tagName) {
+            const { data: tag } = await supabase.from("lead_tags").select("id").eq("workspace_id", workspaceId).ilike("name", tagName).single();
+            if (tag) {
+              if (action === "add") {
+                await supabase.from("lead_tag_assignments").upsert({ lead_id: lead.id, tag_id: tag.id, workspace_id: workspaceId }, { onConflict: "lead_id,tag_id" });
+              } else {
+                await supabase.from("lead_tag_assignments").delete().eq("lead_id", lead.id).eq("tag_id", tag.id);
+              }
+            }
+          }
+          break;
+        }
+
+        case "move_stage": {
+          const stageName = currentNode.data?.stage_name || currentNode.data?.stageName || "";
+          if (stageName) {
+            const { data: stage } = await supabase.from("funnel_stages").select("id").eq("workspace_id", workspaceId).ilike("name", stageName).single();
+            if (stage) {
+              await supabase.from("leads").update({ stage_id: stage.id }).eq("id", lead.id);
+            }
+          }
+          break;
+        }
+
+        case "condition": {
+          // Simplified condition evaluation for cron
+          const { field, operator, value } = currentNode.data || {};
+          let result = false;
+          if (field && operator) {
+            const leadValue = String((lead as any)[field] || "").toLowerCase();
+            const targetVal = (value || "").toLowerCase();
+            if (operator === "equals") result = leadValue === targetVal;
+            else if (operator === "contains") result = leadValue.includes(targetVal);
+            else if (operator === "not_equals") result = leadValue !== targetVal;
+          }
+          currentNode = getNextNode(currentNode.id, nodes, edges, result ? "true" : "false");
+          continue;
+        }
+
+        case "stop":
+          return;
+      }
+    } catch (nodeErr) {
+      console.error(`[salesbot-wait] Node ${currentNode.id} error:`, nodeErr);
+    }
+
+    currentNode = getNextNode(currentNode.id, nodes, edges);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ========================================
+    // PROCESSAR FILA DE WAIT DO SALESBOT
+    // ========================================
+    let waitQueueProcessed = 0;
+
+    try {
+      const { data: pendingWaits } = await supabase
+        .from("salesbot_wait_queue")
+        .select("*")
+        .eq("status", "pending")
+        .not("execute_at", "is", null)
+        .lte("execute_at", new Date().toISOString())
+        .limit(30);
+
+      if (pendingWaits?.length) {
+        console.log(`[salesbot-wait] Processing ${pendingWaits.length} expired wait items`);
+
+        for (const item of pendingWaits) {
+          // Atomic status update to prevent double execution
+          const { data: updated } = await supabase
+            .from("salesbot_wait_queue")
+            .update({ status: "executed", executed_at: new Date().toISOString() })
+            .eq("id", item.id)
+            .eq("status", "pending")
+            .select("id")
+            .single();
+
+          if (!updated) {
+            console.log(`[salesbot-wait] Item ${item.id} already processed, skipping`);
+            continue;
+          }
+
+          // For timer conditions: verify lead hasn't responded since started_at
+          if (item.condition_type === "timer") {
+            const { data: inboundMsgs } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("remote_jid", item.session_id)
+              .eq("workspace_id", item.workspace_id)
+              .eq("direction", "inbound")
+              .gte("timestamp", item.started_at)
+              .limit(1);
+
+            if (inboundMsgs && inboundMsgs.length > 0) {
+              // Lead responded — this timer is moot, cancel
+              console.log(`[salesbot-wait] Timer canceled — lead responded since ${item.started_at}`);
+              await supabase.from("salesbot_wait_queue").update({ status: "canceled", canceled_reason: "lead_responded_before_timer" }).eq("id", item.id);
+              continue;
+            }
+          }
+
+          // Cancel sibling conditions for the same wait node + lead
+          await supabase
+            .from("salesbot_wait_queue")
+            .update({ status: "canceled", canceled_reason: "sibling_triggered", executed_at: new Date().toISOString() })
+            .eq("wait_node_id", item.wait_node_id)
+            .eq("lead_id", item.lead_id)
+            .eq("status", "pending")
+            .neq("id", item.id);
+
+          // Fetch lead and resume flow
+          const { data: lead } = await supabase.from("leads").select("*").eq("id", item.lead_id).single();
+          if (lead) {
+            const instanceName = lead.instance_name || "";
+            if (instanceName) {
+              await resumeFlowFromNode(supabase, item.bot_id, lead, item.target_node_id, instanceName, item.workspace_id);
+              console.log(`[salesbot-wait] ✅ Resumed flow for lead ${lead.name} via ${item.condition_type}`);
+            }
+          }
+
+          waitQueueProcessed++;
+        }
+      }
+    } catch (waitErr) {
+      console.error("[salesbot-wait] Error processing wait queue:", waitErr);
+    }
+
+    console.log(`[salesbot-wait] Processed: ${waitQueueProcessed}`);
+
+    // ========================================
+    // ORIGINAL: NO-RESPONSE ALERTS
+    // ========================================
 
     // 1. Get workspaces with alert instance configured
     const { data: workspaces, error: wsErr } = await supabase
@@ -60,7 +323,7 @@ Deno.serve(async (req) => {
 
     if (wsErr) throw wsErr;
     if (!workspaces?.length) {
-      return new Response(JSON.stringify({ message: "No workspaces with alerts configured" }), {
+      return new Response(JSON.stringify({ message: "No workspaces with alerts configured", wait_queue_processed: waitQueueProcessed }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -72,7 +335,6 @@ Deno.serve(async (req) => {
 
       const alertInstance = ws.alert_instance_name;
 
-      // 2. Get all notification_preferences with no_response_enabled
       const { data: prefs, error: prefsErr } = await supabase
         .from("notification_preferences")
         .select("user_profile_id, no_response_minutes, manager_report_enabled")
@@ -81,7 +343,6 @@ Deno.serve(async (req) => {
 
       if (prefsErr || !prefs?.length) continue;
 
-      // Get user profiles with personal_whatsapp
       const profileIds = prefs.map((p: any) => p.user_profile_id);
       const { data: profiles } = await supabase
         .from("user_profiles")
@@ -90,7 +351,6 @@ Deno.serve(async (req) => {
 
       if (!profiles?.length) continue;
 
-      // Get roles for these users
       const userIds = profiles.map((p: any) => p.user_id);
       const { data: roles } = await supabase
         .from("workspace_members")
@@ -101,7 +361,6 @@ Deno.serve(async (req) => {
       const roleMap = new Map<string, string>();
       (roles || []).forEach((r: any) => roleMap.set(r.user_id, r.role));
 
-      // Get funnel stages to identify loss/trash stages
       const { data: lossStages } = await supabase
         .from("funnel_stages")
         .select("id")
@@ -110,7 +369,6 @@ Deno.serve(async (req) => {
 
       const lossStageIds = new Set((lossStages || []).map((s: any) => s.id));
 
-      // Get all active leads for this workspace
       const { data: allLeads } = await supabase
         .from("leads")
         .select("id, name, phone, stage_id, responsible_user, updated_at, whatsapp_jid, instance_name")
@@ -119,10 +377,8 @@ Deno.serve(async (req) => {
 
       if (!allLeads?.length) continue;
 
-      // Filter out leads in loss stages
       const activeLeads = allLeads.filter((l: any) => !lossStageIds.has(l.stage_id));
 
-      // Get stage names for context
       const stageIds = [...new Set(activeLeads.map((l: any) => l.stage_id))];
       const { data: stagesData } = await supabase
         .from("funnel_stages")
@@ -132,7 +388,6 @@ Deno.serve(async (req) => {
       const stageNameMap = new Map<string, string>();
       (stagesData || []).forEach((s: any) => stageNameMap.set(s.id, s.name));
 
-      // Check recent alerts to avoid duplicates
       const dedupCutoff = new Date(Date.now() - DEDUP_HOURS * 60 * 60 * 1000).toISOString();
       const { data: recentAlerts } = await supabase
         .from("alert_log")
@@ -145,10 +400,6 @@ Deno.serve(async (req) => {
         (recentAlerts || []).map((a: any) => `${a.user_profile_id}:${a.lead_id}`)
       );
 
-      // Collect alerts for managers/admins
-      const managerAlerts = new Map<string, Array<{ lead: any; sellerName: string; minutes: number }>>();
-
-      // Process seller alerts
       for (const pref of prefs) {
         if (totalSent >= MAX_ALERTS_PER_RUN) break;
 
@@ -160,7 +411,6 @@ Deno.serve(async (req) => {
         const cutoff = new Date(Date.now() - minutes * 60 * 1000).toISOString();
 
         if (userRole === "seller") {
-          // Find leads assigned to this seller that haven't been updated
           const sellerLeads = activeLeads.filter(
             (l: any) => l.responsible_user === profile.id && l.updated_at < cutoff
           );
@@ -190,15 +440,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // For admins/managers with team no-response alert
         if ((userRole === "admin" || userRole === "manager") && pref.manager_report_enabled) {
-          // Collect all leads without response from sellers
           const teamLeads = activeLeads.filter(
             (l: any) => l.responsible_user && l.responsible_user !== profile.id && l.updated_at < cutoff
           );
 
           if (teamLeads.length > 0) {
-            // Group by seller
             const byResponsible = new Map<string, any[]>();
             for (const lead of teamLeads) {
               const arr = byResponsible.get(lead.responsible_user) || [];
@@ -206,7 +453,6 @@ Deno.serve(async (req) => {
               byResponsible.set(lead.responsible_user, arr);
             }
 
-            // Get seller names
             const responsibleIds = [...byResponsible.keys()];
             const { data: sellerProfiles } = await supabase
               .from("user_profiles")
@@ -216,7 +462,6 @@ Deno.serve(async (req) => {
             const sellerNameMap = new Map<string, string>();
             (sellerProfiles || []).forEach((p: any) => sellerNameMap.set(p.id, p.full_name));
 
-            // Check dedup for manager summary (use null lead_id)
             const managerKey = `${profile.id}:null`;
             if (!alertedSet.has(managerKey)) {
               let summaryLines: string[] = [];
@@ -275,7 +520,6 @@ Deno.serve(async (req) => {
     }
 
     if (queueItems?.length) {
-      // Fetch automation details and lead details for each queue item
       const automationIds = [...new Set(queueItems.map((q: any) => q.automation_id))];
       const leadIds = [...new Set(queueItems.map((q: any) => q.lead_id))];
 
@@ -290,7 +534,6 @@ Deno.serve(async (req) => {
       const leadMap = new Map<string, any>();
       (leadsRes.data || []).forEach((l: any) => leadMap.set(l.id, l));
 
-      // Fetch stage names for variable substitution
       const stageIdsForQueue = [...new Set([
         ...(automationsRes.data || []).map((a: any) => a.stage_id),
         ...(leadsRes.data || []).map((l: any) => l.stage_id),
@@ -304,7 +547,6 @@ Deno.serve(async (req) => {
       const stageNameMapQueue = new Map<string, string>();
       (stagesForQueue || []).forEach((s: any) => stageNameMapQueue.set(s.id, s.name));
 
-      // Fetch lead tags for condition checks
       const { data: leadTagAssignments } = await supabase
         .from("lead_tag_assignments")
         .select("lead_id, tag_id")
@@ -316,7 +558,6 @@ Deno.serve(async (req) => {
         leadTagsMap.get(lta.lead_id)!.add(lta.tag_id);
       });
 
-      // Helper: check conditions
       function checkConditions(conditions: any[], lead: any): boolean {
         if (!conditions || !Array.isArray(conditions) || conditions.length === 0) return true;
         return conditions.every((c: any) => {
@@ -350,7 +591,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Check conditions
         if (!checkConditions(automation.conditions, lead)) {
           await supabase.from("stage_automation_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
           automationsProcessed++;
@@ -385,7 +625,6 @@ Deno.serve(async (req) => {
                   const nodes = flowData.nodes || [];
                   const edges = flowData.edges || [];
 
-                  // Find start node and execute send_message nodes in sequence
                   const startNode = nodes.find((n: any) => n.type === "trigger" || n.data?.nodeType === "trigger");
                   if (startNode) {
                     let currentNodeId = startNode.id;
@@ -431,7 +670,6 @@ Deno.serve(async (req) => {
                 .replace(/\{\{lead\.name\}\}/g, lead.name || "")
                 .replace(/\{\{stage\.name\}\}/g, stageName);
 
-              // Get responsible profile
               if (lead.responsible_user) {
                 const { data: respProfile } = await supabase
                   .from("user_profiles")
@@ -443,7 +681,6 @@ Deno.serve(async (req) => {
                   message = message.replace(/\{\{responsible\.name\}\}/g, respProfile.full_name || "");
 
                   if (respProfile.personal_whatsapp) {
-                    // Get workspace alert instance
                     const { data: wsData } = await supabase
                       .from("workspaces")
                       .select("alert_instance_name")
@@ -472,7 +709,6 @@ Deno.serve(async (req) => {
                   .order("user_id");
 
                 if (members?.length) {
-                  // Get user_profile ids for these members
                   const memberUserIds = members.map((m: any) => m.user_id);
                   const { data: memberProfiles } = await supabase
                     .from("user_profiles")
@@ -564,7 +800,6 @@ Deno.serve(async (req) => {
     if (followupItems?.length) {
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
-      // Fetch agent details
       const agentIds = [...new Set(followupItems.map((q: any) => q.agent_id))];
       const leadIds = [...new Set(followupItems.map((q: any) => q.lead_id))];
 
@@ -588,14 +823,12 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Skip if agent is inactive
         if (!agent.is_active) {
           await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "agent_disabled" }).eq("id", item.id);
           followupsProcessed++;
           continue;
         }
 
-        // Check if lead responded since this was queued — look at agent_memories
         const { data: memory } = await supabase
           .from("agent_memories")
           .select("messages")
@@ -606,7 +839,6 @@ Deno.serve(async (req) => {
         if (memory?.messages && Array.isArray(memory.messages) && memory.messages.length > 0) {
           const lastMsg = memory.messages[memory.messages.length - 1];
           if (lastMsg.role === "user") {
-            // Lead responded — cancel
             await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "lead_responded" }).eq("id", item.id);
             followupsProcessed++;
             console.log(`[followup-queue] ⏭️ Canceled — lead responded: ${lead.name}`);
@@ -614,7 +846,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Generate follow-up message via AI
         const sequence = agent.followup_sequence || [];
         const stepNum = item.step_index + 1;
         const totalSteps = sequence.length;
@@ -645,7 +876,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Send via Evolution API
         const instanceName = lead.instance_name || agent.instance_name;
         const phoneNumber = (lead.phone || "").replace(/\D/g, "") || (lead.whatsapp_jid || "").replace(/@.*$/, "");
 
@@ -658,11 +888,9 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Mark as executed
         await supabase.from("agent_followup_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
         followupsProcessed++;
 
-        // Schedule next step or execute end action
         const nextStepIndex = item.step_index + 1;
         if (nextStepIndex < sequence.length) {
           const nextStep = sequence[nextStepIndex];
@@ -680,7 +908,6 @@ Deno.serve(async (req) => {
           });
           console.log(`[followup-queue] 📅 Next follow-up scheduled: step ${nextStepIndex + 1}, at ${executeAt}`);
         } else if (agent.followup_end_stage_id) {
-          // Last step — move lead to end stage
           await supabase.from("leads").update({ stage_id: agent.followup_end_stage_id }).eq("id", lead.id);
           console.log(`[followup-queue] 🏁 Sequence ended for lead ${lead.name} — moved to stage ${agent.followup_end_stage_id}`);
         }
@@ -689,7 +916,7 @@ Deno.serve(async (req) => {
 
     console.log(`[followup-queue] Processed: ${followupsProcessed}`);
 
-    return new Response(JSON.stringify({ alerts_sent: totalSent, automations_processed: automationsProcessed, followups_processed: followupsProcessed }), {
+    return new Response(JSON.stringify({ alerts_sent: totalSent, automations_processed: automationsProcessed, followups_processed: followupsProcessed, wait_queue_processed: waitQueueProcessed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
