@@ -1,188 +1,107 @@
 
-Objetivo da correção
-- Resolver de forma definitiva o nó “Aguardar” para permitir múltiplas condicionais no mesmo nó (quantas o usuário adicionar), cada uma com sua própria saída conectável no fluxo.
-- Corrigir o comportamento atual em que só uma opção pode ser usada por vez e não existe ramificação real “respondeu x não respondeu”.
+# Correção Cirúrgica: Chat Duplicado e Conversa Quebrada
 
-Diagnóstico do problema atual (confirmado no código)
-1) O editor hoje trata “Aguardar” como escolha única
-- Em `src/components/salesbots/WaitNodeContent.tsx`, existe apenas `wait_mode` com select único (`timer`, `message`, `business_hours`).
-- Não existe estrutura de múltiplas regras/condições no mesmo nó.
+## Diagnóstico Confirmado (dados reais do banco)
 
-2) O canvas só suporta duas saídas especiais (S/N) para `condition` e `validate`
-- Em `src/components/salesbots/BotNodeCard.tsx`, `hasDualOutputs` é fixo para esses tipos.
-- Em `src/components/salesbots/BotBuilderCanvas.tsx`, cálculo visual de conexões considera apenas `sourceHandle` `yes/no`.
+Investiguei o banco de dados e o código fonte em profundidade. Identifiquei **5 causas raiz** que se alimentam mutuamente:
 
-3) Execução backend de `wait` é simplificada e não representa “aguardar resposta”
-- Em `supabase/functions/whatsapp-webhook/index.ts`, `case "wait"` apenas faz `setTimeout` (máx 30s) e segue fluxo linear.
-- Não há fila persistente para “aguardar resposta” e “se não responder em X tempo”.
+### Causa 1: JIDs `@lid` não são números de telefone
+O WhatsApp usa internamente identificadores opacos como `148236601958502@lid` que **não contêm o telefone real**. O sistema trata esses IDs como se fossem telefones, falhando na deduplicação. No banco, confirmei que o mesmo contato real ("pablo matos") aparece com JID `108628430332101@lid` e telefone `+55 (77) 8809-6831` -- mas outro contato com JID diferente pode ter o mesmo telefone.
 
-4) Inconsistência de labels de ramificação
-- Builder grava labels “Sim/Não” para yes/no.
-- Parte da execução usa “true/false” em pontos específicos.
-- Isso já é fonte de comportamento imprevisível em nós condicionais e precisa ser padronizado na mesma entrega.
+### Causa 2: `loadChatsFromDB` agrupa por `remote_jid` exato
+A função que carrega chats do banco (linha 830-890 de Chats.tsx) faz `chatMap.set(msg.remote_jid, ...)`. Se o mesmo contato tem mensagens sob dois JIDs diferentes (ex: um `@lid` e um `@s.whatsapp.net`), aparecem como **dois chats separados**.
 
-Solução proposta (arquitetura)
-Vamos transformar “Aguardar” em um nó de roteamento por condições múltiplas, com saídas dinâmicas.
+### Causa 3: Dedup de chats usa `phone.slice(-10)` como chave
+O sistema tenta deduplicar por últimos 10 dígitos do telefone, mas para chats `@lid` o `phone` é frequentemente vazio ou inválido (>13 dígitos). Quando `phone` está vazio, a chave cai para `remoteJid`, anulando a deduplicação.
 
-Modelo de dados do nó `wait` (flow_data JSON)
-- Adicionar em `node.data`:
-  - `conditions: WaitCondition[]`
-  - `default_condition_id` (opcional, para fallback)
-- Estrutura de cada condição:
-  - `id: string` (estável, usado no `sourceHandle`)
-  - `type: "message_received" | "timer" | "business_hours"`
-  - `label: string` (exibição no editor e edge)
-  - `config: { ... }` (por tipo)
-  - `order: number` (prioridade de avaliação)
+### Causa 4: Criação de leads não verifica telefone normalizado
+O `createLeadSilent` verifica `whatsapp_jid === chat.remoteJid`, mas se o lead existente tem JID `@s.whatsapp.net` e o chat usa `@lid`, não encontra. A verificação por telefone (últimos 10 dígitos) existe mas falha quando o telefone não foi preenchido ou está em formato diferente.
 
-Exemplo:
-- Condição 1: “Se responder” (`message_received`)
-- Condição 2: “Se não responder em 30 min” (`timer`, com estratégia de “sem resposta desde o início da espera”)
-- Condição 3: “Se cair fora do expediente” (`business_hours`)
-Cada condição terá sua própria bolinha de saída no card para conectar ao próximo nó.
+### Causa 5: Mensagens carregadas por JID exato
+`fetchMessages(targetInstance, selectedChat.remoteJid)` consulta a Evolution API pelo JID exato. Se o chat mostra `@lid` mas as mensagens outbound foram gravadas com `@s.whatsapp.net`, elas não aparecem -- resultando em "só mensagens do lead" ou "só mensagens nossas".
 
-Execução assíncrona necessária (backend)
-Como “não respondeu em X tempo” não pode ser resolvido no request síncrono do webhook:
-- Criar fila persistente para esperas de SalesBot.
-- Ao chegar no nó wait:
-  - sistema registra itens pendentes da fila (um por condição aplicável),
-  - interrompe a execução naquele ponto,
-  - retoma depois via evento de mensagem ou job de processamento.
+## Dados confirmados no banco
 
-Banco de dados (migração)
-Criar tabela `public.salesbot_wait_queue` com:
-- `id uuid pk`
-- `workspace_id uuid not null`
-- `bot_id uuid not null`
-- `lead_id uuid not null`
-- `wait_node_id text not null`
-- `target_node_id text not null`
-- `condition_id text not null`
-- `condition_type text not null`
-- `session_id text` (jid)
-- `execute_at timestamptz` (para timer/business_hours)
-- `started_at timestamptz not null default now()`
-- `status text not null default 'pending'` (`pending|executed|canceled|error`)
-- `canceled_reason text`
-- `executed_at timestamptz`
-- `created_at timestamptz default now()`
+- **5 pares de leads duplicados** por `whatsapp_jid` idêntico no mesmo workspace
+- **6 pares de leads duplicados** por telefone idêntico
+- **12 remote_jids distintos** com mensagens, todos `@lid`, nenhum com outbound (0 mensagens outbound no banco inteiro deste workspace)
+- O mesmo contato (`5527999064791@s.whatsapp.net`) aparece com 3 mensagens em uma instância e 2 em outra
 
-Índices:
-- `(status, execute_at)`
-- `(lead_id, wait_node_id, status)`
-- `(session_id, status)`
+## Plano de Correção (só futuro, conforme escolhido)
 
-RLS:
-- habilitar RLS
-- policy por workspace (mesmo padrão existente):
-  - `USING (workspace_id = get_user_workspace_id(auth.uid()))`
-  - `WITH CHECK (workspace_id = get_user_workspace_id(auth.uid()))`
+### 1. Unificar agrupamento de chats por lead/telefone (Chats.tsx)
 
-Alterações no frontend (editor)
-1) `src/components/salesbots/WaitNodeContent.tsx`
-- Substituir select único por gerenciador de condições:
-  - botão “Adicionar condição”
-  - cards de condição com:
-    - tipo (respondeu / cronômetro / expediente)
-    - configuração por tipo
-    - label editável
-    - remover/reordenar
-- Backward compatibility:
-  - se nó antigo tiver `wait_mode`, converter em memória para `conditions` (sem quebrar bots existentes).
+**Arquivo:** `src/pages/Chats.tsx`
 
-2) `src/components/salesbots/BotNodeCard.tsx`
-- Trocar lógica binária fixa por saídas dinâmicas para `wait`:
-  - renderizar 1 saída por condição usando `condition.id` como `sourceHandle`.
-  - manter `condition/validate` como está (ou normalizar para mesma infraestrutura dinâmica, sem alterar UX atual).
+**`loadChatsFromDB` (linhas 815-895):** Mudar o agrupamento de `remote_jid` para usar o lead vinculado como chave primária. Para cada mensagem, buscar o lead correspondente (por JID ou telefone). Agrupar todas as mensagens do mesmo lead sob um único chat.
 
-3) `src/components/salesbots/BotBuilderCanvas.tsx`
-- Conexões:
-  - ao criar edge, usar `sourceHandle = condition.id` e `label = condition.label`.
-- Renderização de arestas:
-  - calcular posição X da origem com base no índice do handle dinâmico no nó wait (não apenas yes/no).
-- Defaults:
-  - novo `getDefaultNodeData('wait')` já cria condição inicial padrão (ex: “Se responder”).
+**Dedup final (linhas 986-996 e 1019-1032):** Quando o chat tem um lead vinculado, usar `lead.id` como chave de dedup em vez de `phoneDigits.slice(-10)`. Isso garante que mesmo com JIDs diferentes, o mesmo lead = mesmo chat.
 
-4) `src/components/salesbots/BotPreviewDialog.tsx`
-- Exibir ramificações do wait por condição (não apenas sim/não).
-- Mostrar texto amigável de cada regra (ex: “Sem resposta em 30 min”).
+### 2. Corrigir criação de leads para evitar duplicação (Chats.tsx)
 
-5) Ajuste de consistência de labels de branch
-- Padronizar resolução de branch por `sourceHandle` prioritariamente (mais seguro que texto).
-- Onde hoje busca “true/false”, aceitar também “yes/no” e labels legadas para compatibilidade.
+**Arquivo:** `src/pages/Chats.tsx` (linhas 1041-1097)
 
-Alterações no backend (execução real)
-1) `supabase/functions/whatsapp-webhook/index.ts`
-- No início do processamento de mensagem:
-  - verificar `salesbot_wait_queue` pendente para o lead/session.
-  - se houver condição `message_received` correspondente:
-    - cancelar pendências irmãs do mesmo `wait_node_id`,
-    - retomar fluxo a partir do `target_node_id` da condição acionada.
-- No `case "wait"`:
-  - ao invés de sleep linear, enfileirar condições:
-    - `message_received`: pendente sem `execute_at`
-    - `timer`: `execute_at = started_at + delay`
-    - `business_hours`: calcular próximo horário útil e enfileirar
-  - encerrar a execução corrente com estado “paused/waiting”.
-- Adicionar função de execução “resumeFlowFromNode(botId, lead, startNodeId, ...)” reaproveitando motor atual.
+Antes de chamar `createLeadSilent`:
+- Além de checar `whatsapp_jid` exato e `remoteJidAlt`, também buscar no banco com query normalizada:
+  - `leads.phone` com últimos 10 dígitos iguais
+  - Para `@lid`, tentar resolver o telefone real via `remoteJidAlt` do chat antes de criar
+- Se encontrar lead existente, vincular o JID novo ao lead existente via `updateLead(existingLead.id, { whatsapp_jid: chat.remoteJid })` ao invés de criar um novo
 
-2) `supabase/functions/check-no-response-alerts/index.ts`
-- Aproveitar o job já existente para processar também `salesbot_wait_queue`:
-  - buscar itens pendentes vencidos (`execute_at <= now`)
-  - validar condição antes de disparar:
-    - timer com “não respondeu”: confirmar ausência de inbound após `started_at`
-      (via `whatsapp_messages` por `remote_jid/session_id`; fallback para lead/session heurística)
-    - business_hours: confirmar janela válida
-  - executar retomada do fluxo no `target_node_id`
-  - marcar item como `executed` e cancelar irmãos do mesmo wait.
+### 3. Unificar carregamento de mensagens (Chats.tsx)
 
-Observações importantes de robustez
-- Compatibilidade total com bots antigos: converter configuração antiga de wait de forma transparente.
-- Idempotência: evitar retomar o mesmo wait duas vezes (lock por status + update atômico).
-- Limite anti-loop continua (já existe no webhook com `maxNodes`).
-- Não quebrar AI Agent flow (já usa `agent_followup_queue` separado).
-- Não alterar arquivos auto-gerados (`src/integrations/supabase/client.ts`, `types.ts`, `supabase/config.toml`).
+**Arquivo:** `src/pages/Chats.tsx` (linhas 1208-1370)
 
-Sequência de implementação
-1. Migração DB da fila `salesbot_wait_queue` + RLS + índices.
-2. Refator do motor de execução no webhook para pause/resume por wait.
-3. Processador de fila no `check-no-response-alerts`.
-4. UI do nó Aguardar com múltiplas condições + handles dinâmicos.
-5. Ajustes de canvas/preview/compatibilidade de labels.
-6. Atualização de templates para novo formato de wait (mantendo leitura dos legados).
-7. Testes manuais ponta a ponta e validações de regressão.
+Ao carregar mensagens de um chat:
+- Se o lead vinculado tem `whatsapp_jid` diferente do `remoteJid` do chat, buscar mensagens de **ambos os JIDs**
+- No fallback para DB (linha 1327+): buscar por todos os JIDs conhecidos do lead + por telefone normalizado
+- Mesclar e ordenar por timestamp
 
-Plano de validação (E2E)
-Cenário A (respondeu):
-- Fluxo: enviar mensagem -> wait com duas condições (respondeu / 30min sem resposta).
-- Lead responde em 2 min.
-- Esperado: seguir imediatamente pelo ramo “respondeu”; ramo de timer cancelado.
+### 4. Gravar outbound com JID correto (Chats.tsx)
 
-Cenário B (não respondeu):
-- Mesmo fluxo sem resposta.
-- Após 30 min (ou tempo curto em teste): seguir pelo ramo timer.
-- Esperado: não executar ramo “respondeu”.
+**Arquivo:** `src/pages/Chats.tsx` (linhas 496-506)
 
-Cenário C (múltiplas condicionais):
-- wait com 3+ condições conectadas.
-- Validar que cada bolinha conecta para nó distinto e cada caminho dispara corretamente.
+Ao gravar mensagem outbound no `whatsapp_messages`:
+- Usar o `whatsapp_jid` do lead vinculado (se existir) como `remote_jid`, não o `selectedChat.remoteJid`
+- Isso garante que inbound e outbound ficam sob o mesmo `remote_jid`
 
-Cenário D (retrocompatibilidade):
-- abrir bot antigo com wait_mode único.
-- Esperado: editor mostra condição equivalente e fluxo continua funcional.
+### 5. Vincular JIDs alternativos ao lead (webhook + frontend)
 
-Riscos e mitigação
-- Risco: duplicidade de disparo por concorrência de webhook/job.
-  - Mitigar com update condicional por status pendente e cancelamento transacional de irmãos.
-- Risco: heurística de “respondeu” inconsistente.
-  - Mitigar consultando `whatsapp_messages` inbound por `remote_jid/session_id` e timestamp.
-- Risco: quebra visual em edges dinâmicos.
-  - Mitigar com fallback para centro quando handle não encontrado.
+**Arquivo:** `src/pages/Chats.tsx` (transformChatData, linhas 691-791)
 
-Resultado esperado para o usuário
-- No nó Aguardar, você poderá adicionar quantas condicionais quiser.
-- Cada condicional terá sua saída própria para “puxar” o próximo nó.
-- Funcionará exatamente como você descreveu:
-  - “se respondeu” segue por um caminho,
-  - “se não respondeu em cronômetro X” segue por outro,
-  - e outras condições no mesmo nó, cada uma com seu próprio fluxo.
+Quando `transformChatData` encontra um lead com JID diferente do chat:
+- Se o lead tem `@s.whatsapp.net` e o chat tem `@lid`, não sobrescrever
+- Se o lead tem `@lid` e agora temos `@s.whatsapp.net` via `remoteJidAlt`, atualizar para o `@s.whatsapp.net` (mais estável)
+
+**Arquivo:** `supabase/functions/whatsapp-webhook/index.ts` (linhas 999-1005)
+
+Na busca por lead existente no webhook, além de `whatsapp_jid.eq.${remoteJid}`:
+- Também buscar por telefone normalizado quando disponível
+- Isso evita criar lead duplicado no backend
+
+### 6. Normalizar telefone na criação de lead (useLeads.ts)
+
+**Arquivo:** `src/hooks/useLeads.ts` (linhas 651-728, `createLeadSilent`)
+
+Antes de inserir:
+- Normalizar `phone` para formato consistente (só dígitos, sem formatação)
+- A unique index `idx_leads_phone_workspace` já existe e vai prevenir duplicatas de telefone no mesmo workspace
+
+## Resumo das mudanças por arquivo
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Chats.tsx` | Dedup por lead.id, busca mensagens multi-JID, outbound com JID do lead, vinculação de JIDs |
+| `src/hooks/useLeads.ts` | Normalizar phone antes de insert, busca ampliada antes de criar |
+| `supabase/functions/whatsapp-webhook/index.ts` | Busca de lead por telefone normalizado além de JID |
+
+## O que NÃO será alterado
+- Dados históricos (conforme escolhido)
+- Arquivos auto-gerados (client.ts, types.ts, config.toml)
+- Lógica de AI Agent e SalesBot (não relacionada)
+- Estrutura do banco (sem migrações necessárias)
+
+## Resultado esperado
+- Cada contato real aparece como **um único chat**, independente de quantos JIDs tenha
+- Todas as mensagens (inbound + outbound) aparecem **juntas** na mesma conversa
+- Leads não são mais duplicados ao abrir a tela de Chat
+- O painel lateral mostra os dados corretos do lead vinculado
