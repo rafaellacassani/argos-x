@@ -56,6 +56,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Users,
   Loader2,
@@ -75,6 +77,13 @@ import {
   Trash2,
   Pencil,
   CreditCard,
+  Clock,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Timer,
+  Send,
+  CalendarClock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -174,6 +183,22 @@ export default function AdminClients() {
   const [limitsAI, setLimitsAI] = useState(100);
   const [limitsLoading, setLimitsLoading] = useState(false);
 
+  // Cadence config state
+  const [cadenceConfig, setCadenceConfig] = useState<{
+    id: string;
+    is_active: boolean;
+    cadence_days: number[];
+    whatsapp_instance_name: string | null;
+    whatsapp_template: string;
+    email_subject: string;
+    email_template: string;
+    send_whatsapp: boolean;
+    send_email: boolean;
+  } | null>(null);
+  const [cadenceLoading, setCadenceLoading] = useState(false);
+  const [cadenceSaving, setCadenceSaving] = useState(false);
+  const [reactivationLog, setReactivationLog] = useState<any[]>([]);
+
   useEffect(() => {
     if (!user) return;
     checkAccess();
@@ -189,8 +214,67 @@ export default function AdminClients() {
 
     const isAdmin = !!(data && data.length > 0);
     setIsSuperAdmin(isAdmin);
-    if (isAdmin) fetchClients();
+    if (isAdmin) {
+      fetchClients();
+      fetchCadenceConfig();
+    }
     setLoading(false);
+  };
+
+  const fetchCadenceConfig = async () => {
+    setCadenceLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("reactivation_cadence_config")
+        .select("*")
+        .limit(1)
+        .single();
+      if (data) {
+        setCadenceConfig({
+          ...data,
+          cadence_days: Array.isArray(data.cadence_days) ? data.cadence_days as number[] : [6, 7, 9, 14, 21],
+        });
+      }
+
+      // Fetch recent reactivation logs
+      const { data: logs } = await supabase
+        .from("reactivation_log")
+        .select("*")
+        .order("sent_at", { ascending: false })
+        .limit(50);
+      setReactivationLog(logs || []);
+    } catch (err) {
+      console.error("Error fetching cadence config:", err);
+    } finally {
+      setCadenceLoading(false);
+    }
+  };
+
+  const handleSaveCadence = async () => {
+    if (!cadenceConfig) return;
+    setCadenceSaving(true);
+    try {
+      const { error } = await supabase
+        .from("reactivation_cadence_config")
+        .update({
+          is_active: cadenceConfig.is_active,
+          cadence_days: cadenceConfig.cadence_days,
+          whatsapp_instance_name: cadenceConfig.whatsapp_instance_name,
+          whatsapp_template: cadenceConfig.whatsapp_template,
+          email_subject: cadenceConfig.email_subject,
+          email_template: cadenceConfig.email_template,
+          send_whatsapp: cadenceConfig.send_whatsapp,
+          send_email: cadenceConfig.send_email,
+        })
+        .eq("id", cadenceConfig.id);
+
+      if (error) throw error;
+      toast({ title: "Cadência salva!", description: "Configurações de reativação atualizadas." });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setCadenceSaving(false);
+    }
   };
 
   const fetchClients = async () => {
@@ -489,17 +573,46 @@ export default function AdminClients() {
     );
   });
 
-  const getPlanBadge = (planType: string) => {
-    const map: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
-      active: { variant: "default", label: "Ativo" },
-      trialing: { variant: "secondary", label: "Trial" },
-      trial_manual: { variant: "secondary", label: "Trial Manual" },
-      past_due: { variant: "destructive", label: "Pendente" },
-      canceled: { variant: "destructive", label: "Cancelado" },
-      blocked: { variant: "destructive", label: "Bloqueado" },
-    };
-    const badge = map[planType] || { variant: "outline" as const, label: planType };
-    return <Badge variant={badge.variant}>{badge.label}</Badge>;
+  const getClientStatusInfo = (client: ClientData) => {
+    const now = new Date();
+    const trialEnd = client.trial_end ? new Date(client.trial_end) : null;
+    const daysRemaining = trialEnd ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000) : null;
+    const daysSinceExpiry = trialEnd ? Math.ceil((now.getTime() - trialEnd.getTime()) / 86400000) : null;
+
+    if (client.plan_type === "active") {
+      return { icon: <CheckCircle2 className="w-3.5 h-3.5" />, label: "Ativo", className: "bg-emerald-500/10 text-emerald-600 border-emerald-200" };
+    }
+    if (client.plan_type === "past_due") {
+      return { icon: <CreditCard className="w-3.5 h-3.5" />, label: "Pagamento pendente", className: "bg-amber-500/10 text-amber-600 border-amber-200" };
+    }
+    if (client.plan_type === "canceled") {
+      return { icon: <XCircle className="w-3.5 h-3.5" />, label: "Cancelado", className: "bg-red-500/10 text-red-600 border-red-200" };
+    }
+    if (client.blocked_at || (trialEnd && trialEnd <= now)) {
+      return {
+        icon: <AlertTriangle className="w-3.5 h-3.5" />,
+        label: `Trial expirado${daysSinceExpiry ? ` (${daysSinceExpiry}d)` : ""}`,
+        className: "bg-red-500/10 text-red-600 border-red-200",
+      };
+    }
+    if ((client.plan_type === "trialing" || client.plan_type === "trial_manual") && trialEnd && trialEnd > now) {
+      return {
+        icon: <Timer className="w-3.5 h-3.5" />,
+        label: `Trial (${daysRemaining}d restantes)`,
+        className: "bg-blue-500/10 text-blue-600 border-blue-200",
+      };
+    }
+    return { icon: <Clock className="w-3.5 h-3.5" />, label: client.plan_type, className: "bg-muted text-muted-foreground" };
+  };
+
+  const getPlanBadge = (client: ClientData) => {
+    const info = getClientStatusInfo(client);
+    return (
+      <Badge variant="outline" className={`gap-1 ${info.className}`}>
+        {info.icon}
+        {info.label}
+      </Badge>
+    );
   };
 
   const getUsagePercent = (used: number, limit: number) => {
@@ -535,6 +648,10 @@ export default function AdminClients() {
           <TabsTrigger value="invites" className="gap-2">
             <Mail className="w-4 h-4" />
             Convites Pendentes ({invites.length})
+          </TabsTrigger>
+          <TabsTrigger value="cadence" className="gap-2">
+            <CalendarClock className="w-4 h-4" />
+            Cadência
           </TabsTrigger>
         </TabsList>
 
@@ -836,7 +953,7 @@ export default function AdminClients() {
                       <TableCell className="text-center">
                         {client.members_count}/{client.user_limit}
                       </TableCell>
-                      <TableCell>{getPlanBadge(client.plan_type)}</TableCell>
+                      <TableCell>{getPlanBadge(client)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(client.created_at), "dd/MM/yyyy")}
                       </TableCell>
@@ -953,6 +1070,231 @@ export default function AdminClients() {
             </Table>
           </div>
         </TabsContent>
+
+        {/* ───────── TAB: CADÊNCIA DE REATIVAÇÃO ───────── */}
+        <TabsContent value="cadence" className="space-y-6">
+          {cadenceLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : cadenceConfig ? (
+            <>
+              <Card className="max-w-2xl">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <CalendarClock className="w-5 h-5" />
+                        Cadência de Reativação
+                      </CardTitle>
+                      <CardDescription>
+                        Envio automático de cobranças para clientes com trial expirado.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {cadenceConfig.is_active ? "Ativa" : "Pausada"}
+                      </span>
+                      <Switch
+                        checked={cadenceConfig.is_active}
+                        onCheckedChange={(v) => setCadenceConfig({ ...cadenceConfig, is_active: v })}
+                      />
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Cadence days */}
+                  <div className="space-y-2">
+                    <Label>Dias de envio (após início do trial)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 21, 30].map((day) => {
+                        const isSelected = cadenceConfig.cadence_days.includes(day);
+                        return (
+                          <Button
+                            key={day}
+                            type="button"
+                            size="sm"
+                            variant={isSelected ? "default" : "outline"}
+                            className="h-8 w-10"
+                            onClick={() => {
+                              const newDays = isSelected
+                                ? cadenceConfig.cadence_days.filter((d) => d !== day)
+                                : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
+                              setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
+                            }}
+                          >
+                            {day}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Selecionados: dia {cadenceConfig.cadence_days.join(", ")}
+                    </p>
+                  </div>
+
+                  <Separator />
+
+                  {/* Channels */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">WhatsApp</span>
+                      </div>
+                      <Switch
+                        checked={cadenceConfig.send_whatsapp}
+                        onCheckedChange={(v) => setCadenceConfig({ ...cadenceConfig, send_whatsapp: v })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-blue-600" />
+                        <span className="text-sm font-medium">E-mail</span>
+                      </div>
+                      <Switch
+                        checked={cadenceConfig.send_email}
+                        onCheckedChange={(v) => setCadenceConfig({ ...cadenceConfig, send_email: v })}
+                      />
+                    </div>
+                  </div>
+
+                  {/* WhatsApp instance */}
+                  {cadenceConfig.send_whatsapp && (
+                    <div className="space-y-2">
+                      <Label>Instância WhatsApp (Evolution API)</Label>
+                      <Input
+                        placeholder="Nome da instância (ex: argos-alerts)"
+                        value={cadenceConfig.whatsapp_instance_name || ""}
+                        onChange={(e) =>
+                          setCadenceConfig({ ...cadenceConfig, whatsapp_instance_name: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Nome da instância configurada na Evolution API para disparar as mensagens.
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* WhatsApp template */}
+                  {cadenceConfig.send_whatsapp && (
+                    <div className="space-y-2">
+                      <Label>Template WhatsApp</Label>
+                      <Textarea
+                        rows={6}
+                        value={cadenceConfig.whatsapp_template}
+                        onChange={(e) =>
+                          setCadenceConfig({ ...cadenceConfig, whatsapp_template: e.target.value })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Variáveis: {"{nome}"}, {"{email}"}, {"{link}"}, {"{dias_expirado}"}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Email template */}
+                  {cadenceConfig.send_email && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Assunto do e-mail</Label>
+                        <Input
+                          value={cadenceConfig.email_subject}
+                          onChange={(e) =>
+                            setCadenceConfig({ ...cadenceConfig, email_subject: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Template do e-mail</Label>
+                        <Textarea
+                          rows={8}
+                          value={cadenceConfig.email_template}
+                          onChange={(e) =>
+                            setCadenceConfig({ ...cadenceConfig, email_template: e.target.value })
+                          }
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Variáveis: {"{nome}"}, {"{email}"}, {"{link}"}, {"{dias_expirado}"}
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  <Button onClick={handleSaveCadence} disabled={cadenceSaving} className="w-full">
+                    {cadenceSaving ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
+                    ) : (
+                      <><Check className="w-4 h-4 mr-2" /> Salvar configurações</>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Recent reactivation log */}
+              <Card className="max-w-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Send className="w-4 h-4" />
+                    Histórico de envios recentes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reactivationLog.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhum envio de reativação realizado ainda.
+                    </p>
+                  ) : (
+                    <div className="rounded-lg border overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Data</TableHead>
+                            <TableHead>Canal</TableHead>
+                            <TableHead>Dia</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {reactivationLog.slice(0, 20).map((log: any) => (
+                            <TableRow key={log.id}>
+                              <TableCell className="text-sm">
+                                {format(new Date(log.sent_at), "dd/MM/yyyy HH:mm")}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="gap-1">
+                                  {log.channel === "whatsapp" ? (
+                                    <MessageSquare className="w-3 h-3" />
+                                  ) : (
+                                    <Mail className="w-3 h-3" />
+                                  )}
+                                  {log.channel === "whatsapp" ? "WhatsApp" : "E-mail"}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm">Dia {log.cadence_day}</TableCell>
+                              <TableCell>
+                                <Badge
+                                  variant={log.status === "sent" ? "default" : "destructive"}
+                                  className={log.status === "sent" ? "bg-emerald-500/10 text-emerald-600 border-emerald-200" : ""}
+                                >
+                                  {log.status === "sent" ? "Enviado" : log.status === "failed" ? "Falhou" : "Pulado"}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* ───────── DETAIL DIALOG ───────── */}
@@ -997,7 +1339,7 @@ export default function AdminClients() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Status</p>
-                  {getPlanBadge(selectedClient.plan_type)}
+                  {getPlanBadge(selectedClient)}
                 </div>
                 {selectedClient.trial_end && (
                   <div>
