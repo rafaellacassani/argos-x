@@ -55,6 +55,7 @@ export function PersonalityTab({ formData, updateField }: Props) {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="vender">Vender</SelectItem>
+              <SelectItem value="vendedora">Vendedora (Closer)</SelectItem>
               <SelectItem value="agendar">Agendar</SelectItem>
               <SelectItem value="qualificar">Qualificar lead</SelectItem>
               <SelectItem value="suporte">Suporte</SelectItem>
