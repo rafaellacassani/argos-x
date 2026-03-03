@@ -1716,7 +1716,7 @@ export default function Chats() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-card">
+    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-card" data-tour="chat-section">
       {/* Chat List */}
       <div className="w-96 border-r border-border flex flex-col">
         {/* Header */}

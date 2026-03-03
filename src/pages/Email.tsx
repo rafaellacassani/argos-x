@@ -280,7 +280,7 @@ function EmailPageContent() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-6">
+    <div className="h-[calc(100vh-8rem)] flex gap-6" data-tour="email-section">
       {/* Sidebar */}
       <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="w-56 flex flex-col">
         <Button onClick={handleCompose} className="mb-4 gap-2">

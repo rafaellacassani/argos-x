@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { TopBar } from "./TopBar";
@@ -7,6 +7,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
+import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -14,21 +15,24 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { allowed, reason, daysRemaining, loading } = useWorkspaceAccess();
-  const { workspace } = useWorkspace();
+  const { workspace, refreshWorkspace } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Redirect to tour if onboarding not completed
+  const [tourActive, setTourActive] = useState(false);
+
+  // Activate tour if onboarding not completed
   useEffect(() => {
-    if (
-      !loading &&
-      workspace &&
-      workspace.onboarding_completed === false &&
-      location.pathname !== "/tour-guiado"
-    ) {
-      navigate("/tour-guiado", { replace: true });
+    if (!loading && workspace && workspace.onboarding_completed === false) {
+      setTourActive(true);
     }
-  }, [loading, workspace, location.pathname, navigate]);
+  }, [loading, workspace]);
+
+  const handleTourComplete = useCallback(() => {
+    setTourActive(false);
+    refreshWorkspace();
+    navigate("/dashboard", { replace: true });
+  }, [refreshWorkspace, navigate]);
 
   // Non-blocking: show layout immediately, only block if explicitly not allowed
   if (!loading && !allowed) {
@@ -52,6 +56,12 @@ export function AppLayout({ children }: AppLayoutProps) {
           {children}
         </main>
       </div>
+
+      <GuidedTourOverlay
+        isActive={tourActive}
+        initialStep={workspace?.onboarding_step || 0}
+        onComplete={handleTourComplete}
+      />
     </div>
   );
 }

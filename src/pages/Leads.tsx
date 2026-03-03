@@ -276,6 +276,7 @@ export default function Leads() {
   return (
     <motion.div
       className="h-full flex flex-col bg-muted/30"
+      data-tour="funnel-section"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}

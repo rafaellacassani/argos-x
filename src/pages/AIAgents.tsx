@@ -60,7 +60,7 @@ export default function AIAgents() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="ai-agents-section">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
