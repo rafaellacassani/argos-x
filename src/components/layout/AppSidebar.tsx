@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Home,
   LayoutDashboard,
@@ -22,6 +22,7 @@ import {
   GraduationCap,
   BookOpen,
   Map,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -31,6 +32,8 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
 interface MenuItem {
   icon: React.ElementType;
@@ -56,13 +59,100 @@ const menuItems: MenuItem[] = [
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
-export function AppSidebar() {
+function SidebarNavContent({
+  visibleItems,
+  collapsed,
+  permissions,
+  onNavigate,
+}: {
+  visibleItems: MenuItem[];
+  collapsed: boolean;
+  permissions: ReturnType<typeof useUserRole>;
+  onNavigate?: () => void;
+}) {
+  const location = useLocation();
+
+  return (
+    <ul className="space-y-1">
+      {visibleItems.map((item) => {
+        const isActive = location.pathname === item.path;
+        const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+
+        const linkContent = (
+          <div
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
+              isLocked
+                ? "text-white/40 cursor-not-allowed"
+                : isActive
+                  ? "bg-sidebar-accent text-white"
+                  : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
+              item.highlight && !isActive && !isLocked && "bg-sidebar-primary/20 border border-sidebar-primary/30"
+            )}
+          >
+            {isActive && !isLocked && (
+              <motion.div
+                layoutId="activeIndicator"
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full"
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              />
+            )}
+            <item.icon
+              className={cn(
+                "w-5 h-5 flex-shrink-0 transition-colors",
+                isLocked
+                  ? "text-white/40"
+                  : isActive ? "text-sidebar-primary" : "text-white/80 group-hover:text-white"
+              )}
+            />
+            {!collapsed && (
+              <span className="font-medium text-sm flex-1">{item.label}</span>
+            )}
+            {isLocked && !collapsed && (
+              <Lock className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
+            )}
+          </div>
+        );
+
+        if (isLocked) {
+          return (
+            <li key={item.path}>
+              <Tooltip>
+                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                <TooltipContent side="right">Disponível apenas para administradores</TooltipContent>
+              </Tooltip>
+            </li>
+          );
+        }
+
+        return (
+          <li key={item.path}>
+            <NavLink to={item.path} onClick={onNavigate}>{linkContent}</NavLink>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+interface AppSidebarProps {
+  mobileOpen?: boolean;
+  onMobileOpenChange?: (open: boolean) => void;
+}
+
+export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const location = useLocation();
   const { workspace } = useWorkspace();
   const { user } = useAuth();
   const permissions = useUserRole();
+  const isMobile = useIsMobile();
+
+  // Close mobile drawer on navigation
+  useEffect(() => {
+    onMobileOpenChange?.(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const checkSuperAdmin = async () => {
@@ -79,7 +169,7 @@ export function AppSidebar() {
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
-  ...(isSuperAdmin ? [
+    ...(isSuperAdmin ? [
       { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
       { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
       { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
@@ -89,6 +179,50 @@ export function AppSidebar() {
     ] : []),
   ];
 
+  const workspaceBlock = (showLabel: boolean) => (
+    workspace ? (
+      <div className={cn("border-b border-sidebar-border", showLabel ? "px-4 py-3" : "flex justify-center py-3")}>
+        <div className={cn("flex items-center", showLabel ? "gap-3" : "justify-center")}>
+          {workspace.logo_url ? (
+            <img src={workspace.logo_url} alt={workspace.name} className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0" />
+          ) : (
+            <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs font-bold text-sidebar-primary">{workspace.name.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
+          {showLabel && (
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/50 leading-tight">Workspace de</p>
+              <p className="text-sm font-semibold text-white truncate leading-tight">{workspace.name}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    ) : null
+  );
+
+  // ─── MOBILE: Sheet drawer ───
+  if (isMobile) {
+    return (
+      <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
+        <SheetContent side="left" className="w-[280px] p-0 bg-sidebar border-sidebar-border [&>button]:hidden">
+          <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
+          <div className="flex items-center justify-between h-14 px-4 border-b border-sidebar-border">
+            <img src={argosLogoDarkHorizontal} alt="Argos X" className="h-8 object-contain" />
+            <button onClick={() => onMobileOpenChange?.(false)} className="p-1 rounded-lg text-white/60 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          {workspaceBlock(true)}
+          <nav className="flex-1 py-4 px-3 overflow-y-auto">
+            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} onNavigate={() => onMobileOpenChange?.(false)} />
+          </nav>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // ─── DESKTOP: Normal sidebar ───
   return (
     <motion.aside
       initial={false}
@@ -96,13 +230,8 @@ export function AppSidebar() {
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="sticky top-0 h-screen bg-sidebar flex flex-col border-r border-sidebar-border flex-shrink-0"
     >
-      {/* Logo */}
       <div className="flex items-center h-16 px-4 border-b border-sidebar-border">
-        <motion.div
-          initial={false}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-3"
-        >
+        <motion.div initial={false} animate={{ opacity: 1 }} className="flex items-center gap-3">
           {collapsed ? (
             <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center">
               <img src={argosIcon} alt="Argos X" className="w-10 h-10 object-contain" />
@@ -112,153 +241,19 @@ export function AppSidebar() {
           )}
         </motion.div>
       </div>
-
-      {/* Workspace Info */}
-      {workspace && !collapsed && (
-        <div className="px-4 py-3 border-b border-sidebar-border">
-          <div className="flex items-center gap-3">
-            {workspace.logo_url ? (
-              <img
-                src={workspace.logo_url}
-                alt={workspace.name}
-                className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0"
-              />
-            ) : (
-              <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-sidebar-primary">
-                  {workspace.name.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="text-[11px] text-white/50 leading-tight">Workspace de</p>
-              <p className="text-sm font-semibold text-white truncate leading-tight">
-                {workspace.name}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      {workspace && collapsed && (
-        <div className="flex justify-center py-3 border-b border-sidebar-border">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {workspace.logo_url ? (
-                <img
-                  src={workspace.logo_url}
-                  alt={workspace.name}
-                  className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center">
-                  <span className="text-xs font-bold text-sidebar-primary">
-                    {workspace.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-              )}
-            </TooltipTrigger>
-            <TooltipContent side="right">Workspace de {workspace.name}</TooltipContent>
-          </Tooltip>
-        </div>
-      )}
-
-      {/* Navigation */}
+      {workspaceBlock(!collapsed)}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
-        <ul className="space-y-2">
-          {visibleItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
-
-            const linkContent = (
-              <div
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group relative",
-                  isLocked
-                    ? "text-white/40 cursor-not-allowed"
-                    : isActive
-                      ? "bg-sidebar-accent text-white"
-                      : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
-                  item.highlight && !isActive && !isLocked && "bg-sidebar-primary/20 border border-sidebar-primary/30"
-                )}
-              >
-                {isActive && !isLocked && (
-                  <motion.div
-                    layoutId="activeIndicator"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-sidebar-primary rounded-r-full"
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-                <item.icon
-                  className={cn(
-                    "w-5 h-5 flex-shrink-0 transition-colors",
-                    isLocked
-                      ? "text-white/40"
-                      : isActive ? "text-sidebar-primary" : "text-white/80 group-hover:text-white"
-                  )}
-                />
-                <AnimatePresence>
-                  {!collapsed && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2 }}
-                      className="font-medium text-sm flex-1"
-                    >
-                      {item.label}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-                {isLocked && !collapsed && (
-                  <Lock className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
-                )}
-              </div>
-            );
-
-            if (isLocked) {
-              return (
-                <li key={item.path}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {linkContent}
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      Disponível apenas para administradores
-                    </TooltipContent>
-                  </Tooltip>
-                </li>
-              );
-            }
-
-            return (
-              <li key={item.path}>
-                <NavLink to={item.path}>
-                  {linkContent}
-                </NavLink>
-              </li>
-            );
-          })}
-        </ul>
+        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} />
       </nav>
-
-      {/* Collapse Button */}
       <div className="p-3 border-t border-sidebar-border">
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
         >
-          {collapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
+          {collapsed ? <ChevronRight className="w-5 h-5" /> : (
             <>
               <ChevronLeft className="w-5 h-5" />
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-sm font-medium"
-              >
-                Recolher
-              </motion.span>
+              <span className="text-sm font-medium">Recolher</span>
             </>
           )}
         </button>
