@@ -95,9 +95,9 @@ export function TopBar() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>{workspace?.name || "Minha Conta"}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setShowPasswordDialog(true)}>
-              <Lock className="w-4 h-4 mr-2" />
-              Definir senha
+            <DropdownMenuItem onClick={() => navigate("/perfil")}>
+              <User className="w-4 h-4 mr-2" />
+              Perfil & Segurança
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/configuracoes")}>Configurações</DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/planos")}>
