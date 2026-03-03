@@ -1,7 +1,9 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { TopBar } from "./TopBar";
 import { useWorkspaceAccess } from "@/hooks/useWorkspaceAccess";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
@@ -12,6 +14,21 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { allowed, reason, daysRemaining, loading } = useWorkspaceAccess();
+  const { workspace } = useWorkspace();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Redirect to tour if onboarding not completed
+  useEffect(() => {
+    if (
+      !loading &&
+      workspace &&
+      workspace.onboarding_completed === false &&
+      location.pathname !== "/tour-guiado"
+    ) {
+      navigate("/tour-guiado", { replace: true });
+    }
+  }, [loading, workspace, location.pathname, navigate]);
 
   // Non-blocking: show layout immediately, only block if explicitly not allowed
   if (!loading && !allowed) {

@@ -21,6 +21,7 @@ import {
   Shield,
   GraduationCap,
   BookOpen,
+  Map,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -78,10 +79,13 @@ export function AppSidebar() {
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
-    ...(isSuperAdmin ? [
+  ...(isSuperAdmin ? [
       { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
       { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
       { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
+    ] : []),
+    ...(permissions.isAdmin ? [
+      { icon: Map, label: "Tour Guiado", path: "/tour-guiado" } as MenuItem,
     ] : []),
   ];
 

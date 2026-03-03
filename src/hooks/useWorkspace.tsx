@@ -24,6 +24,8 @@ export interface Workspace {
   user_limit?: number | null;
   ai_interactions_limit?: number | null;
   ai_interactions_used?: number | null;
+  onboarding_completed?: boolean | null;
+  onboarding_step?: number | null;
 }
 
 export interface WorkspaceMember {
