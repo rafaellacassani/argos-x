@@ -43,6 +43,7 @@ const AgentTrainingDoc = lazy(() => import("./pages/AgentTrainingDoc"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
+const TourGuiado = lazy(() => import("./pages/TourGuiado"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,6 +129,7 @@ const App = () => (
                             <Route path="/perfil" element={<ProfileSettings />} />
                             <Route path="/treinamento" element={<Treinamento />} />
                             <Route path="/agent-training" element={<AgentTrainingDoc />} />
+                            <Route path="/tour-guiado" element={<TourGuiado />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
