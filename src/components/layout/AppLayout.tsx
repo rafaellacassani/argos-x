@@ -8,6 +8,8 @@ import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
 import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Menu } from "lucide-react";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -16,12 +18,12 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { allowed, reason, daysRemaining, loading } = useWorkspaceAccess();
   const { workspace, refreshWorkspace } = useWorkspace();
-  const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const [tourActive, setTourActive] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Activate tour if onboarding not completed
   useEffect(() => {
     if (!loading && workspace && workspace.onboarding_completed === false) {
       setTourActive(true);
@@ -34,7 +36,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate("/dashboard", { replace: true });
   }, [refreshWorkspace, navigate]);
 
-  // Non-blocking: show layout immediately, only block if explicitly not allowed
   if (!loading && !allowed) {
     return <WorkspaceBlockedScreen reason={reason as "blocked" | "canceled" | "past_due"} />;
   }
@@ -45,14 +46,24 @@ export function AppLayout({ children }: AppLayoutProps) {
     daysRemaining !== null &&
     daysRemaining <= 3;
 
+  const mobileMenuSlot = isMobile ? (
+    <button
+      onClick={() => setMobileOpen(true)}
+      className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors flex-shrink-0"
+      aria-label="Abrir menu"
+    >
+      <Menu className="w-5 h-5" />
+    </button>
+  ) : undefined;
+
   return (
     <div className="flex min-h-screen w-full bg-background">
-      <AppSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TopBar />
+      <AppSidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <TopBar mobileMenuSlot={mobileMenuSlot} />
         {showTrialBanner && <TrialBanner daysRemaining={daysRemaining} />}
         <LeadLimitBanner />
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>
       </div>
