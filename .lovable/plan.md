@@ -1,69 +1,64 @@
 
 
-# Tour Guiado — Onboarding Interativo do Argos X
+## Entendi o que você quer
 
-## Analise do Rascunho e Ordem Sugerida
+Não, o que eu fiz foi uma **página separada** com uma lista de passos. O que você quer é um **tour interativo por cima da interface real** — tipo aquelas janelinhas que aparecem destacando um botão ou área da tela, com uma seta apontando e um texto explicando "clique aqui para fazer X", e aí o usuário clica em "Próximo" e a janelinha pula para o próximo elemento.
 
-Sua ordem esta boa mas precisa de ajustes logicos. O usuario precisa primeiro entender o "centro nervoso" (Chats + Funil) antes de funcoes avancadas. Ordem otimizada:
+Pense no estilo do **Google quando você abre o Gmail pela primeira vez**, ou apps como Notion/Trello que mostram tooltips guiados.
 
-| # | Etapa | Rota | Por que nessa posicao |
-|---|-------|------|----------------------|
-| 1 | Conecte seu WhatsApp | /settings | Sem conexao, nada funciona |
-| 2 | Adicione sua equipe | /configuracoes | Quem vai usar o sistema |
-| 3 | Organize o Funil de Vendas | /leads | Estrutura base do negocio |
-| 4 | Converse nos Chats | /chats | Funcao principal do dia-a-dia |
-| 5 | Monte sua Agente de IA | /ai-agents | Automacao principal — explicacao detalhada |
-| 6 | Contatos | /contacts | Lista centralizada |
-| 7 | Calendario | /calendar | Agendamentos e lembretes |
-| 8 | E-mail | /email | Canal complementar |
-| 9 | Dashboard | /dashboard | Metricas consolidadas |
-| 10 | Estatisticas | /statistics | Analise do funil |
-| 11 | Alertas e Relatorios | /configuracoes | Notificacoes automaticas |
-| 12 | SalesBots | /salesbots | Automacao avancada de fluxos |
-| 13 | Campanhas | /campaigns | Disparos em massa |
+## Como vou implementar
 
-## Abordagem Tecnica
+### Componente de Tour Overlay
+- Um componente `<GuidedTourOverlay />` que fica renderizado no `AppLayout`
+- Ele cria um **overlay escuro** sobre toda a tela, com um **recorte (spotlight)** exatamente no elemento que está sendo explicado
+- Uma **caixa de diálogo flutuante** (tooltip) posicionada ao lado do elemento destacado, com:
+  - Título do passo
+  - Descrição curta e clara
+  - Botões "Anterior" / "Próximo" / "Pular tour"
+  - Indicador de progresso (ex: "3 de 13")
 
-### 1. Pagina "Tour Guiado" (`/tour-guiado`)
-- Pagina standalone acessivel via sidebar (apenas Super Admin)
-- Design de "linha do tempo vertical" — cada etapa e um card grande com:
-  - Numero + icone da secao
-  - Titulo claro em portugues
-  - Descricao rica (2-4 paragrafos curtos) explicando O QUE faz, POR QUE e importante, e COMO usar
-  - Para Agente de IA: sub-secoes detalhadas (Personalidade, Base de Conhecimento, FAQ, Comportamento, Qualificacao, Ferramentas, Avancado)
-  - Botao "Ir para essa funcao" que navega para a rota correspondente
-- Progress bar no topo mostrando quantas etapas ja foram visitadas
-- Visual: cards grandes, fonte legivel, cores do sistema, sem termos em ingles
+### Navegação automática entre páginas
+- Cada passo define: a **rota** da página e o **seletor CSS** do elemento a destacar
+- Quando o usuário clica "Próximo" e o próximo passo está em outra página, o sistema **navega automaticamente** para aquela rota e depois destaca o elemento
+- Exemplo: Passo 1 vai para `/settings` e destaca o botão de conectar WhatsApp. Passo 2 vai para `/configuracoes` e destaca a área de equipe.
 
-### 2. Sistema de Onboarding Obrigatorio (para novos workspaces)
-- Usa os campos `onboarding_completed` e `onboarding_step` ja existentes na tabela `workspaces`
-- No `AppLayout`, se `workspace.onboarding_completed !== true`, redireciona para `/tour-guiado`
-- Cada etapa tem botao "Proximo" que atualiza `onboarding_step` no banco
-- Botao "Ir para essa funcao" abre a pagina em nova aba ou permite voltar ao tour
-- Na ultima etapa, botao "Concluir Tour" marca `onboarding_completed = true`
-- Admin pode resetar o tour a qualquer momento
+### Os 13 passos com elementos reais
+Cada passo terá um `targetSelector` (elemento da UI real a destacar) e `route` (para onde navegar):
 
-### 3. Descricoes Enriquecidas por Etapa
+| # | Rota | Elemento destacado | Texto |
+|---|------|--------------------|-------|
+| 1 | /settings | Área de conexão WhatsApp | "Conecte o WhatsApp da sua empresa aqui" |
+| 2 | /configuracoes | Seção de equipe | "Adicione vendedores e gestores" |
+| 3 | /leads | Kanban do funil | "Organize as fases do seu funil" |
+| 4 | /chats | Painel de conversas | "Converse com seus leads aqui" |
+| 5 | /ai-agents | Card de agente | "Monte sua agente de IA" |
+| 6 | /contacts | Lista de contatos | "Todos os seus leads organizados" |
+| 7 | /calendar | Calendário | "Agende compromissos" |
+| 8 | /email | Caixa de e-mail | "Sincronize seu e-mail" |
+| 9 | /dashboard | Cards de métricas | "Acompanhe suas métricas" |
+| 10 | /statistics | Gráficos do funil | "Analise o progresso dos leads" |
+| 11 | /configuracoes | Seção de alertas | "Configure alertas e relatórios" |
+| 12 | /salesbots | Lista de bots | "Crie sequências automáticas" |
+| 13 | /campaigns | Área de campanhas | "Dispare campanhas em massa" |
 
-Cada etapa tera texto claro, sem jargao, exemplos praticos. Destaque especial para a etapa 5 (Agente de IA) com sub-cards explicando cada aba de configuracao:
-- **Personalidade**: Nome, tom de voz, como ela se apresenta
-- **Base de Conhecimento**: Textos sobre seus produtos, precos, servicos
-- **FAQ**: Perguntas frequentes com respostas prontas
-- **Comportamento**: Para quem responde, tempo de espera, instancia
-- **Qualificacao**: Perguntas para classificar o lead automaticamente
-- **Ferramentas**: Acoes automaticas (mover etapa, agendar follow-up)
-- **Avancado**: Limites, horarios, configuracoes tecnicas
+### Implementação técnica
 
-Para SalesBots: "Crie sequencias automaticas de mensagens. Por exemplo: quando um lead chega, o bot envia uma saudacao, espera a resposta, e encaminha para a etapa certa do funil — tudo sem precisar de um humano."
+**Arquivos a criar:**
+- `src/components/tour/GuidedTourOverlay.tsx` — Overlay com spotlight, tooltip flutuante, navegação entre passos
+- `src/components/tour/tourSteps.ts` — Definição dos 13 passos (rota, seletor, título, descrição)
+- `src/components/tour/SpotlightMask.tsx` — SVG/CSS que escurece a tela exceto o elemento alvo
 
-### 4. Arquivos a Criar/Editar
+**Arquivos a editar:**
+- `src/components/layout/AppLayout.tsx` — Renderizar `<GuidedTourOverlay />` e ativar automaticamente se `onboarding_completed === false`
+- Manter a página `TourGuiado.tsx` existente como referência para admin resetar/ver o tour
 
-- **Criar**: `src/pages/TourGuiado.tsx` — pagina completa do tour
-- **Editar**: `src/App.tsx` — adicionar rota `/tour-guiado`
-- **Editar**: `src/components/layout/AppSidebar.tsx` — adicionar link no menu admin
-- **Editar**: `src/components/layout/AppLayout.tsx` — redirect para tour se onboarding nao concluido
-- **Editar**: `src/hooks/useWorkspace.tsx` — incluir `onboarding_completed` e `onboarding_step` na interface Workspace
+### Mecânica do spotlight
+- Usa `element.getBoundingClientRect()` para pegar a posição do elemento alvo
+- Overlay com `position: fixed; inset: 0` e `pointer-events: none` no elemento destacado
+- Recorte via `clip-path` ou SVG mask com um "buraco" no elemento
+- Tooltip posicionado com lógica de auto-placement (acima, abaixo, lado — conforme espaço disponível)
+- Animação suave (framer-motion) entre passos
 
-### 5. Sem Migracao Necessaria
-Os campos `onboarding_completed` e `onboarding_step` ja existem na tabela `workspaces`.
+### Fallback
+Se o seletor CSS do elemento não for encontrado na página (por exemplo, a página ainda está carregando), o tooltip aparece centralizado com a descrição do passo e um botão para pular.
 
