@@ -458,7 +458,7 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="h-full flex gap-6">
+    <div className="h-full flex gap-6" data-tour="calendar-section">
       {/* Calendar */}
       <div className="flex-1 inboxia-card p-6 flex flex-col">
         {/* Header */}

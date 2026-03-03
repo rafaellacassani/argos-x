@@ -7,7 +7,7 @@ import { NotificationSettings } from "@/components/settings/NotificationSettings
 
 export default function Configuracoes() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-tour="team-section">
       {/* Header */}
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">
@@ -43,7 +43,7 @@ export default function Configuracoes() {
           <TeamManager />
         </TabsContent>
 
-        <TabsContent value="notifications">
+        <TabsContent value="notifications" data-tour="alerts-section">
           <NotificationSettings />
         </TabsContent>
 

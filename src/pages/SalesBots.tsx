@@ -147,7 +147,7 @@ export default function SalesBots() {
   const conversionRate = totalExecutions > 0 ? ((totalConversions / totalExecutions) * 100).toFixed(1) : '0';
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6" data-tour="salesbots-section">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
