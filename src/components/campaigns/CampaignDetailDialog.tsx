@@ -7,7 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign, CampaignRecipient, useCampaigns } from "@/hooks/useCampaigns";
-import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle } from "lucide-react";
+import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
+import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -32,15 +34,24 @@ const recipientStatusConfig: Record<string, { label: string; color: string }> = 
 };
 
 export default function CampaignDetailDialog({ open, onOpenChange, campaign }: Props) {
-  const { fetchRecipients } = useCampaigns();
+  const { fetchRecipients, retryCampaign } = useCampaigns();
+  const { listInstances } = useEvolutionAPI();
   const [recipients, setRecipients] = useState<CampaignRecipient[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [retryInstance, setRetryInstance] = useState(campaign.instance_name);
+  const [retrying, setRetrying] = useState(false);
+  const [availableInstances, setAvailableInstances] = useState<string[]>([]);
 
   useEffect(() => {
     if (open && campaign.id) {
       loadRecipients();
+      setRetryInstance(campaign.instance_name);
+      // Load instances for retry selector
+      listInstances().then(insts => {
+        setAvailableInstances(insts.map((i: any) => i.instanceName));
+      });
     }
   }, [open, campaign.id]);
 
@@ -49,6 +60,18 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
     const data = await fetchRecipients(campaign.id);
     setRecipients(data);
     setLoading(false);
+  };
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    const result = await retryCampaign(
+      campaign.id,
+      retryInstance !== campaign.instance_name ? retryInstance : undefined
+    );
+    setRetrying(false);
+    if (result) {
+      onOpenChange(false);
+    }
   };
 
   const filteredRecipients = recipients.filter((r) => {
@@ -129,6 +152,46 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
               </div>
               <Progress value={progress} className="h-3" />
             </div>
+
+            {/* Retry Failed */}
+            {campaign.failed_count > 0 && ["completed", "paused", "canceled"].includes(campaign.status) && (
+              <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-destructive" />
+                  <p className="font-medium text-destructive">{campaign.failed_count} mensagens falharam</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Você pode reenviar apenas as mensagens que falharam. Se a conexão caiu, reconecte a instância antes de reenviar.
+                </p>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground mb-1">Instância para reenvio</p>
+                    <Select value={retryInstance} onValueChange={setRetryInstance}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableInstances.length > 0 ? (
+                          availableInstances.map(name => (
+                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value={campaign.instance_name}>{campaign.instance_name}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button 
+                    onClick={handleRetry} 
+                    disabled={retrying}
+                    className="gap-2"
+                  >
+                    <RotateCcw className={`w-4 h-4 ${retrying ? "animate-spin" : ""}`} />
+                    {retrying ? "Reenviando..." : `Reenviar ${campaign.failed_count} falhas`}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Config */}
             <div className="grid grid-cols-2 gap-4">
