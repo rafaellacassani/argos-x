@@ -45,7 +45,7 @@ serve(async (req) => {
       }
     }
 
-    const { campaignId } = await req.json();
+    const { campaignId, retryFailed, newInstanceName } = await req.json();
     if (!campaignId) {
       return new Response(JSON.stringify({ error: "campaignId is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -63,6 +63,57 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Campaign not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // --- RETRY FAILED MODE ---
+    if (retryFailed) {
+      if (!["completed", "paused", "canceled"].includes(campaign.status)) {
+        return new Response(JSON.stringify({ error: "Campaign must be completed, paused or canceled to retry" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Reset failed recipients back to pending
+      const { data: failedRecipients, error: failedErr } = await supabase
+        .from("campaign_recipients")
+        .select("id")
+        .eq("campaign_id", campaignId)
+        .eq("status", "failed");
+
+      if (failedErr) throw failedErr;
+
+      const failedCount = failedRecipients?.length || 0;
+      if (failedCount === 0) {
+        return new Response(JSON.stringify({ error: "No failed recipients to retry" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Reset failed to pending
+      await supabase
+        .from("campaign_recipients")
+        .update({ status: "pending", error_message: null, sent_at: null })
+        .eq("campaign_id", campaignId)
+        .eq("status", "failed");
+
+      // Update campaign: set running, update instance if changed, adjust counters
+      const updateData: Record<string, unknown> = {
+        status: "running",
+        failed_count: 0,
+        last_sent_at: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (newInstanceName) {
+        updateData.instance_name = newInstanceName;
+      }
+
+      await supabase.from("campaigns").update(updateData).eq("id", campaignId);
+
+      console.log(`[prepare-campaign] 🔄 Retry: Campaign ${campaignId}: ${failedCount} failed recipients reset to pending${newInstanceName ? `, instance changed to ${newInstanceName}` : ""}`);
+
+      return new Response(JSON.stringify({
+        retried: failedCount,
+        instance_name: newInstanceName || campaign.instance_name,
+        status: "running",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- NORMAL PREPARE MODE ---
     if (campaign.status !== "draft") {
       return new Response(JSON.stringify({ error: "Campaign must be in draft status" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }

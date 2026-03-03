@@ -258,6 +258,25 @@ export function useCampaigns() {
     }
   }, [fetchCampaigns]);
 
+  const retryCampaign = useCallback(async (id: string, newInstanceName?: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('prepare-campaign', {
+        body: { campaignId: id, retryFailed: true, newInstanceName },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      await fetchCampaigns();
+      toast.success(`Reenvio iniciado! ${data.retried} mensagens serão reenviadas.`);
+      return data;
+    } catch (err: any) {
+      console.error('Error retrying campaign:', err);
+      toast.error(err?.message || 'Erro ao reenviar campanha');
+      return null;
+    }
+  }, [fetchCampaigns]);
+
   const duplicateCampaign = useCallback(async (campaign: Campaign) => {
     const newCampaign = await createCampaign({
       name: `${campaign.name} (cópia)`,
@@ -418,6 +437,7 @@ export function useCampaigns() {
     startCampaign,
     cancelCampaign,
     duplicateCampaign,
+    retryCampaign,
     fetchRecipients,
     estimateRecipients,
   };

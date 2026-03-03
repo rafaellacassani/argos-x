@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Rocket,
   XCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ export default function Campaigns() {
     cancelCampaign,
     deleteCampaign,
     duplicateCampaign,
+    retryCampaign,
   } = useCampaigns();
 
   const [activeTab, setActiveTab] = useState("all");
@@ -243,6 +245,11 @@ export default function Campaigns() {
                         <DropdownMenuItem onClick={() => setDetailCampaign(campaign)}>
                           <Eye className="w-4 h-4 mr-2" /> Ver detalhes
                         </DropdownMenuItem>
+                        {campaign.failed_count > 0 && ["completed", "paused", "canceled"].includes(campaign.status) && (
+                          <DropdownMenuItem onClick={() => retryCampaign(campaign.id)}>
+                            <RotateCcw className="w-4 h-4 mr-2" /> Reenviar falhas ({campaign.failed_count})
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => duplicateCampaign(campaign)}>
                           <Copy className="w-4 h-4 mr-2" /> Duplicar
                         </DropdownMenuItem>
