@@ -252,7 +252,7 @@ export default function Settings() {
         if (i > 0) await new Promise(r => setTimeout(r, 500));
         try {
           const state = await getConnectionState(instance.instanceName);
-          const currentState = state?.instance?.state || "open";
+          const currentState = state?.instance?.state || "close";
           
           // Loop detection: count consecutive "connecting" states
           if (currentState === "connecting") {
@@ -273,7 +273,7 @@ export default function Settings() {
         } catch {
           instancesWithState.push({
             ...instance,
-            connectionStatus: "open" as const,
+            connectionStatus: "close" as const,
           });
         }
       }
