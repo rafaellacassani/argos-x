@@ -1,43 +1,69 @@
 
-# Nova Tool: Agendar Follow-up Contextual para Agente de IA
 
-## Problema
-Quando um lead diz "me chama depois das 9h amanha", a agente de IA nao tem como agendar esse recontato automaticamente. Hoje isso se perde e depende de acao manual.
+# Tour Guiado — Onboarding Interativo do Argos X
 
-## Solucao
-Adicionar uma nova ferramenta (tool) `agendar_followup` ao sistema de IA, permitindo que ela interprete pedidos de agendamento do lead e crie automaticamente uma mensagem programada na tabela `scheduled_messages`.
+## Analise do Rascunho e Ordem Sugerida
 
-## Como vai funcionar (fluxo)
-1. Lead diz: "Me chama depois das 9h amanha"
-2. A IA interpreta e chama a tool `agendar_followup` com data/hora e mensagem
-3. O sistema insere na tabela `scheduled_messages`
-4. O cron `send-scheduled-messages` (ja existe, roda a cada minuto) envia automaticamente no horario correto
-5. O lead recebe a mensagem no WhatsApp no horario combinado
+Sua ordem esta boa mas precisa de ajustes logicos. O usuario precisa primeiro entender o "centro nervoso" (Chats + Funil) antes de funcoes avancadas. Ordem otimizada:
 
-## Mudancas Tecnicas
+| # | Etapa | Rota | Por que nessa posicao |
+|---|-------|------|----------------------|
+| 1 | Conecte seu WhatsApp | /settings | Sem conexao, nada funciona |
+| 2 | Adicione sua equipe | /configuracoes | Quem vai usar o sistema |
+| 3 | Organize o Funil de Vendas | /leads | Estrutura base do negocio |
+| 4 | Converse nos Chats | /chats | Funcao principal do dia-a-dia |
+| 5 | Monte sua Agente de IA | /ai-agents | Automacao principal — explicacao detalhada |
+| 6 | Contatos | /contacts | Lista centralizada |
+| 7 | Calendario | /calendar | Agendamentos e lembretes |
+| 8 | E-mail | /email | Canal complementar |
+| 9 | Dashboard | /dashboard | Metricas consolidadas |
+| 10 | Estatisticas | /statistics | Analise do funil |
+| 11 | Alertas e Relatorios | /configuracoes | Notificacoes automaticas |
+| 12 | SalesBots | /salesbots | Automacao avancada de fluxos |
+| 13 | Campanhas | /campaigns | Disparos em massa |
 
-### 1. Edge Function `ai-agent-chat/index.ts`
-- Adicionar nova tool `agendar_followup` no `getToolDefinitions()`:
-  - Parametros: `lead_id`, `scheduled_at` (ISO datetime), `message` (texto a enviar)
-- Adicionar handler de execucao da tool que insere na tabela `scheduled_messages` com os dados corretos (instance_name, remote_jid, channel_type, workspace_id)
-- Adicionar instrucao no system prompt para a IA saber interpretar pedidos de horario relativo ("amanha as 9h", "daqui 2 horas", "segunda-feira")
+## Abordagem Tecnica
 
-### 2. Tab de Ferramentas (`src/components/agents/tabs/ToolsTab.tsx`)
-- Adicionar `agendar_followup` na lista `availableTools` com label "Agendar Follow-up" e descricao "Agendar uma mensagem para ser enviada em um horario especifico"
+### 1. Pagina "Tour Guiado" (`/tour-guiado`)
+- Pagina standalone acessivel via sidebar (apenas Super Admin)
+- Design de "linha do tempo vertical" — cada etapa e um card grande com:
+  - Numero + icone da secao
+  - Titulo claro em portugues
+  - Descricao rica (2-4 paragrafos curtos) explicando O QUE faz, POR QUE e importante, e COMO usar
+  - Para Agente de IA: sub-secoes detalhadas (Personalidade, Base de Conhecimento, FAQ, Comportamento, Qualificacao, Ferramentas, Avancado)
+  - Botao "Ir para essa funcao" que navega para a rota correspondente
+- Progress bar no topo mostrando quantas etapas ja foram visitadas
+- Visual: cards grandes, fonte legivel, cores do sistema, sem termos em ingles
 
-### 3. Instrucoes no Prompt (automatico via `ai-agent-chat`)
-- Ao detectar a tool `agendar_followup` habilitada, injetar instrucao no system prompt:
-  - "Quando o lead pedir para ser contactado em um horario especifico, use a tool agendar_followup. Interprete expressoes como 'amanha as 9h', 'daqui 1 hora', 'na segunda'. Sempre confirme o agendamento na resposta."
-  - Incluir o timezone do workspace (ou default BRT -3) para calculos corretos
+### 2. Sistema de Onboarding Obrigatorio (para novos workspaces)
+- Usa os campos `onboarding_completed` e `onboarding_step` ja existentes na tabela `workspaces`
+- No `AppLayout`, se `workspace.onboarding_completed !== true`, redireciona para `/tour-guiado`
+- Cada etapa tem botao "Proximo" que atualiza `onboarding_step` no banco
+- Botao "Ir para essa funcao" abre a pagina em nova aba ou permite voltar ao tour
+- Na ultima etapa, botao "Concluir Tour" marca `onboarding_completed = true`
+- Admin pode resetar o tour a qualquer momento
 
-### 4. Nenhuma migracao de banco necessaria
-- A tabela `scheduled_messages` ja existe e suporta todos os campos necessarios
-- O cron `send-scheduled-messages` ja processa e envia automaticamente
+### 3. Descricoes Enriquecidas por Etapa
 
-## Resultado Esperado
-A IA vai conseguir:
-- Interpretar "me chama amanha depois das 9h" -> agendar para o dia seguinte as 09:00
-- Interpretar "daqui 2 horas" -> agendar para now() + 2h
-- Confirmar ao lead: "Combinado! Te chamo amanha as 9h"
-- A mensagem aparece na aba Follow-ups do lead
-- No horario, o sistema envia automaticamente pelo WhatsApp
+Cada etapa tera texto claro, sem jargao, exemplos praticos. Destaque especial para a etapa 5 (Agente de IA) com sub-cards explicando cada aba de configuracao:
+- **Personalidade**: Nome, tom de voz, como ela se apresenta
+- **Base de Conhecimento**: Textos sobre seus produtos, precos, servicos
+- **FAQ**: Perguntas frequentes com respostas prontas
+- **Comportamento**: Para quem responde, tempo de espera, instancia
+- **Qualificacao**: Perguntas para classificar o lead automaticamente
+- **Ferramentas**: Acoes automaticas (mover etapa, agendar follow-up)
+- **Avancado**: Limites, horarios, configuracoes tecnicas
+
+Para SalesBots: "Crie sequencias automaticas de mensagens. Por exemplo: quando um lead chega, o bot envia uma saudacao, espera a resposta, e encaminha para a etapa certa do funil — tudo sem precisar de um humano."
+
+### 4. Arquivos a Criar/Editar
+
+- **Criar**: `src/pages/TourGuiado.tsx` — pagina completa do tour
+- **Editar**: `src/App.tsx` — adicionar rota `/tour-guiado`
+- **Editar**: `src/components/layout/AppSidebar.tsx` — adicionar link no menu admin
+- **Editar**: `src/components/layout/AppLayout.tsx` — redirect para tour se onboarding nao concluido
+- **Editar**: `src/hooks/useWorkspace.tsx` — incluir `onboarding_completed` e `onboarding_step` na interface Workspace
+
+### 5. Sem Migracao Necessaria
+Os campos `onboarding_completed` e `onboarding_step` ja existem na tabela `workspaces`.
+
