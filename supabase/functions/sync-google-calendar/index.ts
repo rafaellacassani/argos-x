@@ -205,10 +205,12 @@ app.delete("/delete", async (c) => {
 app.post("/pull", async (c) => {
   let userId: string;
   let daysAhead = 30;
+  let daysBehind = 0;
   try {
     const body = await c.req.json();
     userId = body.userId;
     if (body.daysAhead) daysAhead = body.daysAhead;
+    if (body.daysBehind) daysBehind = body.daysBehind;
     if (!userId) throw new Error();
   } catch {
     return c.json({ error: "userId is required" }, 400, corsHeaders);
@@ -231,7 +233,7 @@ app.post("/pull", async (c) => {
     }
 
     const calendarId = tokenRow.google_calendar_id || "primary";
-    const daysBehind = body.daysBehind || 0;
+    const timeMin = new Date(Date.now() - daysBehind * 24 * 60 * 60 * 1000).toISOString();
     const timeMin = new Date(Date.now() - daysBehind * 24 * 60 * 60 * 1000).toISOString();
     const timeMax = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
 
