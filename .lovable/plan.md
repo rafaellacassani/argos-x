@@ -1,64 +1,125 @@
 
 
-## Entendi o que você quer
+# Briefing / Prompt para Landing Page — Argos X
 
-Não, o que eu fiz foi uma **página separada** com uma lista de passos. O que você quer é um **tour interativo por cima da interface real** — tipo aquelas janelinhas que aparecem destacando um botão ou área da tela, com uma seta apontando e um texto explicando "clique aqui para fazer X", e aí o usuário clica em "Próximo" e a janelinha pula para o próximo elemento.
+Copie e envie o texto abaixo para o projeto Lovable da Landing Page:
 
-Pense no estilo do **Google quando você abre o Gmail pela primeira vez**, ou apps como Notion/Trello que mostram tooltips guiados.
+---
 
-## Como vou implementar
+## PROMPT PARA O LOVABLE (LANDING PAGE)
 
-### Componente de Tour Overlay
-- Um componente `<GuidedTourOverlay />` que fica renderizado no `AppLayout`
-- Ele cria um **overlay escuro** sobre toda a tela, com um **recorte (spotlight)** exatamente no elemento que está sendo explicado
-- Uma **caixa de diálogo flutuante** (tooltip) posicionada ao lado do elemento destacado, com:
-  - Título do passo
-  - Descrição curta e clara
-  - Botões "Anterior" / "Próximo" / "Pular tour"
-  - Indicador de progresso (ex: "3 de 13")
+Preciso que você crie 3 seções de destaque na landing page do Argos X. Cada seção deve ter visual impactante, com fundo contrastante entre elas, animações sutis de entrada (fade-in ao scroll), e ser 100% responsiva. Use a paleta de cores do Argos X (roxo/violeta como primária, verde como sucesso, fundo escuro). Todas as seções devem ter português brasileiro, sem termos em inglês.
 
-### Navegação automática entre páginas
-- Cada passo define: a **rota** da página e o **seletor CSS** do elemento a destacar
-- Quando o usuário clica "Próximo" e o próximo passo está em outra página, o sistema **navega automaticamente** para aquela rota e depois destaca o elemento
-- Exemplo: Passo 1 vai para `/settings` e destaca o botão de conectar WhatsApp. Passo 2 vai para `/configuracoes` e destaca a área de equipe.
+---
 
-### Os 13 passos com elementos reais
-Cada passo terá um `targetSelector` (elemento da UI real a destacar) e `route` (para onde navegar):
+### SEÇÃO 1: Agente de IA — "Sua vendedora que nunca dorme"
 
-| # | Rota | Elemento destacado | Texto |
-|---|------|--------------------|-------|
-| 1 | /settings | Área de conexão WhatsApp | "Conecte o WhatsApp da sua empresa aqui" |
-| 2 | /configuracoes | Seção de equipe | "Adicione vendedores e gestores" |
-| 3 | /leads | Kanban do funil | "Organize as fases do seu funil" |
-| 4 | /chats | Painel de conversas | "Converse com seus leads aqui" |
-| 5 | /ai-agents | Card de agente | "Monte sua agente de IA" |
-| 6 | /contacts | Lista de contatos | "Todos os seus leads organizados" |
-| 7 | /calendar | Calendário | "Agende compromissos" |
-| 8 | /email | Caixa de e-mail | "Sincronize seu e-mail" |
-| 9 | /dashboard | Cards de métricas | "Acompanhe suas métricas" |
-| 10 | /statistics | Gráficos do funil | "Analise o progresso dos leads" |
-| 11 | /configuracoes | Seção de alertas | "Configure alertas e relatórios" |
-| 12 | /salesbots | Lista de bots | "Crie sequências automáticas" |
-| 13 | /campaigns | Área de campanhas | "Dispare campanhas em massa" |
+**Layout:** Hero grande à esquerda com texto + à direita um mockup/card simulando a interface de configuração da agente. Abaixo, grid de 8 cards (2x4 desktop, 1 coluna mobile) explicando cada capacidade.
 
-### Implementação técnica
+**Título principal:** "Monte sua Agente de IA em minutos — ela vende, qualifica e faz follow-up por você"
 
-**Arquivos a criar:**
-- `src/components/tour/GuidedTourOverlay.tsx` — Overlay com spotlight, tooltip flutuante, navegação entre passos
-- `src/components/tour/tourSteps.ts` — Definição dos 13 passos (rota, seletor, título, descrição)
-- `src/components/tour/SpotlightMask.tsx` — SVG/CSS que escurece a tela exceto o elemento alvo
+**Subtítulo:** "Configure cada detalhe: personalidade, conhecimento, estilo de fala e até como ela reage quando o lead some."
 
-**Arquivos a editar:**
-- `src/components/layout/AppLayout.tsx` — Renderizar `<GuidedTourOverlay />` e ativar automaticamente se `onboarding_completed === false`
-- Manter a página `TourGuiado.tsx` existente como referência para admin resetar/ver o tour
+**Os 8 cards com ícone + título + descrição curta:**
 
-### Mecânica do spotlight
-- Usa `element.getBoundingClientRect()` para pegar a posição do elemento alvo
-- Overlay com `position: fixed; inset: 0` e `pointer-events: none` no elemento destacado
-- Recorte via `clip-path` ou SVG mask com um "buraco" no elemento
-- Tooltip posicionado com lógica de auto-placement (acima, abaixo, lado — conforme espaço disponível)
-- Animação suave (framer-motion) entre passos
+1. **Personalidade** (ícone: Sparkles) — "Defina o nome, tom de voz (formal, amigável, técnico), objetivo principal e dados da empresa. A agente se apresenta exatamente como você quer."
 
-### Fallback
-Se o seletor CSS do elemento não for encontrado na página (por exemplo, a página ainda está carregando), o tooltip aparece centralizado com a descrição do passo e um botão para pular.
+2. **Base de Conhecimento** (ícone: BookOpen) — "Ensine seus produtos, preços, regras e restrições. A agente consulta tudo antes de responder — como um vendedor treinado."
+
+3. **FAQ Inteligente** (ícone: HelpCircle) — "Cadastre até 50 perguntas frequentes com respostas prontas. Quando o lead pergunta algo similar, a agente responde na hora."
+
+4. **Seu Estilo de Atendimento** (ícone: MessageSquare) — "Envie prints de suas conversas no WhatsApp. A IA analisa seu jeito de falar, trejeitos e linguagem — e replica seu estilo."
+
+5. **Comportamento** (ícone: Settings) — "Escolha para quem ela responde (todos, só leads novos, etapas específicas), tempo de resposta, tamanho das mensagens e instância do WhatsApp."
+
+6. **Qualificação Automática** (ícone: Target) — "A agente faz perguntas em sequência (nome, empresa, cargo, e-mail) antes de atender. Se o campo é obrigatório, ela insiste até receber."
+
+7. **Follow-up Automático** (ícone: RefreshCw) — "Se o lead parar de responder, a agente tenta recontatar automaticamente — até 5 tentativas com intervalos que você define (minutos, horas ou dias)."
+
+8. **Ferramentas e Ações** (ícone: Wrench) — "A agente move leads de etapa no funil, adiciona tags, agenda compromissos e atribui responsáveis — tudo sozinha, no momento certo."
+
+**CTA:** "Criar minha Agente de IA" (botão grande, cor primária)
+
+**Prints que preciso que você simule/crie como mockup:**
+- Um card simulando a tela de Personalidade com campos preenchidos (nome "Julia", tom "Amigável", objetivo "Qualificar e agendar")
+- Um card mostrando a timeline de Follow-up com 3 tentativas (30min, 1 dia, 3 dias) e uma seta final "Mover para No Show"
+
+---
+
+### SEÇÃO 2: Notificações Inteligentes — "Relatórios no seu WhatsApp, sem abrir o sistema"
+
+**Layout:** Lado esquerdo um mockup de celular mostrando uma mensagem de WhatsApp com um relatório formatado. Lado direito o texto explicativo.
+
+**Título:** "Receba relatórios completos direto no WhatsApp — sem precisar abrir a ferramenta"
+
+**Subtítulo:** "Configure alertas personalizados para cada membro da equipe. Gestores recebem o resumo, vendedores recebem o que importa para eles."
+
+**Bullets com ícones:**
+- (ícone: Bell) **Alerta de lead sem resposta** — "Defina o tempo limite (10, 30 ou 60 minutos). Se ninguém respondeu, o gestor recebe um aviso no WhatsApp."
+- (ícone: BarChart3) **Relatório diário automático** — "Todo dia no horário que você escolher, receba um resumo com novos leads, conversas abertas, taxa de conversão e desempenho por vendedor."
+- (ícone: Users) **Relatório executivo para gestores** — "Escolha a frequência (diário, semanal ou mensal). Inclui métricas de performance por vendedor e progresso no funil."
+- (ícone: UserPlus) **Alerta de novo lead** — "Assim que um lead novo chegar, o responsável é avisado instantaneamente no WhatsApp."
+- (ícone: Zap) **Disparo manual** — "Botão 'Receber relatório agora' para testar a entrega a qualquer momento."
+
+**Destaque visual:** Simule uma mensagem de WhatsApp (fundo verde claro, balão branco) com texto tipo:
+```
+📊 Relatório Diário — 03/03/2026
+
+Novos leads: 14
+Conversas ativas: 23
+Taxa de conversão: 32%
+Tempo médio de resposta: 4min
+
+👤 Top vendedor: Ana (8 conversões)
+⚠️ 3 leads sem resposta há +30min
+```
+
+**CTA:** "Configurar meus alertas"
+
+---
+
+### SEÇÃO 3: Rastreamento de Campanhas — "Saiba exatamente qual campanha traz os melhores clientes"
+
+**Layout:** Fundo escuro/gradiente. Ícones do Facebook (azul) e Instagram (gradiente rosa/roxo/laranja) em destaque no topo. Abaixo, um mockup de funil mostrando leads entrando de campanhas diferentes com cores distintas.
+
+**Título:** "Rastreie cada lead desde o clique no anúncio até a venda"
+
+**Subtítulo:** "Conecte suas campanhas do Meta Ads e veja quais leads vieram da Campanha A ou B — e se estão de fato comprando."
+
+**Funcionalidades em cards horizontais (com ícones do Facebook e Instagram):**
+
+1. **(ícone Facebook + Instagram)** **Origem rastreada** — "Cada lead que chega pelo Facebook ou Instagram é automaticamente identificado com a campanha de origem."
+
+2. **(ícone: Filter)** **Funil por campanha** — "Filtre o funil de vendas por campanha e veja quantos leads de cada anúncio avançaram para cada etapa."
+
+3. **(ícone: TrendingUp)** **Qualidade real dos leads** — "Não basta gerar lead — veja quais campanhas geram leads que realmente compram. Compare taxa de conversão entre campanhas."
+
+4. **(ícone: Tag)** **Tags automáticas de origem** — "Leads do Instagram recebem tag 'Instagram-inbox' ou 'Instagram-feed'. Leads do Facebook recebem 'Facebook-inbox' ou 'Facebook-feed'. Tudo automático."
+
+5. **(ícone: PieChart)** **ROI por canal** — "Analise qual canal (Facebook vs Instagram, inbox vs feed) traz o melhor retorno para o seu negócio."
+
+**Visual:** Crie um diagrama simples mostrando:
+```
+[Facebook Ads] ──→ Lead com tag "Facebook-feed" ──→ Funil ──→ Venda ✓
+[Instagram Ads] ──→ Lead com tag "Instagram-inbox" ──→ Funil ──→ Em negociação...
+```
+
+**CTA:** "Conectar minhas campanhas" (com ícones do Facebook e Instagram ao lado)
+
+---
+
+### INSTRUÇÕES GERAIS DE DESIGN:
+- Use framer-motion para animações de entrada ao scroll (fade-in + slide-up)
+- Cada seção deve ter pelo menos 100vh de altura
+- Tipografia grande e legível (títulos 3xl-4xl, subtítulos lg-xl)
+- Cards com bordas suaves, sombra leve, hover com scale sutil
+- Mockups podem ser componentes estilizados (não precisa de imagens reais)
+- Paleta: roxo/violeta primário, verde para sucesso/CTA, cinza escuro para fundo, branco para texto
+- 100% responsivo — mobile first
+- Ícones: usar lucide-react exclusivamente
+- Para os ícones de Facebook e Instagram, usar ícones SVG inline simples (o lucide-react não tem ícones de marca)
+
+---
+
+Esse é o briefing completo. Copie e cole no chat do projeto da Landing Page.
 
