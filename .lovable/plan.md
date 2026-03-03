@@ -1,5 +1,6 @@
 
 
+
 # Briefing / Prompt para Landing Page — Argos X
 
 Copie e envie o texto abaixo para o projeto Lovable da Landing Page:
@@ -122,4 +123,3 @@ Tempo médio de resposta: 4min
 ---
 
 Esse é o briefing completo. Copie e cole no chat do projeto da Landing Page.
-
