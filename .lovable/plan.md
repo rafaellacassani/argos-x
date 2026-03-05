@@ -1,64 +1,50 @@
 
 
-# Revisão do Roteiro de Vídeo (máx. 1min30s)
+# Correção: Exclusão de membro da equipe falhando
 
-O texto original está bom em conteúdo, mas tem alguns problemas para um vídeo de 1min30s:
+## Problema
 
-1. **Está longo demais** — lido em ritmo natural de fala, esse texto dá ~3 minutos. Precisa cortar pela metade.
-2. **Alguns trechos podem ficar mais fluidos** para fala (menos escrito, mais falado).
-3. **Pequenos ajustes de português** (antecedência, você).
+A função `deleteTeamMember` no `useTeam.ts` tenta deletar apenas 3 tabelas:
+1. `user_roles`
+2. `notification_settings`
+3. `user_profiles`
 
-Aqui vai a versão revisada, otimizada para ~1min30s de fala natural:
+Mas **não remove** o registro de `workspace_members`, e também não limpa registros em outras tabelas que podem referenciar o `user_id`, como:
+- `notification_preferences`
+- `calendar_events`
+- `google_calendar_tokens`
+- `email_accounts`
+- `scheduled_messages`
+- `agent_followup_queue`
+- `alert_log`
+- `agent_executions`
 
----
+Se alguma dessas tabelas tiver registros vinculados ao user_id da Geisi, a exclusão do `user_profiles` falha por constraint de foreign key, e o erro é engolido silenciosamente (apenas mostra toast de erro genérico).
 
-**ROTEIRO — ARGOS X (1min30s)**
+## Solução
 
----
+Atualizar a função `deleteTeamMember` em `src/hooks/useTeam.ts` para:
 
-*[ABERTURA — 10s]*
+1. **Deletar registros relacionados** em todas as tabelas que referenciam `user_id`, na ordem correta:
+   - `notification_preferences` (usa `user_profile_id`, precisa buscar o profile id primeiro)
+   - `notification_settings`
+   - `user_roles`
+   - `calendar_events`
+   - `google_calendar_tokens`
+   - `email_accounts`
+   - `scheduled_messages` (coluna `created_by`)
+   - `agent_followup_queue`
+   - `agent_executions`
+   - `alert_log` (coluna `user_profile_id`)
 
-"Duvido você encontrar um sistema pra organizar seus atendimentos e vendas no WhatsApp mais completo e mais barato no Brasil."
+2. **Remover de `workspace_members`** — esta é a etapa mais crítica que está faltando
 
----
+3. **Por último**, deletar o `user_profiles`
 
-*[AGENTE DE IA — 25s]*
+4. **Melhorar o log de erros** para cada etapa, facilitando debug futuro
 
-"Nunca mais perca uma venda porque não respondeu a tempo. Sua Agente de IA conversa em tempo real, como sua melhor atendente, enquanto você faz outra coisa.
+## Escopo técnico
 
-Ela aprende sobre seu negócio, faz follow-up sozinha com quem parou de responder, marca e desmarca compromissos na agenda, e avisa seus clientes com antecedência. Sincronizou com seu calendário do celular? Ela atualiza tudo lá, automaticamente."
-
----
-
-*[FUNCIONALIDADES — 25s]*
-
-"Chat completo com agendamento de mensagens e painel do cliente pra registrar vendas e orçamentos.
-
-Campanhas em massa com intervalos que você define.
-
-Funil de vendas visual, com relatórios e estatísticas de evolução.
-
-E um sistema exclusivo no Brasil: rastreie qual campanha do Meta trouxe cada lead, e descubra quais anúncios realmente geram clientes."
-
----
-
-*[NOTIFICAÇÕES — 15s]*
-
-"E a melhor parte pro gestor: você nem precisa abrir o sistema. Configure e receba relatórios completos no seu WhatsApp — leads, vendas, pendências, desempenho por vendedor. Quando quiser, é só pedir pra sua assistente."
-
----
-
-*[FECHAMENTO — 15s]*
-
-"Argos X é tudo isso e muito mais. Comece seu teste grátis agora, sem cartão. Planos a partir de R$47,90 — menos que uma pizza por mês pra ter uma vendedora de IA trabalhando pra você.
-
-Comece agora!"
-
----
-
-### O que mudou:
-- **Cortei** SalesBot, contatos, integração Facebook/Instagram e o trecho "comece aos poucos" — são detalhes secundários que alongam demais. Podem virar um segundo vídeo.
-- **Mantive** todos os diferenciais fortes: IA, follow-up, agenda, campanhas, funil, rastreamento Meta, relatórios no WhatsApp.
-- **Corrigi** "atecedência" → "antecedência" e fluidez de fala.
-- **Tempo estimado:** ~1min25s em ritmo natural.
+- **Arquivo editado:** `src/hooks/useTeam.ts` — função `deleteTeamMember`
+- Nenhuma migração de banco necessária (as tabelas já existem e aceitam DELETE via RLS para admins do workspace)
 
