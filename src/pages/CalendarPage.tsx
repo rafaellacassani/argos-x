@@ -123,6 +123,8 @@ export default function CalendarPage() {
     deleteEvent,
     googleConnected,
     googleEmail,
+    connectGoogle,
+    disconnectGoogle,
   } = useCalendar();
 
   const navigate = useNavigate();
@@ -496,7 +498,7 @@ export default function CalendarPage() {
                 variant="ghost"
                 size="sm"
                 className="text-xs gap-1.5 text-muted-foreground"
-                onClick={() => navigate("/settings")}
+                onClick={connectGoogle}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 Conectar Google Calendar
