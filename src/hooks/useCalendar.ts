@@ -53,7 +53,7 @@ async function callSyncFunction(
   path: string,
   method: string,
   body?: Record<string, unknown>,
-  timeoutMs = 20000
+  timeoutMs = 90000
 ) {
   const headers = await getAuthHeaders();
   const controller = new AbortController();
