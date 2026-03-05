@@ -84,7 +84,7 @@ function getToolDefinitions(enabledTools: string[]) {
       type: "function",
       function: {
         name: "gerenciar_calendario",
-        description: "Gerencia compromissos no calendário. Pode criar, reagendar ou cancelar reuniões. Ao criar, lembretes automáticos são enviados 3h e 30min antes. Use quando o lead quiser agendar uma demonstração, reunião ou compromisso.",
+        description: "Gerencia compromissos no calendário. Pode criar, reagendar ou cancelar reuniões. Ao criar, lembretes automáticos são enviados conforme configuração. Use quando o lead quiser agendar uma demonstração, reunião ou compromisso.",
         parameters: {
           type: "object",
           properties: {
@@ -487,8 +487,12 @@ serve(async (req) => {
         const followupInstruction = enabledTools.includes("agendar_followup")
           ? "\n\nAGENDAMENTO DE FOLLOW-UP: Quando o lead pedir para ser contactado em outro horário (ex: 'me chama amanhã às 9h', 'daqui 2 horas', 'na segunda'), use a tool agendar_followup. Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Sempre confirme o agendamento na sua resposta (ex: 'Combinado! Te chamo amanhã às 9h 😊')."
           : "";
+        const calendarConfig = agent.tools ? (typeof agent.tools === 'string' ? JSON.parse(agent.tools) : agent.tools) : null;
+        const agentCalendarConfig = (agent as any).calendar_config || calendarConfig?.calendar_config || {};
+        const configuredReminders = agentCalendarConfig?.reminders || ["180", "30"];
+        const generateMeetLink = agentCalendarConfig?.generate_meet_link !== false;
         const calendarInstruction = enabledTools.includes("gerenciar_calendario")
-          ? "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados 3 horas e 30 minutos antes. Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos."
+          ? "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados antes da reunião." + (generateMeetLink ? " Um link do Google Meet será gerado automaticamente e incluído nos lembretes." : "") + " Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos."
           : "";
         const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + GUARDRAILS;
 
@@ -695,7 +699,25 @@ serve(async (req) => {
                 } else {
                   console.log(`[ai-agent-chat] 📅 Event created: ${newEvent.id}`);
 
-                  // Create reminder messages (3h before and 30min before) via scheduled_messages
+                  // Try to push to Google Calendar and get Meet link
+                  let meetLink: string | null = null;
+                  try {
+                    const { data: tokenCheck } = await supabase.from("google_calendar_tokens").select("id").eq("user_id", userId).maybeSingle();
+                    if (tokenCheck) {
+                      const syncRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-google-calendar/push`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+                        body: JSON.stringify({ eventId: newEvent.id }),
+                      });
+                      const syncData = await syncRes.json();
+                      if (syncData.meetLink) meetLink = syncData.meetLink;
+                      console.log(`[ai-agent-chat] 📅 Synced to Google, meetLink: ${meetLink}`);
+                    }
+                  } catch (syncErr) {
+                    console.error("[ai-agent-chat] ⚠️ Google sync failed:", syncErr);
+                  }
+
+                  // Create reminder messages using configured reminders
                   if (targetLeadId && isValidUUID(targetLeadId)) {
                     const { data: leadInfo } = await supabase.from("leads").select("phone, whatsapp_jid, instance_name, source, name").eq("id", targetLeadId).single();
                     if (leadInfo) {
@@ -703,15 +725,21 @@ serve(async (req) => {
                       const leadName = leadInfo.name || "cliente";
                       const eventTitle = toolArgs.title || "sua reunião";
 
-                      const reminders = [
-                        { offset: 3 * 60 * 60 * 1000, label: "3 horas" },
-                        { offset: 30 * 60 * 1000, label: "30 minutos" },
-                      ];
+                      // Use configured reminders from calendar_config
+                      const reminderMinutes = configuredReminders.map((r: string) => parseInt(r, 10)).filter((n: number) => !isNaN(n));
+                      const reminders = reminderMinutes.map((mins: number) => {
+                        const hours = mins / 60;
+                        let label = mins >= 60 ? `${hours} hora${hours > 1 ? 's' : ''}` : `${mins} minutos`;
+                        return { offset: mins * 60 * 1000, label };
+                      });
 
                       for (const reminder of reminders) {
                         const reminderTime = new Date(startDate.getTime() - reminder.offset);
                         if (reminderTime.getTime() > Date.now()) {
-                          const reminderMsg = `Olá ${leadName}! 👋 Lembrete: ${eventTitle} começa em ${reminder.label}. Te espero lá! 😊`;
+                          let reminderMsg = `Olá ${leadName}! 👋 Lembrete: ${eventTitle} começa em ${reminder.label}. Te espero lá! 😊`;
+                          if (meetLink) {
+                            reminderMsg += `\n\n📹 Link da reunião: ${meetLink}`;
+                          }
                           const insertData: Record<string, unknown> = {
                             workspace_id: agent.workspace_id,
                             message: reminderMsg,
