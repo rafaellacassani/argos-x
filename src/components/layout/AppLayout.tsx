@@ -17,7 +17,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { allowed, reason, daysRemaining, loading } = useWorkspaceAccess();
-  const { workspace, refreshWorkspace } = useWorkspace();
+  const { workspace, refreshWorkspace, isAdminViewing } = useWorkspace();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -36,7 +36,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate("/dashboard", { replace: true });
   }, [refreshWorkspace, navigate]);
 
-  if (!loading && !allowed) {
+  if (!loading && !allowed && !isAdminViewing) {
     return <WorkspaceBlockedScreen reason={reason as "blocked" | "canceled" | "past_due"} />;
   }
 
@@ -61,8 +61,21 @@ export function AppLayout({ children }: AppLayoutProps) {
       <AppSidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar mobileMenuSlot={mobileMenuSlot} />
-        {showTrialBanner && <TrialBanner daysRemaining={daysRemaining} />}
-        <LeadLimitBanner />
+        {isAdminViewing && (
+          <div className="bg-amber-500/10 border-b border-amber-200 px-4 py-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-amber-700">
+              👁️ Visualizando workspace: <strong>{workspace?.name}</strong> (modo leitura)
+            </span>
+            <a
+              href="/admin/clients"
+              className="text-xs text-amber-600 hover:text-amber-800 underline"
+            >
+              Voltar ao painel
+            </a>
+          </div>
+        )}
+        {showTrialBanner && !isAdminViewing && <TrialBanner daysRemaining={daysRemaining} />}
+        {!isAdminViewing && <LeadLimitBanner />}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>

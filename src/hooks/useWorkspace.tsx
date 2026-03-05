@@ -10,13 +10,11 @@ export interface Workspace {
   created_at: string;
   alert_instance_name?: string | null;
   logo_url?: string | null;
-  // Plan/access fields for local validation
   plan_type?: string;
   subscription_status?: string;
   trial_end?: string | null;
   blocked_at?: string | null;
   updated_at?: string;
-  // Limits fields
   plan_name?: string | null;
   lead_limit?: number | null;
   extra_leads?: number | null;
@@ -45,6 +43,7 @@ interface WorkspaceContextType {
   userProfileId: string | null;
   loading: boolean;
   hasWorkspace: boolean;
+  isAdminViewing: boolean;
   createWorkspace: (name: string) => Promise<Workspace | null>;
   inviteMember: (email: string, role: "admin" | "manager" | "seller") => Promise<boolean>;
   fetchMembers: () => Promise<WorkspaceMember[]>;
@@ -62,6 +61,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [isAdminViewing, setIsAdminViewing] = useState(false);
 
   const loadWorkspace = useCallback(async () => {
     if (!user) {
@@ -69,40 +69,102 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setMembership(null);
       setUserProfileId(null);
       setLoading(false);
+      setIsAdminViewing(false);
       return;
     }
 
-    // Only show loading spinner on initial load, not on background refreshes
     if (!initialLoadDone) {
       setLoading(true);
     }
     try {
-      // Fetch membership and profile in parallel
-      const [memberResult, profileResult] = await Promise.all([
-        supabase
-          .from("workspace_members")
-          .select("*")
-          .eq("user_id", user.id)
-          .not("accepted_at", "is", null)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from("user_profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle(),
-      ]);
+      // Check for admin workspace override via URL param
+      const urlParams = new URLSearchParams(window.location.search);
+      const adminWsId = urlParams.get("admin_ws");
+
+      // Fetch profile
+      const profileResult = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
       if (profileResult.data) {
         setUserProfileId(profileResult.data.id);
       }
+
+      // If admin_ws param is present, check if user is super admin
+      if (adminWsId) {
+        const { data: adminRole } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin");
+
+        if (adminRole && adminRole.length > 0) {
+          // Super admin - load the target workspace directly
+          const { data: wsData, error: wsError } = await supabase.rpc(
+            "get_workspace_for_admin" as any,
+            { ws_id: adminWsId }
+          ).single();
+
+          // Fallback: try direct query (admin may have access via RLS)
+          if (wsError) {
+            // Use edge function to get workspace data
+            const { data: efData } = await supabase.functions.invoke("admin-clients", {
+              body: { action: "get-workspace", workspaceId: adminWsId },
+            });
+
+            if (efData?.workspace) {
+              setWorkspace(efData.workspace as Workspace);
+              setMembership({
+                id: "admin-view",
+                workspace_id: adminWsId,
+                user_id: user.id,
+                role: "admin",
+                invited_at: new Date().toISOString(),
+                accepted_at: new Date().toISOString(),
+                invited_email: null,
+              });
+              setIsAdminViewing(true);
+              setLoading(false);
+              setInitialLoadDone(true);
+              return;
+            }
+          } else if (wsData) {
+            setWorkspace(wsData as unknown as Workspace);
+            setMembership({
+              id: "admin-view",
+              workspace_id: adminWsId,
+              user_id: user.id,
+              role: "admin",
+              invited_at: new Date().toISOString(),
+              accepted_at: new Date().toISOString(),
+              invited_email: null,
+            });
+            setIsAdminViewing(true);
+            setLoading(false);
+            setInitialLoadDone(true);
+            return;
+          }
+        }
+      }
+
+      setIsAdminViewing(false);
+
+      // Normal flow
+      const memberResult = await supabase
+        .from("workspace_members")
+        .select("*")
+        .eq("user_id", user.id)
+        .not("accepted_at", "is", null)
+        .limit(1)
+        .maybeSingle();
 
       if (memberResult.error) throw memberResult.error;
 
       if (memberResult.data) {
         setMembership(memberResult.data as WorkspaceMember);
         
-        // Fetch workspace with ALL needed fields (plan, limits, access)
         const { data: wsData, error: wsError } = await supabase
           .from("workspaces")
           .select("*")
@@ -112,7 +174,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (wsError) throw wsError;
         setWorkspace(wsData as Workspace);
       } else {
-        // Check for pending invitations by email
         const userEmail = user.email;
         if (userEmail) {
           const { data: invite } = await supabase
@@ -274,6 +335,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       userProfileId,
       loading,
       hasWorkspace: !!workspace,
+      isAdminViewing,
       createWorkspace,
       inviteMember,
       fetchMembers,
