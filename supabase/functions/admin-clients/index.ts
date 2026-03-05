@@ -816,6 +816,135 @@ serve(async (req) => {
       );
     }
 
+    // ──────────────────────────────────────
+    // ACTION: GET-WORKSPACE (for admin view)
+    // ──────────────────────────────────────
+    if (action === "get-workspace") {
+      const { workspaceId } = body;
+      if (!workspaceId) {
+        return new Response(JSON.stringify({ error: "workspaceId required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: ws, error: wsError } = await supabaseAdmin
+        .from("workspaces")
+        .select("*")
+        .eq("id", workspaceId)
+        .single();
+
+      if (wsError || !ws) {
+        return new Response(JSON.stringify({ error: "Workspace not found" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ workspace: ws }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ──────────────────────────────────────
+    // ACTION: BULK-WHATSAPP
+    // ──────────────────────────────────────
+    if (action === "bulk-whatsapp") {
+      const { workspaceIds, message, instanceName } = body;
+      if (!workspaceIds?.length || !message || !instanceName) {
+        return new Response(JSON.stringify({ error: "workspaceIds, message, and instanceName required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+      const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+      if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) {
+        return new Response(JSON.stringify({ error: "Evolution API not configured" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get owner phones for each workspace
+      const ownerIds: string[] = [];
+      const wsOwnerMap = new Map<string, string>();
+
+      const { data: workspaces } = await supabaseAdmin
+        .from("workspaces")
+        .select("id, created_by, name")
+        .in("id", workspaceIds);
+
+      for (const ws of workspaces || []) {
+        ownerIds.push(ws.created_by);
+        wsOwnerMap.set(ws.id, ws.created_by);
+      }
+
+      const { data: profiles } = await supabaseAdmin
+        .from("user_profiles")
+        .select("user_id, full_name, phone, personal_whatsapp")
+        .in("user_id", [...new Set(ownerIds)]);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.user_id, p]));
+
+      const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+      let sent = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const ws of workspaces || []) {
+        const profile = profileMap.get(ws.created_by);
+        const phone = profile?.personal_whatsapp || profile?.phone;
+        if (!phone) {
+          errors.push(`${ws.name}: sem telefone`);
+          failed++;
+          continue;
+        }
+
+        let cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+          cleanPhone = "55" + cleanPhone;
+        }
+
+        const personalizedMessage = message
+          .replace(/{nome}/g, profile?.full_name || ws.name)
+          .replace(/{workspace}/g, ws.name);
+
+        try {
+          const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: EVOLUTION_API_KEY,
+            },
+            body: JSON.stringify({
+              number: cleanPhone,
+              text: personalizedMessage,
+            }),
+          });
+
+          if (!response.ok) {
+            const errText = await response.text();
+            errors.push(`${ws.name}: ${errText}`);
+            failed++;
+          } else {
+            sent++;
+          }
+
+          // Interval between messages
+          await new Promise(r => setTimeout(r, 2000));
+        } catch (e) {
+          errors.push(`${ws.name}: ${e.message}`);
+          failed++;
+        }
+      }
+
+      return new Response(JSON.stringify({ sent, failed, errors }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

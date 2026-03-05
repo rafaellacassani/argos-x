@@ -58,6 +58,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Users,
   Loader2,
@@ -84,6 +85,8 @@ import {
   Timer,
   Send,
   CalendarClock,
+  Eye,
+  Filter,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -199,6 +202,21 @@ export default function AdminClients() {
   const [cadenceSaving, setCadenceSaving] = useState(false);
   const [reactivationLog, setReactivationLog] = useState<any[]>([]);
   const [evolutionInstances, setEvolutionInstances] = useState<{ instance_name: string; display_name: string | null; instance_type: string; workspace_id: string }[]>([]);
+
+  // Filter state
+  const [filterPlan, setFilterPlan] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterDateFrom, setFilterDateFrom] = useState<string>("");
+  const [filterDateTo, setFilterDateTo] = useState<string>("");
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Bulk WhatsApp state
+  const [bulkWhatsappOpen, setBulkWhatsappOpen] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState("Olá, {nome}! 👋\n\n");
+  const [bulkInstance, setBulkInstance] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -560,14 +578,100 @@ export default function AdminClients() {
     return <Navigate to="/dashboard" replace />;
   }
 
+  const getClientStatusKey = (client: ClientData) => {
+    const now = new Date();
+    const trialEnd = client.trial_end ? new Date(client.trial_end) : null;
+    if (client.plan_type === "active") return "active";
+    if (client.plan_type === "past_due") return "past_due";
+    if (client.plan_type === "canceled") return "canceled";
+    if (client.blocked_at || (trialEnd && trialEnd <= now)) return "expired";
+    if ((client.plan_type === "trialing" || client.plan_type === "trial_manual") && trialEnd && trialEnd > now) return "trialing";
+    return "other";
+  };
+
   const filteredClients = clients.filter((c) => {
     const term = searchTerm.toLowerCase();
-    return (
+    const matchesSearch =
       c.name?.toLowerCase().includes(term) ||
       c.owner?.full_name?.toLowerCase().includes(term) ||
-      c.owner?.email?.toLowerCase().includes(term)
-    );
+      c.owner?.email?.toLowerCase().includes(term);
+    if (!matchesSearch) return false;
+
+    // Plan filter
+    if (filterPlan !== "all") {
+      const planName = c.plan_name || c.plan_type || "";
+      if (filterPlan === "trial") {
+        if (c.plan_type !== "trialing" && c.plan_type !== "trial_manual") return false;
+      } else if (planName.toLowerCase() !== filterPlan.toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Status filter
+    if (filterStatus !== "all") {
+      if (getClientStatusKey(c) !== filterStatus) return false;
+    }
+
+    // Date filter
+    if (filterDateFrom) {
+      const from = new Date(filterDateFrom);
+      if (new Date(c.created_at) < from) return false;
+    }
+    if (filterDateTo) {
+      const to = new Date(filterDateTo);
+      to.setHours(23, 59, 59, 999);
+      if (new Date(c.created_at) > to) return false;
+    }
+
+    return true;
   });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredClients.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredClients.map(c => c.id)));
+    }
+  };
+
+  const handleBulkWhatsapp = async () => {
+    if (!bulkInstance || !bulkMessage || selectedIds.size === 0) return;
+    setBulkSending(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-clients", {
+        body: {
+          action: "bulk-whatsapp",
+          workspaceIds: Array.from(selectedIds),
+          message: bulkMessage,
+          instanceName: bulkInstance,
+        },
+      });
+      if (error) throw error;
+      toast({
+        title: "Envio concluído!",
+        description: `${data?.sent || 0} enviados, ${data?.failed || 0} falharam.`,
+      });
+      if (data?.errors?.length) {
+        console.warn("Bulk WhatsApp errors:", data.errors);
+      }
+      setBulkWhatsappOpen(false);
+      setSelectedIds(new Set());
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkSending(false);
+    }
+  };
+
+  
 
   const getClientStatusInfo = (client: ClientData) => {
     const now = new Date();
@@ -882,14 +986,59 @@ export default function AdminClients() {
 
         {/* ───────── TAB: CLIENTES ───────── */}
         <TabsContent value="clients" className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1 max-w-sm">
+          {/* Filters row */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nome ou e-mail..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9"
+              />
+            </div>
+            <Select value={filterPlan} onValueChange={setFilterPlan}>
+              <SelectTrigger className="w-[150px]">
+                <Filter className="w-3.5 h-3.5 mr-1.5" />
+                <SelectValue placeholder="Plano" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os planos</SelectItem>
+                <SelectItem value="trial">Trial</SelectItem>
+                <SelectItem value="semente">Semente</SelectItem>
+                <SelectItem value="essencial">Essencial</SelectItem>
+                <SelectItem value="negocio">Negócio</SelectItem>
+                <SelectItem value="escala">Escala</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="active">Ativo</SelectItem>
+                <SelectItem value="trialing">Em trial</SelectItem>
+                <SelectItem value="expired">Trial expirado</SelectItem>
+                <SelectItem value="past_due">Pagamento pendente</SelectItem>
+                <SelectItem value="canceled">Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Input
+                type="date"
+                placeholder="De"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="w-[140px] text-xs"
+              />
+              <span className="text-muted-foreground text-xs">até</span>
+              <Input
+                type="date"
+                placeholder="Até"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="w-[140px] text-xs"
               />
             </div>
             <Button
@@ -903,10 +1052,41 @@ export default function AdminClients() {
             </Button>
           </div>
 
+          {/* Bulk actions bar */}
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <span className="text-sm font-medium">
+                {selectedIds.size} selecionado{selectedIds.size > 1 ? "s" : ""}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setBulkWhatsappOpen(true)}
+              >
+                <MessageSquare className="w-4 h-4" />
+                Enviar WhatsApp em massa
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setSelectedIds(new Set())}
+              >
+                Limpar seleção
+              </Button>
+            </div>
+          )}
+
           <div className="rounded-lg border bg-card overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={filteredClients.length > 0 && selectedIds.size === filteredClients.length}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>E-mail</TableHead>
                   <TableHead>Plano</TableHead>
@@ -920,7 +1100,7 @@ export default function AdminClients() {
                 {filteredClients.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="text-center py-8 text-muted-foreground"
                     >
                       {refreshing
@@ -935,6 +1115,12 @@ export default function AdminClients() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => setSelectedClient(client)}
                     >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(client.id)}
+                          onCheckedChange={() => toggleSelect(client.id)}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         {client.name}
                       </TableCell>
@@ -961,6 +1147,15 @@ export default function AdminClients() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const url = `${window.location.origin}/dashboard?admin_ws=${client.id}`;
+                                window.open(url, "_blank");
+                              }}
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              Abrir workspace
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleCopyWorkspaceLink(client)}>
                               <Link2 className="w-4 h-4 mr-2" />
                               Link do workspace
@@ -1701,6 +1896,73 @@ export default function AdminClients() {
             <Button onClick={handleUpdateLimits} disabled={limitsLoading}>
               {limitsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Salvar limites
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ───────── BULK WHATSAPP DIALOG ───────── */}
+      <Dialog open={bulkWhatsappOpen} onOpenChange={setBulkWhatsappOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5" />
+              Enviar WhatsApp em massa
+            </DialogTitle>
+            <DialogDescription>
+              Enviar mensagem para {selectedIds.size} cliente{selectedIds.size > 1 ? "s" : ""} selecionado{selectedIds.size > 1 ? "s" : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Instância WhatsApp</Label>
+              <Select value={bulkInstance} onValueChange={setBulkInstance}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma instância" />
+                </SelectTrigger>
+                <SelectContent>
+                  {evolutionInstances.length === 0 ? (
+                    <SelectItem value="__none" disabled>
+                      Nenhuma instância encontrada
+                    </SelectItem>
+                  ) : (
+                    evolutionInstances.map((inst) => (
+                      <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                        <div className="flex items-center gap-2">
+                          <span>{inst.display_name || inst.instance_name}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {inst.instance_type}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Mensagem</Label>
+              <Textarea
+                rows={6}
+                value={bulkMessage}
+                onChange={(e) => setBulkMessage(e.target.value)}
+                placeholder="Digite a mensagem..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Variáveis: {"{nome}"}, {"{workspace}"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkWhatsappOpen(false)} disabled={bulkSending}>
+              Cancelar
+            </Button>
+            <Button onClick={handleBulkWhatsapp} disabled={bulkSending || !bulkInstance || !bulkMessage}>
+              {bulkSending ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Enviando...</>
+              ) : (
+                <><Send className="w-4 h-4 mr-2" /> Enviar para {selectedIds.size}</>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
