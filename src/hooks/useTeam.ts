@@ -243,19 +243,74 @@ export function useTeam() {
   const deleteTeamMember = useCallback(
     async (userId: string) => {
       try {
-        // Delete roles first
-        await supabase.from("user_roles").delete().eq("user_id", userId);
+        if (!workspaceId) throw new Error("Workspace não encontrado");
 
-        // Delete notification settings
-        await supabase.from("notification_settings").delete().eq("user_id", userId);
-
-        // Delete profile
-        const { error } = await supabase
+        // 1. Get the profile id (needed for tables that reference user_profile_id)
+        const { data: profile } = await supabase
           .from("user_profiles")
-          .delete()
-          .eq("user_id", userId);
+          .select("id")
+          .eq("user_id", userId)
+          .single();
 
-        if (error) throw error;
+        const profileId = profile?.id;
+
+        // 2. Delete from tables that reference user_profile_id
+        if (profileId) {
+          const { error: npError } = await supabase
+            .from("notification_preferences")
+            .delete()
+            .eq("user_profile_id", profileId)
+            .eq("workspace_id", workspaceId);
+          if (npError) console.warn("Error deleting notification_preferences:", npError);
+
+          const { error: alertError } = await supabase
+            .from("alert_log")
+            .delete()
+            .eq("user_profile_id", profileId)
+            .eq("workspace_id", workspaceId);
+          if (alertError) console.warn("Error deleting alert_log:", alertError);
+        }
+
+        // 3. Delete from tables that reference user_id directly
+        const tablesToClean = [
+          { table: "notification_settings" as const, col: "user_id" as const },
+          { table: "user_roles" as const, col: "user_id" as const },
+          { table: "calendar_events" as const, col: "user_id" as const },
+          { table: "google_calendar_tokens" as const, col: "user_id" as const },
+          { table: "email_accounts" as const, col: "user_id" as const },
+        ];
+
+        for (const { table, col } of tablesToClean) {
+          const { error } = await supabase.from(table).delete().eq(col, userId);
+          if (error) console.warn(`Error deleting ${table}:`, error);
+        }
+
+        // 4. scheduled_messages uses created_by (which references user_profiles.id)
+        if (profileId) {
+          const { error } = await supabase
+            .from("scheduled_messages")
+            .delete()
+            .eq("created_by", profileId)
+            .eq("workspace_id", workspaceId);
+          if (error) console.warn("Error deleting scheduled_messages:", error);
+        }
+
+        // 5. Remove from workspace_members (critical!)
+        const { error: wmError } = await supabase
+          .from("workspace_members")
+          .delete()
+          .eq("user_id", userId)
+          .eq("workspace_id", workspaceId);
+        if (wmError) console.warn("Error deleting workspace_members:", wmError);
+
+        // 6. Finally delete the profile
+        if (profileId) {
+          const { error } = await supabase
+            .from("user_profiles")
+            .delete()
+            .eq("user_id", userId);
+          if (error) throw error;
+        }
 
         toast({
           title: "Membro removido",
@@ -274,7 +329,7 @@ export function useTeam() {
         return false;
       }
     },
-    [toast, fetchTeamMembers]
+    [toast, fetchTeamMembers, workspaceId]
   );
 
   const fetchNotificationSettings = useCallback(async (userId: string) => {
