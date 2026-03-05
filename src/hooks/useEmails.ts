@@ -114,7 +114,7 @@ export function useEmails() {
 
       const data = await res.json();
       if (data.url) {
-        window.location.href = data.url;
+        window.open(data.url, "_blank");
       } else {
         toast.error("Erro ao gerar URL de autorização");
       }
