@@ -80,6 +80,25 @@ function getToolDefinitions(enabledTools: string[]) {
         }
       }
     },
+    {
+      type: "function",
+      function: {
+        name: "gerenciar_calendario",
+        description: "Gerencia compromissos no calendário. Pode criar, reagendar ou cancelar reuniões. Ao criar, lembretes automáticos são enviados 3h e 30min antes. Use quando o lead quiser agendar uma demonstração, reunião ou compromisso.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["criar", "reagendar", "cancelar", "consultar"], description: "Ação a executar no calendário" },
+            title: { type: "string", description: "Título do evento (ex: 'Demonstração Argos X - João')" },
+            start_at: { type: "string", description: "Data e hora de início no formato ISO 8601 (ex: 2026-03-05T14:00:00-03:00)" },
+            end_at: { type: "string", description: "Data e hora de término no formato ISO 8601. Se não informado, será 15 minutos após o início." },
+            description: { type: "string", description: "Descrição ou notas do evento" },
+            event_id: { type: "string", description: "ID do evento existente (necessário para reagendar ou cancelar)" },
+          },
+          required: ["action"]
+        }
+      }
+    },
   ];
   if (!enabledTools || enabledTools.length === 0) return allTools;
   return allTools.filter(t => enabledTools.includes(t.function.name));
@@ -468,7 +487,10 @@ serve(async (req) => {
         const followupInstruction = enabledTools.includes("agendar_followup")
           ? "\n\nAGENDAMENTO DE FOLLOW-UP: Quando o lead pedir para ser contactado em outro horário (ex: 'me chama amanhã às 9h', 'daqui 2 horas', 'na segunda'), use a tool agendar_followup. Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Sempre confirme o agendamento na sua resposta (ex: 'Combinado! Te chamo amanhã às 9h 😊')."
           : "";
-        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + GUARDRAILS;
+        const calendarInstruction = enabledTools.includes("gerenciar_calendario")
+          ? "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados 3 horas e 30 minutos antes. Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos."
+          : "";
+        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + GUARDRAILS;
 
         const contextWindow = memory.context_window || agent.max_tokens || 50;
         const recentMessages = messages.slice(-contextWindow);
@@ -634,6 +656,115 @@ serve(async (req) => {
                     console.error("[ai-agent-chat] ❌ Failed to schedule followup:", schedErr);
                   } else {
                     console.log(`[ai-agent-chat] 📅 Follow-up scheduled for ${toolArgs.scheduled_at}`);
+                  }
+                }
+              }
+              break;
+            }
+            case "gerenciar_calendario": {
+              const targetLeadId = lead_id || toolArgs.lead_id;
+              const action = toolArgs.action;
+              console.log(`[ai-agent-chat] 📅 Calendar action: ${action}`);
+
+              if (action === "criar") {
+                const startAt = toolArgs.start_at;
+                if (!startAt) { console.error("[ai-agent-chat] ❌ Calendar: missing start_at"); break; }
+                // Default 15min duration
+                const startDate = new Date(startAt);
+                const endAt = toolArgs.end_at || new Date(startDate.getTime() + 15 * 60 * 1000).toISOString();
+
+                // Get workspace owner for user_id
+                const { data: wsData } = await supabase.from("workspaces").select("created_by").eq("id", agent.workspace_id).single();
+                const userId = wsData?.created_by;
+                if (!userId) { console.error("[ai-agent-chat] ❌ Calendar: no workspace owner"); break; }
+
+                const { data: newEvent, error: calErr } = await supabase.from("calendar_events").insert({
+                  workspace_id: agent.workspace_id,
+                  user_id: userId,
+                  title: toolArgs.title || "Reunião agendada pela IA",
+                  description: toolArgs.description || null,
+                  start_at: startAt,
+                  end_at: endAt,
+                  all_day: false,
+                  type: "meeting",
+                  lead_id: targetLeadId && isValidUUID(targetLeadId) ? targetLeadId : null,
+                }).select("id").single();
+
+                if (calErr) {
+                  console.error("[ai-agent-chat] ❌ Calendar insert error:", calErr);
+                } else {
+                  console.log(`[ai-agent-chat] 📅 Event created: ${newEvent.id}`);
+
+                  // Create reminder messages (3h before and 30min before) via scheduled_messages
+                  if (targetLeadId && isValidUUID(targetLeadId)) {
+                    const { data: leadInfo } = await supabase.from("leads").select("phone, whatsapp_jid, instance_name, source, name").eq("id", targetLeadId).single();
+                    if (leadInfo) {
+                      const channelType = (leadInfo.source === "meta_facebook" || leadInfo.source === "meta_instagram") ? leadInfo.source : "whatsapp";
+                      const leadName = leadInfo.name || "cliente";
+                      const eventTitle = toolArgs.title || "sua reunião";
+
+                      const reminders = [
+                        { offset: 3 * 60 * 60 * 1000, label: "3 horas" },
+                        { offset: 30 * 60 * 1000, label: "30 minutos" },
+                      ];
+
+                      for (const reminder of reminders) {
+                        const reminderTime = new Date(startDate.getTime() - reminder.offset);
+                        if (reminderTime.getTime() > Date.now()) {
+                          const reminderMsg = `Olá ${leadName}! 👋 Lembrete: ${eventTitle} começa em ${reminder.label}. Te espero lá! 😊`;
+                          const insertData: Record<string, unknown> = {
+                            workspace_id: agent.workspace_id,
+                            message: reminderMsg,
+                            scheduled_at: reminderTime.toISOString(),
+                            channel_type: channelType,
+                            status: "pending",
+                            contact_name: leadInfo.phone,
+                          };
+                          if (channelType === "whatsapp") {
+                            insertData.instance_name = leadInfo.instance_name || reqInstanceName || agent.instance_name;
+                            insertData.remote_jid = leadInfo.whatsapp_jid;
+                            insertData.phone_number = leadInfo.phone;
+                          }
+                          await supabase.from("scheduled_messages").insert(insertData);
+                          console.log(`[ai-agent-chat] ⏰ Reminder scheduled: ${reminder.label} before`);
+                        }
+                      }
+                    }
+                  }
+                }
+              } else if (action === "reagendar") {
+                const eventId = toolArgs.event_id;
+                if (!eventId || !isValidUUID(eventId)) { console.error("[ai-agent-chat] ❌ Calendar: missing event_id for reschedule"); break; }
+                const updateData: Record<string, unknown> = {};
+                if (toolArgs.start_at) updateData.start_at = toolArgs.start_at;
+                if (toolArgs.end_at) {
+                  updateData.end_at = toolArgs.end_at;
+                } else if (toolArgs.start_at) {
+                  updateData.end_at = new Date(new Date(toolArgs.start_at).getTime() + 15 * 60 * 1000).toISOString();
+                }
+                if (toolArgs.title) updateData.title = toolArgs.title;
+                if (Object.keys(updateData).length > 0) {
+                  await supabase.from("calendar_events").update(updateData).eq("id", eventId).eq("workspace_id", agent.workspace_id);
+                  console.log(`[ai-agent-chat] 📅 Event rescheduled: ${eventId}`);
+                }
+              } else if (action === "cancelar") {
+                const eventId = toolArgs.event_id;
+                if (!eventId || !isValidUUID(eventId)) { console.error("[ai-agent-chat] ❌ Calendar: missing event_id for cancel"); break; }
+                await supabase.from("calendar_events").delete().eq("id", eventId).eq("workspace_id", agent.workspace_id);
+                console.log(`[ai-agent-chat] 📅 Event cancelled: ${eventId}`);
+              } else if (action === "consultar") {
+                // Query upcoming events for the lead
+                if (targetLeadId && isValidUUID(targetLeadId)) {
+                  const { data: events } = await supabase.from("calendar_events")
+                    .select("id, title, start_at, end_at, description")
+                    .eq("workspace_id", agent.workspace_id)
+                    .eq("lead_id", targetLeadId)
+                    .gte("start_at", new Date().toISOString())
+                    .order("start_at")
+                    .limit(5);
+                  if (events && events.length > 0) {
+                    const eventList = events.map((e: any) => `- ${e.title} em ${e.start_at} (ID: ${e.id})`).join("\n");
+                    responseContent += `\n\n[Eventos encontrados:\n${eventList}]`;
                   }
                 }
               }
