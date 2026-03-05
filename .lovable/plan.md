@@ -1,50 +1,35 @@
 
 
-# Correção: Exclusão de membro da equipe falhando
+# Plano: Google Meet automático + link nos lembretes da IA
 
-## Problema
+## O que será feito
 
-A função `deleteTeamMember` no `useTeam.ts` tenta deletar apenas 3 tabelas:
-1. `user_roles`
-2. `notification_settings`
-3. `user_profiles`
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-Mas **não remove** o registro de `workspace_members`, e também não limpa registros em outras tabelas que podem referenciar o `user_id`, como:
-- `notification_preferences`
-- `calendar_events`
-- `google_calendar_tokens`
-- `email_accounts`
-- `scheduled_messages`
-- `agent_followup_queue`
-- `alert_log`
-- `agent_executions`
+## Detalhes técnicos
 
-Se alguma dessas tabelas tiver registros vinculados ao user_id da Geisi, a exclusão do `user_profiles` falha por constraint de foreign key, e o erro é engolido silenciosamente (apenas mostra toast de erro genérico).
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
 
-## Solução
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
 
-Atualizar a função `deleteTeamMember` em `src/hooks/useTeam.ts` para:
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
 
-1. **Deletar registros relacionados** em todas as tabelas que referenciam `user_id`, na ordem correta:
-   - `notification_preferences` (usa `user_profile_id`, precisa buscar o profile id primeiro)
-   - `notification_settings`
-   - `user_roles`
-   - `calendar_events`
-   - `google_calendar_tokens`
-   - `email_accounts`
-   - `scheduled_messages` (coluna `created_by`)
-   - `agent_followup_queue`
-   - `agent_executions`
-   - `alert_log` (coluna `user_profile_id`)
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
 
-2. **Remover de `workspace_members`** — esta é a etapa mais crítica que está faltando
-
-3. **Por último**, deletar o `user_profiles`
-
-4. **Melhorar o log de erros** para cada etapa, facilitando debug futuro
-
-## Escopo técnico
-
-- **Arquivo editado:** `src/hooks/useTeam.ts` — função `deleteTeamMember`
-- Nenhuma migração de banco necessária (as tabelas já existem e aceitam DELETE via RLS para admins do workspace)
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 
