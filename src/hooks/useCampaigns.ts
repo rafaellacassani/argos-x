@@ -9,6 +9,8 @@ export interface Campaign {
   name: string;
   status: string;
   instance_name: string;
+  instance_names: string[];
+  last_instance_index: number;
   message_text: string;
   attachment_url: string | null;
   attachment_type: string | null;
@@ -51,6 +53,7 @@ export interface CampaignRecipient {
 export interface CreateCampaignData {
   name: string;
   instance_name: string;
+  instance_names?: string[];
   message_text: string;
   attachment_url?: string | null;
   attachment_type?: string | null;
@@ -86,6 +89,8 @@ export function useCampaigns() {
         filter_stage_ids: (c.filter_stage_ids as string[]) || [],
         filter_responsible_ids: (c.filter_responsible_ids as string[]) || [],
         schedule_days: (c.schedule_days as number[]) || [1, 2, 3, 4, 5],
+        instance_names: (c.instance_names as string[]) || [],
+        last_instance_index: (c as any).last_instance_index || 0,
       })));
     } catch (err) {
       console.error('Error fetching campaigns:', err);
@@ -132,6 +137,7 @@ export function useCampaigns() {
           workspace_id: workspaceId,
           name: data.name,
           instance_name: data.instance_name,
+          instance_names: data.instance_names || [],
           message_text: data.message_text,
           attachment_url: data.attachment_url || null,
           attachment_type: data.attachment_type || null,
