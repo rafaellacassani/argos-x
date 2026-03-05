@@ -1,0 +1,1 @@
+DELETE FROM google_calendar_tokens WHERE id = '8a9c0861-3296-49fb-b23d-06a87bed031e';
