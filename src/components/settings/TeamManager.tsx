@@ -313,6 +313,7 @@ export function TeamManager() {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [resendingFor, setResendingFor] = useState<string | null>(null);
   const [deletingMember, setDeletingMember] = useState<UserProfile | null>(null);
+  const [transferToUserId, setTransferToUserId] = useState<string>("none");
   const [passwordMember, setPasswordMember] = useState<UserProfile | null>(null);
   const [sessionMember, setSessionMember] = useState<UserProfile | null>(null);
   const { isAdmin } = useUserRole();
@@ -386,6 +387,10 @@ export function TeamManager() {
     await updateNotificationSettings(userId, settings);
     await fetchTeamMembers();
   };
+
+  const transferCandidates = teamMembers.filter(
+    (member) => deletingMember && member.user_id !== deletingMember.user_id
+  );
 
   return (
     <Card>
@@ -574,7 +579,11 @@ export function TeamManager() {
                         )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => setDeletingMember(member)}
+                          onClick={() => {
+                            setDeletingMember(member);
+                            const fallbackTarget = teamMembers.find((m) => m.user_id !== member.user_id);
+                            setTransferToUserId(fallbackTarget?.user_id || "none");
+                          }}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Excluir
@@ -624,20 +633,57 @@ export function TeamManager() {
       />
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deletingMember} onOpenChange={(open) => !open && setDeletingMember(null)}>
+      <AlertDialog
+        open={!!deletingMember}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingMember(null);
+            setTransferToUserId("none");
+          }
+        }}
+      >
         <AlertDialogContent className="bg-background">
           <AlertDialogHeader>
             <AlertDialogTitle>Remover membro?</AlertDialogTitle>
             <AlertDialogDescription>
-              {deletingMember?.full_name} será removido da equipe e não receberá mais notificações.
+              {deletingMember?.full_name} será removido da equipe. Se houver leads/carteira atribuídos,
+              eles serão transferidos para o responsável selecionado abaixo.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-2">
+            <Label>Transferir carteira para</Label>
+            <Select value={transferToUserId} onValueChange={setTransferToUserId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o novo responsável" />
+              </SelectTrigger>
+              <SelectContent>
+                {transferCandidates.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    Nenhum membro disponível
+                  </SelectItem>
+                ) : (
+                  transferCandidates.map((member) => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      {member.full_name}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                if (deletingMember) deleteTeamMember(deletingMember.user_id);
+                if (deletingMember) {
+                  void deleteTeamMember(deletingMember.user_id, {
+                    transferToUserId: transferToUserId !== "none" ? transferToUserId : undefined,
+                  });
+                }
                 setDeletingMember(null);
+                setTransferToUserId("none");
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
