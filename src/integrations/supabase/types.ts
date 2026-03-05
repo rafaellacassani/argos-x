@@ -667,7 +667,9 @@ export type Database = {
           filter_tag_ids: Json | null
           id: string
           instance_name: string
+          instance_names: Json | null
           interval_seconds: number
+          last_instance_index: number | null
           last_sent_at: string | null
           message_text: string
           name: string
@@ -693,7 +695,9 @@ export type Database = {
           filter_tag_ids?: Json | null
           id?: string
           instance_name: string
+          instance_names?: Json | null
           interval_seconds?: number
+          last_instance_index?: number | null
           last_sent_at?: string | null
           message_text: string
           name: string
@@ -719,7 +723,9 @@ export type Database = {
           filter_tag_ids?: Json | null
           id?: string
           instance_name?: string
+          instance_names?: Json | null
           interval_seconds?: number
+          last_instance_index?: number | null
           last_sent_at?: string | null
           message_text?: string
           name?: string

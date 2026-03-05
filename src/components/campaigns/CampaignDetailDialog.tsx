@@ -196,8 +196,14 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
             {/* Config */}
             <div className="grid grid-cols-2 gap-4">
               <div className="p-3 rounded-lg border">
-                <p className="text-xs text-muted-foreground mb-1">Instância</p>
-                <p className="font-medium">{campaign.instance_name}</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {campaign.instance_names && campaign.instance_names.length >= 2 ? "Instâncias (Round Robin)" : "Instância"}
+                </p>
+                <p className="font-medium">
+                  {campaign.instance_names && campaign.instance_names.length >= 2
+                    ? campaign.instance_names.join(" → ")
+                    : campaign.instance_name}
+                </p>
               </div>
               <div className="p-3 rounded-lg border">
                 <p className="text-xs text-muted-foreground mb-1">Intervalo</p>

@@ -113,6 +113,18 @@ serve(async (req) => {
 
         const recipient = recipients[0];
 
+        // Determine which instance to use (round-robin or single)
+        const instanceNames: string[] = (campaign.instance_names as string[]) || [];
+        let currentInstanceName = campaign.instance_name;
+        let nextInstanceIndex = campaign.last_instance_index || 0;
+
+        if (instanceNames.length >= 2) {
+          // Round-robin: pick instance based on current index
+          const idx = nextInstanceIndex % instanceNames.length;
+          currentInstanceName = instanceNames[idx];
+          nextInstanceIndex = idx + 1;
+        }
+
         // Validate phone
         const cleanPhone = (recipient.phone || "").replace(/\D/g, "");
         if (cleanPhone.length < 10) {
@@ -143,7 +155,7 @@ serve(async (req) => {
               caption: messageText,
             };
 
-            const mediaRes = await fetch(`${evolutionApiUrl}/message/sendMedia/${campaign.instance_name}`, {
+            const mediaRes = await fetch(`${evolutionApiUrl}/message/sendMedia/${currentInstanceName}`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -159,7 +171,7 @@ serve(async (req) => {
             sendSuccess = true;
           } else {
             // Send text
-            const textRes = await fetch(`${evolutionApiUrl}/message/sendText/${campaign.instance_name}`, {
+            const textRes = await fetch(`${evolutionApiUrl}/message/sendText/${currentInstanceName}`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -189,6 +201,7 @@ serve(async (req) => {
           await supabase.from("campaigns").update({
             sent_count: (campaign.sent_count || 0) + 1,
             last_sent_at: new Date().toISOString(),
+            last_instance_index: nextInstanceIndex,
             updated_at: new Date().toISOString(),
           }).eq("id", campaign.id);
         } else {
@@ -200,6 +213,7 @@ serve(async (req) => {
           await supabase.from("campaigns").update({
             failed_count: (campaign.failed_count || 0) + 1,
             last_sent_at: new Date().toISOString(),
+            last_instance_index: nextInstanceIndex,
             updated_at: new Date().toISOString(),
           }).eq("id", campaign.id);
         }

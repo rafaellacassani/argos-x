@@ -26,6 +26,7 @@ import {
   Calendar,
   Save,
 } from "lucide-react";
+import { Shuffle } from "lucide-react";
 
 interface Props {
   open: boolean;
@@ -81,6 +82,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
 
   // Step 2
   const [instanceName, setInstanceName] = useState("");
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [roundRobinEnabled, setRoundRobinEnabled] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentType, setAttachmentType] = useState<string | null>(null);
@@ -262,16 +265,21 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
 
   const canProceed = () => {
     if (step === 1) return name.trim().length > 0;
-    if (step === 2) return instanceName.length > 0 && messageText.trim().length > 0;
+    if (step === 2) {
+      const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
+      return hasInstance && messageText.trim().length > 0;
+    }
     return true;
   };
 
   const handleSave = async (startImmediately: boolean) => {
     setSaving(true);
     try {
+      const primaryInstance = roundRobinEnabled ? selectedInstances[0] : instanceName;
       const data: CreateCampaignData = {
         name,
-        instance_name: instanceName,
+        instance_name: primaryInstance,
+        instance_names: roundRobinEnabled ? selectedInstances : [],
         message_text: messageText,
         attachment_url: attachmentUrl,
         attachment_type: attachmentType,
@@ -312,6 +320,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setFilterStageIds([]);
     setFilterResponsibleIds([]);
     setInstanceName("");
+    setSelectedInstances([]);
+    setRoundRobinEnabled(false);
     setMessageText("");
     setAttachmentUrl(null);
     setAttachmentType(null);
@@ -439,20 +449,71 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         {/* Step 2: Message */}
         {step === 2 && (
           <div className="space-y-6">
-            <div>
-              <Label>Instância WhatsApp *</Label>
-              <Select value={instanceName} onValueChange={setInstanceName}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione a instância" />
-                </SelectTrigger>
-                <SelectContent>
-                  {instances.map((inst) => (
-                    <SelectItem key={inst.instance_name} value={inst.instance_name}>
-                      {inst.display_name || inst.instance_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+              {/* Round Robin toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Shuffle className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Round Robin</p>
+                    <p className="text-xs text-muted-foreground">Alternar envio entre múltiplas instâncias</p>
+                  </div>
+                </div>
+                <Switch checked={roundRobinEnabled} onCheckedChange={(v) => {
+                  setRoundRobinEnabled(v);
+                  if (!v) setSelectedInstances([]);
+                }} />
+              </div>
+
+              {!roundRobinEnabled ? (
+                <div>
+                  <Label>Instância WhatsApp *</Label>
+                  <Select value={instanceName} onValueChange={setInstanceName}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione a instância" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {instances.map((inst) => (
+                        <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                          {inst.display_name || inst.instance_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Instâncias participantes * <span className="text-muted-foreground font-normal">(mín. 2)</span></Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {instances.map((inst) => {
+                      const selected = selectedInstances.includes(inst.instance_name);
+                      return (
+                        <Badge
+                          key={inst.instance_name}
+                          variant={selected ? "default" : "outline"}
+                          className="cursor-pointer text-sm py-1.5 px-3"
+                          onClick={() => {
+                            setSelectedInstances(prev =>
+                              selected ? prev.filter(i => i !== inst.instance_name) : [...prev, inst.instance_name]
+                            );
+                          }}
+                        >
+                          {selected && <span className="mr-1 font-bold">{selectedInstances.indexOf(inst.instance_name) + 1}.</span>}
+                          {inst.display_name || inst.instance_name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {selectedInstances.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Ordem: {selectedInstances.map((name, i) => {
+                        const inst = instances.find(ins => ins.instance_name === name);
+                        return `${i + 1}. ${inst?.display_name || name}`;
+                      }).join(" → ")} → volta ao início
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
