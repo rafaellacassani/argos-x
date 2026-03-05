@@ -241,37 +241,124 @@ export function useTeam() {
   );
 
   const deleteTeamMember = useCallback(
-    async (userId: string) => {
+    async (
+      userId: string,
+      options?: {
+        transferToUserId?: string;
+      }
+    ) => {
       try {
         if (!workspaceId) throw new Error("Workspace não encontrado");
 
-        // 1. Get the profile id (needed for tables that reference user_profile_id)
-        const { data: profile } = await supabase
+        // 1) Resolve profile ids
+        const { data: profile, error: profileError } = await supabase
           .from("user_profiles")
           .select("id")
           .eq("user_id", userId)
           .single();
 
+        if (profileError) throw profileError;
         const profileId = profile?.id;
+        if (!profileId) throw new Error("Perfil do usuário não encontrado");
 
-        // 2. Delete from tables that reference user_profile_id
-        if (profileId) {
-          const { error: npError } = await supabase
-            .from("notification_preferences")
-            .delete()
-            .eq("user_profile_id", profileId)
-            .eq("workspace_id", workspaceId);
-          if (npError) console.warn("Error deleting notification_preferences:", npError);
+        let transferProfileId: string | null = null;
+        if (options?.transferToUserId) {
+          const { data: transferProfile, error: transferError } = await supabase
+            .from("user_profiles")
+            .select("id")
+            .eq("user_id", options.transferToUserId)
+            .single();
 
-          const { error: alertError } = await supabase
-            .from("alert_log")
-            .delete()
-            .eq("user_profile_id", profileId)
-            .eq("workspace_id", workspaceId);
-          if (alertError) console.warn("Error deleting alert_log:", alertError);
+          if (transferError) throw transferError;
+          transferProfileId = transferProfile?.id || null;
+
+          if (!transferProfileId) {
+            throw new Error("Responsável de destino inválido");
+          }
         }
 
-        // 3. Delete from tables that reference user_id directly
+        // 2) Check dependencies that reference user_profiles.id
+        const [leadsCountRes, campaignsCountRes, salesCountRes] = await Promise.all([
+          supabase
+            .from("leads")
+            .select("id", { count: "exact", head: true })
+            .eq("workspace_id", workspaceId)
+            .eq("responsible_user", profileId),
+          supabase
+            .from("campaigns")
+            .select("id", { count: "exact", head: true })
+            .eq("workspace_id", workspaceId)
+            .eq("created_by", profileId),
+          supabase
+            .from("lead_sales")
+            .select("id", { count: "exact", head: true })
+            .eq("workspace_id", workspaceId)
+            .eq("created_by", profileId),
+        ]);
+
+        if (leadsCountRes.error) throw leadsCountRes.error;
+        if (campaignsCountRes.error) throw campaignsCountRes.error;
+        if (salesCountRes.error) throw salesCountRes.error;
+
+        const leadsCount = leadsCountRes.count || 0;
+        const campaignsCount = campaignsCountRes.count || 0;
+        const salesCount = salesCountRes.count || 0;
+        const hasDependencies = leadsCount > 0 || campaignsCount > 0 || salesCount > 0;
+
+        // 3) Require transfer target if there are assigned records
+        if (hasDependencies && !transferProfileId) {
+          throw new Error(
+            `Este membro possui ${leadsCount} lead(s), ${campaignsCount} campanha(s) e ${salesCount} venda(s) vinculadas. Selecione um responsável para transferir antes de excluir.`
+          );
+        }
+
+        // 4) Reassign ownership data before deletion
+        if (transferProfileId) {
+          const { error: leadsUpdateError } = await supabase
+            .from("leads")
+            .update({ responsible_user: transferProfileId })
+            .eq("workspace_id", workspaceId)
+            .eq("responsible_user", profileId);
+          if (leadsUpdateError) throw leadsUpdateError;
+
+          const { error: campaignsUpdateError } = await supabase
+            .from("campaigns")
+            .update({ created_by: transferProfileId })
+            .eq("workspace_id", workspaceId)
+            .eq("created_by", profileId);
+          if (campaignsUpdateError) throw campaignsUpdateError;
+
+          const { error: salesUpdateError } = await supabase
+            .from("lead_sales")
+            .update({ created_by: transferProfileId })
+            .eq("workspace_id", workspaceId)
+            .eq("created_by", profileId);
+          if (salesUpdateError) throw salesUpdateError;
+
+          const { error: scheduledUpdateError } = await supabase
+            .from("scheduled_messages")
+            .update({ created_by: transferProfileId })
+            .eq("workspace_id", workspaceId)
+            .eq("created_by", profileId);
+          if (scheduledUpdateError) throw scheduledUpdateError;
+        }
+
+        // 5) Delete from tables that reference user_profile_id
+        const { error: npError } = await supabase
+          .from("notification_preferences")
+          .delete()
+          .eq("user_profile_id", profileId)
+          .eq("workspace_id", workspaceId);
+        if (npError) console.warn("Error deleting notification_preferences:", npError);
+
+        const { error: alertError } = await supabase
+          .from("alert_log")
+          .delete()
+          .eq("user_profile_id", profileId)
+          .eq("workspace_id", workspaceId);
+        if (alertError) console.warn("Error deleting alert_log:", alertError);
+
+        // 6) Delete from tables that reference user_id directly
         const tablesToClean = [
           { table: "notification_settings" as const, col: "user_id" as const },
           { table: "user_roles" as const, col: "user_id" as const },
@@ -285,8 +372,8 @@ export function useTeam() {
           if (error) console.warn(`Error deleting ${table}:`, error);
         }
 
-        // 4. scheduled_messages uses created_by (which references user_profiles.id)
-        if (profileId) {
+        // 7) If we didn't transfer scheduled messages ownership, delete them
+        if (!transferProfileId) {
           const { error } = await supabase
             .from("scheduled_messages")
             .delete()
@@ -295,7 +382,7 @@ export function useTeam() {
           if (error) console.warn("Error deleting scheduled_messages:", error);
         }
 
-        // 5. Remove from workspace_members (critical!)
+        // 8) Remove from workspace_members
         const { error: wmError } = await supabase
           .from("workspace_members")
           .delete()
@@ -303,27 +390,28 @@ export function useTeam() {
           .eq("workspace_id", workspaceId);
         if (wmError) console.warn("Error deleting workspace_members:", wmError);
 
-        // 6. Finally delete the profile
-        if (profileId) {
-          const { error } = await supabase
-            .from("user_profiles")
-            .delete()
-            .eq("user_id", userId);
-          if (error) throw error;
-        }
+        // 9) Finally delete profile
+        const { error: deleteProfileError } = await supabase
+          .from("user_profiles")
+          .delete()
+          .eq("user_id", userId);
+
+        if (deleteProfileError) throw deleteProfileError;
 
         toast({
           title: "Membro removido",
-          description: "O membro foi removido da equipe.",
+          description: transferProfileId
+            ? "Membro removido e carteira transferida com sucesso."
+            : "O membro foi removido da equipe.",
         });
 
         await fetchTeamMembers();
         return true;
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error deleting team member:", error);
         toast({
           title: "Erro ao remover",
-          description: "Não foi possível remover o membro.",
+          description: error?.message || "Não foi possível remover o membro.",
           variant: "destructive",
         });
         return false;
