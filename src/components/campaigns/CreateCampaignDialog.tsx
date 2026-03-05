@@ -81,6 +81,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
 
   // Step 2
   const [instanceName, setInstanceName] = useState("");
+  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
+  const [roundRobinEnabled, setRoundRobinEnabled] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentType, setAttachmentType] = useState<string | null>(null);
@@ -262,16 +264,21 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
 
   const canProceed = () => {
     if (step === 1) return name.trim().length > 0;
-    if (step === 2) return instanceName.length > 0 && messageText.trim().length > 0;
+    if (step === 2) {
+      const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
+      return hasInstance && messageText.trim().length > 0;
+    }
     return true;
   };
 
   const handleSave = async (startImmediately: boolean) => {
     setSaving(true);
     try {
+      const primaryInstance = roundRobinEnabled ? selectedInstances[0] : instanceName;
       const data: CreateCampaignData = {
         name,
-        instance_name: instanceName,
+        instance_name: primaryInstance,
+        instance_names: roundRobinEnabled ? selectedInstances : [],
         message_text: messageText,
         attachment_url: attachmentUrl,
         attachment_type: attachmentType,
@@ -312,6 +319,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setFilterStageIds([]);
     setFilterResponsibleIds([]);
     setInstanceName("");
+    setSelectedInstances([]);
+    setRoundRobinEnabled(false);
     setMessageText("");
     setAttachmentUrl(null);
     setAttachmentType(null);
