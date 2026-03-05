@@ -247,44 +247,75 @@ app.post("/pull", async (c) => {
     const timeMin = new Date(Date.now() - daysBehind * 24 * 60 * 60 * 1000).toISOString();
     const timeMax = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
 
-    const url = new URL(`${GOOGLE_CALENDAR_API}/calendars/${calendarId}/events`);
-    url.searchParams.set("timeMin", timeMin);
-    url.searchParams.set("timeMax", timeMax);
-    url.searchParams.set("singleEvents", "true");
-    url.searchParams.set("orderBy", "startTime");
-    url.searchParams.set("maxResults", "250");
+    const fetchGoogleEventsPage = async (pageToken?: string) => {
+      const url = new URL(`${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`);
+      url.searchParams.set("timeMin", timeMin);
+      url.searchParams.set("timeMax", timeMax);
+      url.searchParams.set("singleEvents", "true");
+      url.searchParams.set("orderBy", "startTime");
+      url.searchParams.set("maxResults", "250");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    if (!res.ok) {
-      console.error("[Sync Google] Pull failed:", data);
-      return c.json({ error: "Google API error" }, 500, corsHeaders);
+      try {
+        const res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          console.error("[Sync Google] Pull failed:", data);
+          throw new Error("Google API error");
+        }
+        return data;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const googleEvents: Array<Record<string, any>> = [];
+    let pageToken: string | undefined = undefined;
+
+    do {
+      const pageData = await fetchGoogleEventsPage(pageToken);
+      const pageItems = Array.isArray(pageData.items) ? pageData.items : [];
+      googleEvents.push(...pageItems);
+      pageToken = pageData.nextPageToken || undefined;
+    } while (pageToken);
+
+    const googleEventIds = googleEvents
+      .map((event) => event?.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+    const existingGoogleIds = new Set<string>();
+    if (googleEventIds.length > 0) {
+      const { data: existingRows, error: existingError } = await supabaseAdmin
+        .from("calendar_events")
+        .select("google_event_id")
+        .eq("user_id", userId)
+        .in("google_event_id", googleEventIds);
+
+      if (existingError) {
+        console.error("[Sync Google] Existing events check failed:", existingError);
+      } else {
+        for (const row of existingRows || []) {
+          if (row.google_event_id) existingGoogleIds.add(row.google_event_id);
+        }
+      }
     }
 
-    const events = data.items || [];
-    let imported = 0;
+    const rowsToInsert: Array<Record<string, unknown>> = [];
 
-    for (const gEvent of events) {
-      if (!gEvent.id) continue;
-
-      // Check if already exists
-      const { data: existing } = await supabaseAdmin
-        .from("calendar_events")
-        .select("id")
-        .eq("google_event_id", gEvent.id)
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (existing) continue;
+    for (const gEvent of googleEvents) {
+      if (!gEvent.id || existingGoogleIds.has(gEvent.id)) continue;
 
       const startAt = gEvent.start?.dateTime || `${gEvent.start?.date}T00:00:00Z`;
       const endAt = gEvent.end?.dateTime || `${gEvent.end?.date}T23:59:59Z`;
       const allDay = !gEvent.start?.dateTime;
 
-      await supabaseAdmin.from("calendar_events").insert({
+      rowsToInsert.push({
         workspace_id: tokenRow.workspace_id,
         user_id: userId,
         title: gEvent.summary || "(Sem título)",
@@ -299,12 +330,20 @@ app.post("/pull", async (c) => {
         type: "meeting",
         meet_link: gEvent.hangoutLink || null,
       });
-
-      imported++;
     }
 
-    console.log(`[Sync Google] Pulled ${imported} new events for user ${userId}`);
-    return c.json({ success: true, imported, total: events.length }, 200, corsHeaders);
+    for (let i = 0; i < rowsToInsert.length; i += 100) {
+      const chunk = rowsToInsert.slice(i, i + 100);
+      const { error: insertError } = await supabaseAdmin.from("calendar_events").insert(chunk);
+      if (insertError) {
+        console.error("[Sync Google] Insert chunk failed:", insertError);
+        return c.json({ error: "Database insert error" }, 500, corsHeaders);
+      }
+    }
+
+    const imported = rowsToInsert.length;
+    console.log(`[Sync Google] Pulled ${imported} new events for user ${userId} (total Google events: ${googleEvents.length})`);
+    return c.json({ success: true, imported, total: googleEvents.length }, 200, corsHeaders);
   } catch (err) {
     console.error("[Sync Google] Pull error:", err);
     return c.json({ error: "Internal error" }, 500, corsHeaders);

@@ -136,12 +136,7 @@ export default function CalendarPage() {
 
     setSyncing(true);
     try {
-      await Promise.race([
-        pullFromGoogle(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Tempo limite da sincronização excedido")), 25000)
-        ),
-      ]);
+      await pullFromGoogle();
       await fetchEvents(currentDate.getFullYear(), currentDate.getMonth());
       toast({ title: "Calendário sincronizado com sucesso!" });
     } catch (error) {
