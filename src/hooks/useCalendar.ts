@@ -49,18 +49,38 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-async function callSyncFunction(path: string, method: string, body?: Record<string, unknown>) {
+async function callSyncFunction(
+  path: string,
+  method: string,
+  body?: Record<string, unknown>,
+  timeoutMs = 20000
+) {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-google-calendar${path}`, {
-    method,
-    headers,
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Sync function error");
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/sync-google-calendar${path}`, {
+      method,
+      headers,
+      signal: controller.signal,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Sync function error");
+    }
+
+    return res.json();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("Tempo limite da sincronização excedido");
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  return res.json();
 }
 
 async function callOAuthFunction(path: string, method: string, body?: Record<string, unknown>) {

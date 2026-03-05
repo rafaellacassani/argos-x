@@ -118,10 +118,23 @@ export default function CalendarPage() {
   const [syncing, setSyncing] = useState(false);
 
   const handleManualSync = async () => {
+    if (syncing) return;
+
     setSyncing(true);
     try {
-      await pullFromGoogle();
+      await Promise.race([
+        pullFromGoogle(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Tempo limite da sincronização excedido")), 25000)
+        ),
+      ]);
       await fetchEvents(currentDate.getFullYear(), currentDate.getMonth());
+    } catch (error) {
+      toast({
+        title: "Falha ao sincronizar calendário",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      });
     } finally {
       setSyncing(false);
     }
