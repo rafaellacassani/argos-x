@@ -20,6 +20,7 @@ export interface CalendarEvent {
   google_event_id: string | null;
   synced_to_google: boolean;
   last_synced_at: string | null;
+  meet_link: string | null;
   created_at: string;
   updated_at: string;
 }

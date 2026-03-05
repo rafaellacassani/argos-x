@@ -82,7 +82,7 @@ app.post("/push", async (c) => {
 
     const calendarId = tokenRow?.google_calendar_id || "primary";
 
-    const googleEvent = {
+    const googleEvent: Record<string, unknown> = {
       summary: event.title,
       description: event.description || "",
       location: event.location || "",
@@ -93,6 +93,16 @@ app.post("/push", async (c) => {
         ? { date: event.end_at.split("T")[0] }
         : { dateTime: event.end_at, timeZone: "America/Sao_Paulo" },
     };
+
+    // Add Google Meet conference data for new events
+    if (!event.google_event_id) {
+      googleEvent.conferenceData = {
+        createRequest: {
+          requestId: crypto.randomUUID(),
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      };
+    }
 
     let googleRes: Response;
     if (event.google_event_id) {
@@ -109,18 +119,17 @@ app.post("/push", async (c) => {
         }
       );
     } else {
-      // Create new
-      googleRes = await fetch(
-        `${GOOGLE_CALENDAR_API}/calendars/${calendarId}/events`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(googleEvent),
-        }
-      );
+      // Create new with conferenceDataVersion=1 to generate Meet link
+      const createUrl = new URL(`${GOOGLE_CALENDAR_API}/calendars/${calendarId}/events`);
+      createUrl.searchParams.set("conferenceDataVersion", "1");
+      googleRes = await fetch(createUrl.toString(), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(googleEvent),
+      });
     }
 
     const googleData = await googleRes.json();
@@ -130,17 +139,19 @@ app.post("/push", async (c) => {
       return c.json({ error: "Google API error" }, 500, corsHeaders);
     }
 
-    // Update local event
+    // Update local event with Meet link
+    const meetLink = googleData.hangoutLink || null;
     await supabaseAdmin
       .from("calendar_events")
       .update({
         google_event_id: googleData.id,
         synced_to_google: true,
         last_synced_at: new Date().toISOString(),
+        meet_link: meetLink,
       })
       .eq("id", eventId);
 
-    return c.json({ success: true, googleEventId: googleData.id }, 200, corsHeaders);
+    return c.json({ success: true, googleEventId: googleData.id, meetLink }, 200, corsHeaders);
   } catch (err) {
     console.error("[Sync Google] Push error:", err);
     return c.json({ error: "Internal error" }, 500, corsHeaders);
@@ -286,6 +297,7 @@ app.post("/pull", async (c) => {
         synced_to_google: true,
         last_synced_at: new Date().toISOString(),
         type: "meeting",
+        meet_link: gEvent.hangoutLink || null,
       });
 
       imported++;

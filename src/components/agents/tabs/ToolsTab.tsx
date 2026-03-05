@@ -81,9 +81,10 @@ export function ToolsTab({ formData, updateField }: Props) {
   const [calendarOpen, setCalendarOpen] = useState(true);
 
   // Calendar sub-config
-  const calendarConfig = formData.calendar_config || { permissions: ["cal_agendar", "cal_reagendar", "cal_cancelar", "cal_consultar", "cal_lembrete"], reminders: ["180", "30"] };
+  const calendarConfig = formData.calendar_config || { permissions: ["cal_agendar", "cal_reagendar", "cal_cancelar", "cal_consultar", "cal_lembrete"], reminders: ["180", "30"], generate_meet_link: true };
   const calendarPermissions: string[] = calendarConfig.permissions || [];
   const calendarReminders: string[] = calendarConfig.reminders || [];
+  const generateMeetLink: boolean = calendarConfig.generate_meet_link !== false;
 
   const updateCalendarConfig = (key: string, value: any) => {
     updateField("calendar_config", { ...calendarConfig, [key]: value });
@@ -343,6 +344,18 @@ export function ToolsTab({ formData, updateField }: Props) {
                       </div>
                     </div>
                   )}
+
+                  {/* Google Meet toggle */}
+                  <div className="flex items-center justify-between py-2 pl-2">
+                    <div>
+                      <p className="text-sm font-medium">📹 Gerar link do Google Meet</p>
+                      <p className="text-xs text-muted-foreground">Cria automaticamente um link do Meet ao agendar reuniões</p>
+                    </div>
+                    <Switch
+                      checked={generateMeetLink}
+                      onCheckedChange={(checked) => updateCalendarConfig("generate_meet_link", checked)}
+                    />
+                  </div>
                 </div>
               </CollapsibleContent>
             )}

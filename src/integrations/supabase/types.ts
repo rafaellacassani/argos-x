@@ -537,6 +537,7 @@ export type Database = {
           last_synced_at: string | null
           lead_id: string | null
           location: string | null
+          meet_link: string | null
           start_at: string
           synced_to_google: boolean
           title: string
@@ -556,6 +557,7 @@ export type Database = {
           last_synced_at?: string | null
           lead_id?: string | null
           location?: string | null
+          meet_link?: string | null
           start_at: string
           synced_to_google?: boolean
           title: string
@@ -575,6 +577,7 @@ export type Database = {
           last_synced_at?: string | null
           lead_id?: string | null
           location?: string | null
+          meet_link?: string | null
           start_at?: string
           synced_to_google?: boolean
           title?: string
