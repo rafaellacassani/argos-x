@@ -115,6 +115,20 @@ export default function CalendarPage() {
   const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [leadNames, setLeadNames] = useState<Record<string, string>>({});
+  const {
+    events,
+    loading,
+    fetchEvents,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    googleConnected,
+    googleEmail,
+    connectGoogle,
+    disconnectGoogle,
+    pullFromGoogle,
+  } = useCalendar();
+
   const [syncing, setSyncing] = useState(false);
 
   const handleManualSync = async () => {
@@ -129,6 +143,7 @@ export default function CalendarPage() {
         ),
       ]);
       await fetchEvents(currentDate.getFullYear(), currentDate.getMonth());
+      toast({ title: "Calendário sincronizado com sucesso!" });
     } catch (error) {
       toast({
         title: "Falha ao sincronizar calendário",
@@ -139,20 +154,6 @@ export default function CalendarPage() {
       setSyncing(false);
     }
   };
-
-  const {
-    events,
-    loading,
-    fetchEvents,
-    createEvent,
-    updateEvent,
-    deleteEvent,
-    googleConnected,
-    googleEmail,
-    connectGoogle,
-    disconnectGoogle,
-    pullFromGoogle,
-  } = useCalendar();
 
   const navigate = useNavigate();
   const { workspaceId } = useWorkspace();
