@@ -448,20 +448,71 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         {/* Step 2: Message */}
         {step === 2 && (
           <div className="space-y-6">
-            <div>
-              <Label>Instância WhatsApp *</Label>
-              <Select value={instanceName} onValueChange={setInstanceName}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Selecione a instância" />
-                </SelectTrigger>
-                <SelectContent>
-                  {instances.map((inst) => (
-                    <SelectItem key={inst.instance_name} value={inst.instance_name}>
-                      {inst.display_name || inst.instance_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+              {/* Round Robin toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Shuffle className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Round Robin</p>
+                    <p className="text-xs text-muted-foreground">Alternar envio entre múltiplas instâncias</p>
+                  </div>
+                </div>
+                <Switch checked={roundRobinEnabled} onCheckedChange={(v) => {
+                  setRoundRobinEnabled(v);
+                  if (!v) setSelectedInstances([]);
+                }} />
+              </div>
+
+              {!roundRobinEnabled ? (
+                <div>
+                  <Label>Instância WhatsApp *</Label>
+                  <Select value={instanceName} onValueChange={setInstanceName}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione a instância" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {instances.map((inst) => (
+                        <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                          {inst.display_name || inst.instance_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Instâncias participantes * <span className="text-muted-foreground font-normal">(mín. 2)</span></Label>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {instances.map((inst) => {
+                      const selected = selectedInstances.includes(inst.instance_name);
+                      return (
+                        <Badge
+                          key={inst.instance_name}
+                          variant={selected ? "default" : "outline"}
+                          className="cursor-pointer text-sm py-1.5 px-3"
+                          onClick={() => {
+                            setSelectedInstances(prev =>
+                              selected ? prev.filter(i => i !== inst.instance_name) : [...prev, inst.instance_name]
+                            );
+                          }}
+                        >
+                          {selected && <span className="mr-1 font-bold">{selectedInstances.indexOf(inst.instance_name) + 1}.</span>}
+                          {inst.display_name || inst.instance_name}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {selectedInstances.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Ordem: {selectedInstances.map((name, i) => {
+                        const inst = instances.find(ins => ins.instance_name === name);
+                        return `${i + 1}. ${inst?.display_name || name}`;
+                      }).join(" → ")} → volta ao início
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
