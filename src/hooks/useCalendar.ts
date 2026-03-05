@@ -244,7 +244,9 @@ export function useCalendar() {
     try {
       const data = await callOAuthFunction("/url", "POST", { workspaceId });
       if (data?.url) {
-        window.location.href = data.url;
+        window.open(data.url, "_blank");
+      } else {
+        toast({ title: "Erro ao gerar URL de autorização", variant: "destructive" });
       }
     } catch (err) {
       console.error("Error connecting Google:", err);
