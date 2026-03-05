@@ -26,6 +26,7 @@ import {
   Calendar,
   Save,
 } from "lucide-react";
+import { Shuffle } from "lucide-react";
 
 interface Props {
   open: boolean;
