@@ -5,9 +5,10 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { X, Plus, FolderOpen, Tag, UserRound } from "lucide-react";
+import { X, Plus, FolderOpen, Tag, UserRound, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
@@ -30,7 +31,25 @@ const availableTools = [
   { id: "pausar_ia", label: "Pausar IA", description: "Transferir atendimento para um humano" },
   { id: "chamar_n8n", label: "Chamar Webhook", description: "Executar workflow externo via n8n/webhook" },
   { id: "agendar_followup", label: "Agendar Follow-up", description: "Agendar uma mensagem para ser enviada em um horário específico" },
-  { id: "gerenciar_calendario", label: "Gerenciar Calendário", description: "Agendar, reagendar, cancelar reuniões e enviar lembretes automáticos (3h e 30min antes)" },
+];
+
+const calendarSubOptions = [
+  { id: "cal_agendar", label: "Agendar reunião", description: "Criar novos eventos no calendário" },
+  { id: "cal_reagendar", label: "Reagendar reunião", description: "Alterar data/hora de reuniões existentes" },
+  { id: "cal_cancelar", label: "Cancelar reunião", description: "Remover reuniões agendadas" },
+  { id: "cal_consultar", label: "Consultar disponibilidade", description: "Verificar horários livres no calendário" },
+  { id: "cal_lembrete", label: "Enviar lembretes", description: "Enviar lembretes automáticos antes da reunião" },
+];
+
+const reminderOptions = [
+  { value: "15", label: "15 minutos antes" },
+  { value: "30", label: "30 minutos antes" },
+  { value: "60", label: "1 hora antes" },
+  { value: "120", label: "2 horas antes" },
+  { value: "180", label: "3 horas antes" },
+  { value: "360", label: "6 horas antes" },
+  { value: "720", label: "12 horas antes" },
+  { value: "1440", label: "24 horas antes" },
 ];
 
 const actionTypes = [
@@ -58,6 +77,31 @@ export function ToolsTab({ formData, updateField }: Props) {
   const tools: string[] = formData.tools || [];
   const onStartActions: OnStartAction[] = formData.on_start_actions || [];
   const { workspaceId } = useWorkspace();
+
+  const [calendarOpen, setCalendarOpen] = useState(true);
+
+  // Calendar sub-config
+  const calendarConfig = formData.calendar_config || { permissions: ["cal_agendar", "cal_reagendar", "cal_cancelar", "cal_consultar", "cal_lembrete"], reminders: ["180", "30"] };
+  const calendarPermissions: string[] = calendarConfig.permissions || [];
+  const calendarReminders: string[] = calendarConfig.reminders || [];
+
+  const updateCalendarConfig = (key: string, value: any) => {
+    updateField("calendar_config", { ...calendarConfig, [key]: value });
+  };
+
+  const toggleCalendarPermission = (id: string) => {
+    const next = calendarPermissions.includes(id)
+      ? calendarPermissions.filter((p) => p !== id)
+      : [...calendarPermissions, id];
+    updateCalendarConfig("permissions", next);
+  };
+
+  const toggleReminder = (value: string) => {
+    const next = calendarReminders.includes(value)
+      ? calendarReminders.filter((r) => r !== value)
+      : [...calendarReminders, value];
+    updateCalendarConfig("reminders", next);
+  };
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [newActionType, setNewActionType] = useState<string>("");
@@ -239,6 +283,71 @@ export function ToolsTab({ formData, updateField }: Props) {
             </div>
           </div>
         ))}
+
+        {/* Calendar tool with sub-options */}
+        <Collapsible open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <div className="border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-3 p-3 hover:bg-muted/30 transition-colors">
+              <Checkbox
+                checked={tools.includes("gerenciar_calendario")}
+                onCheckedChange={() => toggleTool("gerenciar_calendario")}
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium">📅 Gerenciar Calendário</p>
+                <p className="text-xs text-muted-foreground">Agendar, reagendar, cancelar reuniões e enviar lembretes</p>
+              </div>
+              {tools.includes("gerenciar_calendario") && (
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                    <ChevronDown className={`w-4 h-4 transition-transform ${calendarOpen ? "rotate-180" : ""}`} />
+                  </Button>
+                </CollapsibleTrigger>
+              )}
+            </div>
+
+            {tools.includes("gerenciar_calendario") && (
+              <CollapsibleContent>
+                <div className="border-t border-border bg-muted/10 p-3 space-y-3">
+                  <div>
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Permissões do agente</Label>
+                    <div className="mt-2 space-y-1.5">
+                      {calendarSubOptions.map((sub) => (
+                        <div key={sub.id} className="flex items-center gap-2.5 pl-2 py-1.5">
+                          <Checkbox
+                            checked={calendarPermissions.includes(sub.id)}
+                            onCheckedChange={() => toggleCalendarPermission(sub.id)}
+                          />
+                          <div>
+                            <p className="text-sm">{sub.label}</p>
+                            <p className="text-xs text-muted-foreground">{sub.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {calendarPermissions.includes("cal_lembrete") && (
+                    <div>
+                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lembretes automáticos</Label>
+                      <p className="text-xs text-muted-foreground mt-0.5 mb-2">Selecione quando os lembretes devem ser enviados</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {reminderOptions.map((opt) => (
+                          <div key={opt.value} className="flex items-center gap-2 pl-2 py-1">
+                            <Checkbox
+                              checked={calendarReminders.includes(opt.value)}
+                              onCheckedChange={() => toggleReminder(opt.value)}
+                            />
+                            <span className="text-sm">{opt.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            )}
+          </div>
+        </Collapsible>
       </div>
 
       <Separator />
