@@ -582,9 +582,15 @@ async function executeFlow(
   }
 
   // Increment executions count
-  await supabase.rpc("increment_bot_executions_count", { bot_id_param: botId }).catch(() => {
-    supabase.from("salesbots").update({ executions_count: (bot as any).executions_count + 1 }).eq("id", botId).then(() => {});
-  });
+  try {
+    const { error: rpcErr } = await supabase.rpc("increment_bot_executions_count", { bot_id_param: botId });
+    if (rpcErr) {
+      // Fallback: manual increment
+      await supabase.from("salesbots").update({ executions_count: (bot as any).executions_count + 1 }).eq("id", botId);
+    }
+  } catch (_) {
+    // ignore increment errors
+  }
 }
 
 // --- Follow-up delay calculator ---
