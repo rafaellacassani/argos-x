@@ -1,38 +1,35 @@
 
 
-## Diagnosis: SalesBot Not Triggering
+# Plano: Google Meet automático + link nos lembretes da IA
 
-### Root Cause Found
+## O que será feito
 
-After analyzing the webhook logs and code, the issue is clear:
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-1. **The webhook IS receiving events** from the `ananutri3` instance (confirmed in logs at 18:40 and 18:42)
-2. **But NO logs appear after the initial receipt** -- not even "MSG from" or "Skipping event"
-3. The only code path that returns silently (without any log) is the **`fromMe` filter** at line 634
+## Detalhes técnicos
 
-This means ALL webhook events arriving are outbound messages (`fromMe: true`). When you send FROM the phone connected to the `ananutri3` instance, Evolution API echoes those as `messages.upsert` with `fromMe: true`, and they get silently discarded.
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
 
-**Key question:** When you tested, did you send FROM a different phone number TO Ana's number (+55 21 98787-6687)? Or did you send FROM Ana's phone?
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
 
-### Additional Issue: Silent Filters
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
 
-Even if the `fromMe` filter is working correctly, the code has no logging for several early-exit paths, making debugging impossible. The fix should add logging.
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
 
-### Plan
-
-1. **Add debug logging** to the `fromMe` filter, `data/instanceName` check, and other silent return paths in `whatsapp-webhook/index.ts` so we can see exactly why messages are being dropped
-2. **Verify the test scenario** is correct: the message must come FROM a phone that is NOT the `ananutri3` instance (+55 21 98787-6687)
-
-### Changes
-
-**File: `supabase/functions/whatsapp-webhook/index.ts`**
-- Add `console.log` at the `fromMe` filter (line 634): log that the message was skipped because it was outgoing
-- Add `console.log` at the `data/instanceName` null check (line 625): log missing data
-- These are small additions (2-3 lines) that will make future debugging instant
-
-### How to Test
-
-After deploying, send a WhatsApp message FROM a different phone (not Ana's +55 21 98787-6687) TO Ana's number. The logs should now show either:
-- "Skipped: fromMe" -- confirming the message direction issue
-- "MSG from..." followed by bot matching logs -- confirming the bot flow is executing
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 
