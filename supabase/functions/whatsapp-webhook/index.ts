@@ -1023,6 +1023,17 @@ app.post("/", async (c) => {
 
     const isNewLead = !existingLead;
 
+    // Update whatsapp_jid and instance_name if lead exists but missing JID
+    if (existingLead && !existingLead.whatsapp_jid && remoteJid) {
+      await supabase
+        .from("leads")
+        .update({ whatsapp_jid: remoteJid, instance_name: instanceName })
+        .eq("id", existingLead.id);
+      existingLead.whatsapp_jid = remoteJid;
+      existingLead.instance_name = instanceName;
+      console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} with JID: ${remoteJid}`);
+    }
+
     let matchedBot: any = null;
 
     for (const bot of bots) {
