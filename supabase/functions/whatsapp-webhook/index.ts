@@ -623,6 +623,7 @@ app.post("/", async (c) => {
     const instanceName = payload.instance;
 
     if (!data || !instanceName) {
+      console.log("[whatsapp-webhook] ⚠️ Missing data or instanceName. data:", !!data, "instanceName:", instanceName);
       return c.json({ received: true, skipped: true }, 200, corsHeaders);
     }
 
@@ -631,11 +632,15 @@ app.post("/", async (c) => {
     const fromMe: boolean = key.fromMe || false;
     const msgId: string = key.id || "";
 
+    console.log("[whatsapp-webhook] 📨 MSG details:", { instanceName, remoteJid, fromMe, msgId: msgId.substring(0, 20) });
+
     if (fromMe) {
+      console.log("[whatsapp-webhook] ⏭️ Skipped: fromMe=true for", instanceName, "jid:", remoteJid);
       return c.json({ received: true, skipped: "fromMe" }, 200, corsHeaders);
     }
 
     if (remoteJid.endsWith("@g.us")) {
+      console.log("[whatsapp-webhook] ⏭️ Skipped: group message for", instanceName);
       return c.json({ received: true, skipped: "group" }, 200, corsHeaders);
     }
 
