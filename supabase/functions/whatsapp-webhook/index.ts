@@ -582,9 +582,15 @@ async function executeFlow(
   }
 
   // Increment executions count
-  await supabase.rpc("increment_bot_executions_count", { bot_id_param: botId }).catch(() => {
-    supabase.from("salesbots").update({ executions_count: (bot as any).executions_count + 1 }).eq("id", botId).then(() => {});
-  });
+  try {
+    const { error: rpcErr } = await supabase.rpc("increment_bot_executions_count", { bot_id_param: botId });
+    if (rpcErr) {
+      // Fallback: manual increment
+      await supabase.from("salesbots").update({ executions_count: (bot as any).executions_count + 1 }).eq("id", botId);
+    }
+  } catch (_) {
+    // ignore increment errors
+  }
 }
 
 // --- Follow-up delay calculator ---
@@ -1022,6 +1028,17 @@ app.post("/", async (c) => {
       .single();
 
     const isNewLead = !existingLead;
+
+    // Update whatsapp_jid and instance_name if lead exists but missing JID
+    if (existingLead && !existingLead.whatsapp_jid && remoteJid) {
+      await supabase
+        .from("leads")
+        .update({ whatsapp_jid: remoteJid, instance_name: instanceName })
+        .eq("id", existingLead.id);
+      existingLead.whatsapp_jid = remoteJid;
+      existingLead.instance_name = instanceName;
+      console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} with JID: ${remoteJid}`);
+    }
 
     let matchedBot: any = null;
 
