@@ -1,0 +1,1 @@
+UPDATE salesbot_wait_queue SET status = 'canceled', canceled_reason = 'empty_session_fix' WHERE session_id = '' AND status = 'pending';
