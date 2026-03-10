@@ -5,10 +5,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Zap, Clock, Timer, Hourglass, Shuffle } from "lucide-react";
+import { Zap, Clock, Timer, Hourglass, Shuffle, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 interface Props {
   formData: Record<string, any>;
@@ -148,6 +149,29 @@ export function BehaviorTab({ formData, updateField }: Props) {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Cloud API 24h window */}
+      {(formData.instance_name?.startsWith("cloud_") || (!formData.instance_name && cloudConnections.length > 0)) && (
+        <>
+          <Separator />
+          <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-muted/30">
+            <ShieldAlert className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Respeitar janela de 24h (Cloud API)</Label>
+                <Switch
+                  checked={formData.cloud_24h_window_only ?? true}
+                  onCheckedChange={(v) => updateField("cloud_24h_window_only", v)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                A Meta permite envio de mensagens apenas dentro de 24h após a última mensagem do cliente. 
+                Com esta opção ativa, o agente e os follow-ups automáticos respeitam essa janela.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
 
       <Separator />
 

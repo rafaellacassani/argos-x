@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_agents ADD COLUMN cloud_24h_window_only BOOLEAN DEFAULT true;

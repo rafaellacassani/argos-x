@@ -804,7 +804,7 @@ Deno.serve(async (req) => {
       const leadIds = [...new Set(followupItems.map((q: any) => q.lead_id))];
 
       const [agentsRes, leadsRes] = await Promise.all([
-        supabase.from("ai_agents").select("id, name, agent_role, system_prompt, model, tone_of_voice, use_emojis, response_length, followup_sequence, followup_end_stage_id, instance_name, is_active, workspace_id").in("id", agentIds),
+        supabase.from("ai_agents").select("id, name, agent_role, system_prompt, model, tone_of_voice, use_emojis, response_length, followup_sequence, followup_end_stage_id, instance_name, is_active, workspace_id, cloud_24h_window_only").in("id", agentIds),
         supabase.from("leads").select("id, name, phone, whatsapp_jid, instance_name, workspace_id, stage_id").in("id", leadIds),
       ]);
 
@@ -876,10 +876,71 @@ Deno.serve(async (req) => {
           }
         }
 
-        const instanceName = lead.instance_name || agent.instance_name;
+        const isWabaSession = item.session_id?.startsWith("waba_");
+        const instanceName = isWabaSession ? null : (lead.instance_name || agent.instance_name);
         const phoneNumber = (lead.phone || "").replace(/\D/g, "") || (lead.whatsapp_jid || "").replace(/@.*$/, "");
 
-        if (instanceName && phoneNumber) {
+        // Check 24h window for WABA sessions
+        if (isWabaSession && agent.cloud_24h_window_only !== false) {
+          const windowCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const { data: lastInbound } = await supabase
+            .from("meta_conversations")
+            .select("timestamp")
+            .eq("workspace_id", item.workspace_id)
+            .eq("sender_id", phoneNumber)
+            .eq("direction", "inbound")
+            .eq("platform", "whatsapp_business")
+            .gte("timestamp", windowCutoff)
+            .order("timestamp", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (!lastInbound) {
+            console.log(`[followup-queue] ⏭️ Skipped — 24h window expired for WABA lead: ${lead.name}`);
+            await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "24h_window_expired" }).eq("id", item.id);
+            followupsProcessed++;
+            continue;
+          }
+        }
+
+        if (isWabaSession && phoneNumber) {
+          // Send via WhatsApp Cloud API
+          const cloudPhoneNumberId = item.session_id.replace("waba_", "");
+          // Get access token from cloud connection matching agent instance or workspace
+          const agentCloudId = agent.instance_name?.startsWith("cloud_") ? agent.instance_name.replace("cloud_", "") : null;
+          
+          let cloudQuery = supabase
+            .from("whatsapp_cloud_connections")
+            .select("phone_number_id, access_token")
+            .eq("workspace_id", item.workspace_id)
+            .eq("is_active", true);
+          
+          if (agentCloudId) {
+            cloudQuery = cloudQuery.eq("phone_number_id", agentCloudId);
+          }
+
+          const { data: cloudConn } = await cloudQuery.limit(1).single();
+
+          if (cloudConn) {
+            const res = await fetch(`https://graph.facebook.com/v21.0/${cloudConn.phone_number_id}/messages`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${cloudConn.access_token}` },
+              body: JSON.stringify({
+                messaging_product: "whatsapp",
+                to: phoneNumber,
+                type: "text",
+                text: { body: followupMessage },
+              }),
+            });
+            if (res.ok) {
+              console.log(`[followup-queue] ✅ WABA follow-up sent: step ${stepNum}, lead: ${lead.name}`);
+            } else {
+              console.error(`[followup-queue] ❌ WABA send failed: ${res.status} ${await res.text()}`);
+            }
+          } else {
+            console.error(`[followup-queue] ❌ No cloud connection found for WABA follow-up`);
+          }
+        } else if (instanceName && phoneNumber) {
           const sent = await sendWhatsApp(instanceName, phoneNumber, followupMessage);
           if (sent) {
             console.log(`[followup-queue] ✅ Follow-up sent: step ${stepNum}, lead: ${lead.name}`);
