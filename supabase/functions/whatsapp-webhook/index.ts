@@ -681,14 +681,41 @@ app.post("/", async (c) => {
     let phoneNumber = "";
     
     if (remoteJid.endsWith("@lid")) {
+      // Multiple fallback strategies to resolve @lid to real phone number
       const participant = data.participant || data.key?.participant || "";
+      const remoteJidAlt = data.key?.remoteJidAlt || data.remoteJidAlt || "";
+      
       if (participant && !participant.endsWith("@lid")) {
         resolvedRemoteJid = participant;
         phoneNumber = jidToNumber(participant);
-        console.log(`[whatsapp-webhook] 🔄 @lid resolved: ${remoteJid} → ${participant}`);
+        console.log(`[whatsapp-webhook] 🔄 @lid resolved via participant: ${remoteJid} → ${participant}`);
+      } else if (remoteJidAlt && !remoteJidAlt.endsWith("@lid")) {
+        resolvedRemoteJid = remoteJidAlt;
+        phoneNumber = jidToNumber(remoteJidAlt);
+        console.log(`[whatsapp-webhook] 🔄 @lid resolved via remoteJidAlt: ${remoteJid} → ${remoteJidAlt}`);
       } else {
-        phoneNumber = jidToNumber(remoteJid);
-        console.log(`[whatsapp-webhook] ⚠️ @lid contact, using as-is: ${remoteJid}`);
+        // Attempt to resolve via Evolution API fetchProfile
+        console.log(`[whatsapp-webhook] 🔍 @lid not resolved locally, trying Evolution API fetchProfile for ${remoteJid}...`);
+        try {
+          const profileData = await evolutionFetch(`/chat/fetchProfile/${instanceName}`, "POST", {
+            number: jidToNumber(remoteJid),
+          });
+          const resolvedNumber = profileData?.number || profileData?.wuid || profileData?.jid || "";
+          const cleanNumber = resolvedNumber ? jidToNumber(String(resolvedNumber)) : "";
+          if (cleanNumber && cleanNumber.length >= 10 && cleanNumber.length <= 15 && /^\d+$/.test(cleanNumber)) {
+            resolvedRemoteJid = `${cleanNumber}@s.whatsapp.net`;
+            phoneNumber = cleanNumber;
+            console.log(`[whatsapp-webhook] 🔄 @lid resolved via fetchProfile: ${remoteJid} → ${cleanNumber}`);
+          } else {
+            // Last resort: use LID as-is for session tracking, but flag it
+            phoneNumber = jidToNumber(remoteJid);
+            console.warn(`[whatsapp-webhook] ⚠️ @lid could NOT be resolved for ${remoteJid}. fetchProfile returned: ${JSON.stringify(profileData)}`);
+            console.warn(`[whatsapp-webhook] ⚠️ AI agent will use LID as session_id but may fail to send reply. pushName: ${pushName}`);
+          }
+        } catch (fetchErr) {
+          phoneNumber = jidToNumber(remoteJid);
+          console.error(`[whatsapp-webhook] ❌ @lid fetchProfile error:`, fetchErr);
+        }
       }
     } else {
       phoneNumber = jidToNumber(remoteJid);
@@ -814,7 +841,7 @@ app.post("/", async (c) => {
         // Search by JID + phone suffix to avoid missing leads with different JID format
         const agentLeadOrFilters = [`whatsapp_jid.eq.${remoteJid}`];
         if (resolvedRemoteJid !== remoteJid) agentLeadOrFilters.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
-        if (phoneNumber.length >= 10 && phoneNumber.length <= 13) {
+        if (phoneNumber.length >= 10 && phoneNumber.length <= 15) {
           agentLeadOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
         }
         const { data: existingLead } = await supabase
@@ -925,18 +952,34 @@ app.post("/", async (c) => {
               console.error(`[whatsapp-webhook] ❌ Agent error: ${agentData.error}`);
             }
 
+            // Determine the best number to send to
+            // For @lid contacts that couldn't be resolved, try sending to the original JID
+            const sendToNumber = (phoneNumber.length >= 10 && phoneNumber.length <= 15 && /^\d+$/.test(phoneNumber))
+              ? phoneNumber
+              : remoteJid; // Use full JID (Evolution API may handle @lid internally)
+
             if (agentData.chunks && Array.isArray(agentData.chunks)) {
-              console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${phoneNumber}`);
+              console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${sendToNumber}`);
               for (const chunk of agentData.chunks) {
                 if (chunk && chunk.trim()) {
-                  const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                    number: phoneNumber,
+                  let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                    number: sendToNumber,
                     text: chunk,
                     delay: 0,
                     linkPreview: false,
                   });
+                  // Fallback: if send failed and we used phoneNumber, retry with full remoteJid
+                  if (!sendResult && sendToNumber !== remoteJid) {
+                    console.log(`[whatsapp-webhook] 🔄 Retrying send with original JID: ${remoteJid}`);
+                    sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                      number: remoteJid,
+                      text: chunk,
+                      delay: 0,
+                      linkPreview: false,
+                    });
+                  }
                   if (!sendResult) {
-                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${phoneNumber}`);
+                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${sendToNumber} (and fallback ${remoteJid})`);
                   }
                   if (agentData.chunks.length > 1) {
                     await new Promise((r) => setTimeout(r, 1000));
@@ -945,12 +988,22 @@ app.post("/", async (c) => {
               }
               console.log(`[whatsapp-webhook] ✅ Agent response sent successfully`);
             } else if (agentData.response) {
-              const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                number: phoneNumber,
+              let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                number: sendToNumber,
                 text: agentData.response,
                 delay: 0,
                 linkPreview: false,
               });
+              // Fallback with full JID
+              if (!sendResult && sendToNumber !== remoteJid) {
+                console.log(`[whatsapp-webhook] 🔄 Retrying single response with original JID: ${remoteJid}`);
+                sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                  number: remoteJid,
+                  text: agentData.response,
+                  delay: 0,
+                  linkPreview: false,
+                });
+              }
               if (sendResult) {
                 console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
               } else {
