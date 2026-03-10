@@ -681,14 +681,41 @@ app.post("/", async (c) => {
     let phoneNumber = "";
     
     if (remoteJid.endsWith("@lid")) {
+      // Multiple fallback strategies to resolve @lid to real phone number
       const participant = data.participant || data.key?.participant || "";
+      const remoteJidAlt = data.key?.remoteJidAlt || data.remoteJidAlt || "";
+      
       if (participant && !participant.endsWith("@lid")) {
         resolvedRemoteJid = participant;
         phoneNumber = jidToNumber(participant);
-        console.log(`[whatsapp-webhook] 🔄 @lid resolved: ${remoteJid} → ${participant}`);
+        console.log(`[whatsapp-webhook] 🔄 @lid resolved via participant: ${remoteJid} → ${participant}`);
+      } else if (remoteJidAlt && !remoteJidAlt.endsWith("@lid")) {
+        resolvedRemoteJid = remoteJidAlt;
+        phoneNumber = jidToNumber(remoteJidAlt);
+        console.log(`[whatsapp-webhook] 🔄 @lid resolved via remoteJidAlt: ${remoteJid} → ${remoteJidAlt}`);
       } else {
-        phoneNumber = jidToNumber(remoteJid);
-        console.log(`[whatsapp-webhook] ⚠️ @lid contact, using as-is: ${remoteJid}`);
+        // Attempt to resolve via Evolution API fetchProfile
+        console.log(`[whatsapp-webhook] 🔍 @lid not resolved locally, trying Evolution API fetchProfile for ${remoteJid}...`);
+        try {
+          const profileData = await evolutionFetch(`/chat/fetchProfile/${instanceName}`, "POST", {
+            number: jidToNumber(remoteJid),
+          });
+          const resolvedNumber = profileData?.number || profileData?.wuid || profileData?.jid || "";
+          const cleanNumber = resolvedNumber ? jidToNumber(String(resolvedNumber)) : "";
+          if (cleanNumber && cleanNumber.length >= 10 && cleanNumber.length <= 15 && /^\d+$/.test(cleanNumber)) {
+            resolvedRemoteJid = `${cleanNumber}@s.whatsapp.net`;
+            phoneNumber = cleanNumber;
+            console.log(`[whatsapp-webhook] 🔄 @lid resolved via fetchProfile: ${remoteJid} → ${cleanNumber}`);
+          } else {
+            // Last resort: use LID as-is for session tracking, but flag it
+            phoneNumber = jidToNumber(remoteJid);
+            console.warn(`[whatsapp-webhook] ⚠️ @lid could NOT be resolved for ${remoteJid}. fetchProfile returned: ${JSON.stringify(profileData)}`);
+            console.warn(`[whatsapp-webhook] ⚠️ AI agent will use LID as session_id but may fail to send reply. pushName: ${pushName}`);
+          }
+        } catch (fetchErr) {
+          phoneNumber = jidToNumber(remoteJid);
+          console.error(`[whatsapp-webhook] ❌ @lid fetchProfile error:`, fetchErr);
+        }
       }
     } else {
       phoneNumber = jidToNumber(remoteJid);
