@@ -47,6 +47,15 @@ export default function Dashboard() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const { isAdminOrManager, userProfileId } = useUserRole();
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("checkout") === "success") {
+      toast.success("Pagamento confirmado! Seu plano foi ativado com sucesso. 🎉");
+      searchParams.delete("checkout");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const {
     loading,
