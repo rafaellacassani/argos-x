@@ -67,6 +67,7 @@ export interface CreateAgentData {
   qualification_enabled?: boolean;
   qualification_fields?: any[];
   is_active?: boolean;
+  cloud_24h_window_only?: boolean;
 }
 
 export function useAIAgents() {
