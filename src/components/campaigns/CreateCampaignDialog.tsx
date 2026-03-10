@@ -91,6 +91,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [useTemplate, setUseTemplate] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
 
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
