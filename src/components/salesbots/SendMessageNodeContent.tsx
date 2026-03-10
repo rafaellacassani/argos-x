@@ -45,7 +45,10 @@ export function SendMessageNodeContent({
   const [showSettings, setShowSettings] = useState(false);
   const [selectedTestLead, setSelectedTestLead] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string }[]>([]);
   const { listInstances } = useEvolutionAPI();
+  const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
+  const { workspaceId } = useWorkspace();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
