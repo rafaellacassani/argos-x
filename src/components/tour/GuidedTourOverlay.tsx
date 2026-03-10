@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, X, MapPin } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, MapPin, Sparkles, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { SpotlightMask } from "./SpotlightMask";
 import { tourSteps } from "./tourSteps";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface GuidedTourOverlayProps {
   isActive: boolean;
@@ -16,6 +17,7 @@ interface GuidedTourOverlayProps {
 }
 
 export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: GuidedTourOverlayProps) {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -23,6 +25,7 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
   const location = useLocation();
   const { workspace } = useWorkspace();
   const retryRef = useRef<NodeJS.Timeout | null>(null);
+  const isMobile = useIsMobile();
 
   const step = tourSteps[currentStep];
   const progress = ((currentStep + 1) / tourSteps.length) * 100;
@@ -38,36 +41,34 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
       if (retryRef.current) clearTimeout(retryRef.current);
     } else {
       setTargetRect(null);
-      // Retry a few times for lazy-loaded content
       retryRef.current = setTimeout(findTarget, 500);
     }
   }, [step]);
 
   // Navigate to correct route when step changes
   useEffect(() => {
-    if (!isActive || !step) return;
+    if (!isActive || !step || showWelcome) return;
 
     if (location.pathname !== step.route) {
       setIsNavigating(true);
       setTargetRect(null);
       navigate(step.route);
     } else {
-      // Small delay to let the page render
       setTimeout(findTarget, 300);
     }
-  }, [currentStep, isActive, step, location.pathname, navigate, findTarget]);
+  }, [currentStep, isActive, step, location.pathname, navigate, findTarget, showWelcome]);
 
   // When route changes, try to find the element
   useEffect(() => {
-    if (!isActive || !step) return;
+    if (!isActive || !step || showWelcome) return;
     if (location.pathname === step.route) {
       setTimeout(findTarget, 500);
     }
-  }, [location.pathname, isActive, step, findTarget]);
+  }, [location.pathname, isActive, step, findTarget, showWelcome]);
 
   // Recalculate on resize/scroll
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || showWelcome) return;
     const handler = () => findTarget();
     window.addEventListener("resize", handler);
     window.addEventListener("scroll", handler, true);
@@ -75,7 +76,7 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
       window.removeEventListener("resize", handler);
       window.removeEventListener("scroll", handler, true);
     };
-  }, [isActive, findTarget]);
+  }, [isActive, findTarget, showWelcome]);
 
   // Cleanup retry on unmount
   useEffect(() => {
@@ -102,7 +103,6 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
       setCurrentStep(next);
       await saveStep(next);
     } else {
-      // Complete
       if (workspace?.id) {
         await supabase
           .from("workspaces")
@@ -131,12 +131,51 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
     onComplete();
   }, [workspace?.id, onComplete]);
 
-  if (!isActive || !step) return null;
+  const handleStartTour = useCallback(() => {
+    setShowWelcome(false);
+  }, []);
 
-  // Calculate tooltip position
-  const getTooltipStyle = (): React.CSSProperties => {
+  if (!isActive) return null;
+
+  // ─── Welcome Gate ───
+  if (showWelcome) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-2xl text-center"
+        >
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-7 w-7 text-primary" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-2">
+            Bem-vindo ao Argos X!
+          </h2>
+          <p className="text-sm text-muted-foreground mb-6 leading-relaxed">
+            Preparamos um tour rápido de ~2 min para você conhecer cada recurso da plataforma. Deseja iniciar?
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button onClick={handleStartTour} className="w-full gap-2">
+              <Sparkles className="h-4 w-4" />
+              Iniciar tour guiado
+            </Button>
+            <Button variant="ghost" onClick={handleSkip} className="w-full gap-2 text-muted-foreground">
+              <SkipForward className="h-4 w-4" />
+              Pular, quero explorar sozinho
+            </Button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!step) return null;
+
+  // ─── Tooltip position (desktop only) ───
+  const getDesktopTooltipStyle = (): React.CSSProperties => {
     if (!targetRect) {
-      // Centered fallback
       return {
         position: "fixed",
         top: "50%",
@@ -154,7 +193,6 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
     let top = 0;
     let left = 0;
 
-    // Try placement preference, then auto
     const placements = [step.placement, "bottom", "top", "right", "left"];
     for (const p of placements) {
       if (p === "bottom" && targetRect.bottom + gap + tooltipHeight < vh) {
@@ -186,27 +224,28 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
     <>
       <SpotlightMask targetRect={targetRect} />
 
-      {/* Clickable overlay area to prevent interaction */}
-      <div
-        className="fixed inset-0 z-[9998]"
-        style={{ pointerEvents: "none" }}
-      />
+      {/* Block interaction */}
+      <div className="fixed inset-0 z-[9998]" style={{ pointerEvents: "none" }} />
 
       {/* Tooltip card */}
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, y: 10, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -10, scale: 0.95 }}
+          initial={isMobile ? { opacity: 0, y: 60 } : { opacity: 0, y: 10, scale: 0.95 }}
+          animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+          exit={isMobile ? { opacity: 0, y: 60 } : { opacity: 0, y: -10, scale: 0.95 }}
           transition={{ duration: 0.25 }}
-          className="z-[9999] w-[400px] max-w-[calc(100vw-32px)] rounded-2xl border border-border bg-card shadow-2xl"
-          style={getTooltipStyle()}
+          className={
+            isMobile
+              ? "fixed bottom-0 left-0 right-0 z-[9999] rounded-t-2xl border-t border-border bg-card shadow-2xl"
+              : "z-[9999] w-[400px] max-w-[calc(100vw-32px)] rounded-2xl border border-border bg-card shadow-2xl"
+          }
+          style={isMobile ? { position: "fixed" } : getDesktopTooltipStyle()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-5 pt-5 pb-2">
+          <div className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
+              <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs sm:text-sm font-bold">
                 {step.id}
               </div>
               <span className="text-xs text-muted-foreground font-medium">
@@ -223,23 +262,23 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
           </div>
 
           {/* Progress */}
-          <div className="px-5 pb-3">
+          <div className="px-4 sm:px-5 pb-2 sm:pb-3">
             <Progress value={progress} className="h-1.5" />
           </div>
 
           {/* Content */}
-          <div className="px-5 pb-3">
-            <h3 className="text-lg font-bold text-foreground mb-2">
+          <div className="px-4 sm:px-5 pb-2 sm:pb-3">
+            <h3 className="text-base sm:text-lg font-bold text-foreground mb-1 sm:mb-2">
               {step.title}
             </h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">
+            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               {step.description}
             </p>
           </div>
 
           {/* Loading state */}
           {isNavigating && (
-            <div className="px-5 pb-3">
+            <div className="px-4 sm:px-5 pb-2 sm:pb-3">
               <p className="text-xs text-muted-foreground animate-pulse flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
                 Navegando para a página...
@@ -248,7 +287,7 @@ export function GuidedTourOverlay({ isActive, initialStep = 0, onComplete }: Gui
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-between px-5 pb-5 pt-2 border-t border-border/50">
+          <div className="flex items-center justify-between px-4 sm:px-5 pb-4 sm:pb-5 pt-2 border-t border-border/50">
             <Button
               variant="ghost"
               size="sm"
