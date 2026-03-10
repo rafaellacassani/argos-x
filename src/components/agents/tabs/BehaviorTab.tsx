@@ -125,11 +125,26 @@ export function BehaviorTab({ formData, updateField }: Props) {
           <SelectTrigger><SelectValue placeholder="Todas as instâncias" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as instâncias</SelectItem>
-            {instances.map((inst) => (
-              <SelectItem key={inst.instance_name} value={inst.instance_name}>
-                {inst.display_name || inst.instance_name}
-              </SelectItem>
-            ))}
+            {instances.length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">📱 Evolution API</div>
+                {instances.map((inst) => (
+                  <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                    {inst.display_name || inst.instance_name}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            {cloudConnections.length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">☁️ Cloud API</div>
+                {cloudConnections.map((conn) => (
+                  <SelectItem key={conn.id} value={`cloud_${conn.phone_number_id}`}>
+                    {conn.inbox_name} ({conn.phone_number})
+                  </SelectItem>
+                ))}
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>

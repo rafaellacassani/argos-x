@@ -252,6 +252,184 @@ async function processInstagramEvent(igUserId: string, event: any) {
   });
 }
 
+// Helper: route inbound message to AI Agent (if active)
+async function routeToAIAgent(workspaceId: string, senderPhone: string, messageText: string, messageId: string, phoneNumberId: string, accessToken: string) {
+  if (!messageText) return;
+
+  try {
+    // Find active AI agents for this workspace
+    const { data: agents } = await supabase
+      .from("ai_agents")
+      .select("id, instance_name, respond_to, respond_to_stages")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true);
+
+    if (!agents || agents.length === 0) {
+      console.log("[Facebook Webhook] No active AI agents for workspace:", workspaceId);
+      return;
+    }
+
+    // Match agent: instance_name empty = all, or match "cloud_<phoneNumberId>"
+    const cloudInstanceId = `cloud_${phoneNumberId}`;
+    const matchingAgent = agents.find((a: any) => {
+      return !a.instance_name || a.instance_name === "" || a.instance_name === cloudInstanceId;
+    });
+
+    if (!matchingAgent) {
+      console.log("[Facebook Webhook] No agent matched for cloud instance:", cloudInstanceId);
+      return;
+    }
+
+    // Find existing lead by phone
+    let leadId: string | null = null;
+    const phoneSuffix = senderPhone.length >= 10 ? senderPhone.slice(-10) : senderPhone;
+    const { data: existingLead } = await supabase
+      .from("leads")
+      .select("id, stage_id")
+      .eq("workspace_id", workspaceId)
+      .like("phone", `%${phoneSuffix}`)
+      .limit(1)
+      .single();
+    leadId = existingLead?.id || null;
+
+    // Check stage filter
+    if (matchingAgent.respond_to === "specific_stages" && existingLead) {
+      const stages = matchingAgent.respond_to_stages || [];
+      if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
+        console.log("[Facebook Webhook] Agent skipped: lead stage not matched");
+        return;
+      }
+    }
+
+    // Cancel pending follow-ups
+    if (leadId) {
+      await supabase.from("agent_followup_queue")
+        .update({ status: "canceled", canceled_reason: "lead_responded" })
+        .eq("session_id", `waba_${senderPhone}`)
+        .eq("status", "pending");
+    }
+
+    // Call ai-agent-chat
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    console.log(`[Facebook Webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, phone ${senderPhone}`);
+
+    const agentRes = await fetch(`${supabaseUrl}/functions/v1/ai-agent-chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({
+        agent_id: matchingAgent.id,
+        session_id: `waba_${senderPhone}`,
+        message: messageText,
+        lead_id: leadId,
+        message_id: messageId,
+        phone_number: senderPhone,
+        _internal_webhook: true,
+        channel_type: "whatsapp_cloud",
+        cloud_phone_number_id: phoneNumberId,
+        cloud_access_token: accessToken,
+      }),
+    });
+
+    const agentData = await agentRes.json();
+    console.log(`[Facebook Webhook] 📤 Agent response status: ${agentRes.status}, skipped: ${agentData.skipped || false}`);
+
+    // Send response via WhatsApp Cloud API
+    if (agentData.chunks && Array.isArray(agentData.chunks)) {
+      for (const chunk of agentData.chunks) {
+        if (!chunk?.trim()) continue;
+        await sendWhatsAppCloudMessage(phoneNumberId, accessToken, senderPhone, chunk);
+        if (agentData.chunks.length > 1) await new Promise(r => setTimeout(r, 1000));
+      }
+      console.log(`[Facebook Webhook] ✅ Agent response sent via Cloud API`);
+    } else if (agentData.response) {
+      await sendWhatsAppCloudMessage(phoneNumberId, accessToken, senderPhone, agentData.response);
+      console.log(`[Facebook Webhook] ✅ Agent single response sent via Cloud API`);
+    }
+
+    // Save outbound messages to meta_conversations
+    const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join(" ") : null);
+    if (responseText) {
+      // Find meta_page for this phone_number_id
+      const { data: metaPage } = await supabase
+        .from("meta_pages")
+        .select("id")
+        .eq("page_id", phoneNumberId)
+        .eq("is_active", true)
+        .limit(1)
+        .single();
+
+      if (metaPage) {
+        await saveMessage({
+          meta_page_id: metaPage.id,
+          platform: "whatsapp_business",
+          sender_id: senderPhone,
+          message_id: `out-agent-${Date.now()}`,
+          content: responseText,
+          message_type: "text",
+          direction: "outbound",
+          timestamp: new Date().toISOString(),
+          raw_payload: { source: "ai_agent" },
+          workspace_id: workspaceId,
+        });
+      }
+    }
+
+    // Schedule follow-up if enabled
+    if (!agentData.paused && !agentData.skipped && leadId) {
+      const { data: agentFull } = await supabase
+        .from("ai_agents")
+        .select("followup_enabled, followup_sequence")
+        .eq("id", matchingAgent.id)
+        .single();
+
+      if (agentFull?.followup_enabled && agentFull.followup_sequence?.length > 0) {
+        const firstStep = agentFull.followup_sequence[0];
+        const delayMs = getFollowupDelayMs(firstStep.delay_value, firstStep.delay_unit);
+        const executeAt = new Date(Date.now() + delayMs).toISOString();
+        await supabase.from("agent_followup_queue").insert({
+          agent_id: matchingAgent.id,
+          lead_id: leadId,
+          session_id: `waba_${senderPhone}`,
+          workspace_id: workspaceId,
+          step_index: 0,
+          execute_at: executeAt,
+          status: "pending",
+        });
+        console.log(`[Facebook Webhook] 📅 Follow-up scheduled: ${executeAt}`);
+      }
+    }
+  } catch (err) {
+    console.error("[Facebook Webhook] ❌ AI Agent routing error:", err);
+  }
+}
+
+// Helper: send a text message via WhatsApp Cloud API
+async function sendWhatsAppCloudMessage(phoneNumberId: string, accessToken: string, to: string, text: string) {
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to,
+      type: "text",
+      text: { body: text },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[Facebook Webhook] ❌ Cloud API send failed: ${res.status} ${errText}`);
+  }
+  return res;
+}
+
+// Helper: calculate follow-up delay
+function getFollowupDelayMs(value: number, unit: string): number {
+  const multipliers: Record<string, number> = { minutes: 60000, hours: 3600000, days: 86400000 };
+  return (value || 1) * (multipliers[unit] || 3600000);
+}
+
 // Process WhatsApp Business API messages
 async function processWhatsAppBusinessEvent(entry: any) {
   const changes = entry.changes || [];
@@ -277,6 +455,17 @@ async function processWhatsAppBusinessEvent(entry: any) {
       continue;
     }
 
+    // Also try to get access_token from whatsapp_cloud_connections (preferred, more up-to-date)
+    const { data: cloudConn } = await supabase
+      .from("whatsapp_cloud_connections")
+      .select("access_token")
+      .eq("phone_number_id", phoneNumberId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
+
+    const accessToken = cloudConn?.access_token || metaPage.page_access_token;
+
     // Process incoming messages
     const messages = value.messages || [];
     for (const msg of messages) {
@@ -291,7 +480,6 @@ async function processWhatsAppBusinessEvent(entry: any) {
       } else if (["image", "video", "audio", "document", "sticker"].includes(msg.type)) {
         const mediaObj = msg[msg.type];
         if (mediaObj?.id) {
-          // We could download media via Graph API, but for now store the media ID
           mediaUrl = `whatsapp-media://${mediaObj.id}`;
           content = mediaObj.caption || "";
         }
@@ -316,6 +504,11 @@ async function processWhatsAppBusinessEvent(entry: any) {
         raw_payload: msg,
         workspace_id: metaPage.workspace_id,
       });
+
+      // Route to AI Agent for text messages
+      if (content) {
+        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken);
+      }
     }
 
     // Process status updates (delivery, read)
