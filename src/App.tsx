@@ -123,6 +123,7 @@ const App = () => (
                             <Route path="/email" element={<Email />} />
                             <Route path="/statistics" element={<Statistics />} />
                             <Route path="/campaigns" element={<PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard>} />
+                            <Route path="/templates" element={<PermissionGuard permission="canManageCampaigns"><WhatsAppTemplates /></PermissionGuard>} />
                             <Route path="/settings" element={<Settings />} />
                             <Route path="/configuracoes" element={<Configuracoes />} />
                             <Route path="/planos" element={<Planos />} />

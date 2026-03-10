@@ -56,6 +56,7 @@ const menuItems: MenuItem[] = [
   { icon: Mail, label: "Email", path: "/email" },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
+  { icon: FileText, label: "Templates WA", path: "/templates", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
