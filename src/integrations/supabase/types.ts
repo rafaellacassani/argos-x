@@ -275,6 +275,7 @@ export type Database = {
       ai_agents: {
         Row: {
           agent_role: string | null
+          cloud_24h_window_only: boolean | null
           company_info: Json | null
           created_at: string
           description: string | null
@@ -320,6 +321,7 @@ export type Database = {
         }
         Insert: {
           agent_role?: string | null
+          cloud_24h_window_only?: boolean | null
           company_info?: Json | null
           created_at?: string
           description?: string | null
@@ -365,6 +367,7 @@ export type Database = {
         }
         Update: {
           agent_role?: string | null
+          cloud_24h_window_only?: boolean | null
           company_info?: Json | null
           created_at?: string
           description?: string | null
