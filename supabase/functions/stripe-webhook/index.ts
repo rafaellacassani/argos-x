@@ -462,6 +462,7 @@ serve(async (req) => {
 
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
+        const customerId = invoice.customer as string;
         await supabaseAdmin
           .from("workspaces")
           .update({
@@ -469,7 +470,28 @@ serve(async (req) => {
             plan_type: "active",
             blocked_at: null,
           })
-          .eq("stripe_customer_id", invoice.customer as string);
+          .eq("stripe_customer_id", customerId);
+
+        // Move internal CRM lead to "Cliente Ativo"
+        try {
+          const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+          if (customer.email) {
+            const { data: ws } = await supabaseAdmin
+              .from("workspaces")
+              .select("stripe_price_id")
+              .eq("stripe_customer_id", customerId)
+              .maybeSingle();
+            const env = {
+              STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+              STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+              STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+            };
+            const planConfig = getPlanConfig(ws?.stripe_price_id || "", env);
+            await moveInternalLead(supabaseAdmin, customer.email, STAGE_ACTIVE, TAG_ACTIVE, planConfig.plan_name);
+          }
+        } catch (e) {
+          console.warn("Internal lead move on payment error:", e);
+        }
         break;
       }
 
