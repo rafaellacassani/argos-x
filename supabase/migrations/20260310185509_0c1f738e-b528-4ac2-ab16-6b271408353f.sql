@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meta_conversations_message_id ON public.meta_conversations (message_id) WHERE message_id IS NOT NULL;
