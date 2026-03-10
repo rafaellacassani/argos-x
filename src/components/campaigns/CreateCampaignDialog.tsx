@@ -141,11 +141,12 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
       ? supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).eq("funnel_id", funnelId).order("position")
       : supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).order("position").limit(0);
 
-    const [tagsRes, stagesRes, membersRes, instancesRes] = await Promise.all([
+    const [tagsRes, stagesRes, membersRes, instancesRes, cloudRes] = await Promise.all([
       supabase.from("lead_tags").select("id, name, color").eq("workspace_id", workspaceId),
       stagesQuery,
       supabase.from("workspace_members").select("user_id, user_profiles(id, full_name)").eq("workspace_id", workspaceId),
       supabase.from("whatsapp_instances").select("instance_name, display_name").eq("workspace_id", workspaceId),
+      supabase.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number").eq("workspace_id", workspaceId).eq("is_active", true),
     ]);
     setTags(tagsRes.data || []);
     setStages(stagesRes.data || []);
@@ -156,6 +157,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         .map((p: any) => ({ id: p.id, full_name: p.full_name }))
     );
     setInstances(instancesRes.data || []);
+    setCloudConnections((cloudRes.data || []) as { id: string; inbox_name: string; phone_number: string }[]);
 
     // Initial estimate (no filters = all leads with phone)
     const count = await estimateRecipients([], [], []);
