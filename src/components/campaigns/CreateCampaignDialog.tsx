@@ -110,6 +110,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [stages, setStages] = useState<{ id: string; name: string; color: string }[]>([]);
   const [members, setMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string }[]>([]);
 
   const loadData = useCallback(async () => {
     if (!workspaceId) return;
