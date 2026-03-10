@@ -260,7 +260,7 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
     // Find active AI agents for this workspace
     const { data: agents } = await supabase
       .from("ai_agents")
-      .select("id, instance_name, respond_to, respond_to_stages")
+      .select("id, instance_name, respond_to, respond_to_stages, cloud_24h_window_only")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true);
 
