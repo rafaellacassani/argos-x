@@ -9,7 +9,7 @@ const corsHeaders = {
 
 // Simple in-memory rate limiting (per isolate)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 3; // max 3 signups per IP per 10 minutes
+const RATE_LIMIT = 3;
 const RATE_WINDOW = 10 * 60 * 1000;
 
 function isRateLimited(ip: string): boolean {
@@ -21,6 +21,108 @@ function isRateLimited(ip: string): boolean {
   }
   entry.count++;
   return entry.count > RATE_LIMIT;
+}
+
+async function sendWelcomeEmail(email: string, name: string) {
+  const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+  if (!RESEND_API_KEY) return;
+
+  const resetLink = "https://argosx.com.br/auth";
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06)">
+<tr><td style="background:#0F172A;padding:24px 32px;text-align:center">
+<img src="https://argosx.com.br/favicon.png" width="40" height="40" alt="Argos X" style="display:inline-block;vertical-align:middle;margin-right:8px">
+<span style="color:#ffffff;font-size:22px;font-weight:700;vertical-align:middle">Argos X</span>
+</td></tr>
+<tr><td style="padding:32px">
+<h2 style="color:#0F172A;margin:0 0 16px">Bem-vindo ao Argos X, ${name}! 🚀</h2>
+<p style="color:#475569;font-size:15px;line-height:1.6">Sua conta foi criada com sucesso! Você tem <strong>7 dias de teste grátis</strong> para explorar todas as funcionalidades.</p>
+<p style="color:#475569;font-size:15px;line-height:1.6">Para começar, defina sua senha clicando no botão abaixo:</p>
+<div style="text-align:center;margin:28px 0">
+<a href="${resetLink}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Definir minha senha</a>
+</div>
+<p style="color:#475569;font-size:15px;line-height:1.6">O que você pode fazer agora:</p>
+<ul style="color:#475569;font-size:15px;line-height:1.8">
+<li>📱 Conectar seu WhatsApp</li>
+<li>🤖 Configurar seu agente de IA</li>
+<li>📊 Organizar seu funil de vendas</li>
+</ul>
+<p style="color:#94a3b8;font-size:13px;margin-top:24px">Qualquer dúvida, estamos aqui para ajudar!</p>
+</td></tr>
+<tr><td style="padding:16px 32px 24px;text-align:center;color:#94a3b8;font-size:12px">
+© ${new Date().getFullYear()} Argos X — CRM Inteligente
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: "Argos X <noreply@argosx.com.br>",
+        to: [email],
+        subject: `Bem-vindo ao Argos X, ${name}! 🚀`,
+        html,
+      }),
+    });
+  } catch (e) {
+    console.warn("Welcome email failed:", e);
+  }
+}
+
+async function sendWelcomeWhatsApp(phone: string, name: string) {
+  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
+
+  // Get the reactivation config to find the WhatsApp instance
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const { data: config } = await supabaseAdmin
+    .from("reactivation_cadence_config")
+    .select("whatsapp_instance_name")
+    .limit(1)
+    .single();
+
+  if (!config?.whatsapp_instance_name) return;
+
+  let cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e defina sua senha:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+
+  const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+
+  try {
+    await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: EVOLUTION_API_KEY,
+      },
+      body: JSON.stringify({ number: cleanPhone, text: message }),
+    });
+  } catch (e) {
+    console.warn("Welcome WhatsApp failed:", e);
+  }
 }
 
 serve(async (req) => {
@@ -82,7 +184,6 @@ serve(async (req) => {
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
     const existingUser = existingUsers?.users?.find((u: any) => u.email === email);
     if (existingUser) {
-      // Check if user already has a workspace
       const { data: existingMember } = await supabaseAdmin
         .from("workspace_members")
         .select("id")
@@ -204,6 +305,12 @@ serve(async (req) => {
       workspace_id: workspace.id,
       created_by: userId,
     });
+
+    // 7. Send welcome email + WhatsApp (fire-and-forget)
+    sendWelcomeEmail(email, name).catch((e) => console.warn("Welcome email error:", e));
+    if (cleanPhone) {
+      sendWelcomeWhatsApp(cleanPhone, name).catch((e) => console.warn("Welcome WA error:", e));
+    }
 
     return new Response(
       JSON.stringify({ success: true, email, workspaceId: workspace.id }),
