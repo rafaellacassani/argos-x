@@ -538,6 +538,8 @@ async function processWhatsAppBusinessEvent(entry: any) {
       // Route to AI Agent for text messages
       if (content) {
         await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken);
+      } else {
+        console.log(`[Facebook Webhook] ⚠️ No text content to route to AI agent for ${senderId} (type: ${messageType})`);
       }
     }
 
