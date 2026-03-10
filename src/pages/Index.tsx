@@ -93,8 +93,8 @@ export default function Index() {
               </Link>
             </Button>
             <Button
-              variant="outline"
-              className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+              variant="destructive"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Assistir Tutorial
             </Button>
