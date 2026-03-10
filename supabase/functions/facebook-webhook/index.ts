@@ -269,11 +269,22 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
       return;
     }
 
-    // Match agent: instance_name empty = all, or match "cloud_<phoneNumberId>"
+    // Match agent: prefer specific cloud instance, then fallback to any active agent
     const cloudInstanceId = `cloud_${phoneNumberId}`;
-    const matchingAgent = agents.find((a: any) => {
-      return !a.instance_name || a.instance_name === "" || a.instance_name === cloudInstanceId;
-    });
+    
+    // Priority 1: agent explicitly configured for this cloud instance
+    let matchingAgent = agents.find((a: any) => a.instance_name === cloudInstanceId);
+    
+    // Priority 2: agent with no instance restriction (empty/null)
+    if (!matchingAgent) {
+      matchingAgent = agents.find((a: any) => !a.instance_name || a.instance_name === "");
+    }
+    
+    // Priority 3: fallback to any active agent in the workspace (e.g. Evolution agent that should also handle WABA)
+    if (!matchingAgent) {
+      matchingAgent = agents[0];
+      console.log(`[Facebook Webhook] ℹ️ No dedicated cloud agent found, falling back to agent: ${matchingAgent.id} (${matchingAgent.instance_name})`);
+    }
 
     if (!matchingAgent) {
       console.log("[Facebook Webhook] No agent matched for cloud instance:", cloudInstanceId);
