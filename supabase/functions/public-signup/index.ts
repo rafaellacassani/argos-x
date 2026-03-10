@@ -23,6 +23,47 @@ function isRateLimited(ip: string): boolean {
   return entry.count > RATE_LIMIT;
 }
 
+// Internal CRM constants (admin workspace)
+const INTERNAL_WS = "41efdc6d-d4ba-4589-9761-7438a5911d57";
+const STAGE_TRIAL = "fc4b4ff8-fbb8-40f3-ad51-9f6564b6ae3b";
+const TAG_TRIAL = "a57de997-9b5c-467d-ad1e-8b50e0d07958";
+
+async function createInternalLead(
+  supabaseAdmin: any,
+  contact: { name: string; email: string; phone: string }
+) {
+  const { data: existing } = await supabaseAdmin
+    .from("leads")
+    .select("id")
+    .eq("workspace_id", INTERNAL_WS)
+    .or(`phone.eq.${contact.phone},email.eq.${contact.email}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return;
+
+  const { data: lead } = await supabaseAdmin
+    .from("leads")
+    .insert({
+      workspace_id: INTERNAL_WS,
+      name: contact.name,
+      phone: contact.phone,
+      email: contact.email,
+      stage_id: STAGE_TRIAL,
+      source: "signup_publico",
+    })
+    .select("id")
+    .single();
+
+  if (lead) {
+    await supabaseAdmin.from("lead_tag_assignments").insert({
+      workspace_id: INTERNAL_WS,
+      lead_id: lead.id,
+      tag_id: TAG_TRIAL,
+    });
+  }
+}
+
 async function sendWelcomeEmail(email: string, name: string) {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) return;
@@ -311,6 +352,11 @@ serve(async (req) => {
     if (cleanPhone) {
       sendWelcomeWhatsApp(cleanPhone, name).catch((e) => console.warn("Welcome WA error:", e));
     }
+
+    // 8. Create lead in internal admin CRM (fire-and-forget)
+    createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(
+      (e) => console.warn("Internal lead creation error:", e)
+    );
 
     return new Response(
       JSON.stringify({ success: true, email, workspaceId: workspace.id }),
