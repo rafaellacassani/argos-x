@@ -68,7 +68,7 @@ async function sendWelcomeEmail(email: string, name: string) {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) return;
 
-  const resetLink = "https://argosx.com.br/auth";
+  const loginLink = "https://argosx.com.br/auth";
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -84,9 +84,9 @@ async function sendWelcomeEmail(email: string, name: string) {
 <tr><td style="padding:32px">
 <h2 style="color:#0F172A;margin:0 0 16px">Bem-vindo ao Argos X, ${name}! 🚀</h2>
 <p style="color:#475569;font-size:15px;line-height:1.6">Sua conta foi criada com sucesso! Você tem <strong>7 dias de teste grátis</strong> para explorar todas as funcionalidades.</p>
-<p style="color:#475569;font-size:15px;line-height:1.6">Para começar, defina sua senha clicando no botão abaixo:</p>
+<p style="color:#475569;font-size:15px;line-height:1.6">Sua conta já está pronta para uso. Acesse agora:</p>
 <div style="text-align:center;margin:28px 0">
-<a href="${resetLink}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Definir minha senha</a>
+<a href="${loginLink}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Acessar o Argos X</a>
 </div>
 <p style="color:#475569;font-size:15px;line-height:1.6">O que você pode fazer agora:</p>
 <ul style="color:#475569;font-size:15px;line-height:1.8">
@@ -148,7 +148,7 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
     cleanPhone = "55" + cleanPhone;
   }
 
-  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e defina sua senha:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
 
   const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
 
@@ -189,12 +189,20 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName } = body;
+    const { name, phone, email, companyName, password } = body;
 
     // Validate required fields
-    if (!name || !phone || !email || !companyName) {
+    if (!name || !phone || !email || !companyName || !password) {
       return new Response(
-        JSON.stringify({ error: "Todos os campos são obrigatórios: name, phone, email, companyName" }),
+        JSON.stringify({ error: "Todos os campos são obrigatórios: name, phone, email, companyName, password" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return new Response(
+        JSON.stringify({ error: "A senha deve ter pelo menos 6 caracteres." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -243,14 +251,15 @@ serve(async (req) => {
 
     // 1. Create user in Supabase Auth
     let userId: string;
-    const randomPassword = crypto.randomUUID() + "Aa1!";
 
     if (existingUser) {
       userId = existingUser.id;
+      // Update password for existing user who hasn't fully onboarded
+      await supabaseAdmin.auth.admin.updateUserById(userId, { password });
     } else {
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password: randomPassword,
+        password,
         email_confirm: true,
       });
 

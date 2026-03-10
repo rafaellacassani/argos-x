@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,12 +21,16 @@ export default function Cadastro() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     phone: "",
     email: "",
     companyName: "",
+    password: "",
+    confirmPassword: "",
   });
 
   const handlePhoneChange = (value: string) => {
@@ -35,8 +39,18 @@ export default function Cadastro() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.email || !form.companyName) {
+    if (!form.name || !form.phone || !form.email || !form.companyName || !form.password) {
       toast({ title: "Preencha todos os campos", variant: "destructive" });
+      return;
+    }
+
+    if (form.password.length < 6) {
+      toast({ title: "A senha deve ter pelo menos 6 caracteres", variant: "destructive" });
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      toast({ title: "As senhas não coincidem", variant: "destructive" });
       return;
     }
 
@@ -53,6 +67,7 @@ export default function Cadastro() {
             phone: form.phone.replace(/\D/g, ""),
             email: form.email,
             companyName: form.companyName,
+            password: form.password,
           }),
         }
       );
@@ -62,7 +77,6 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao criar conta");
       }
 
-      // Redirect directly to success page — no plan selection needed
       navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
       toast({ title: err.message || "Erro ao criar conta", variant: "destructive" });
@@ -73,7 +87,6 @@ export default function Cadastro() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
       <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <img src={argosLogoDark} alt="Argos X" className="h-8" />
@@ -146,6 +159,50 @@ export default function Cadastro() {
                     required
                     maxLength={100}
                   />
+                </div>
+                <div>
+                  <Label htmlFor="password">Senha</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
+                      onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                      placeholder="Mínimo 6 caracteres"
+                      required
+                      minLength={6}
+                      maxLength={72}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="confirmPassword">Confirmar senha</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirm ? "text" : "password"}
+                      value={form.confirmPassword}
+                      onChange={(e) => setForm((p) => ({ ...p, confirmPassword: e.target.value }))}
+                      placeholder="Repita a senha"
+                      required
+                      minLength={6}
+                      maxLength={72}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <Button
                   type="submit"
