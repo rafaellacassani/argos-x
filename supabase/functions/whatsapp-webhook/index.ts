@@ -952,18 +952,34 @@ app.post("/", async (c) => {
               console.error(`[whatsapp-webhook] ❌ Agent error: ${agentData.error}`);
             }
 
+            // Determine the best number to send to
+            // For @lid contacts that couldn't be resolved, try sending to the original JID
+            const sendToNumber = (phoneNumber.length >= 10 && phoneNumber.length <= 15 && /^\d+$/.test(phoneNumber))
+              ? phoneNumber
+              : remoteJid; // Use full JID (Evolution API may handle @lid internally)
+
             if (agentData.chunks && Array.isArray(agentData.chunks)) {
-              console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${phoneNumber}`);
+              console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${sendToNumber}`);
               for (const chunk of agentData.chunks) {
                 if (chunk && chunk.trim()) {
-                  const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                    number: phoneNumber,
+                  let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                    number: sendToNumber,
                     text: chunk,
                     delay: 0,
                     linkPreview: false,
                   });
+                  // Fallback: if send failed and we used phoneNumber, retry with full remoteJid
+                  if (!sendResult && sendToNumber !== remoteJid) {
+                    console.log(`[whatsapp-webhook] 🔄 Retrying send with original JID: ${remoteJid}`);
+                    sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                      number: remoteJid,
+                      text: chunk,
+                      delay: 0,
+                      linkPreview: false,
+                    });
+                  }
                   if (!sendResult) {
-                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${phoneNumber}`);
+                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${sendToNumber} (and fallback ${remoteJid})`);
                   }
                   if (agentData.chunks.length > 1) {
                     await new Promise((r) => setTimeout(r, 1000));
@@ -972,12 +988,22 @@ app.post("/", async (c) => {
               }
               console.log(`[whatsapp-webhook] ✅ Agent response sent successfully`);
             } else if (agentData.response) {
-              const sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                number: phoneNumber,
+              let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                number: sendToNumber,
                 text: agentData.response,
                 delay: 0,
                 linkPreview: false,
               });
+              // Fallback with full JID
+              if (!sendResult && sendToNumber !== remoteJid) {
+                console.log(`[whatsapp-webhook] 🔄 Retrying single response with original JID: ${remoteJid}`);
+                sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                  number: remoteJid,
+                  text: agentData.response,
+                  delay: 0,
+                  linkPreview: false,
+                });
+              }
               if (sendResult) {
                 console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
               } else {
