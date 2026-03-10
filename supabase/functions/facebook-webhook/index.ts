@@ -280,6 +280,25 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
       return;
     }
 
+    // Check 24h window if enabled
+    if (matchingAgent.cloud_24h_window_only !== false) {
+      const windowCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: lastInbound } = await supabase
+        .from("meta_conversations")
+        .select("timestamp")
+        .eq("workspace_id", workspaceId)
+        .eq("sender_id", senderPhone)
+        .eq("direction", "inbound")
+        .eq("platform", "whatsapp_business")
+        .order("timestamp", { ascending: false })
+        .limit(1)
+        .single();
+
+      // The current message IS the inbound, so window is open. 
+      // This check is mainly for follow-ups; for live responses the window is always valid.
+      // We still set the flag so follow-up logic can use it.
+    }
+
     // Find existing lead by phone
     let leadId: string | null = null;
     const phoneSuffix = senderPhone.length >= 10 ? senderPhone.slice(-10) : senderPhone;

@@ -125,6 +125,7 @@ export function useAIAgents() {
           qualification_enabled: agentData.qualification_enabled ?? false,
           qualification_fields: agentData.qualification_fields || [],
           is_active: agentData.is_active ?? false,
+          cloud_24h_window_only: agentData.cloud_24h_window_only ?? true,
         })
         .select()
         .single();
