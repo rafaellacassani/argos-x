@@ -5,7 +5,7 @@ export interface MetaPage {
   id: string;
   page_id: string;
   page_name: string;
-  platform: "facebook" | "instagram" | "both";
+  platform: "facebook" | "instagram" | "both" | "whatsapp_business";
   instagram_username?: string | null;
   is_active: boolean;
 }
