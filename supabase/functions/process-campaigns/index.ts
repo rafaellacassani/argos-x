@@ -119,7 +119,6 @@ serve(async (req) => {
         let nextInstanceIndex = campaign.last_instance_index || 0;
 
         if (instanceNames.length >= 2) {
-          // Round-robin: pick instance based on current index
           const idx = nextInstanceIndex % instanceNames.length;
           currentInstanceName = instanceNames[idx];
           nextInstanceIndex = idx + 1;
@@ -140,14 +139,83 @@ serve(async (req) => {
           continue;
         }
 
-        // Send message
-        const messageText = recipient.personalized_message || campaign.message_text;
+        // Check if this campaign uses a WABA template
+        const isTemplateCampaign = !!campaign.template_id;
         let sendSuccess = false;
         let sendError = "";
 
         try {
-          if (campaign.attachment_url && campaign.attachment_type) {
-            // Send media
+          if (isTemplateCampaign) {
+            // --- WABA Template sending via Graph API ---
+            const { data: tpl } = await supabase
+              .from("whatsapp_templates")
+              .select("template_name, language, components, cloud_connection_id")
+              .eq("id", campaign.template_id)
+              .single();
+
+            if (!tpl) throw new Error("Template not found");
+
+            const { data: conn } = await supabase
+              .from("whatsapp_cloud_connections")
+              .select("phone_number_id, access_token")
+              .eq("id", tpl.cloud_connection_id)
+              .single();
+
+            if (!conn) throw new Error("Cloud connection not found");
+
+            // Build template components with variables
+            const templateVars: { key: string; value: string }[] = (campaign.template_variables as any[]) || [];
+            const bodyComponent = (tpl.components as any[]).find((c: any) => c.type === "BODY");
+            const bodyParams: any[] = [];
+
+            if (bodyComponent?.text) {
+              const matches = bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+              for (const match of matches) {
+                const mapping = templateVars.find(v => v.key === match);
+                let paramValue = mapping?.value || "";
+                // Replace shortcodes with lead data
+                if (paramValue === "#nome#") paramValue = recipient.personalized_message ? "" : (recipient as any).lead_name || "";
+                else if (paramValue === "#empresa#") paramValue = "";
+                else if (paramValue === "#telefone#") paramValue = cleanPhone;
+                else if (paramValue === "#email#") paramValue = "";
+                bodyParams.push({ type: "text", text: paramValue || match });
+              }
+            }
+
+            const templatePayload: any = {
+              messaging_product: "whatsapp",
+              to: cleanPhone,
+              type: "template",
+              template: {
+                name: tpl.template_name,
+                language: { code: tpl.language },
+                ...(bodyParams.length > 0 ? {
+                  components: [{ type: "body", parameters: bodyParams }]
+                } : {}),
+              },
+            };
+
+            const graphRes = await fetch(
+              `https://graph.facebook.com/v21.0/${conn.phone_number_id}/messages`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${conn.access_token}`,
+                },
+                body: JSON.stringify(templatePayload),
+              }
+            );
+
+            if (!graphRes.ok) {
+              const errBody = await graphRes.text();
+              throw new Error(`Graph API error ${graphRes.status}: ${errBody}`);
+            }
+            await graphRes.json(); // consume body
+            sendSuccess = true;
+          } else if (campaign.attachment_url && campaign.attachment_type) {
+            // Send media via Evolution API
+            const messageText = recipient.personalized_message || campaign.message_text;
             const mediaPayload: Record<string, unknown> = {
               number: cleanPhone,
               mediatype: campaign.attachment_type,
@@ -170,7 +238,8 @@ serve(async (req) => {
             }
             sendSuccess = true;
           } else {
-            // Send text
+            // Send text via Evolution API
+            const messageText = recipient.personalized_message || campaign.message_text;
             const textRes = await fetch(`${evolutionApiUrl}/message/sendText/${currentInstanceName}`, {
               method: "POST",
               headers: {
