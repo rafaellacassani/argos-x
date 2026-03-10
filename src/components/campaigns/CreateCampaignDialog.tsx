@@ -69,7 +69,7 @@ const DAYS_OF_WEEK = [
 export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const { workspaceId } = useWorkspace();
   const { createCampaign, startCampaign, estimateRecipients } = useCampaigns();
-
+  const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
