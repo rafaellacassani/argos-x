@@ -95,3 +95,9 @@ verify_jwt = false
 
 [functions.public-checkout]
 verify_jwt = false
+
+[functions.sync-whatsapp-templates]
+verify_jwt = false
+
+[functions.process-campaigns]
+verify_jwt = false
