@@ -155,7 +155,7 @@ export function BehaviorTab({ formData, updateField }: Props) {
         <>
           <Separator />
           <div className="flex items-start gap-4 p-4 rounded-lg border border-border bg-muted/30">
-            <ShieldAlert className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+            <ShieldAlert className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
             <div className="flex-1 space-y-1">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">Respeitar janela de 24h (Cloud API)</Label>
