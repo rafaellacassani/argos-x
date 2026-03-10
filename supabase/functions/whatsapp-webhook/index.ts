@@ -841,7 +841,7 @@ app.post("/", async (c) => {
         // Search by JID + phone suffix to avoid missing leads with different JID format
         const agentLeadOrFilters = [`whatsapp_jid.eq.${remoteJid}`];
         if (resolvedRemoteJid !== remoteJid) agentLeadOrFilters.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
-        if (phoneNumber.length >= 10 && phoneNumber.length <= 13) {
+        if (phoneNumber.length >= 10 && phoneNumber.length <= 15) {
           agentLeadOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
         }
         const { data: existingLead } = await supabase
