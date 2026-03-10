@@ -19,6 +19,7 @@ export function BehaviorTab({ formData, updateField }: Props) {
   const { workspaceId } = useWorkspace();
   const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -27,6 +28,9 @@ export function BehaviorTab({ formData, updateField }: Props) {
     });
     supabase.from("whatsapp_instances").select("instance_name, display_name").eq("workspace_id", workspaceId).neq("instance_type", "alerts").then(({ data }) => {
       if (data) setInstances(data);
+    });
+    supabase.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, phone_number_id").eq("workspace_id", workspaceId).eq("is_active", true).then(({ data }) => {
+      if (data) setCloudConnections(data);
     });
   }, [workspaceId]);
 
@@ -121,11 +125,26 @@ export function BehaviorTab({ formData, updateField }: Props) {
           <SelectTrigger><SelectValue placeholder="Todas as instâncias" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todas as instâncias</SelectItem>
-            {instances.map((inst) => (
-              <SelectItem key={inst.instance_name} value={inst.instance_name}>
-                {inst.display_name || inst.instance_name}
-              </SelectItem>
-            ))}
+            {instances.length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">📱 Evolution API</div>
+                {instances.map((inst) => (
+                  <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                    {inst.display_name || inst.instance_name}
+                  </SelectItem>
+                ))}
+              </>
+            )}
+            {cloudConnections.length > 0 && (
+              <>
+                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">☁️ Cloud API</div>
+                {cloudConnections.map((conn) => (
+                  <SelectItem key={conn.id} value={`cloud_${conn.phone_number_id}`}>
+                    {conn.inbox_name} ({conn.phone_number})
+                  </SelectItem>
+                ))}
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>
