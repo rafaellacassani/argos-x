@@ -148,7 +148,7 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
     cleanPhone = "55" + cleanPhone;
   }
 
-  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e defina sua senha:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
 
   const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
 
