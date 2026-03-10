@@ -8,6 +8,85 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, stripe-signature",
 };
 
+// Internal CRM constants (admin workspace)
+const INTERNAL_WS = "41efdc6d-d4ba-4589-9761-7438a5911d57";
+const STAGE_TRIAL = "fc4b4ff8-fbb8-40f3-ad51-9f6564b6ae3b";
+const STAGE_ACTIVE = "7030e322-ac11-4dfa-b128-c9b09c5efbb4";
+const STAGE_CANCELED = "a1c9acb9-82e5-4b99-966b-d7a033372a9a";
+const TAG_TRIAL = "a57de997-9b5c-467d-ad1e-8b50e0d07958";
+const TAG_ACTIVE = "62750bf4-b139-4462-b646-100e1c69723b";
+const TAG_CANCELED = "0594a852-068d-4a23-a9d5-c17e8106f396";
+const PLAN_TAGS: Record<string, string> = {
+  essencial: "e399514f-7df6-46ab-b6a9-e19eaf8b257f",
+  negocio: "ed1b0c84-f306-4e82-bcb7-bce4e2174abc",
+  escala: "4dcb6219-e129-4d0c-8b9f-aeea14b296c2",
+};
+const STATUS_TAGS = [TAG_TRIAL, TAG_ACTIVE, TAG_CANCELED];
+const ALL_PLAN_TAGS = Object.values(PLAN_TAGS);
+
+async function moveInternalLead(
+  supabaseAdmin: any,
+  customerEmail: string,
+  targetStageId: string,
+  addTagId: string,
+  planName?: string
+) {
+  try {
+    // Find lead by email in internal workspace
+    const { data: lead } = await supabaseAdmin
+      .from("leads")
+      .select("id")
+      .eq("workspace_id", INTERNAL_WS)
+      .eq("email", customerEmail)
+      .limit(1)
+      .maybeSingle();
+
+    if (!lead) return;
+
+    // Move to target stage
+    await supabaseAdmin
+      .from("leads")
+      .update({ stage_id: targetStageId })
+      .eq("id", lead.id);
+
+    // Remove old status tags
+    await supabaseAdmin
+      .from("lead_tag_assignments")
+      .delete()
+      .eq("lead_id", lead.id)
+      .eq("workspace_id", INTERNAL_WS)
+      .in("tag_id", STATUS_TAGS);
+
+    // Add new status tag
+    await supabaseAdmin.from("lead_tag_assignments").upsert(
+      { workspace_id: INTERNAL_WS, lead_id: lead.id, tag_id: addTagId },
+      { onConflict: "lead_id,tag_id" }
+    ).select();
+
+    // Handle plan tags
+    if (planName) {
+      // Remove old plan tags
+      await supabaseAdmin
+        .from("lead_tag_assignments")
+        .delete()
+        .eq("lead_id", lead.id)
+        .eq("workspace_id", INTERNAL_WS)
+        .in("tag_id", ALL_PLAN_TAGS);
+
+      // Add new plan tag
+      const planTagId = PLAN_TAGS[planName];
+      if (planTagId) {
+        await supabaseAdmin.from("lead_tag_assignments").upsert(
+          { workspace_id: INTERNAL_WS, lead_id: lead.id, tag_id: planTagId },
+          { onConflict: "lead_id,tag_id" }
+        ).select();
+      }
+    }
+  } catch (e) {
+    console.warn("moveInternalLead error:", e);
+  }
+}
+
 // Plan definitions by Stripe Price ID
 function getPlanConfig(priceId: string, env: Record<string, string | undefined>) {
   const priceEssencial = env.STRIPE_PRICE_ESSENCIAL;
