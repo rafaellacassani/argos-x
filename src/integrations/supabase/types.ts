@@ -682,6 +682,8 @@ export type Database = {
           scheduled_at: string | null
           sent_count: number | null
           status: string
+          template_id: string | null
+          template_variables: Json | null
           total_recipients: number | null
           updated_at: string
           workspace_id: string
@@ -710,6 +712,8 @@ export type Database = {
           scheduled_at?: string | null
           sent_count?: number | null
           status?: string
+          template_id?: string | null
+          template_variables?: Json | null
           total_recipients?: number | null
           updated_at?: string
           workspace_id: string
@@ -738,6 +742,8 @@ export type Database = {
           scheduled_at?: string | null
           sent_count?: number | null
           status?: string
+          template_id?: string | null
+          template_variables?: Json | null
           total_recipients?: number | null
           updated_at?: string
           workspace_id?: string
@@ -748,6 +754,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaigns_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_templates"
             referencedColumns: ["id"]
           },
           {
@@ -2483,6 +2496,63 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "whatsapp_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_templates: {
+        Row: {
+          category: string
+          cloud_connection_id: string
+          components: Json
+          created_at: string
+          id: string
+          language: string
+          status: string
+          synced_at: string
+          template_id: string
+          template_name: string
+          workspace_id: string
+        }
+        Insert: {
+          category?: string
+          cloud_connection_id: string
+          components?: Json
+          created_at?: string
+          id?: string
+          language?: string
+          status?: string
+          synced_at?: string
+          template_id: string
+          template_name: string
+          workspace_id: string
+        }
+        Update: {
+          category?: string
+          cloud_connection_id?: string
+          components?: Json
+          created_at?: string
+          id?: string
+          language?: string
+          status?: string
+          synced_at?: string
+          template_id?: string
+          template_name?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_templates_cloud_connection_id_fkey"
+            columns: ["cloud_connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_cloud_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_templates_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
