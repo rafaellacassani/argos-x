@@ -251,14 +251,15 @@ serve(async (req) => {
 
     // 1. Create user in Supabase Auth
     let userId: string;
-    const randomPassword = crypto.randomUUID() + "Aa1!";
 
     if (existingUser) {
       userId = existingUser.id;
+      // Update password for existing user who hasn't fully onboarded
+      await supabaseAdmin.auth.admin.updateUserById(userId, { password });
     } else {
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password: randomPassword,
+        password,
         email_confirm: true,
       });
 
