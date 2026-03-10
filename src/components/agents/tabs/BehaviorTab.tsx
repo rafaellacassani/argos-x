@@ -19,6 +19,7 @@ export function BehaviorTab({ formData, updateField }: Props) {
   const { workspaceId } = useWorkspace();
   const [stages, setStages] = useState<{ id: string; name: string }[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -27,6 +28,9 @@ export function BehaviorTab({ formData, updateField }: Props) {
     });
     supabase.from("whatsapp_instances").select("instance_name, display_name").eq("workspace_id", workspaceId).neq("instance_type", "alerts").then(({ data }) => {
       if (data) setInstances(data);
+    });
+    supabase.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, phone_number_id").eq("workspace_id", workspaceId).eq("is_active", true).then(({ data }) => {
+      if (data) setCloudConnections(data);
     });
   }, [workspaceId]);
 
