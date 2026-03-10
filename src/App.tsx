@@ -44,6 +44,7 @@ const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
 const TourGuiado = lazy(() => import("./pages/TourGuiado"));
+const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
