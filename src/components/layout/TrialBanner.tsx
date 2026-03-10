@@ -18,7 +18,7 @@ export function TrialBanner({ daysRemaining }: TrialBannerProps) {
     return elapsed < 24 * 60 * 60 * 1000; // 24h
   });
 
-  if (dismissed) return null;
+  if (dismissed || daysRemaining > 5) return null;
 
   const handleDismiss = () => {
     localStorage.setItem(DISMISS_KEY, String(Date.now()));
