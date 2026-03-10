@@ -57,6 +57,9 @@ export function SendMessageNodeContent({
   const forceWithoutConversation = (node.data.forceWithoutConversation as boolean) || false;
   const urlButton = (node.data.url_button as { label: string; url: string } | null) || null;
   const [showUrlButton, setShowUrlButton] = useState(!!urlButton);
+  const useWabaTemplate = (node.data.useWabaTemplate as boolean) || false;
+  const selectedWabaTemplateId = (node.data.wabaTemplateId as string) || '';
+  const wabaTemplateVars = (node.data.wabaTemplateVars as Record<string, string>) || {};
 
   useEffect(() => {
     const loadInstances = async () => {
