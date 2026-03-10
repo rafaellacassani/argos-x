@@ -189,12 +189,20 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName } = body;
+    const { name, phone, email, companyName, password } = body;
 
     // Validate required fields
-    if (!name || !phone || !email || !companyName) {
+    if (!name || !phone || !email || !companyName || !password) {
       return new Response(
-        JSON.stringify({ error: "Todos os campos são obrigatórios: name, phone, email, companyName" }),
+        JSON.stringify({ error: "Todos os campos são obrigatórios: name, phone, email, companyName, password" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return new Response(
+        JSON.stringify({ error: "A senha deve ter pelo menos 6 caracteres." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
