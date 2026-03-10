@@ -79,7 +79,21 @@ export function SendMessageNodeContent({
       }
     };
 
+    const loadCloudConnections = async () => {
+      if (!workspaceId) return;
+      const { data } = await supabase
+        .from('whatsapp_cloud_connections')
+        .select('id, inbox_name, phone_number')
+        .eq('workspace_id', workspaceId)
+        .eq('is_active', true);
+      setCloudConnections((data || []) as { id: string; inbox_name: string; phone_number: string }[]);
+      if (data && data.length > 0 && useWabaTemplate) {
+        fetchTemplates(data[0].id);
+      }
+    };
+
     loadInstances();
+    loadCloudConnections();
   }, []);
 
   // Update sending state based on execution status
