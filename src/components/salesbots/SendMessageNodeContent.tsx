@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2, Link2, Plus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2, Link2, Plus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
 import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
 import { useEvolutionAPI, EvolutionInstance } from '@/hooks/useEvolutionAPI';
+import { useWhatsAppTemplates, WhatsAppTemplate } from '@/hooks/useWhatsAppTemplates';
+import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
