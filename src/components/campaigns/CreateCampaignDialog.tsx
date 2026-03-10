@@ -345,6 +345,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setScheduleDays([1, 2, 3, 4, 5]);
     setWhenToStart("now");
     setScheduledAt("");
+    setUseTemplate(false);
+    setSelectedTemplateId("");
+    setTemplateVariables({});
   };
 
   return (
