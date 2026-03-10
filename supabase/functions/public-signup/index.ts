@@ -312,6 +312,11 @@ serve(async (req) => {
       sendWelcomeWhatsApp(cleanPhone, name).catch((e) => console.warn("Welcome WA error:", e));
     }
 
+    // 8. Create lead in internal admin CRM (fire-and-forget)
+    createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(
+      (e) => console.warn("Internal lead creation error:", e)
+    );
+
     return new Response(
       JSON.stringify({ success: true, email, workspaceId: workspace.id }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
