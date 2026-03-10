@@ -68,7 +68,7 @@ async function sendWelcomeEmail(email: string, name: string) {
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
   if (!RESEND_API_KEY) return;
 
-  const resetLink = "https://argosx.com.br/auth";
+  const loginLink = "https://argosx.com.br/auth";
 
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -84,9 +84,9 @@ async function sendWelcomeEmail(email: string, name: string) {
 <tr><td style="padding:32px">
 <h2 style="color:#0F172A;margin:0 0 16px">Bem-vindo ao Argos X, ${name}! 🚀</h2>
 <p style="color:#475569;font-size:15px;line-height:1.6">Sua conta foi criada com sucesso! Você tem <strong>7 dias de teste grátis</strong> para explorar todas as funcionalidades.</p>
-<p style="color:#475569;font-size:15px;line-height:1.6">Para começar, defina sua senha clicando no botão abaixo:</p>
+<p style="color:#475569;font-size:15px;line-height:1.6">Sua conta já está pronta para uso. Acesse agora:</p>
 <div style="text-align:center;margin:28px 0">
-<a href="${resetLink}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Definir minha senha</a>
+<a href="${loginLink}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Acessar o Argos X</a>
 </div>
 <p style="color:#475569;font-size:15px;line-height:1.6">O que você pode fazer agora:</p>
 <ul style="color:#475569;font-size:15px;line-height:1.8">
