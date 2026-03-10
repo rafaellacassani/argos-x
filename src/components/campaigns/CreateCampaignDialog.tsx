@@ -26,6 +26,7 @@ import {
   Rocket,
   Calendar,
   Save,
+  FileText,
 } from "lucide-react";
 import { Shuffle } from "lucide-react";
 
