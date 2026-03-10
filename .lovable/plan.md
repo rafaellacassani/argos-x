@@ -1,35 +1,36 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Janela de 24h da Cloud API nos Agentes de IA
 
-## O que será feito
+### Contexto
+A WhatsApp Cloud API (Meta) exige que mensagens proativas (fora de resposta) sejam enviadas dentro de uma janela de 24h após a última mensagem do cliente. Atualmente o agente não tem controle sobre isso -- ele responde e faz follow-up sem restrição.
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+### Plano
 
-## Detalhes técnicos
+#### 1. Nova coluna no banco -- `cloud_24h_window_only`
+- Adicionar `cloud_24h_window_only BOOLEAN DEFAULT true` na tabela `ai_agents`
+- Quando `true`: agente só responde/envia follow-up se a última mensagem do cliente foi há menos de 24h
+- Quando `false`: agente responde livremente (útil para Evolution API ou se o workspace tem templates aprovados)
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+#### 2. Frontend -- BehaviorTab.tsx
+- Mostrar a opção **condicionalmente** apenas quando a instância selecionada é Cloud API (valor começa com `cloud_`) ou "Todas as instâncias" (e há conexões Cloud API)
+- UI: Switch com label "Respeitar janela de 24h (Cloud API)" e descrição explicando que a Meta limita envios fora dessa janela
+- Posicionar logo abaixo do seletor de instância WhatsApp
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+#### 3. Backend -- facebook-webhook/index.ts
+- Na função `routeToAIAgent`, antes de chamar o agente, verificar:
+  - Se `agent.cloud_24h_window_only === true`
+  - Buscar o timestamp da última mensagem inbound do sender na `meta_conversations`
+  - Se > 24h, não enviar (logar skip)
+- Aplicar a mesma lógica no follow-up automático (quando `check-no-response-alerts` tenta enviar via Cloud API)
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+#### 4. Hook/Types -- useAIAgents.ts
+- Adicionar `cloud_24h_window_only` ao `CreateAgentData` interface e ao payload de `createAgent`
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
-
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+### Arquivos alterados
+- **Migration SQL**: adicionar coluna `cloud_24h_window_only`
+- **`src/components/agents/tabs/BehaviorTab.tsx`**: switch condicional
+- **`src/hooks/useAIAgents.ts`**: novo campo no create/interface
+- **`supabase/functions/facebook-webhook/index.ts`**: verificação de janela 24h
+- **`supabase/functions/check-no-response-alerts/index.ts`**: verificação de janela 24h no follow-up
 
