@@ -423,6 +423,7 @@ serve(async (req) => {
 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
+        const customerId = subscription.customer as string;
         await supabaseAdmin
           .from("workspaces")
           .update({
@@ -430,7 +431,17 @@ serve(async (req) => {
             plan_type: "canceled",
             blocked_at: new Date().toISOString(),
           })
-          .eq("stripe_customer_id", subscription.customer as string);
+          .eq("stripe_customer_id", customerId);
+
+        // Move internal CRM lead to "Cancelou Assinatura"
+        try {
+          const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+          if (customer.email) {
+            await moveInternalLead(supabaseAdmin, customer.email, STAGE_CANCELED, TAG_CANCELED);
+          }
+        } catch (e) {
+          console.warn("Internal lead move on cancel error:", e);
+        }
         break;
       }
 
