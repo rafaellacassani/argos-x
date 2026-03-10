@@ -804,7 +804,7 @@ Deno.serve(async (req) => {
       const leadIds = [...new Set(followupItems.map((q: any) => q.lead_id))];
 
       const [agentsRes, leadsRes] = await Promise.all([
-        supabase.from("ai_agents").select("id, name, agent_role, system_prompt, model, tone_of_voice, use_emojis, response_length, followup_sequence, followup_end_stage_id, instance_name, is_active, workspace_id").in("id", agentIds),
+        supabase.from("ai_agents").select("id, name, agent_role, system_prompt, model, tone_of_voice, use_emojis, response_length, followup_sequence, followup_end_stage_id, instance_name, is_active, workspace_id, cloud_24h_window_only").in("id", agentIds),
         supabase.from("leads").select("id, name, phone, whatsapp_jid, instance_name, workspace_id, stage_id").in("id", leadIds),
       ]);
 
