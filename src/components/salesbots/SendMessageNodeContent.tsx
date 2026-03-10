@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2, Link2, Plus } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle, Loader2, Phone, Settings2, Link2, Plus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BotNode } from '@/hooks/useSalesBots';
 import { ExecutionStatus, TestLead } from '@/hooks/useBotExecution';
 import { useEvolutionAPI, EvolutionInstance } from '@/hooks/useEvolutionAPI';
+import { useWhatsAppTemplates, WhatsAppTemplate } from '@/hooks/useWhatsAppTemplates';
+import { supabase } from '@/integrations/supabase/client';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -42,7 +45,10 @@ export function SendMessageNodeContent({
   const [showSettings, setShowSettings] = useState(false);
   const [selectedTestLead, setSelectedTestLead] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string }[]>([]);
   const { listInstances } = useEvolutionAPI();
+  const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
+  const { workspaceId } = useWorkspace();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -51,6 +57,9 @@ export function SendMessageNodeContent({
   const forceWithoutConversation = (node.data.forceWithoutConversation as boolean) || false;
   const urlButton = (node.data.url_button as { label: string; url: string } | null) || null;
   const [showUrlButton, setShowUrlButton] = useState(!!urlButton);
+  const useWabaTemplate = (node.data.useWabaTemplate as boolean) || false;
+  const selectedWabaTemplateId = (node.data.wabaTemplateId as string) || '';
+  const wabaTemplateVars = (node.data.wabaTemplateVars as Record<string, string>) || {};
 
   useEffect(() => {
     const loadInstances = async () => {
@@ -70,7 +79,21 @@ export function SendMessageNodeContent({
       }
     };
 
+    const loadCloudConnections = async () => {
+      if (!workspaceId) return;
+      const { data } = await supabase
+        .from('whatsapp_cloud_connections')
+        .select('id, inbox_name, phone_number')
+        .eq('workspace_id', workspaceId)
+        .eq('is_active', true);
+      setCloudConnections((data || []) as { id: string; inbox_name: string; phone_number: string }[]);
+      if (data && data.length > 0 && useWabaTemplate) {
+        fetchTemplates(data[0].id);
+      }
+    };
+
     loadInstances();
+    loadCloudConnections();
   }, []);
 
   // Update sending state based on execution status
@@ -142,71 +165,162 @@ export function SendMessageNodeContent({
 
   return (
     <div className="space-y-3">
-      {/* Message Input */}
-      <div className="relative">
-        <textarea
-          ref={textareaRef}
-          className={cn(
-            "w-full p-2 text-sm bg-background border rounded resize-none focus:ring-2 focus:ring-primary/50",
-            hasBracketText && "border-amber-400 bg-amber-50/30 dark:bg-amber-950/20"
-          )}
-          placeholder="Digite a mensagem..."
-          rows={3}
-          value={message}
-          onChange={(e) => onUpdate({ message: e.target.value })}
-        />
-        {hasBracketText && (
-          <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
-            <AlertCircle className="w-3 h-3" />
-            Edite os textos entre [colchetes] para personalizar
-          </p>
-        )}
-      </div>
-
-      {/* Variable Chips */}
-      <div className="flex flex-wrap gap-1">
-        {variables.map(v => (
-          <button
-            key={v.value}
-            type="button"
-            className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
-            onClick={() => insertVariable(v.value)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-
-      {/* URL Button */}
-      {!showUrlButton ? (
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs text-primary hover:underline"
-          onClick={() => setShowUrlButton(true)}
-        >
-          <Plus className="w-3 h-3" /> Botão de URL
-        </button>
-      ) : (
-        <div className="space-y-1.5 p-2 bg-muted/50 rounded border">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium flex items-center gap-1"><Link2 className="w-3 h-3" /> Botão de URL</span>
-            <button type="button" className="text-[10px] text-destructive hover:underline" onClick={() => { setShowUrlButton(false); onUpdate({ url_button: null }); }}>Remover</button>
-          </div>
-          <input
-            type="text"
-            className="w-full p-1.5 text-xs bg-background border rounded"
-            placeholder="Texto do botão..."
-            value={urlButton?.label || ''}
-            onChange={(e) => onUpdate({ url_button: { label: e.target.value, url: urlButton?.url || '' } })}
+      {/* WABA Template toggle */}
+      {cloudConnections.length > 0 && (
+        <div className="flex items-center gap-2 p-2 rounded border bg-muted/30">
+          <Checkbox
+            id={`waba-tpl-${node.id}`}
+            checked={useWabaTemplate}
+            onCheckedChange={(checked) => onUpdate({ useWabaTemplate: !!checked })}
           />
-          <input
-            type="url"
-            className="w-full p-1.5 text-xs bg-background border rounded"
-            placeholder="https://..."
-            value={urlButton?.url || ''}
-            onChange={(e) => onUpdate({ url_button: { label: urlButton?.label || '', url: e.target.value } })}
-          />
+          <Label htmlFor={`waba-tpl-${node.id}`} className="text-xs flex items-center gap-1 cursor-pointer">
+            <FileText className="w-3 h-3" />
+            Enviar Template WABA
+          </Label>
         </div>
+      )}
+
+      {useWabaTemplate ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs">Template *</Label>
+            <button
+              type="button"
+              className="text-[10px] text-primary hover:underline"
+              onClick={() => { if (cloudConnections.length > 0) syncTemplates(cloudConnections[0].id); }}
+              disabled={syncingTemplates}
+            >
+              {syncingTemplates ? "Sincronizando..." : "Sincronizar"}
+            </button>
+          </div>
+          <Select
+            value={selectedWabaTemplateId}
+            onValueChange={(v) => {
+              onUpdate({ wabaTemplateId: v });
+              const tpl = templates.find(t => t.id === v);
+              if (tpl) {
+                const body = tpl.components.find((c: any) => c.type === "BODY");
+                const vars: Record<string, string> = {};
+                const matches = body?.text?.match(/\{\{(\d+)\}\}/g) || [];
+                for (const m of matches) vars[m] = wabaTemplateVars[m] || "";
+                onUpdate({ wabaTemplateId: v, wabaTemplateVars: vars });
+              }
+            }}
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue placeholder="Selecione o template" />
+            </SelectTrigger>
+            <SelectContent>
+              {templates.filter(t => t.status === "APPROVED").map(t => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.template_name} ({t.language})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Template preview */}
+          {selectedWabaTemplateId && (() => {
+            const tpl = templates.find(t => t.id === selectedWabaTemplateId);
+            if (!tpl) return null;
+            const body = tpl.components.find((c: any) => c.type === "BODY");
+            const varMatches = body?.text?.match(/\{\{(\d+)\}\}/g) || [];
+            return (
+              <div className="space-y-2">
+                <div className="p-2 rounded bg-green-50 dark:bg-green-950/20 text-xs whitespace-pre-wrap border border-green-200 dark:border-green-800">
+                  {body?.text || ""}
+                </div>
+                {varMatches.length > 0 && varMatches.map((v: string) => (
+                  <div key={v} className="flex items-center gap-1">
+                    <span className="text-[10px] font-mono bg-muted px-1 rounded">{v}</span>
+                    <Select
+                      value={wabaTemplateVars[v] || ""}
+                      onValueChange={(val) => onUpdate({ wabaTemplateVars: { ...wabaTemplateVars, [v]: val } })}
+                    >
+                      <SelectTrigger className="h-6 text-[10px] flex-1">
+                        <SelectValue placeholder="Campo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="{{lead.name}}">Nome</SelectItem>
+                        <SelectItem value="{{lead.phone}}">Telefone</SelectItem>
+                        <SelectItem value="{{lead.company}}">Empresa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <>
+          {/* Message Input */}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              className={cn(
+                "w-full p-2 text-sm bg-background border rounded resize-none focus:ring-2 focus:ring-primary/50",
+                hasBracketText && "border-amber-400 bg-amber-50/30 dark:bg-amber-950/20"
+              )}
+              placeholder="Digite a mensagem..."
+              rows={3}
+              value={message}
+              onChange={(e) => onUpdate({ message: e.target.value })}
+            />
+            {hasBracketText && (
+              <p className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Edite os textos entre [colchetes] para personalizar
+              </p>
+            )}
+          </div>
+
+          {/* Variable Chips */}
+          <div className="flex flex-wrap gap-1">
+            {variables.map(v => (
+              <button
+                key={v.value}
+                type="button"
+                className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                onClick={() => insertVariable(v.value)}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+
+          {/* URL Button */}
+          {!showUrlButton ? (
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+              onClick={() => setShowUrlButton(true)}
+            >
+              <Plus className="w-3 h-3" /> Botão de URL
+            </button>
+          ) : (
+            <div className="space-y-1.5 p-2 bg-muted/50 rounded border">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium flex items-center gap-1"><Link2 className="w-3 h-3" /> Botão de URL</span>
+                <button type="button" className="text-[10px] text-destructive hover:underline" onClick={() => { setShowUrlButton(false); onUpdate({ url_button: null }); }}>Remover</button>
+              </div>
+              <input
+                type="text"
+                className="w-full p-1.5 text-xs bg-background border rounded"
+                placeholder="Texto do botão..."
+                value={urlButton?.label || ''}
+                onChange={(e) => onUpdate({ url_button: { label: e.target.value, url: urlButton?.url || '' } })}
+              />
+              <input
+                type="url"
+                className="w-full p-1.5 text-xs bg-background border rounded"
+                placeholder="https://..."
+                value={urlButton?.url || ''}
+                onChange={(e) => onUpdate({ url_button: { label: urlButton?.label || '', url: e.target.value } })}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {/* Instance Selection */}

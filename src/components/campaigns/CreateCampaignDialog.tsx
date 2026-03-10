@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useCampaigns, CreateCampaignData } from "@/hooks/useCampaigns";
+import { useWhatsAppTemplates, WhatsAppTemplate } from "@/hooks/useWhatsAppTemplates";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -25,6 +26,7 @@ import {
   Rocket,
   Calendar,
   Save,
+  FileText,
 } from "lucide-react";
 import { Shuffle } from "lucide-react";
 
@@ -68,7 +70,7 @@ const DAYS_OF_WEEK = [
 export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const { workspaceId } = useWorkspace();
   const { createCampaign, startCampaign, estimateRecipients } = useCampaigns();
-
+  const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -90,6 +92,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [useTemplate, setUseTemplate] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
 
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
@@ -106,6 +111,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [stages, setStages] = useState<{ id: string; name: string; color: string }[]>([]);
   const [members, setMembers] = useState<{ id: string; full_name: string }[]>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string }[]>([]);
 
   const loadData = useCallback(async () => {
     if (!workspaceId) return;
@@ -136,11 +142,12 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
       ? supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).eq("funnel_id", funnelId).order("position")
       : supabase.from("funnel_stages").select("id, name, color").eq("workspace_id", workspaceId).order("position").limit(0);
 
-    const [tagsRes, stagesRes, membersRes, instancesRes] = await Promise.all([
+    const [tagsRes, stagesRes, membersRes, instancesRes, cloudRes] = await Promise.all([
       supabase.from("lead_tags").select("id, name, color").eq("workspace_id", workspaceId),
       stagesQuery,
       supabase.from("workspace_members").select("user_id, user_profiles(id, full_name)").eq("workspace_id", workspaceId),
       supabase.from("whatsapp_instances").select("instance_name, display_name").eq("workspace_id", workspaceId),
+      supabase.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number").eq("workspace_id", workspaceId).eq("is_active", true),
     ]);
     setTags(tagsRes.data || []);
     setStages(stagesRes.data || []);
@@ -151,6 +158,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         .map((p: any) => ({ id: p.id, full_name: p.full_name }))
     );
     setInstances(instancesRes.data || []);
+    setCloudConnections((cloudRes.data || []) as { id: string; inbox_name: string; phone_number: string }[]);
 
     // Initial estimate (no filters = all leads with phone)
     const count = await estimateRecipients([], [], []);
@@ -267,6 +275,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     if (step === 1) return name.trim().length > 0;
     if (step === 2) {
       const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
+      if (useTemplate) return hasInstance && selectedTemplateId.length > 0;
       return hasInstance && messageText.trim().length > 0;
     }
     return true;
@@ -276,13 +285,14 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setSaving(true);
     try {
       const primaryInstance = roundRobinEnabled ? selectedInstances[0] : instanceName;
+      const selectedTemplate = useTemplate ? templates.find(t => t.id === selectedTemplateId) : null;
       const data: CreateCampaignData = {
         name,
         instance_name: primaryInstance,
         instance_names: roundRobinEnabled ? selectedInstances : [],
-        message_text: messageText,
-        attachment_url: attachmentUrl,
-        attachment_type: attachmentType,
+        message_text: useTemplate ? (selectedTemplate?.template_name || '') : messageText,
+        attachment_url: useTemplate ? null : attachmentUrl,
+        attachment_type: useTemplate ? null : attachmentType,
         filter_tag_ids: filterTagIds,
         filter_stage_ids: filterStageIds,
         filter_responsible_ids: filterResponsibleIds,
@@ -291,6 +301,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         schedule_end_time: restrictTime ? endTime : null,
         schedule_days: scheduleDays,
         scheduled_at: whenToStart === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        template_id: useTemplate ? selectedTemplateId : undefined,
+        template_variables: useTemplate ? Object.entries(templateVariables).map(([key, value]) => ({ key, value })) : undefined,
       };
 
       const campaign = await createCampaign(data);
@@ -334,6 +346,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setScheduleDays([1, 2, 3, 4, 5]);
     setWhenToStart("now");
     setScheduledAt("");
+    setUseTemplate(false);
+    setSelectedTemplateId("");
+    setTemplateVariables({});
   };
 
   return (
@@ -516,62 +531,191 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
               )}
             </div>
 
-            <div>
-              <Label>Mensagem *</Label>
-              {/* Shortcode chips */}
-              <div className="flex flex-wrap gap-1 mt-2 mb-2">
-                {SHORTCODES.map((sc) => (
-                  <Badge
-                    key={sc.value}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-secondary/80"
-                    onClick={() => insertShortcode(sc.value)}
-                  >
-                    {sc.label}
-                  </Badge>
-                ))}
-              </div>
-              <Textarea
-                ref={textareaRef}
-                value={messageText}
-                onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Oi #nome#, tudo bem? Vi que você é da #empresa#..."
-                className="min-h-[120px]"
-              />
-              <p className="text-xs text-muted-foreground mt-1 text-right">{messageText.length} caracteres</p>
-            </div>
-
-            {/* Preview */}
-            {messageText && (
-              <div>
-                <Label>Preview</Label>
-                <div className="mt-2 p-4 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap max-w-sm border">
-                  {previewMessage}
+            {/* Template vs Free Text toggle (show only if cloud connections exist) */}
+            {cloudConnections.length > 0 && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Usar Template WABA</p>
+                    <p className="text-xs text-muted-foreground">Enviar template pré-aprovado via Cloud API</p>
+                  </div>
                 </div>
+                <Switch checked={useTemplate} onCheckedChange={(v) => {
+                  setUseTemplate(v);
+                  if (v && cloudConnections.length > 0) {
+                    fetchTemplates(cloudConnections[0].id);
+                  }
+                }} />
               </div>
             )}
 
-            {/* Attachment */}
-            <div>
-              <Label>Anexo (opcional)</Label>
-              {!attachmentUrl ? (
-                <label className="mt-2 flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
-                  </span>
-                  <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading} />
-                </label>
-              ) : (
-                <div className="mt-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/50">
-                  <span className="text-sm flex-1 truncate">{attachmentName}</span>
-                  <Badge variant="secondary">{attachmentType}</Badge>
-                  <Button variant="ghost" size="icon" onClick={removeAttachment}>
-                    <X className="w-4 h-4" />
-                  </Button>
+            {useTemplate ? (
+              <div className="space-y-4">
+                {/* Template selector */}
+                <div>
+                  <Label>Conexão Cloud API</Label>
+                  <Select
+                    value={cloudConnections.length === 1 ? cloudConnections[0].id : undefined}
+                    onValueChange={(connId) => fetchTemplates(connId)}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione a conexão" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cloudConnections.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.inbox_name} ({c.phone_number})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label>Template *</Label>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => {
+                      if (cloudConnections.length > 0) syncTemplates(cloudConnections[0].id);
+                    }} disabled={syncingTemplates}>
+                      {syncingTemplates ? "Sincronizando..." : "Sincronizar"}
+                    </Button>
+                  </div>
+                  <Select value={selectedTemplateId} onValueChange={(v) => {
+                    setSelectedTemplateId(v);
+                    // Extract variables from template body
+                    const tpl = templates.find(t => t.id === v);
+                    if (tpl) {
+                      const body = tpl.components.find((c: any) => c.type === "BODY");
+                      const vars: Record<string, string> = {};
+                      const matches = body?.text?.match(/\{\{(\d+)\}\}/g) || [];
+                      for (const m of matches) {
+                        vars[m] = templateVariables[m] || "";
+                      }
+                      setTemplateVariables(vars);
+                    }
+                  }}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione o template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.filter(t => t.status === "APPROVED").map(t => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.template_name} ({t.language})
+                        </SelectItem>
+                      ))}
+                      {templates.filter(t => t.status === "APPROVED").length === 0 && (
+                        <SelectItem value="none" disabled>Nenhum template aprovado</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Template preview + variable mapping */}
+                {selectedTemplateId && (() => {
+                  const tpl = templates.find(t => t.id === selectedTemplateId);
+                  if (!tpl) return null;
+                  const body = tpl.components.find((c: any) => c.type === "BODY");
+                  const varMatches = body?.text?.match(/\{\{(\d+)\}\}/g) || [];
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Preview */}
+                      <div className="p-3 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap max-w-sm border">
+                        {body?.text || ""}
+                      </div>
+
+                      {/* Variable mapping */}
+                      {varMatches.length > 0 && (
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Mapeamento de variáveis</Label>
+                          <p className="text-xs text-muted-foreground">Associe cada variável a um campo do lead</p>
+                          {varMatches.map((v: string) => (
+                            <div key={v} className="flex items-center gap-2">
+                              <Badge variant="outline" className="min-w-[50px] justify-center">{v}</Badge>
+                              <Select
+                                value={templateVariables[v] || ""}
+                                onValueChange={(val) => setTemplateVariables(prev => ({ ...prev, [v]: val }))}
+                              >
+                                <SelectTrigger className="flex-1 h-8 text-xs">
+                                  <SelectValue placeholder="Selecione o campo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="#nome#">Nome do lead</SelectItem>
+                                  <SelectItem value="#empresa#">Empresa</SelectItem>
+                                  <SelectItem value="#telefone#">Telefone</SelectItem>
+                                  <SelectItem value="#email#">Email</SelectItem>
+                                  <SelectItem value="custom">Texto fixo</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <>
+                <div>
+                  <Label>Mensagem *</Label>
+                  {/* Shortcode chips */}
+                  <div className="flex flex-wrap gap-1 mt-2 mb-2">
+                    {SHORTCODES.map((sc) => (
+                      <Badge
+                        key={sc.value}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-secondary/80"
+                        onClick={() => insertShortcode(sc.value)}
+                      >
+                        {sc.label}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Textarea
+                    ref={textareaRef}
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder="Oi #nome#, tudo bem? Vi que você é da #empresa#..."
+                    className="min-h-[120px]"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1 text-right">{messageText.length} caracteres</p>
+                </div>
+
+                {/* Preview */}
+                {messageText && (
+                  <div>
+                    <Label>Preview</Label>
+                    <div className="mt-2 p-4 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap max-w-sm border">
+                      {previewMessage}
+                    </div>
+                  </div>
+                )}
+
+                {/* Attachment */}
+                <div>
+                  <Label>Anexo (opcional)</Label>
+                  {!attachmentUrl ? (
+                    <label className="mt-2 flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
+                      </span>
+                      <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading} />
+                    </label>
+                  ) : (
+                    <div className="mt-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/50">
+                      <span className="text-sm flex-1 truncate">{attachmentName}</span>
+                      <Badge variant="secondary">{attachmentType}</Badge>
+                      <Button variant="ghost" size="icon" onClick={removeAttachment}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 

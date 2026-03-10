@@ -65,6 +65,8 @@ export interface CreateCampaignData {
   schedule_end_time?: string | null;
   schedule_days?: number[];
   scheduled_at?: string | null;
+  template_id?: string;
+  template_variables?: { key: string; value: string }[];
 }
 
 export function useCampaigns() {
@@ -151,6 +153,8 @@ export function useCampaigns() {
           scheduled_at: data.scheduled_at || null,
           created_by: userProfile?.id || null,
           status: 'draft',
+          template_id: data.template_id || null,
+          template_variables: data.template_variables || [],
         })
         .select()
         .single();
