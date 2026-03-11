@@ -469,6 +469,30 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         {step === 2 && (
           <div className="space-y-6">
           <div className="space-y-4">
+            {/* Template vs Free Text toggle (show only if cloud connections exist) */}
+            {cloudConnections.length > 0 && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Usar Template WABA</p>
+                    <p className="text-xs text-muted-foreground">Enviar template pré-aprovado via Cloud API</p>
+                  </div>
+                </div>
+                <Switch checked={useTemplate} onCheckedChange={(v) => {
+                  setUseTemplate(v);
+                  if (v && cloudConnections.length > 0) {
+                    const connId = selectedCloudConnectionId || cloudConnections[0].id;
+                    setSelectedCloudConnectionId(connId);
+                    fetchTemplates(connId);
+                  }
+                }} />
+              </div>
+            )}
+
+            {/* Instance selection — only when NOT using WABA template */}
+            {!useTemplate && (
+              <>
               {/* Round Robin toggle */}
               <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                 <div className="flex items-center gap-2">
@@ -533,7 +557,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                   )}
                 </div>
               )}
-            </div>
+              </>
+            )}
 
             {/* Template vs Free Text toggle (show only if cloud connections exist) */}
             {cloudConnections.length > 0 && (
