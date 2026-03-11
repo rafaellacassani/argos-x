@@ -287,7 +287,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const handleSave = async (startImmediately: boolean) => {
     setSaving(true);
     try {
-      const primaryInstance = roundRobinEnabled ? selectedInstances[0] : instanceName;
+      const primaryInstance = useTemplate ? "" : (roundRobinEnabled ? selectedInstances[0] : instanceName);
       const selectedTemplate = useTemplate ? templates.find(t => t.id === selectedTemplateId) : null;
       const data: CreateCampaignData = {
         name,
