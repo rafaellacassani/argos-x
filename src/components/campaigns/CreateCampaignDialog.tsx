@@ -95,6 +95,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [useTemplate, setUseTemplate] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [selectedCloudConnectionId, setSelectedCloudConnectionId] = useState<string>("");
 
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
@@ -274,8 +275,10 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const canProceed = () => {
     if (step === 1) return name.trim().length > 0;
     if (step === 2) {
+      if (useTemplate) {
+        return selectedTemplateId.length > 0 && selectedCloudConnectionId.length > 0;
+      }
       const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
-      if (useTemplate) return hasInstance && selectedTemplateId.length > 0;
       return hasInstance && messageText.trim().length > 0;
     }
     return true;
@@ -284,7 +287,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const handleSave = async (startImmediately: boolean) => {
     setSaving(true);
     try {
-      const primaryInstance = roundRobinEnabled ? selectedInstances[0] : instanceName;
+      const primaryInstance = useTemplate ? "" : (roundRobinEnabled ? selectedInstances[0] : instanceName);
       const selectedTemplate = useTemplate ? templates.find(t => t.id === selectedTemplateId) : null;
       const data: CreateCampaignData = {
         name,
@@ -349,6 +352,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setUseTemplate(false);
     setSelectedTemplateId("");
     setTemplateVariables({});
+    setSelectedCloudConnectionId("");
   };
 
   return (
@@ -465,6 +469,30 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         {step === 2 && (
           <div className="space-y-6">
           <div className="space-y-4">
+            {/* Template vs Free Text toggle (show only if cloud connections exist) */}
+            {cloudConnections.length > 0 && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Usar Template WABA</p>
+                    <p className="text-xs text-muted-foreground">Enviar template pré-aprovado via Cloud API</p>
+                  </div>
+                </div>
+                <Switch checked={useTemplate} onCheckedChange={(v) => {
+                  setUseTemplate(v);
+                  if (v && cloudConnections.length > 0) {
+                    const connId = selectedCloudConnectionId || cloudConnections[0].id;
+                    setSelectedCloudConnectionId(connId);
+                    fetchTemplates(connId);
+                  }
+                }} />
+              </div>
+            )}
+
+            {/* Instance selection — only when NOT using WABA template */}
+            {!useTemplate && (
+              <>
               {/* Round Robin toggle */}
               <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
                 <div className="flex items-center gap-2">
@@ -529,35 +557,20 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                   )}
                 </div>
               )}
-            </div>
-
-            {/* Template vs Free Text toggle (show only if cloud connections exist) */}
-            {cloudConnections.length > 0 && (
-              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-secondary" />
-                  <div>
-                    <p className="text-sm font-medium">Usar Template WABA</p>
-                    <p className="text-xs text-muted-foreground">Enviar template pré-aprovado via Cloud API</p>
-                  </div>
-                </div>
-                <Switch checked={useTemplate} onCheckedChange={(v) => {
-                  setUseTemplate(v);
-                  if (v && cloudConnections.length > 0) {
-                    fetchTemplates(cloudConnections[0].id);
-                  }
-                }} />
-              </div>
+              </>
             )}
 
             {useTemplate ? (
               <div className="space-y-4">
-                {/* Template selector */}
+                {/* Cloud connection selector */}
                 <div>
-                  <Label>Conexão Cloud API</Label>
+                  <Label>Conexão Cloud API *</Label>
                   <Select
-                    value={cloudConnections.length === 1 ? cloudConnections[0].id : undefined}
-                    onValueChange={(connId) => fetchTemplates(connId)}
+                    value={selectedCloudConnectionId || undefined}
+                    onValueChange={(connId) => {
+                      setSelectedCloudConnectionId(connId);
+                      fetchTemplates(connId);
+                    }}
                   >
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecione a conexão" />
@@ -716,6 +729,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                 </div>
               </>
             )}
+            </div>
           </div>
         )}
 
