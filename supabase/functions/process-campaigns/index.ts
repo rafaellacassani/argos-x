@@ -112,7 +112,22 @@ serve(async (req) => {
         }
 
         const recipient = recipients[0];
-        const leadName = (recipient as any).leads?.name || "";
+        let leadName = (recipient as any).leads?.name || "";
+
+        // Robust fallback: if join didn't work, fetch lead name separately
+        if (!leadName && recipient.lead_id) {
+          const { data: leadData } = await supabase
+            .from("leads")
+            .select("name")
+            .eq("id", recipient.lead_id)
+            .single();
+          leadName = leadData?.name || "";
+        }
+
+        // Ultimate fallback: never send empty parameter
+        if (!leadName) {
+          leadName = "Cliente";
+        }
 
         // Determine which instance to use (round-robin or single)
         const instanceNames: string[] = (campaign.instance_names as string[]) || [];
