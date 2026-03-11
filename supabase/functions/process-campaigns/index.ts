@@ -92,10 +92,10 @@ serve(async (req) => {
           }
         }
 
-        // Get next pending recipient
+        // Get next pending recipient (join lead name for template fallback)
         const { data: recipients } = await supabase
           .from("campaign_recipients")
-          .select("*")
+          .select("*, leads(name)")
           .eq("campaign_id", campaign.id)
           .eq("status", "pending")
           .order("position", { ascending: true })
@@ -112,6 +112,7 @@ serve(async (req) => {
         }
 
         const recipient = recipients[0];
+        const leadName = (recipient as any).leads?.name || "";
 
         // Determine which instance to use (round-robin or single)
         const instanceNames: string[] = (campaign.instance_names as string[]) || [];
