@@ -1,35 +1,33 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Diagnóstico: Campanhas WABA falhando 100%
 
-## O que será feito
+### Problema identificado
+**Todas as mensagens estão falhando** com erro da Meta: `"Parameter name is missing or empty"`. Ambas as campanhas têm 0 envios bem-sucedidos e ~41-42 falhas cada.
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+### Causa raiz
+A tabela `campaign_recipients` **não tem foreign key** para `leads`. O código faz:
+```
+.select("*, leads(name)")
+```
+Sem FK, o Supabase ignora silenciosamente o join — `recipient.leads` fica `undefined` → `leadName = ""` → o parâmetro do template é enviado como string vazia → Meta rejeita.
 
-## Detalhes técnicos
+Além disso, `template_variables` está `[]` (vazio) nas duas campanhas, então o fallback com `leadName` é a única chance, mas ele também falha pelo motivo acima.
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+### Correções
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+#### 1. Migração: Adicionar FK em `campaign_recipients.lead_id → leads.id`
+Isso faz o join do Supabase funcionar corretamente.
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+#### 2. `process-campaigns/index.ts` — Fallback robusto
+Caso o join ainda falhe por algum motivo, buscar o nome do lead separadamente:
+- Após obter o recipient, se `leads?.name` estiver vazio, fazer um `SELECT name FROM leads WHERE id = recipient.lead_id`
+- Garantir que o `paramValue` nunca seja string vazia — usar o telefone ou "Cliente" como último fallback
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+#### 3. Resetar recipients falhados para re-disparo
+Após o fix, resetar os ~83 recipients com `status = 'failed'` para `pending` para que sejam reprocessados automaticamente.
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+### Arquivos
+- **Migração SQL**: adicionar FK `campaign_recipients(lead_id) → leads(id)`
+- **`supabase/functions/process-campaigns/index.ts`**: fallback para buscar nome do lead individualmente
 
