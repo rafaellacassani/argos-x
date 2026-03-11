@@ -170,15 +170,17 @@ serve(async (req) => {
             const bodyParams: any[] = [];
 
             if (bodyComponent?.text) {
-              const matches = bodyComponent.text.match(/\{\{(\d+)\}\}/g) || [];
+              const matches = bodyComponent.text.match(/\{\{[^}]+\}\}/g) || [];
               for (const match of matches) {
                 const mapping = templateVars.find(v => v.key === match);
                 let paramValue = mapping?.value || "";
                 // Replace shortcodes with lead data
-                if (paramValue === "#nome#") paramValue = recipient.personalized_message ? "" : (recipient as any).lead_name || "";
+                if (paramValue === "#nome#") paramValue = leadName;
                 else if (paramValue === "#empresa#") paramValue = "";
                 else if (paramValue === "#telefone#") paramValue = cleanPhone;
                 else if (paramValue === "#email#") paramValue = "";
+                // Fallback: if no mapping exists, use lead name as default (most common variable)
+                if (!paramValue && !mapping) paramValue = leadName;
                 bodyParams.push({ type: "text", text: paramValue || match });
               }
             }
