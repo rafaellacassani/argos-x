@@ -729,6 +729,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                 </div>
               </>
             )}
+            </div>
           </div>
         )}
 
