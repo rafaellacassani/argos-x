@@ -601,7 +601,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                     if (tpl) {
                       const body = tpl.components.find((c: any) => c.type === "BODY");
                       const vars: Record<string, string> = {};
-                      const matches = body?.text?.match(/\{\{(\d+)\}\}/g) || [];
+                      const matches = body?.text?.match(/\{\{[^}]+\}\}/g) || [];
                       for (const m of matches) {
                         vars[m] = templateVariables[m] || "";
                       }
