@@ -352,6 +352,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setUseTemplate(false);
     setSelectedTemplateId("");
     setTemplateVariables({});
+    setSelectedCloudConnectionId("");
   };
 
   return (
