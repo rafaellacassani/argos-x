@@ -95,6 +95,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [useTemplate, setUseTemplate] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
+  const [selectedCloudConnectionId, setSelectedCloudConnectionId] = useState<string>("");
 
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
