@@ -275,8 +275,10 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const canProceed = () => {
     if (step === 1) return name.trim().length > 0;
     if (step === 2) {
+      if (useTemplate) {
+        return selectedTemplateId.length > 0 && selectedCloudConnectionId.length > 0;
+      }
       const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
-      if (useTemplate) return hasInstance && selectedTemplateId.length > 0;
       return hasInstance && messageText.trim().length > 0;
     }
     return true;
