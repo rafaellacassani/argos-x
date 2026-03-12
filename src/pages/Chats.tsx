@@ -716,11 +716,9 @@ export default function Chats() {
     const remoteJidAlt = lastMsg?.key?.remoteJidAlt || chat.remoteJidAlt || undefined;
     
     // Check if there's a matching lead with a proper name
-    const matchingLead = leadsRef.current.find((l) => {
-      if (l.whatsapp_jid === jid) return true;
-      if (remoteJidAlt && l.whatsapp_jid === remoteJidAlt) return true;
-      return false;
-    });
+    // O(1) lead lookup via maps instead of O(N) find()
+    const maps = leadMapsRef.current;
+    const matchingLead = maps.byJid.get(jid) || (remoteJidAlt ? maps.byJid.get(remoteJidAlt) : undefined);
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
     
