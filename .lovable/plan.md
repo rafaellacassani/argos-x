@@ -1,35 +1,31 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Diagnóstico: Conversa incompleta no Chat
 
-## O que será feito
+### Causa raiz
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+A agente IA **está respondendo corretamente** — confirmei nos logs que Wesllem recebeu "Você é estudante ou profissional formado?" e depois o link de ingresso, e Marisa também recebeu a resposta. As execuções mostram `status: success` para todas.
 
-## Detalhes técnicos
+O problema: o `whatsapp-webhook` envia a resposta da IA via Evolution API (`sendText`), mas **nunca salva a mensagem de saída** na tabela `whatsapp_messages`. O chat UI lê dessa tabela, então só exibe as mensagens recebidas (inbound).
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+### Correção
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+Editar **`supabase/functions/whatsapp-webhook/index.ts`** — após cada envio bem-sucedido via `evolutionFetch(/message/sendText/...)` (linhas 965-1010), inserir um registro em `whatsapp_messages` com:
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+- `workspace_id`, `instance_name`, `remote_jid` (do lead)
+- `from_me: true`, `direction: 'outbound'`
+- `content`: texto do chunk/response enviado
+- `message_type: 'text'`
+- `push_name`: nome da agente
+- `timestamp`: horário atual
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+Isso se aplica a dois pontos no código:
+1. **Envio por chunks** (linha 963-988) — salvar cada chunk após envio
+2. **Envio de resposta única** (linha 990-1010) — salvar a resposta completa após envio
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+Sem impacto no fluxo existente — é um `insert` adicional que não bloqueia o envio.
+
+### Resultado esperado
+
+Após o deploy, todas as novas respostas da IA aparecerão no chat como mensagens enviadas (bolha azul/direita), junto com as mensagens recebidas do lead.
 
