@@ -1020,6 +1020,19 @@ app.post("/", async (c) => {
               }
               if (sendResult) {
                 console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
+                // Persist outbound message so it appears in the Chat UI
+                await supabase.from("whatsapp_messages").insert({
+                  workspace_id: workspaceId,
+                  instance_name: instanceName,
+                  remote_jid: remoteJid,
+                  from_me: true,
+                  direction: "outbound",
+                  content: agentData.response,
+                  message_type: "text",
+                  push_name: "IA",
+                  message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  timestamp: new Date().toISOString(),
+                });
               } else {
                 console.error(`[whatsapp-webhook] ❌ Failed to send agent response`);
               }
