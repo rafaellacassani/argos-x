@@ -185,8 +185,17 @@ serve(async (req) => {
             const bodyParams: any[] = [];
 
             if (bodyComponent?.text) {
+              // Build named params map from template example data
+              const namedParams: { param_name: string; example: string }[] =
+                bodyComponent.example?.body_text_named_params || [];
+              const namedParamMap = new Map<number, string>();
+              namedParams.forEach((np, idx) => {
+                if (np.param_name) namedParamMap.set(idx, np.param_name);
+              });
+
               const matches = bodyComponent.text.match(/\{\{[^}]+\}\}/g) || [];
-              for (const match of matches) {
+              for (let i = 0; i < matches.length; i++) {
+                const match = matches[i];
                 const mapping = templateVars.find(v => v.key === match);
                 let paramValue = mapping?.value || "";
                 // Replace shortcodes with lead data
@@ -194,9 +203,14 @@ serve(async (req) => {
                 else if (paramValue === "#empresa#") paramValue = "";
                 else if (paramValue === "#telefone#") paramValue = cleanPhone;
                 else if (paramValue === "#email#") paramValue = "";
-                // Fallback: if no mapping exists, use lead name as default (most common variable)
+                // Fallback: if no mapping exists, use lead name as default
                 if (!paramValue && !mapping) paramValue = leadName;
-                bodyParams.push({ type: "text", text: paramValue || match });
+
+                const param: any = { type: "text", text: paramValue || match };
+                // Add parameter_name for named variables (required by Meta Graph API)
+                const pName = namedParamMap.get(i);
+                if (pName) param.parameter_name = pName;
+                bodyParams.push(param);
               }
             }
 

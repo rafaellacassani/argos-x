@@ -1,38 +1,35 @@
 
 
-## Diagnóstico: Campanhas WABA não disparam
+# Plano: Google Meet automático + link nos lembretes da IA
 
-### Causa raiz confirmada
+## O que será feito
 
-Os templates usam **variáveis nomeadas** (`{{customer_name}}` com `param_name: "customer_name"`), mas o código envia os parâmetros **sem o campo `name`**.
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-O payload atual gera:
-```json
-{ "type": "text", "text": "João" }
-```
+## Detalhes técnicos
 
-A Meta exige para variáveis nomeadas:
-```json
-{ "type": "text", "parameter_name": "customer_name", "text": "João" }
-```
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
 
-Isso causa o erro `"Parameter name is missing or empty"` em **100% dos envios** (329 falhas em cada campanha, 0 sucessos).
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
 
-### Correção
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
 
-Editar **`supabase/functions/process-campaigns/index.ts`**, linha 199.
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
 
-Ao construir `bodyParams`, detectar se o template usa variáveis nomeadas (tem `param_name` no `example`) e incluir `parameter_name` no payload:
-
-1. Extrair o mapa de `param_name` dos `body_text_named_params` do componente BODY
-2. Ao fazer push em `bodyParams`, adicionar `parameter_name` quando disponível
-3. Manter compatibilidade com templates que usam variáveis numeradas (`{{1}}`, `{{2}}`)
-
-Mudança localizada em ~10 linhas, sem impacto no restante do sistema.
-
-### Após o deploy
-
-As campanhas estão pausadas. Basta:
-1. Reenviar as falhas (o botão "Reenviar falhas" já reseta os recipients para `pending`)
-2. Ou retomar as campanhas no horário de envio (07:00-19:00)
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 
