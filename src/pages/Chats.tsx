@@ -1663,8 +1663,32 @@ export default function Chats() {
         allChats = results.flat();
         allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
         allChats = allChats.slice(0, 100);
+      } else if (selectedInstance.startsWith("meta:")) {
+        // Meta instance — load from meta_conversations, not Evolution API
+        try {
+          const metaConvs = await fetchMetaConversations();
+          allChats = (metaConvs || []).map((conv) => ({
+            id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
+            remoteJid: conv.sender_id,
+            name: conv.sender_name || conv.sender_id,
+            lastMessage: conv.last_message,
+            time: formatMetaTime(conv.last_timestamp),
+            unread: conv.unread_count,
+            online: false,
+            phone: conv.sender_id,
+            lastMessageFromMe: false,
+            isMeta: true,
+            metaPageId: conv.meta_page_id,
+            metaSenderId: conv.sender_id,
+            metaPlatform: conv.platform,
+            instanceLabel: conv.page_name || conv.platform,
+            _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
+          }));
+        } catch (err) {
+          console.error("[Chats] Error refreshing Meta conversations:", err);
+        }
       } else {
-        // Refresh single instance
+        // Refresh single Evolution API instance
         const data = await fetchChats(selectedInstance);
         allChats = data
           .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
