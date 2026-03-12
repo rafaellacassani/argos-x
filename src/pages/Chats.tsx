@@ -716,11 +716,9 @@ export default function Chats() {
     const remoteJidAlt = lastMsg?.key?.remoteJidAlt || chat.remoteJidAlt || undefined;
     
     // Check if there's a matching lead with a proper name
-    const matchingLead = leadsRef.current.find((l) => {
-      if (l.whatsapp_jid === jid) return true;
-      if (remoteJidAlt && l.whatsapp_jid === remoteJidAlt) return true;
-      return false;
-    });
+    // O(1) lead lookup via maps instead of O(N) find()
+    const maps = leadMapsRef.current;
+    const matchingLead = maps.byJid.get(jid) || (remoteJidAlt ? maps.byJid.get(remoteJidAlt) : undefined);
     const leadName = matchingLead?.name;
     const leadAvatar = matchingLead?.avatar_url;
     
@@ -809,6 +807,31 @@ export default function Chats() {
     leadsRef.current = leads;
   }, [leads]);
   
+  // Build lead lookup maps for O(1) matching (rebuilt when leads change)
+  const leadMapsRef = useRef<{ byJid: Map<string, Lead>; byPhone10: Map<string, Lead> }>({ byJid: new Map(), byPhone10: new Map() });
+  useEffect(() => {
+    const byJid = new Map<string, Lead>();
+    const byPhone10 = new Map<string, Lead>();
+    for (const lead of leads) {
+      if (lead.whatsapp_jid) byJid.set(lead.whatsapp_jid, lead);
+      const digits = (lead.phone || '').replace(/[^0-9]/g, '');
+      if (digits.length >= 10) byPhone10.set(digits.slice(-10), lead);
+    }
+    leadMapsRef.current = { byJid, byPhone10 };
+  }, [leads]);
+
+  // Fast O(1) lead lookup using maps
+  const findLeadByChat = useCallback((remoteJid: string, remoteJidAlt?: string, phone?: string): Lead | undefined => {
+    const maps = leadMapsRef.current;
+    if (maps.byJid.has(remoteJid)) return maps.byJid.get(remoteJid);
+    if (remoteJidAlt && maps.byJid.has(remoteJidAlt)) return maps.byJid.get(remoteJidAlt);
+    if (phone) {
+      const digits = phone.replace(/[^0-9]/g, '');
+      if (digits.length >= 10) return maps.byPhone10.get(digits.slice(-10));
+    }
+    return undefined;
+  }, []);
+
   // Ref to track which JIDs we've already processed for lead creation
   const processedJidsRef = useRef<Set<string>>(new Set());
   
@@ -945,23 +968,39 @@ export default function Chats() {
     }
   }, []);
 
-  // Load chats when instance is selected
+  // Helper: deduplicate chats using O(1) map lookups
+  const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
+    const deduped = new Map<string, (Chat & { _timestamp?: number })>();
+    for (const c of chatList) {
+      const matchedLead = findLeadByChat(c.remoteJid, c.remoteJidAlt, c.phone);
+      const chatDigits = cleanPhoneNumber(c.phone || "");
+      const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
+      const existing = deduped.get(key);
+      if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
+        deduped.set(key, c);
+      }
+    }
+    let result = Array.from(deduped.values());
+    result.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
+    return result.slice(0, 100);
+  }, [findLeadByChat]);
+
+  // Load chats: DB-first (instant render), then API merge (background)
   useEffect(() => {
     if (!selectedInstance) return;
+    let cancelled = false;
 
     const loadChats = async () => {
       setLoadingChats(true);
       setChatError(null);
       try {
-        let allChats: (Chat & { _timestamp?: number })[] = [];
-
         const isMetaSource = selectedInstance.startsWith("meta:");
         
         if (isMetaSource) {
           // Load Meta conversations only
           const metaPageId = selectedInstance.replace("meta:", "");
           const convs = await fetchMetaConversations(metaPageId);
-          allChats = (convs || []).map((conv) => ({
+          const allChats = (convs || []).map((conv) => ({
             id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
             remoteJid: conv.sender_id,
             name: conv.sender_name || conv.sender_id,
@@ -978,209 +1017,91 @@ export default function Chats() {
             instanceLabel: conv.page_name || conv.platform,
             _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
           }));
-        } else if (selectedInstance === "all") {
-          // DATABASE-FIRST: Always load from local DB first
-          const dbChats = await loadChatsFromDB('all');
-          
-          // Then try to fetch from Evolution API to get newer data
-          const promises = instances.map(async (inst) => {
-            try {
-              const data = await fetchChats(inst.instanceName);
-              if (!Array.isArray(data)) return [];
-              return data
-                .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
-                .map((chat: any) => transformChatData(
-                  chat, 
-                  inst.instanceName, 
-                  inst.profileName || inst.instanceName
-                ));
-            } catch (err) {
-              console.error(`[Chats] Error fetching from ${inst.instanceName}:`, err);
-              return [];
-            }
-          });
-          
-          const results = await Promise.all(promises);
-          const apiChats = results.flat();
-
-          // Merge: DB chats + API chats, deduplicate by remoteJid keeping most recent
-          allChats = [...dbChats, ...apiChats];
-
-          // Also fetch Meta conversations
-          if (metaPages.length > 0) {
-            try {
-              const metaConvs = await fetchMetaConversations();
-              const metaChats = (metaConvs || []).map((conv) => ({
-                id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
-                remoteJid: conv.sender_id,
-                name: conv.sender_name || conv.sender_id,
-                lastMessage: conv.last_message,
-                time: formatMetaTime(conv.last_timestamp),
-                unread: conv.unread_count,
-                online: false,
-                phone: conv.sender_id,
-                lastMessageFromMe: false,
-                isMeta: true,
-                metaPageId: conv.meta_page_id,
-                metaSenderId: conv.sender_id,
-                metaPlatform: conv.platform,
-                instanceLabel: conv.page_name || conv.platform,
-                _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
-              }));
-              allChats = [...allChats, ...metaChats];
-            } catch (err) {
-              console.error("[Chats] Error fetching Meta conversations:", err);
-            }
+          if (!cancelled) {
+            setChats(allChats);
+            if (allChats.length > 0 && !selectedChat) setSelectedChat(allChats[0]);
+            setLoadingChats(false);
           }
-          
-          // Deduplicate by lead.id > phone digits > remoteJid
-          const deduped = new Map<string, (Chat & { _timestamp?: number })>();
-          for (const c of allChats) {
-            // Find matching lead for best dedup key
-            const chatDigits = cleanPhoneNumber(c.phone || "");
-            const matchedLead = leadsRef.current.find((l) => {
-              if (l.whatsapp_jid === c.remoteJid) return true;
-              if (c.remoteJidAlt && l.whatsapp_jid === c.remoteJidAlt) return true;
-              if (chatDigits.length >= 10) {
-                const ld = (l.phone || "").replace(/[^0-9]/g, "");
-                return ld.length >= 10 && ld.slice(-10) === chatDigits.slice(-10);
-              }
-              return false;
-            });
-            const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
-            const existing = deduped.get(key);
-            if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
-              deduped.set(key, c);
-            }
-          }
-          allChats = Array.from(deduped.values());
-
-          // Sort by timestamp (most recent first)
-          allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
-          allChats = allChats.slice(0, 100);
-          
         } else {
-          // DATABASE-FIRST: Always load from local DB first
-          const dbChats = await loadChatsFromDB(selectedInstance);
+          // ═══ PHASE 1: DB-first instant render ═══
+          const dbChats = await loadChatsFromDB(selectedInstance === "all" ? "all" : selectedInstance);
+          const initialChats = dedupChats(dbChats);
           
-          // Then try to fetch from Evolution API for newer data
-          let apiChats: (Chat & { _timestamp?: number })[] = [];
-          try {
-            const data = await fetchChats(selectedInstance);
-            if (Array.isArray(data) && data.length > 0) {
-              apiChats = data
-                .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
-                .map((chat: any) => transformChatData(chat));
-            }
-          } catch {
-            // API unavailable — DB chats are sufficient
+          if (!cancelled) {
+            setChats(initialChats);
+            setChatError(null);
+            if (initialChats.length > 0 && !selectedChat) setSelectedChat(initialChats[0]);
+            setLoadingChats(false); // ← UI visible now! User can interact
           }
-          
-          // Merge DB + API, deduplicate by lead.id > phone digits
-          const merged = [...dbChats, ...apiChats];
-          const deduped = new Map<string, (Chat & { _timestamp?: number })>();
-          for (const c of merged) {
-            const chatDigits = cleanPhoneNumber(c.phone || "");
-            const matchedLead = leadsRef.current.find((l) => {
-              if (l.whatsapp_jid === c.remoteJid) return true;
-              if (c.remoteJidAlt && l.whatsapp_jid === c.remoteJidAlt) return true;
-              if (chatDigits.length >= 10) {
-                const ld = (l.phone || "").replace(/[^0-9]/g, "");
-                return ld.length >= 10 && ld.slice(-10) === chatDigits.slice(-10);
-              }
-              return false;
-            });
-            const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
-            const existing = deduped.get(key);
-            if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
-              deduped.set(key, c);
-            }
-          }
-          allChats = Array.from(deduped.values());
-          allChats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
-          allChats = allChats.slice(0, 100);
-        }
 
-        setChats(allChats);
-        setChatError(null);
-        if (allChats.length > 0 && !selectedChat) {
-          setSelectedChat(allChats[0]);
-        }
-        
-        // Auto-create leads for ALL WhatsApp conversations (including outbound/prospecting)
-        // ALSO: if a lead exists but has a different JID, link the new JID to it
-        const currentLeads = leadsRef.current;
-        const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
-        const chatsNeedingLeads: { chat: typeof allChats[0]; existingLead?: typeof currentLeads[0] }[] = [];
-        
-        for (const chat of allChats) {
-          if (chat.isMeta) continue;
-          if (processedJidsRef.current.has(chat.remoteJid)) continue;
-          
-          const chatDigits = stripDigits(chat.phone || "");
-          const existingLead = currentLeads.find((lead) => {
-            if (lead.whatsapp_jid === chat.remoteJid) return true;
-            if (chat.remoteJidAlt && lead.whatsapp_jid === chat.remoteJidAlt) return true;
-            if (chatDigits.length >= 10) {
-              const leadDigits = stripDigits(lead.phone || "");
-              if (leadDigits.length >= 10 && (leadDigits.slice(-10) === chatDigits.slice(-10))) return true;
-            }
-            return false;
-          });
-          
-          if (!existingLead) {
-            // Need to create a new lead
-            chatsNeedingLeads.push({ chat });
-          } else if (existingLead.whatsapp_jid !== chat.remoteJid) {
-            // Lead exists with a different JID — link the current JID
-            // Prefer @s.whatsapp.net over @lid
-            processedJidsRef.current.add(chat.remoteJid);
-            if (chat.remoteJid.endsWith("@s.whatsapp.net") && existingLead.whatsapp_jid?.endsWith("@lid")) {
-              // Upgrade: replace @lid with @s.whatsapp.net
-              updateLead(existingLead.id, { whatsapp_jid: chat.remoteJid }).catch(() => {});
-            }
-          } else {
-            processedJidsRef.current.add(chat.remoteJid);
-          }
-        }
-        
-        if (chatsNeedingLeads.length > 0) {
-          console.log(`[Chats] Auto-creating ${chatsNeedingLeads.length} leads`);
-          const BATCH_SIZE = 20;
-          for (let i = 0; i < chatsNeedingLeads.length; i += BATCH_SIZE) {
-            const batch = chatsNeedingLeads.slice(i, i + BATCH_SIZE);
-            for (const { chat } of batch) {
-              try {
-                processedJidsRef.current.add(chat.remoteJid);
-                const phoneDigits = cleanPhoneNumber(chat.phone || "");
-                const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
-                // Normalize phone to digits-only for DB storage
-                const normalizedPhone = validPhone ? validPhone.replace(/[^0-9+]/g, "") : "";
-                const isLidChat = chat.remoteJid?.endsWith("@lid");
-                const rawName = chat.name || "";
-                const nameIsJid = rawName.includes("@") || /^\d{14,}$/.test(rawName.replace(/[^0-9]/g, ""));
-                const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (normalizedPhone || "Contato WhatsApp")) : (rawName || normalizedPhone || "Contato WhatsApp");
-                const newLead = await createLeadSilentRef.current({
-                  name: leadName,
-                  phone: normalizedPhone,
-                  whatsapp_jid: chat.remoteJid,
-                  instance_name: chat.instanceName,
-                  source: 'whatsapp',
-                });
-                if (newLead && chat.lastMessage && tagRulesRef.current.length > 0) {
-                  const matchingTagIds = checkMessageAgainstRulesRef.current(chat.lastMessage);
-                  for (const tagId of matchingTagIds) {
-                    await addTagToLeadRef.current(newLead.id, tagId);
-                  }
+          // ═══ PHASE 2: Background API fetch (non-blocking) ═══
+          try {
+            let apiChats: (Chat & { _timestamp?: number })[] = [];
+            
+            if (selectedInstance === "all") {
+              const promises = instances.map(async (inst) => {
+                try {
+                  const data = await fetchChats(inst.instanceName);
+                  if (!Array.isArray(data)) return [];
+                  return data
+                    .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+                    .map((chat: any) => transformChatData(
+                      chat, 
+                      inst.instanceName, 
+                      inst.profileName || inst.instanceName
+                    ));
+                } catch {
+                  return [];
                 }
-              } catch (err) {
-                console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
-                processedJidsRef.current.delete(chat.remoteJid);
+              });
+              const results = await Promise.all(promises);
+              apiChats = results.flat();
+
+              // Also fetch Meta conversations in background
+              if (metaPages.length > 0) {
+                try {
+                  const metaConvs = await fetchMetaConversations();
+                  const metaChats = (metaConvs || []).map((conv) => ({
+                    id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
+                    remoteJid: conv.sender_id,
+                    name: conv.sender_name || conv.sender_id,
+                    lastMessage: conv.last_message,
+                    time: formatMetaTime(conv.last_timestamp),
+                    unread: conv.unread_count,
+                    online: false,
+                    phone: conv.sender_id,
+                    lastMessageFromMe: false,
+                    isMeta: true,
+                    metaPageId: conv.meta_page_id,
+                    metaSenderId: conv.sender_id,
+                    metaPlatform: conv.platform,
+                    instanceLabel: conv.page_name || conv.platform,
+                    _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
+                  }));
+                  apiChats = [...apiChats, ...metaChats];
+                } catch (err) {
+                  console.error("[Chats] Error fetching Meta conversations:", err);
+                }
+              }
+            } else {
+              try {
+                const data = await fetchChats(selectedInstance);
+                if (Array.isArray(data) && data.length > 0) {
+                  apiChats = data
+                    .filter((chat: any) => !chat.remoteJid?.endsWith("@g.us"))
+                    .map((chat: any) => transformChatData(chat));
+                }
+              } catch {
+                // API unavailable — DB chats are sufficient
               }
             }
-            if (i + BATCH_SIZE < chatsNeedingLeads.length) {
-              await new Promise((r) => setTimeout(r, 1000));
+
+            // Merge API data into existing chats silently
+            if (!cancelled && apiChats.length > 0) {
+              setChats(prev => dedupChats([...prev, ...apiChats]));
             }
+          } catch (err) {
+            console.warn("[Chats] Background API fetch failed:", err);
           }
         }
       } catch (err) {
@@ -1188,17 +1109,88 @@ export default function Chats() {
         setChatError(`Não foi possível carregar conversas. Tente novamente.`);
         toast({ title: "Erro ao carregar conversas", description: "Tente novamente.", variant: "destructive" });
       } finally {
-        setLoadingChats(false);
+        if (!cancelled) setLoadingChats(false);
       }
     };
 
     loadChats();
-  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations]);
+    return () => { cancelled = true; };
+  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations, dedupChats]);
+
+  // Background: auto-create leads for chats without matching leads (non-blocking)
+  useEffect(() => {
+    if (chats.length === 0 || !workspaceId) return;
+    
+    const autoCreateLeads = async () => {
+      const chatsNeedingLeads: { chat: Chat }[] = [];
+      
+      for (const chat of chats) {
+        if (chat.isMeta) continue;
+        if (processedJidsRef.current.has(chat.remoteJid)) continue;
+        
+        const existingLead = findLeadByChat(chat.remoteJid, chat.remoteJidAlt, chat.phone);
+        
+        if (!existingLead) {
+          chatsNeedingLeads.push({ chat });
+        } else if (existingLead.whatsapp_jid !== chat.remoteJid) {
+          processedJidsRef.current.add(chat.remoteJid);
+          if (chat.remoteJid.endsWith("@s.whatsapp.net") && existingLead.whatsapp_jid?.endsWith("@lid")) {
+            updateLead(existingLead.id, { whatsapp_jid: chat.remoteJid }).catch(() => {});
+          }
+        } else {
+          processedJidsRef.current.add(chat.remoteJid);
+        }
+      }
+      
+      if (chatsNeedingLeads.length > 0) {
+        console.log(`[Chats] Background: auto-creating ${chatsNeedingLeads.length} leads`);
+        const BATCH_SIZE = 20;
+        for (let i = 0; i < chatsNeedingLeads.length; i += BATCH_SIZE) {
+          const batch = chatsNeedingLeads.slice(i, i + BATCH_SIZE);
+          for (const { chat } of batch) {
+            try {
+              processedJidsRef.current.add(chat.remoteJid);
+              const phoneDigits = cleanPhoneNumber(chat.phone || "");
+              const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
+              const normalizedPhone = validPhone ? validPhone.replace(/[^0-9+]/g, "") : "";
+              const isLidChat = chat.remoteJid?.endsWith("@lid");
+              const rawName = chat.name || "";
+              const nameIsJid = rawName.includes("@") || /^\d{14,}$/.test(rawName.replace(/[^0-9]/g, ""));
+              const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (normalizedPhone || "Contato WhatsApp")) : (rawName || normalizedPhone || "Contato WhatsApp");
+              const newLead = await createLeadSilentRef.current({
+                name: leadName,
+                phone: normalizedPhone,
+                whatsapp_jid: chat.remoteJid,
+                instance_name: chat.instanceName,
+                source: 'whatsapp',
+              });
+              if (newLead && chat.lastMessage && tagRulesRef.current.length > 0) {
+                const matchingTagIds = checkMessageAgainstRulesRef.current(chat.lastMessage);
+                for (const tagId of matchingTagIds) {
+                  await addTagToLeadRef.current(newLead.id, tagId);
+                }
+              }
+            } catch (err) {
+              console.error(`[Chats] Error creating lead for ${chat.remoteJid}:`, err);
+              processedJidsRef.current.delete(chat.remoteJid);
+            }
+          }
+          if (i + BATCH_SIZE < chatsNeedingLeads.length) {
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        }
+      }
+    };
+    
+    // Run after a short delay to ensure UI is fully rendered first
+    const timer = setTimeout(autoCreateLeads, 500);
+    return () => clearTimeout(timer);
+  }, [chats.length, workspaceId, findLeadByChat, updateLead]);
 
   // Ref to track which JIDs have been enriched to avoid duplicate API calls
   const enrichedJidsRef = useRef<Set<string>>(new Set());
 
-  // Enrich chats with profile photos asynchronously (non-blocking)
+  // Enrich chats with profile photos asynchronously (non-blocking, batched updates)
   useEffect(() => {
     if (chats.length === 0) return;
     
@@ -1212,7 +1204,9 @@ export default function Chats() {
     if (chatsToEnrich.length === 0) return;
 
     const enrichChats = async () => {
-      // Get the instance for the request
+      // Accumulate all updates, then apply in a single setChats call
+      const updates = new Map<string, { profilePicUrl?: string; name?: string }>();
+      
       for (const chat of chatsToEnrich) {
         const targetInstance = chat.instanceName || selectedInstance;
         if (!targetInstance || targetInstance === "all") continue;
@@ -1223,23 +1217,30 @@ export default function Chats() {
         try {
           const profile = await fetchProfile(targetInstance, number);
           if (profile && (profile.name || profile.profilePicUrl)) {
-            setChats((prev) =>
-              prev.map((c) =>
-                c.remoteJid === chat.remoteJid
-                  ? {
-                      ...c,
-                      profilePicUrl: profile.profilePicUrl || c.profilePicUrl,
-                      name: (!c.name || c.name === c.phone) && profile.name ? profile.name : c.name,
-                    }
-                  : c
-              )
-            );
+            updates.set(chat.remoteJid, {
+              profilePicUrl: profile.profilePicUrl,
+              name: profile.name,
+            });
           }
-          // Small delay between requests
           await new Promise((r) => setTimeout(r, 300));
         } catch (err) {
           console.warn(`[Chats] Failed to enrich ${chat.remoteJid}:`, err);
         }
+      }
+      
+      // Apply all profile updates in a single render
+      if (updates.size > 0) {
+        setChats((prev) =>
+          prev.map((c) => {
+            const update = updates.get(c.remoteJid);
+            if (!update) return c;
+            return {
+              ...c,
+              profilePicUrl: update.profilePicUrl || c.profilePicUrl,
+              name: (!c.name || c.name === c.phone) && update.name ? update.name : c.name,
+            };
+          })
+        );
       }
     };
 
