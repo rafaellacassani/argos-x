@@ -1,35 +1,42 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Permitir ver e trocar template WABA ao editar campanha pausada
 
-## O que será feito
+### Problema atual
+O dialog de detalhes da campanha não exibe informações WABA (qual conexão Cloud e qual template está sendo usado). Quando a campanha é WABA, o `message_text` mostra apenas o nome do template (ex: "argoxscontato1") e a "Instância principal" fica vazia porque campanhas WABA não usam Evolution API.
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+### Correção
 
-## Detalhes técnicos
+**Arquivo 1: `src/hooks/useCampaigns.ts`**
+- Adicionar `template_id` e `template_variables` à interface `Campaign`
+- Incluir esses campos no mapeamento do `fetchCampaigns` (já vêm do banco, só não estão na interface)
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+**Arquivo 2: `src/components/campaigns/CampaignDetailDialog.tsx`**
+- Detectar se a campanha é WABA: `const isWaba = !!campaign.template_id`
+- No modo **visualização**: mostrar card "Conexão WABA" e "Template" em vez de "Instância"
+- No modo **edição**:
+  - Carregar conexões WABA ativas do workspace (`whatsapp_cloud_connections`)
+  - Carregar templates aprovados da conexão selecionada (`whatsapp_templates`)
+  - Mostrar select de conexão WABA + select de template (filtrando por `status = 'APPROVED'`)
+  - Ao trocar template, atualizar `editMessage` com o novo `template_name`
+  - Permitir remapear variáveis do template (mesmo UI do CreateCampaignDialog)
+- No `handleSaveEdits`: incluir `template_id` e `template_variables` nos updates quando alterados
+- Esconder o campo "Instância principal" para campanhas WABA (não se aplica)
+- Esconder o Textarea de mensagem livre para campanhas WABA (usar preview do template em vez disso)
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+### Detalhes técnicos
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+1. **Carregar dados WABA no useEffect** (quando `open`):
+   - Query `whatsapp_cloud_connections` onde `workspace_id` e `is_active = true`
+   - Query `whatsapp_templates` onde `workspace_id` e `status = 'APPROVED'`
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+2. **Estado adicional**:
+   - `editTemplateId` — o template selecionado em edição
+   - `editTemplateVariables` — mapeamento de variáveis
+   - `cloudConnections` — lista de conexões WABA
+   - `availableTemplates` — templates aprovados
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+3. **View mode para WABA**: Mostrar nome do template, preview dos componentes (HEADER/BODY/FOOTER/BUTTONS), e nome da conexão WABA
+
+4. **Edit mode para WABA**: Select de template com preview, mapeamento de variáveis com shortcodes (#nome#, #empresa#, etc.)
 
