@@ -227,12 +227,14 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableInstances.length > 0 ? (
-                          availableInstances.map(name => (
+                        {availableInstances.filter(n => n).length > 0 ? (
+                          availableInstances.filter(n => n).map(name => (
                             <SelectItem key={name} value={name}>{name}</SelectItem>
                           ))
-                        ) : (
+                        ) : campaign.instance_name ? (
                           <SelectItem value={campaign.instance_name}>{campaign.instance_name}</SelectItem>
+                        ) : (
+                          <SelectItem value="__none">Nenhuma instância</SelectItem>
                         )}
                       </SelectContent>
                     </Select>
