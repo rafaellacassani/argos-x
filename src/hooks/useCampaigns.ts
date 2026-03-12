@@ -30,6 +30,8 @@ export interface Campaign {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  template_id: string | null;
+  template_variables: { key: string; value: string }[];
 }
 
 export interface CampaignRecipient {
