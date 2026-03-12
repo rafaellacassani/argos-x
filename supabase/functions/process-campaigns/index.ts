@@ -243,8 +243,36 @@ serve(async (req) => {
               const errBody = await graphRes.text();
               throw new Error(`Graph API error ${graphRes.status}: ${errBody}`);
             }
-            await graphRes.json(); // consume body
+            const graphData = await graphRes.json();
             sendSuccess = true;
+
+            // Persist outbound WABA message to meta_conversations for chat visibility
+            try {
+              const wabaMessageId = graphData?.messages?.[0]?.id || null;
+              // Get the meta_page_id from the cloud connection
+              const metaPageId = conn ? (await supabase
+                .from("whatsapp_cloud_connections")
+                .select("meta_page_id")
+                .eq("id", tpl.cloud_connection_id)
+                .single()
+              ).data?.meta_page_id : null;
+
+              await supabase.from("meta_conversations").insert({
+                workspace_id: campaign.workspace_id,
+                meta_page_id: metaPageId || null,
+                sender_id: cleanPhone,
+                sender_name: leadName,
+                content: `📋 Template: ${tpl.template_name}`,
+                direction: "outbound",
+                platform: "whatsapp_business",
+                message_type: "template",
+                message_id: wabaMessageId,
+                timestamp: new Date().toISOString(),
+              });
+            } catch (persistErr) {
+              console.error(`[process-campaigns] ⚠️ Failed to persist WABA message:`, persistErr);
+              // Don't fail the send if persistence fails
+            }
           } else if (campaign.attachment_url && campaign.attachment_type) {
             // Send media via Evolution API
             const messageText = recipient.personalized_message || campaign.message_text;

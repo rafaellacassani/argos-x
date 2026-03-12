@@ -846,18 +846,21 @@ export default function Chats() {
   useEffect(() => { addTagToLeadRef.current = addTagToLead; }, [addTagToLead]);
 
   // Helper: load chat list from local whatsapp_messages DB
-  // ALWAYS loads by workspace_id (via RLS), never filters by instance_name
-  // This ensures chats from deleted/offline instances remain visible
+  // When "all" is selected, loads all chats; otherwise filters by instance_name
   const loadChatsFromDB = useCallback(async (instanceName?: string): Promise<(Chat & { _timestamp?: number })[]> => {
     try {
       // Query whatsapp_messages grouped by remote_jid to build a chat list
-      // NO instance_name filter — chats must survive instance deletion
-      const query = supabase
+      let query = supabase
         .from('whatsapp_messages')
         .select('remote_jid, push_name, content, direction, timestamp, instance_name, from_me')
         .eq('workspace_id', workspaceId || '')
         .order('timestamp', { ascending: false })
         .limit(1000);
+
+      // Filter by instance_name when a specific instance is selected
+      if (instanceName && instanceName !== 'all') {
+        query = query.eq('instance_name', instanceName);
+      }
 
       const { data: msgs, error } = await query;
       if (error || !msgs || msgs.length === 0) return [];
