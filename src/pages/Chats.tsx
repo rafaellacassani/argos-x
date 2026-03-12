@@ -809,6 +809,31 @@ export default function Chats() {
     leadsRef.current = leads;
   }, [leads]);
   
+  // Build lead lookup maps for O(1) matching (rebuilt when leads change)
+  const leadMapsRef = useRef<{ byJid: Map<string, Lead>; byPhone10: Map<string, Lead> }>({ byJid: new Map(), byPhone10: new Map() });
+  useEffect(() => {
+    const byJid = new Map<string, Lead>();
+    const byPhone10 = new Map<string, Lead>();
+    for (const lead of leads) {
+      if (lead.whatsapp_jid) byJid.set(lead.whatsapp_jid, lead);
+      const digits = (lead.phone || '').replace(/[^0-9]/g, '');
+      if (digits.length >= 10) byPhone10.set(digits.slice(-10), lead);
+    }
+    leadMapsRef.current = { byJid, byPhone10 };
+  }, [leads]);
+
+  // Fast O(1) lead lookup using maps
+  const findLeadByChat = useCallback((remoteJid: string, remoteJidAlt?: string, phone?: string): Lead | undefined => {
+    const maps = leadMapsRef.current;
+    if (maps.byJid.has(remoteJid)) return maps.byJid.get(remoteJid);
+    if (remoteJidAlt && maps.byJid.has(remoteJidAlt)) return maps.byJid.get(remoteJidAlt);
+    if (phone) {
+      const digits = phone.replace(/[^0-9]/g, '');
+      if (digits.length >= 10) return maps.byPhone10.get(digits.slice(-10));
+    }
+    return undefined;
+  }, []);
+
   // Ref to track which JIDs we've already processed for lead creation
   const processedJidsRef = useRef<Set<string>>(new Set());
   
