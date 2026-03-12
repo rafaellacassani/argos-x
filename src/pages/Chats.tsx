@@ -1221,7 +1221,7 @@ export default function Chats() {
   // Ref to track which JIDs have been enriched to avoid duplicate API calls
   const enrichedJidsRef = useRef<Set<string>>(new Set());
 
-  // Enrich chats with profile photos asynchronously (non-blocking)
+  // Enrich chats with profile photos asynchronously (non-blocking, batched updates)
   useEffect(() => {
     if (chats.length === 0) return;
     
@@ -1235,7 +1235,9 @@ export default function Chats() {
     if (chatsToEnrich.length === 0) return;
 
     const enrichChats = async () => {
-      // Get the instance for the request
+      // Accumulate all updates, then apply in a single setChats call
+      const updates = new Map<string, { profilePicUrl?: string; name?: string }>();
+      
       for (const chat of chatsToEnrich) {
         const targetInstance = chat.instanceName || selectedInstance;
         if (!targetInstance || targetInstance === "all") continue;
@@ -1246,23 +1248,30 @@ export default function Chats() {
         try {
           const profile = await fetchProfile(targetInstance, number);
           if (profile && (profile.name || profile.profilePicUrl)) {
-            setChats((prev) =>
-              prev.map((c) =>
-                c.remoteJid === chat.remoteJid
-                  ? {
-                      ...c,
-                      profilePicUrl: profile.profilePicUrl || c.profilePicUrl,
-                      name: (!c.name || c.name === c.phone) && profile.name ? profile.name : c.name,
-                    }
-                  : c
-              )
-            );
+            updates.set(chat.remoteJid, {
+              profilePicUrl: profile.profilePicUrl,
+              name: profile.name,
+            });
           }
-          // Small delay between requests
           await new Promise((r) => setTimeout(r, 300));
         } catch (err) {
           console.warn(`[Chats] Failed to enrich ${chat.remoteJid}:`, err);
         }
+      }
+      
+      // Apply all profile updates in a single render
+      if (updates.size > 0) {
+        setChats((prev) =>
+          prev.map((c) => {
+            const update = updates.get(c.remoteJid);
+            if (!update) return c;
+            return {
+              ...c,
+              profilePicUrl: update.profilePicUrl || c.profilePicUrl,
+              name: (!c.name || c.name === c.phone) && update.name ? update.name : c.name,
+            };
+          })
+        );
       }
     };
 
