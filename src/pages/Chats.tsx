@@ -1086,7 +1086,7 @@ export default function Chats() {
                   console.error("[Chats] Error fetching Meta conversations:", err);
                 }
               }
-            } else {
+            } else if (!selectedInstance.startsWith("meta:")) {
               try {
                 const data = await fetchChats(selectedInstance);
                 if (Array.isArray(data) && data.length > 0) {
