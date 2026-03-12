@@ -978,7 +978,21 @@ app.post("/", async (c) => {
                       linkPreview: false,
                     });
                   }
-                  if (!sendResult) {
+                  if (sendResult) {
+                    // Persist outbound message so it appears in the Chat UI
+                    await supabase.from("whatsapp_messages").insert({
+                      workspace_id: workspaceId,
+                      instance_name: instanceName,
+                      remote_jid: remoteJid,
+                      from_me: true,
+                      direction: "outbound",
+                      content: chunk,
+                      message_type: "text",
+                      push_name: "IA",
+                      message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                      timestamp: new Date().toISOString(),
+                    });
+                  } else {
                     console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${sendToNumber} (and fallback ${remoteJid})`);
                   }
                   if (agentData.chunks.length > 1) {
