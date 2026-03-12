@@ -5,10 +5,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Campaign, CampaignRecipient, useCampaigns } from "@/hooks/useCampaigns";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
-import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw } from "lucide-react";
+import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw, Pencil, Save, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -34,7 +35,7 @@ const recipientStatusConfig: Record<string, { label: string; color: string }> = 
 };
 
 export default function CampaignDetailDialog({ open, onOpenChange, campaign }: Props) {
-  const { fetchRecipients, retryCampaign } = useCampaigns();
+  const { fetchRecipients, retryCampaign, updateCampaign } = useCampaigns();
   const { listInstances } = useEvolutionAPI();
   const [recipients, setRecipients] = useState<CampaignRecipient[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,11 +45,29 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
   const [retrying, setRetrying] = useState(false);
   const [availableInstances, setAvailableInstances] = useState<string[]>([]);
 
+  // Edit mode state
+  const [editing, setEditing] = useState(false);
+  const [editInstanceName, setEditInstanceName] = useState(campaign.instance_name);
+  const [editInstanceNames, setEditInstanceNames] = useState<string[]>(campaign.instance_names || []);
+  const [editInterval, setEditInterval] = useState(String(campaign.interval_seconds));
+  const [editMessage, setEditMessage] = useState(campaign.message_text);
+  const [editStartTime, setEditStartTime] = useState(campaign.schedule_start_time || "");
+  const [editEndTime, setEditEndTime] = useState(campaign.schedule_end_time || "");
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     if (open && campaign.id) {
       loadRecipients();
       setRetryInstance(campaign.instance_name);
-      // Load instances for retry selector
+      setEditing(false);
+      // Reset edit fields to current campaign values
+      setEditInstanceName(campaign.instance_name);
+      setEditInstanceNames(campaign.instance_names || []);
+      setEditInterval(String(campaign.interval_seconds));
+      setEditMessage(campaign.message_text);
+      setEditStartTime(campaign.schedule_start_time || "");
+      setEditEndTime(campaign.schedule_end_time || "");
+      // Load instances for retry/edit selector
       listInstances().then(insts => {
         setAvailableInstances(insts.map((i: any) => i.instanceName));
       });
@@ -73,6 +92,43 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
       onOpenChange(false);
     }
   };
+
+  const handleSaveEdits = async () => {
+    setSaving(true);
+    const updates: Record<string, any> = {};
+
+    if (editInstanceName !== campaign.instance_name) updates.instance_name = editInstanceName;
+    if (JSON.stringify(editInstanceNames) !== JSON.stringify(campaign.instance_names)) updates.instance_names = editInstanceNames;
+    if (Number(editInterval) !== campaign.interval_seconds) updates.interval_seconds = Number(editInterval);
+    if (editMessage !== campaign.message_text) updates.message_text = editMessage;
+    if (editStartTime !== (campaign.schedule_start_time || "")) updates.schedule_start_time = editStartTime || null;
+    if (editEndTime !== (campaign.schedule_end_time || "")) updates.schedule_end_time = editEndTime || null;
+
+    if (Object.keys(updates).length === 0) {
+      setEditing(false);
+      setSaving(false);
+      return;
+    }
+
+    const success = await updateCampaign(campaign.id, updates);
+    setSaving(false);
+    if (success) {
+      toast.success("Campanha atualizada!");
+      setEditing(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditing(false);
+    setEditInstanceName(campaign.instance_name);
+    setEditInstanceNames(campaign.instance_names || []);
+    setEditInterval(String(campaign.interval_seconds));
+    setEditMessage(campaign.message_text);
+    setEditStartTime(campaign.schedule_start_time || "");
+    setEditEndTime(campaign.schedule_end_time || "");
+  };
+
+  const canEdit = ["draft", "paused", "completed", "canceled"].includes(campaign.status);
 
   const filteredRecipients = recipients.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
@@ -193,42 +249,130 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
               </div>
             )}
 
-            {/* Config */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg border">
-                <p className="text-xs text-muted-foreground mb-1">
-                  {campaign.instance_names && campaign.instance_names.length >= 2 ? "Instâncias (Round Robin)" : "Instância"}
-                </p>
-                <p className="font-medium">
-                  {campaign.instance_names && campaign.instance_names.length >= 2
-                    ? campaign.instance_names.join(" → ")
-                    : campaign.instance_name}
-                </p>
+            {/* Config Section - View / Edit */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Configurações</p>
+                {canEdit && !editing && (
+                  <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => setEditing(true)}>
+                    <Pencil className="w-3 h-3" />
+                    Editar
+                  </Button>
+                )}
+                {editing && (
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="gap-1.5 h-7 text-xs" onClick={cancelEditing}>
+                      <X className="w-3 h-3" />
+                      Cancelar
+                    </Button>
+                    <Button size="sm" className="gap-1.5 h-7 text-xs" onClick={handleSaveEdits} disabled={saving}>
+                      <Save className="w-3 h-3" />
+                      {saving ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="p-3 rounded-lg border">
-                <p className="text-xs text-muted-foreground mb-1">Intervalo</p>
-                <p className="font-medium">{campaign.interval_seconds}s entre mensagens</p>
-              </div>
-              {campaign.schedule_start_time && (
-                <div className="p-3 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">Janela de envio</p>
-                  <p className="font-medium">{campaign.schedule_start_time} — {campaign.schedule_end_time}</p>
+
+              {editing ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg border space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Instância principal</p>
+                    <Select value={editInstanceName} onValueChange={setEditInstanceName}>
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableInstances.length > 0 ? (
+                          availableInstances.map(name => (
+                            <SelectItem key={name} value={name}>{name}</SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value={editInstanceName}>{editInstanceName}</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="p-3 rounded-lg border space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Intervalo (segundos)</p>
+                    <Input
+                      type="number"
+                      min={5}
+                      max={300}
+                      value={editInterval}
+                      onChange={(e) => setEditInterval(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  {(editStartTime || campaign.schedule_start_time) && (
+                    <>
+                      <div className="p-3 rounded-lg border space-y-1.5">
+                        <p className="text-xs text-muted-foreground">Horário início</p>
+                        <Input
+                          type="time"
+                          value={editStartTime}
+                          onChange={(e) => setEditStartTime(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                      <div className="p-3 rounded-lg border space-y-1.5">
+                        <p className="text-xs text-muted-foreground">Horário fim</p>
+                        <Input
+                          type="time"
+                          value={editEndTime}
+                          onChange={(e) => setEditEndTime(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
-              {campaign.scheduled_at && (
-                <div className="p-3 rounded-lg border">
-                  <p className="text-xs text-muted-foreground mb-1">Agendada para</p>
-                  <p className="font-medium">{new Date(campaign.scheduled_at).toLocaleString("pt-BR")}</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg border">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {campaign.instance_names && campaign.instance_names.length >= 2 ? "Instâncias (Round Robin)" : "Instância"}
+                    </p>
+                    <p className="font-medium">
+                      {campaign.instance_names && campaign.instance_names.length >= 2
+                        ? campaign.instance_names.join(" → ")
+                        : campaign.instance_name}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg border">
+                    <p className="text-xs text-muted-foreground mb-1">Intervalo</p>
+                    <p className="font-medium">{campaign.interval_seconds}s entre mensagens</p>
+                  </div>
+                  {campaign.schedule_start_time && (
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">Janela de envio</p>
+                      <p className="font-medium">{campaign.schedule_start_time} — {campaign.schedule_end_time}</p>
+                    </div>
+                  )}
+                  {campaign.scheduled_at && (
+                    <div className="p-3 rounded-lg border">
+                      <p className="text-xs text-muted-foreground mb-1">Agendada para</p>
+                      <p className="font-medium">{new Date(campaign.scheduled_at).toLocaleString("pt-BR")}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Message preview */}
+            {/* Message preview / edit */}
             <div>
               <p className="text-sm font-medium mb-2">Mensagem</p>
-              <div className="p-4 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap max-w-md border">
-                {campaign.message_text}
-              </div>
+              {editing ? (
+                <Textarea
+                  value={editMessage}
+                  onChange={(e) => setEditMessage(e.target.value)}
+                  className="min-h-[120px] text-sm"
+                  placeholder="Texto da mensagem..."
+                />
+              ) : (
+                <div className="p-4 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap max-w-md border">
+                  {campaign.message_text}
+                </div>
+              )}
               {campaign.attachment_url && (
                 <div className="mt-2 p-2 rounded border inline-flex items-center gap-2 text-sm">
                   📎 Anexo: <a href={campaign.attachment_url} target="_blank" rel="noreferrer" className="text-secondary underline">Ver arquivo</a>
