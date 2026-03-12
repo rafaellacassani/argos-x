@@ -1,36 +1,35 @@
 
 
-## Problemas identificados
+# Plano: Google Meet automático + link nos lembretes da IA
 
-### Problema 1: Filtro de instância não funciona
-O `loadChatsFromDB` (linha 849) carrega **todos** os chats do workspace sem filtrar por `instance_name`. Quando o usuário seleciona "api-whatsapp-na-pratica", chats de outras instâncias aparecem misturados.
+## O que será feito
 
-**Correção**: No `loadChatsFromDB`, quando o `instanceName` não é "all", filtrar os resultados do DB por `instance_name`. No `filteredChats` (useMemo), aplicar filtro por `instanceName` caso o `selectedInstance` não seja "all".
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-### Problema 2: Mensagens enviadas por campanhas WABA não aparecem no chat
-O `process-campaigns/index.ts` envia mensagens via Graph API mas **nunca salva na tabela** `meta_conversations`. Portanto, essas mensagens simplesmente não existem no banco para o chat exibir.
+## Detalhes técnicos
 
-**Correção**: Após envio bem-sucedido via WABA (linha 247), inserir um registro em `meta_conversations` com `direction: 'outbound'`, `platform: 'whatsapp_business'`, `content` com o texto personalizado, e o `sender_id` sendo o número do destinatário. Isso permite que as mensagens de campanha apareçam no chat quando o usuário abre a conversa WABA.
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
 
-### Arquivos a editar
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
 
-1. **`src/pages/Chats.tsx`** — Filtrar chats por `instance_name` quando uma instância específica é selecionada (não "all")
-2. **`supabase/functions/process-campaigns/index.ts`** — Persistir mensagens WABA enviadas na tabela `meta_conversations`
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
 
-### Detalhes técnicos
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
 
-**Chats.tsx — filtro de instância:**
-- Em `loadChatsFromDB`: quando `instanceName` não é "all" e não é undefined, adicionar `.eq('instance_name', instanceName)` à query do Supabase
-- Na fase 2 (API fetch para instância específica), manter apenas chats da instância selecionada
-
-**process-campaigns — persistir WABA:**
-- Após `sendSuccess = true` no bloco WABA (linha 247), inserir em `meta_conversations`:
-  - `workspace_id`: da campanha
-  - `meta_page_id`: do `tpl.cloud_connection_id` (buscar o `meta_page_id` da conexão)
-  - `sender_id`: `cleanPhone` do destinatário  
-  - `content`: texto personalizado da mensagem (ou template name)
-  - `direction`: `'outbound'`
-  - `platform`: `'whatsapp_business'`
-  - `message_type`: `'template'`
-  - `message_id`: gerado ou retornado pela Graph API
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 
