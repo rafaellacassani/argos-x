@@ -95,6 +95,8 @@ export function useCampaigns() {
         schedule_days: (c.schedule_days as number[]) || [1, 2, 3, 4, 5],
         instance_names: (c.instance_names as string[]) || [],
         last_instance_index: (c as any).last_instance_index || 0,
+        template_id: c.template_id || null,
+        template_variables: (c.template_variables as { key: string; value: string }[]) || [],
       })));
     } catch (err) {
       console.error('Error fetching campaigns:', err);
