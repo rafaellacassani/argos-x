@@ -23,7 +23,8 @@ import {
   Lock,
   Unplug,
   Wrench,
-import { Wrench, BarChart3 } from "lucide-react";
+  BarChart3,
+} from "lucide-react";
 import { MetaPixelSettings } from "@/components/settings/MetaPixelSettings";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
