@@ -28,9 +28,10 @@ export function MetaPixelSettings() {
     setSaving(true);
     try {
       const trimmed = pixelId.trim();
+      const trimmedToken = conversionsToken.trim();
       const { error } = await supabase
         .from("workspaces")
-        .update({ meta_pixel_id: trimmed || null } as any)
+        .update({ meta_pixel_id: trimmed || null, meta_conversions_token: trimmedToken || null } as any)
         .eq("id", workspaceId);
 
       if (error) throw error;
