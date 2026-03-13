@@ -17,12 +17,48 @@ function applyPhoneMask(value: string): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+const PIXEL_ID = "1294031842786070";
+const PRODUCTION_URL = "https://argosx.com.br/cadastro";
+
 export default function Cadastro() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [pixelReady, setPixelReady] = useState(false);
+
+  // Pre-load Meta Pixel on page mount
+  useEffect(() => {
+    const w = window as any;
+    if (!w.fbq) {
+      const n: any = (w.fbq = function () {
+        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+      });
+      if (!w._fbq) w._fbq = n;
+      n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+    }
+
+    // Check if script already loaded
+    const existing = document.querySelector('script[src*="fbevents.js"]');
+    if (existing) {
+      w.fbq("init", PIXEL_ID);
+      w.fbq("track", "PageView");
+      setPixelReady(true);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://connect.facebook.net/en_US/fbevents.js";
+    script.onload = () => {
+      setPixelReady(true);
+    };
+    document.head.appendChild(script);
+
+    w.fbq("init", PIXEL_ID);
+    w.fbq("track", "PageView");
+  }, []);
 
   const [form, setForm] = useState({
     name: "",
