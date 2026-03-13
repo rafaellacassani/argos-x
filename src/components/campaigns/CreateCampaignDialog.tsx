@@ -401,6 +401,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setFilterTagIds([]);
     setFilterStageIds([]);
     setFilterResponsibleIds([]);
+    setIncludeAllContacts(false);
     setInstanceName("");
     setSelectedInstances([]);
     setRoundRobinEnabled(false);
@@ -408,6 +409,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setAttachmentUrl(null);
     setAttachmentType(null);
     setAttachmentName(null);
+    setIsRecording(false);
+    setRecordingTime(0);
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIntervalOption(30);
     setCustomInterval(30);
     setRestrictTime(true);
