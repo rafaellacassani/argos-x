@@ -2614,6 +2614,7 @@ export type Database = {
           id: string
           lead_limit: number | null
           logo_url: string | null
+          meta_pixel_id: string | null
           name: string
           onboarding_completed: boolean | null
           onboarding_step: number | null
@@ -2640,6 +2641,7 @@ export type Database = {
           id?: string
           lead_limit?: number | null
           logo_url?: string | null
+          meta_pixel_id?: string | null
           name: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
@@ -2666,6 +2668,7 @@ export type Database = {
           id?: string
           lead_limit?: number | null
           logo_url?: string | null
+          meta_pixel_id?: string | null
           name?: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
