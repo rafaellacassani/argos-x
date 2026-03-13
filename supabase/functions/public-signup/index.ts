@@ -129,7 +129,6 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
   const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
 
-  // Get the reactivation config to find the WhatsApp instance
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -166,6 +165,89 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
   }
 }
 
+// SHA-256 hash helper for Meta CAPI user_data
+async function sha256(value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value.trim().toLowerCase());
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function sendMetaConversionEvent(
+  supabaseAdmin: any,
+  params: {
+    email: string;
+    phone: string;
+    eventId: string;
+    sourceUrl: string;
+    ip: string;
+    userAgent: string;
+  }
+) {
+  try {
+    // Get pixel config from internal workspace
+    const { data: ws } = await supabaseAdmin
+      .from("workspaces")
+      .select("meta_pixel_id, meta_conversions_token")
+      .eq("id", INTERNAL_WS)
+      .single();
+
+    if (!ws?.meta_pixel_id || !ws?.meta_conversions_token) {
+      console.log("Meta CAPI: pixel_id or token not configured, skipping");
+      return;
+    }
+
+    let cleanPhone = params.phone.replace(/\D/g, "");
+    if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+      cleanPhone = "55" + cleanPhone;
+    }
+
+    const [emailHash, phoneHash] = await Promise.all([
+      sha256(params.email),
+      sha256(cleanPhone),
+    ]);
+
+    const payload = {
+      data: [
+        {
+          event_name: "CompleteRegistration",
+          event_time: Math.floor(Date.now() / 1000),
+          event_id: params.eventId,
+          event_source_url: params.sourceUrl || "https://argosx.com.br/cadastro",
+          action_source: "website",
+          user_data: {
+            em: [emailHash],
+            ph: [phoneHash],
+            client_ip_address: params.ip,
+            client_user_agent: params.userAgent,
+          },
+          custom_data: {
+            content_name: "Argos X Trial",
+            currency: "BRL",
+            value: 0,
+          },
+        },
+      ],
+    };
+
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${ws.meta_pixel_id}/events?access_token=${ws.meta_conversions_token}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const result = await res.json();
+    console.log("Meta CAPI response:", JSON.stringify(result));
+  } catch (e) {
+    console.warn("Meta CAPI event failed:", e);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -181,6 +263,7 @@ serve(async (req) => {
   try {
     // Rate limiting
     const ip = req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || "unknown";
+    const userAgent = req.headers.get("user-agent") || "";
     if (isRateLimited(ip)) {
       return new Response(
         JSON.stringify({ error: "Muitas tentativas. Aguarde alguns minutos." }),
@@ -189,7 +272,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName, password } = body;
+    const { name, phone, email, companyName, password, eventId, sourceUrl } = body;
 
     // Validate required fields
     if (!name || !phone || !email || !companyName || !password) {
@@ -254,7 +337,6 @@ serve(async (req) => {
 
     if (existingUser) {
       userId = existingUser.id;
-      // Update password for existing user who hasn't fully onboarded
       await supabaseAdmin.auth.admin.updateUserById(userId, { password });
     } else {
       const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -367,8 +449,30 @@ serve(async (req) => {
       (e) => console.warn("Internal lead creation error:", e)
     );
 
+    // 9. Send Meta Conversions API event (fire-and-forget)
+    const metaEventId = eventId || `cr_server_${Date.now()}`;
+    sendMetaConversionEvent(supabaseAdmin, {
+      email,
+      phone: cleanPhone,
+      eventId: metaEventId,
+      sourceUrl: sourceUrl || "https://argosx.com.br/cadastro",
+      ip,
+      userAgent,
+    }).catch((e) => console.warn("Meta CAPI error:", e));
+
+    // 10. Get pixel ID for browser-side tracking
+    let pixelId: string | null = null;
+    try {
+      const { data: internalWs } = await supabaseAdmin
+        .from("workspaces")
+        .select("meta_pixel_id")
+        .eq("id", INTERNAL_WS)
+        .single();
+      pixelId = internalWs?.meta_pixel_id || null;
+    } catch (_) {}
+
     return new Response(
-      JSON.stringify({ success: true, email, workspaceId: workspace.id }),
+      JSON.stringify({ success: true, email, workspaceId: workspace.id, pixelId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

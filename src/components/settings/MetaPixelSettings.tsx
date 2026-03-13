@@ -13,13 +13,14 @@ export function MetaPixelSettings() {
   const { workspace, workspaceId, refreshWorkspace } = useWorkspace();
   const { toast } = useToast();
   const [pixelId, setPixelId] = useState("");
+  const [conversionsToken, setConversionsToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const currentPixelId = (workspace as any)?.meta_pixel_id;
-    if (currentPixelId) {
-      setPixelId(currentPixelId);
-    }
+    const currentToken = (workspace as any)?.meta_conversions_token;
+    if (currentPixelId) setPixelId(currentPixelId);
+    if (currentToken) setConversionsToken(currentToken);
   }, [workspace]);
 
   const handleSave = async () => {
@@ -27,9 +28,10 @@ export function MetaPixelSettings() {
     setSaving(true);
     try {
       const trimmed = pixelId.trim();
+      const trimmedToken = conversionsToken.trim();
       const { error } = await supabase
         .from("workspaces")
-        .update({ meta_pixel_id: trimmed || null } as any)
+        .update({ meta_pixel_id: trimmed || null, meta_conversions_token: trimmedToken || null } as any)
         .eq("id", workspaceId);
 
       if (error) throw error;
@@ -101,6 +103,30 @@ export function MetaPixelSettings() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="conversions-token">Access Token (API de Conversões)</Label>
+            <Input
+              id="conversions-token"
+              type="password"
+              value={conversionsToken}
+              onChange={(e) => setConversionsToken(e.target.value)}
+              placeholder="EAAxxxxxxx..."
+            />
+            <p className="text-xs text-muted-foreground">
+              Gere o token em{" "}
+              <a
+                href="https://business.facebook.com/events_manager2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Events Manager → Configurações → API de Conversões → Gerar Token
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              . Permite envio server-side para maior confiabilidade.
+            </p>
+          </div>
+
           <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
             {saving ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -115,8 +141,11 @@ export function MetaPixelSettings() {
               <h4 className="text-sm font-medium mb-2">Eventos rastreados</h4>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• <strong>PageView</strong> — todas as páginas autenticadas</li>
-                <li>• <strong>CompleteRegistration</strong> — página de cadastro</li>
+                <li>• <strong>CompleteRegistration</strong> — página de cadastro (browser + server-side)</li>
               </ul>
+              {(workspace as any)?.meta_conversions_token && (
+                <p className="text-xs text-success mt-2">✅ API de Conversões configurada (envio duplo ativo)</p>
+              )}
             </div>
           )}
         </CardContent>
