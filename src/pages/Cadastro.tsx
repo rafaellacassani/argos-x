@@ -77,6 +77,15 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao criar conta");
       }
 
+      // Disparar evento de conversão do Meta Pixel
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'CompleteRegistration', {
+          content_name: 'Argos X Trial',
+          currency: 'BRL',
+          value: 0,
+        });
+      }
+
       navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
       toast({ title: err.message || "Erro ao criar conta", variant: "destructive" });
