@@ -643,7 +643,20 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
 
               {campaign.attachment_url && (
                 <div className="mt-2 p-2 rounded border inline-flex items-center gap-2 text-sm">
-                  📎 Anexo: <a href={campaign.attachment_url} target="_blank" rel="noreferrer" className="text-secondary underline">Ver arquivo</a>
+                  {campaign.attachment_type === "audio" ? (
+                    <audio src={campaign.attachment_url} controls className="h-8" />
+                  ) : (
+                    <>📎 Anexo: <a href={campaign.attachment_url} target="_blank" rel="noreferrer" className="text-secondary underline">Ver arquivo</a></>
+                  )}
+                </div>
+              )}
+
+              {campaign.include_all_contacts && (
+                <div className="mt-2">
+                  <Badge variant="outline" className="gap-1">
+                    <Users className="w-3 h-3" />
+                    Inclui todos os contatos do WhatsApp
+                  </Badge>
                 </div>
               )}
             </div>
