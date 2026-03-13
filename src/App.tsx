@@ -10,6 +10,7 @@ import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { PermissionGuard } from "@/components/layout/PermissionGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { MetaPixelLoader } from "@/components/settings/MetaPixelLoader";
 import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages

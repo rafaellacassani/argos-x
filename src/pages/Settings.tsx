@@ -964,6 +964,11 @@ export default function Settings() {
           </motion.div>
         </TabsContent>
 
+        {/* Meta Pixel Tab */}
+        <TabsContent value="meta-pixel" className="space-y-6">
+          <MetaPixelSettings />
+        </TabsContent>
+
         {/* General Tab */}
         <TabsContent value="general" className="space-y-6">
           <div className="inboxia-card p-6">
