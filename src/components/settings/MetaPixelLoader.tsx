@@ -1,6 +1,13 @@
 import { useEffect, useRef } from "react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
+declare global {
+  interface Window {
+    fbq: any;
+    _fbq: any;
+  }
+}
+
 export function MetaPixelLoader() {
   const { workspace } = useWorkspace();
   const loadedPixelId = useRef<string | null>(null);
@@ -11,15 +18,13 @@ export function MetaPixelLoader() {
 
     loadedPixelId.current = pixelId;
 
-    // Inject fbevents.js if not already loaded
-    if (!(window as any).fbq) {
-      const f = window as any;
-      const n = (f.fbq = function () {
+    if (!window.fbq) {
+      const n: any = (window.fbq = function () {
         n.callMethod
           ? n.callMethod.apply(n, arguments)
           : n.queue.push(arguments);
       });
-      if (!f._fbq) f._fbq = n;
+      if (!window._fbq) window._fbq = n;
       n.push = n;
       n.loaded = true;
       n.version = "2.0";
@@ -31,8 +36,8 @@ export function MetaPixelLoader() {
       document.head.appendChild(script);
     }
 
-    (window as any).fbq("init", pixelId);
-    (window as any).fbq("track", "PageView");
+    window.fbq("init", pixelId);
+    window.fbq("track", "PageView");
   }, [workspace]);
 
   return null;
