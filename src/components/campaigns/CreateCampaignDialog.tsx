@@ -82,6 +82,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
   const [filterStageIds, setFilterStageIds] = useState<string[]>([]);
   const [filterResponsibleIds, setFilterResponsibleIds] = useState<string[]>([]);
+  const [includeAllContacts, setIncludeAllContacts] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [estimating, setEstimating] = useState(false);
 
