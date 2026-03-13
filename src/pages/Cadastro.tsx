@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,12 +17,48 @@ function applyPhoneMask(value: string): string {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+const PIXEL_ID = "1294031842786070";
+const PRODUCTION_URL = "https://argosx.com.br/cadastro";
+
 export default function Cadastro() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [pixelReady, setPixelReady] = useState(false);
+
+  // Pre-load Meta Pixel on page mount
+  useEffect(() => {
+    const w = window as any;
+    if (!w.fbq) {
+      const n: any = (w.fbq = function () {
+        n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+      });
+      if (!w._fbq) w._fbq = n;
+      n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+    }
+
+    // Check if script already loaded
+    const existing = document.querySelector('script[src*="fbevents.js"]');
+    if (existing) {
+      w.fbq("init", PIXEL_ID);
+      w.fbq("track", "PageView");
+      setPixelReady(true);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://connect.facebook.net/en_US/fbevents.js";
+    script.onload = () => {
+      setPixelReady(true);
+    };
+    document.head.appendChild(script);
+
+    w.fbq("init", PIXEL_ID);
+    w.fbq("track", "PageView");
+  }, []);
 
   const [form, setForm] = useState({
     name: "",
@@ -72,7 +108,7 @@ export default function Cadastro() {
             companyName: form.companyName,
             password: form.password,
             eventId,
-            sourceUrl: window.location.href,
+            sourceUrl: PRODUCTION_URL,
           }),
         }
       );
@@ -82,21 +118,9 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao criar conta");
       }
 
-      // Inicializar fbq e disparar evento com pixel_id retornado pelo servidor
-      if (data.pixelId) {
-        const w = window as any;
-        if (!w.fbq) {
-          const n: any = (w.fbq = function () {
-            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-          });
-          if (!w._fbq) w._fbq = n;
-          n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
-          const script = document.createElement("script");
-          script.async = true;
-          script.src = "https://connect.facebook.net/en_US/fbevents.js";
-          document.head.appendChild(script);
-        }
-        w.fbq("init", data.pixelId);
+      // Disparar evento CompleteRegistration via Pixel já carregado
+      const w = window as any;
+      if (w.fbq) {
         w.fbq("track", "CompleteRegistration", {
           content_name: "Argos X Trial",
           currency: "BRL",
@@ -105,7 +129,7 @@ export default function Cadastro() {
       }
 
       // Aguardar beacon HTTP ser enviado antes de navegar
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, pixelReady ? 800 : 1500));
 
       navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
