@@ -341,7 +341,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         return selectedTemplateId.length > 0 && selectedCloudConnectionId.length > 0;
       }
       const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
-      return hasInstance && messageText.trim().length > 0;
+      const hasContent = messageText.trim().length > 0 || !!attachmentUrl;
+      return hasInstance && hasContent;
     }
     return true;
   };
