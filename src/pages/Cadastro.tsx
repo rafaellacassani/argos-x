@@ -118,21 +118,9 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao criar conta");
       }
 
-      // Inicializar fbq e disparar evento com pixel_id retornado pelo servidor
-      if (data.pixelId) {
-        const w = window as any;
-        if (!w.fbq) {
-          const n: any = (w.fbq = function () {
-            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
-          });
-          if (!w._fbq) w._fbq = n;
-          n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
-          const script = document.createElement("script");
-          script.async = true;
-          script.src = "https://connect.facebook.net/en_US/fbevents.js";
-          document.head.appendChild(script);
-        }
-        w.fbq("init", data.pixelId);
+      // Disparar evento CompleteRegistration via Pixel já carregado
+      const w = window as any;
+      if (w.fbq) {
         w.fbq("track", "CompleteRegistration", {
           content_name: "Argos X Trial",
           currency: "BRL",
@@ -141,7 +129,7 @@ export default function Cadastro() {
       }
 
       // Aguardar beacon HTTP ser enviado antes de navegar
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise((r) => setTimeout(r, pixelReady ? 800 : 1500));
 
       navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
