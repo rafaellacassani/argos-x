@@ -515,6 +515,10 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="meta-pixel">
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Meta Pixel
+          </TabsTrigger>
           <TabsTrigger value="general" disabled={isSeller}>
             Geral
             {isSeller && <Lock className="w-3 h-3 ml-1" />}
