@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, ArrowRight, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
