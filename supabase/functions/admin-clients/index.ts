@@ -694,34 +694,126 @@ serve(async (req) => {
         );
       }
 
-      // Delete in order: dependents first
+      // 1. Cancel Stripe subscription if exists
+      const { data: wsData } = await supabaseAdmin
+        .from("workspaces")
+        .select("stripe_customer_id, stripe_subscription_id, created_by")
+        .eq("id", workspaceId)
+        .single();
+
+      if (wsData) {
+        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+        if (stripeKey && (wsData.stripe_subscription_id || wsData.stripe_customer_id)) {
+          try {
+            const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+
+            // Cancel subscription directly if we have the ID
+            if (wsData.stripe_subscription_id) {
+              try {
+                await stripe.subscriptions.cancel(wsData.stripe_subscription_id);
+                console.log("Stripe subscription canceled:", wsData.stripe_subscription_id);
+              } catch (e) {
+                console.warn("Failed to cancel subscription:", e);
+              }
+            }
+
+            // Also cancel any active subscriptions on the customer
+            if (wsData.stripe_customer_id) {
+              try {
+                const subs = await stripe.subscriptions.list({
+                  customer: wsData.stripe_customer_id,
+                  status: "active",
+                  limit: 10,
+                });
+                for (const sub of subs.data) {
+                  await stripe.subscriptions.cancel(sub.id);
+                  console.log("Canceled active subscription:", sub.id);
+                }
+                // Also cancel trialing subscriptions
+                const trialSubs = await stripe.subscriptions.list({
+                  customer: wsData.stripe_customer_id,
+                  status: "trialing",
+                  limit: 10,
+                });
+                for (const sub of trialSubs.data) {
+                  await stripe.subscriptions.cancel(sub.id);
+                  console.log("Canceled trialing subscription:", sub.id);
+                }
+              } catch (e) {
+                console.warn("Failed to list/cancel customer subscriptions:", e);
+              }
+            }
+          } catch (e) {
+            console.warn("Stripe cleanup failed:", e);
+          }
+        }
+      }
+
+      // 2. Delete all dependent data in order
       const tables = [
-        "agent_followup_queue", "agent_executions", "agent_memories", "ai_agents",
+        "reactivation_log",
+        "agent_followup_queue", "agent_executions", "agent_memories", "agent_attachments", "ai_agents",
         "bot_execution_logs", "salesbots",
         "campaign_recipients", "campaigns",
         "lead_tag_assignments", "lead_proposals", "lead_sales", "lead_history", "leads",
         "funnel_stages", "funnels",
-        "whatsapp_messages", "whatsapp_instances",
+        "whatsapp_messages", "whatsapp_cloud_connections", "whatsapp_templates", "whatsapp_instances",
         "calendar_events", "google_calendar_tokens",
+        "emails", "email_accounts",
         "notification_preferences", "notification_settings",
         "scheduled_messages", "tag_rules", "lead_tags",
         "stage_automation_queue", "stage_automations",
         "meta_conversations", "meta_pages", "meta_accounts",
         "alert_log", "lead_packs",
-        "workspace_members",
+        "user_sessions", "webhook_message_log",
       ];
 
       for (const table of tables) {
         await supabaseAdmin.from(table).delete().eq("workspace_id", workspaceId);
       }
 
-      // Delete workspace itself
+      // 3. Get members before deleting membership
+      const { data: members } = await supabaseAdmin
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId);
+
+      const memberUserIds = (members || []).map((m: any) => m.user_id);
+
+      // Delete workspace members
+      await supabaseAdmin.from("workspace_members").delete().eq("workspace_id", workspaceId);
+
+      // Delete client invites linked to this workspace
+      await supabaseAdmin.from("client_invites").delete().eq("workspace_id", workspaceId);
+
+      // 4. Delete workspace itself
       const { error: delError } = await supabaseAdmin
         .from("workspaces")
         .delete()
         .eq("id", workspaceId);
 
       if (delError) throw delError;
+
+      // 5. Clean up orphaned users (only if they don't belong to other workspaces)
+      for (const uid of memberUserIds) {
+        const { count } = await supabaseAdmin
+          .from("workspace_members")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", uid);
+
+        if (count === 0) {
+          // No other workspace memberships — clean up user data
+          await supabaseAdmin.from("user_roles").delete().eq("user_id", uid);
+          await supabaseAdmin.from("user_profiles").delete().eq("user_id", uid);
+          // Delete auth user
+          try {
+            await supabaseAdmin.auth.admin.deleteUser(uid);
+            console.log("Deleted auth user:", uid);
+          } catch (e) {
+            console.warn("Failed to delete auth user:", uid, e);
+          }
+        }
+      }
 
       return new Response(
         JSON.stringify({ success: true }),
