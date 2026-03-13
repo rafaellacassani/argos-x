@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, ArrowRight, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,17 @@ import argosLogoDark from "@/assets/argos-logo-dark.png";
 export default function CadastroSucesso() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "";
+
+  // Fallback: disparar evento de conversão caso não tenha sido enviado na página anterior
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).fbq) {
+      (window as any).fbq('track', 'CompleteRegistration', {
+        content_name: 'Argos X Trial',
+        currency: 'BRL',
+        value: 0,
+      });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-white">
