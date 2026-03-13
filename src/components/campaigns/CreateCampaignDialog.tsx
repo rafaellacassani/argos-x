@@ -519,6 +519,18 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                   ))}
                 </div>
               </div>
+
+              {/* Include all WhatsApp contacts toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Incluir contatos do WhatsApp</p>
+                    <p className="text-xs text-muted-foreground">Enviar também para contatos que não são leads</p>
+                  </div>
+                </div>
+                <Switch checked={includeAllContacts} onCheckedChange={setIncludeAllContacts} />
+              </div>
             </div>
 
             {/* Estimate */}
