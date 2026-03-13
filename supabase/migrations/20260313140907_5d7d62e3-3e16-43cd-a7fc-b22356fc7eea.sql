@@ -1,0 +1,1 @@
+ALTER TABLE public.campaigns ADD COLUMN include_all_contacts boolean NOT NULL DEFAULT false;

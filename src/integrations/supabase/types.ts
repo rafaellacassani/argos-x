@@ -669,6 +669,7 @@ export type Database = {
           filter_stage_ids: Json | null
           filter_tag_ids: Json | null
           id: string
+          include_all_contacts: boolean
           instance_name: string
           instance_names: Json | null
           interval_seconds: number
@@ -699,6 +700,7 @@ export type Database = {
           filter_stage_ids?: Json | null
           filter_tag_ids?: Json | null
           id?: string
+          include_all_contacts?: boolean
           instance_name: string
           instance_names?: Json | null
           interval_seconds?: number
@@ -729,6 +731,7 @@ export type Database = {
           filter_stage_ids?: Json | null
           filter_tag_ids?: Json | null
           id?: string
+          include_all_contacts?: boolean
           instance_name?: string
           instance_names?: Json | null
           interval_seconds?: number
