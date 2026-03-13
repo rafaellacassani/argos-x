@@ -101,6 +101,13 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const [selectedCloudConnectionId, setSelectedCloudConnectionId] = useState<string>("");
 
+  // Audio recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
   const [customInterval, setCustomInterval] = useState(30);
