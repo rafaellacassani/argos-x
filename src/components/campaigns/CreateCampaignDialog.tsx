@@ -789,20 +789,49 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
-                {/* Attachment */}
+                {/* Attachment / Audio */}
                 <div>
-                  <Label>Anexo (opcional)</Label>
+                  <Label>Anexo ou Áudio (opcional)</Label>
                   {!attachmentUrl ? (
-                    <label className="mt-2 flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
-                      <Upload className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
-                      </span>
-                      <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading} />
-                    </label>
+                    <div className="mt-2 space-y-2">
+                      {/* File upload */}
+                      <label className="flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
+                        <Upload className="w-5 h-5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
+                        </span>
+                        <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading || isRecording} />
+                      </label>
+
+                      {/* Audio recording */}
+                      <div className="flex items-center gap-3">
+                        {!isRecording ? (
+                          <Button type="button" variant="outline" className="gap-2" onClick={startRecording} disabled={uploading}>
+                            <Mic className="w-4 h-4" />
+                            Gravar áudio
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5 flex-1">
+                            <div className="w-3 h-3 rounded-full bg-destructive animate-pulse" />
+                            <span className="text-sm font-medium text-destructive">
+                              Gravando... {Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}
+                            </span>
+                            <Button type="button" variant="destructive" size="sm" className="ml-auto gap-1" onClick={stopRecording}>
+                              <Square className="w-3 h-3" />
+                              Parar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <div className="mt-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/50">
-                      <span className="text-sm flex-1 truncate">{attachmentName}</span>
+                      {attachmentType === "audio" && attachmentUrl && (
+                        <audio src={attachmentUrl} controls className="h-8 flex-1" />
+                      )}
+                      {attachmentType !== "audio" && (
+                        <span className="text-sm flex-1 truncate">{attachmentName}</span>
+                      )}
                       <Badge variant="secondary">{attachmentType}</Badge>
                       <Button variant="ghost" size="icon" onClick={removeAttachment}>
                         <X className="w-4 h-4" />
