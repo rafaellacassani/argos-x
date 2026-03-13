@@ -99,6 +99,7 @@ export function useCampaigns() {
         last_instance_index: (c as any).last_instance_index || 0,
         template_id: c.template_id || null,
         template_variables: (c.template_variables as { key: string; value: string }[]) || [],
+        include_all_contacts: (c as any).include_all_contacts || false,
       })));
     } catch (err) {
       console.error('Error fetching campaigns:', err);
