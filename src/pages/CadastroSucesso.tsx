@@ -10,16 +10,8 @@ export default function CadastroSucesso() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "";
 
-  // Fallback: disparar evento de conversão caso não tenha sido enviado na página anterior
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).fbq) {
-      (window as any).fbq('track', 'CompleteRegistration', {
-        content_name: 'Argos X Trial',
-        currency: 'BRL',
-        value: 0,
-      });
-    }
-  }, []);
+  // Fallback removido — evento CompleteRegistration agora é enviado via CAPI server-side
+  // e via browser pixel na página de cadastro com deduplicação por event_id
 
   return (
     <div className="min-h-screen bg-white">

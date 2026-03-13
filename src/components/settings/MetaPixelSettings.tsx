@@ -141,8 +141,11 @@ export function MetaPixelSettings() {
               <h4 className="text-sm font-medium mb-2">Eventos rastreados</h4>
               <ul className="text-sm text-muted-foreground space-y-1">
                 <li>• <strong>PageView</strong> — todas as páginas autenticadas</li>
-                <li>• <strong>CompleteRegistration</strong> — página de cadastro</li>
+                <li>• <strong>CompleteRegistration</strong> — página de cadastro (browser + server-side)</li>
               </ul>
+              {(workspace as any)?.meta_conversions_token && (
+                <p className="text-xs text-success mt-2">✅ API de Conversões configurada (envio duplo ativo)</p>
+              )}
             </div>
           )}
         </CardContent>

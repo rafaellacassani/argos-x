@@ -56,6 +56,9 @@ export default function Cadastro() {
 
     setLoading(true);
     try {
+      // Gerar event_id para deduplicação browser/server
+      const eventId = `cr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/public-signup`,
@@ -68,6 +71,8 @@ export default function Cadastro() {
             email: form.email,
             companyName: form.companyName,
             password: form.password,
+            eventId,
+            sourceUrl: window.location.href,
           }),
         }
       );
@@ -77,14 +82,30 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao criar conta");
       }
 
-      // Disparar evento de conversão do Meta Pixel
-      if (typeof window !== 'undefined' && (window as any).fbq) {
-        (window as any).fbq('track', 'CompleteRegistration', {
-          content_name: 'Argos X Trial',
-          currency: 'BRL',
+      // Inicializar fbq e disparar evento com pixel_id retornado pelo servidor
+      if (data.pixelId) {
+        const w = window as any;
+        if (!w.fbq) {
+          const n: any = (w.fbq = function () {
+            n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+          });
+          if (!w._fbq) w._fbq = n;
+          n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+          const script = document.createElement("script");
+          script.async = true;
+          script.src = "https://connect.facebook.net/en_US/fbevents.js";
+          document.head.appendChild(script);
+        }
+        w.fbq("init", data.pixelId);
+        w.fbq("track", "CompleteRegistration", {
+          content_name: "Argos X Trial",
+          currency: "BRL",
           value: 0,
-        });
+        }, { eventID: eventId });
       }
+
+      // Aguardar beacon HTTP ser enviado antes de navegar
+      await new Promise((r) => setTimeout(r, 600));
 
       navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
     } catch (err: any) {
