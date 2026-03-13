@@ -1,35 +1,69 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Plano: Pixel + API de Conversões do Meta
 
-## O que será feito
+### Diagnóstico
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+O Pixel Helper mostra `PageView` ativo, mas o `CompleteRegistration` pode não estar aparecendo no Events Manager por dois motivos:
+1. **Timing no browser**: o `fbq('track', 'CompleteRegistration')` dispara e imediatamente o `navigate()` redireciona para `/cadastro/sucesso`, podendo cancelar a requisição HTTP antes de completar
+2. **Sem envio server-side**: o Meta prioriza eventos enviados via Conversions API e pode demorar até 20min para exibir eventos apenas client-side
 
-## Detalhes técnicos
+### Solução
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+Implementar **duplo envio** (browser + server-side), o que é a prática recomendada pelo Meta.
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+---
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+### 1. Corrigir timing do evento client-side
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+**`src/pages/Cadastro.tsx`**: Aguardar um pequeno delay após disparar o `fbq` antes de navegar, garantindo que o beacon HTTP seja enviado.
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+```typescript
+// Após signup bem-sucedido:
+window.fbq?.('track', 'CompleteRegistration', { ... });
+// Aguardar 500ms para o beacon completar
+await new Promise(r => setTimeout(r, 500));
+navigate(`/cadastro/sucesso?email=...`);
+```
+
+### 2. Adicionar campo para Access Token na UI
+
+**`src/components/settings/MetaPixelSettings.tsx`**: Adicionar um segundo campo para o **Access Token** da API de Conversões, que será salvo no banco.
+
+**DB migration**: Adicionar coluna `meta_conversions_token` na tabela `workspaces`.
+
+### 3. Enviar evento server-side na edge function `public-signup`
+
+**`supabase/functions/public-signup/index.ts`**: Após criar o workspace, buscar `meta_pixel_id` e `meta_conversions_token` do workspace admin (o workspace do Argos X interno) e enviar o evento `CompleteRegistration` via Facebook Conversions API:
+
+```
+POST https://graph.facebook.com/v21.0/{PIXEL_ID}/events
+```
+
+Payload com:
+- `event_name`: `CompleteRegistration`
+- `action_source`: `website`
+- `user_data`: email (hashed SHA-256), phone (hashed SHA-256)
+- `event_source_url`: URL do cadastro
+- `event_id`: ID único para deduplicação com o evento client-side
+
+### 4. Deduplicação browser/server
+
+Gerar um `event_id` único no frontend e enviá-lo tanto no `fbq` quanto no body do `public-signup`. O Meta deduplica automaticamente eventos com o mesmo `event_id` + `event_name`.
+
+---
+
+### Arquivos alterados
+
+| Arquivo | Mudança |
+|---------|---------|
+| DB migration | `meta_conversions_token text` em `workspaces` |
+| `MetaPixelSettings.tsx` | Campo para Access Token + instruções |
+| `Cadastro.tsx` | Gerar `event_id`, delay antes de navigate, enviar `event_id` no body |
+| `public-signup/index.ts` | Enviar evento via Conversions API com deduplicação |
+| `CadastroSucesso.tsx` | Usar mesmo `event_id` passado via query param |
+
+### Pré-requisito do usuário
+
+Você precisará gerar um **Access Token** no Meta Events Manager (Dataset Settings > Conversions API > Generate Token) e colá-lo na aba Meta Pixel em Integrações.
 
