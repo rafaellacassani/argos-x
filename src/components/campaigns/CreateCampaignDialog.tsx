@@ -352,11 +352,14 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     try {
       const primaryInstance = useTemplate ? "" : (roundRobinEnabled ? selectedInstances[0] : instanceName);
       const selectedTemplate = useTemplate ? templates.find(t => t.id === selectedTemplateId) : null;
+      const finalMessageText = useTemplate
+        ? (selectedTemplate?.template_name || '')
+        : (messageText.trim() || (attachmentUrl ? '📎 Áudio' : ''));
       const data: CreateCampaignData = {
         name,
         instance_name: primaryInstance,
         instance_names: roundRobinEnabled ? selectedInstances : [],
-        message_text: useTemplate ? (selectedTemplate?.template_name || '') : messageText,
+        message_text: finalMessageText,
         attachment_url: useTemplate ? null : attachmentUrl,
         attachment_type: useTemplate ? null : attachmentType,
         filter_tag_ids: filterTagIds,
@@ -369,6 +372,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         scheduled_at: whenToStart === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         template_id: useTemplate ? selectedTemplateId : undefined,
         template_variables: useTemplate ? Object.entries(templateVariables).map(([key, value]) => ({ key, value })) : undefined,
+        include_all_contacts: includeAllContacts,
       };
 
       const campaign = await createCampaign(data);
