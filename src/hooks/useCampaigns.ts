@@ -162,6 +162,7 @@ export function useCampaigns() {
           status: 'draft',
           template_id: data.template_id || null,
           template_variables: data.template_variables || [],
+          include_all_contacts: data.include_all_contacts || false,
         })
         .select()
         .single();
