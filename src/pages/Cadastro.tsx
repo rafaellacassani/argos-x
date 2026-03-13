@@ -108,7 +108,7 @@ export default function Cadastro() {
             companyName: form.companyName,
             password: form.password,
             eventId,
-            sourceUrl: window.location.href,
+            sourceUrl: PRODUCTION_URL,
           }),
         }
       );
