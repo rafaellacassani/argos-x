@@ -611,7 +611,7 @@ export type Database = {
           campaign_id: string
           error_message: string | null
           id: string
-          lead_id: string
+          lead_id: string | null
           personalized_message: string | null
           phone: string
           position: number
@@ -622,7 +622,7 @@ export type Database = {
           campaign_id: string
           error_message?: string | null
           id?: string
-          lead_id: string
+          lead_id?: string | null
           personalized_message?: string | null
           phone: string
           position?: number
@@ -633,7 +633,7 @@ export type Database = {
           campaign_id?: string
           error_message?: string | null
           id?: string
-          lead_id?: string
+          lead_id?: string | null
           personalized_message?: string | null
           phone?: string
           position?: number

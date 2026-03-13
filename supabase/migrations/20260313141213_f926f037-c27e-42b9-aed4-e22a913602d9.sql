@@ -1,0 +1,1 @@
+ALTER TABLE public.campaign_recipients ALTER COLUMN lead_id DROP NOT NULL;
