@@ -13,13 +13,14 @@ export function MetaPixelSettings() {
   const { workspace, workspaceId, refreshWorkspace } = useWorkspace();
   const { toast } = useToast();
   const [pixelId, setPixelId] = useState("");
+  const [conversionsToken, setConversionsToken] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const currentPixelId = (workspace as any)?.meta_pixel_id;
-    if (currentPixelId) {
-      setPixelId(currentPixelId);
-    }
+    const currentToken = (workspace as any)?.meta_conversions_token;
+    if (currentPixelId) setPixelId(currentPixelId);
+    if (currentToken) setConversionsToken(currentToken);
   }, [workspace]);
 
   const handleSave = async () => {
