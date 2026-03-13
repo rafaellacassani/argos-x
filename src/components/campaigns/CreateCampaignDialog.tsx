@@ -27,6 +27,9 @@ import {
   Calendar,
   Save,
   FileText,
+  Mic,
+  Square,
+  Trash2,
 } from "lucide-react";
 import { Shuffle } from "lucide-react";
 
