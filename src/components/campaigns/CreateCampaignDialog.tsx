@@ -260,6 +260,57 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setAttachmentName(null);
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setRecordingTime(0);
+
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
+        if (blob.size < 100) return;
+
+        setUploading(true);
+        try {
+          const path = `${workspaceId}/${Date.now()}.ogg`;
+          const { error } = await supabase.storage.from("campaign-attachments").upload(path, blob, { contentType: 'audio/ogg' });
+          if (error) throw error;
+          const { data: urlData } = supabase.storage.from("campaign-attachments").getPublicUrl(path);
+          setAttachmentUrl(urlData.publicUrl);
+          setAttachmentType("audio");
+          setAttachmentName("audio-gravado.ogg");
+        } catch (err) {
+          console.error("Audio upload error:", err);
+          toast.error("Erro ao salvar áudio");
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      recordingTimerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
+    } catch (err) {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
   const toggleDay = (day: number) => {
     setScheduleDays(prev =>
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
