@@ -75,6 +75,7 @@ const App = () => (
         <BrowserRouter>
           <AuthProvider>
             <WorkspaceProvider>
+              <MetaPixelLoader />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public pages */}
