@@ -23,7 +23,9 @@ import {
   Lock,
   Unplug,
   Wrench,
+  BarChart3,
 } from "lucide-react";
+import { MetaPixelSettings } from "@/components/settings/MetaPixelSettings";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -514,6 +516,10 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="meta-pixel">
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Meta Pixel
+          </TabsTrigger>
           <TabsTrigger value="general" disabled={isSeller}>
             Geral
             {isSeller && <Lock className="w-3 h-3 ml-1" />}
@@ -956,6 +962,11 @@ export default function Settings() {
               </li>
             </ul>
           </motion.div>
+        </TabsContent>
+
+        {/* Meta Pixel Tab */}
+        <TabsContent value="meta-pixel" className="space-y-6">
+          <MetaPixelSettings />
         </TabsContent>
 
         {/* General Tab */}
