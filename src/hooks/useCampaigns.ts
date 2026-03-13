@@ -70,6 +70,7 @@ export interface CreateCampaignData {
   scheduled_at?: string | null;
   template_id?: string;
   template_variables?: { key: string; value: string }[];
+  include_all_contacts?: boolean;
 }
 
 export function useCampaigns() {
