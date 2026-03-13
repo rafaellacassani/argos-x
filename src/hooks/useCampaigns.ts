@@ -32,6 +32,7 @@ export interface Campaign {
   updated_at: string;
   template_id: string | null;
   template_variables: { key: string; value: string }[];
+  include_all_contacts: boolean;
 }
 
 export interface CampaignRecipient {
@@ -69,6 +70,7 @@ export interface CreateCampaignData {
   scheduled_at?: string | null;
   template_id?: string;
   template_variables?: { key: string; value: string }[];
+  include_all_contacts?: boolean;
 }
 
 export function useCampaigns() {
@@ -97,6 +99,7 @@ export function useCampaigns() {
         last_instance_index: (c as any).last_instance_index || 0,
         template_id: c.template_id || null,
         template_variables: (c.template_variables as { key: string; value: string }[]) || [],
+        include_all_contacts: (c as any).include_all_contacts || false,
       })));
     } catch (err) {
       console.error('Error fetching campaigns:', err);
@@ -159,6 +162,7 @@ export function useCampaigns() {
           status: 'draft',
           template_id: data.template_id || null,
           template_variables: data.template_variables || [],
+          include_all_contacts: data.include_all_contacts || false,
         })
         .select()
         .single();

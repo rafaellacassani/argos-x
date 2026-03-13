@@ -27,6 +27,9 @@ import {
   Calendar,
   Save,
   FileText,
+  Mic,
+  Square,
+  Trash2,
 } from "lucide-react";
 import { Shuffle } from "lucide-react";
 
@@ -79,6 +82,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
   const [filterStageIds, setFilterStageIds] = useState<string[]>([]);
   const [filterResponsibleIds, setFilterResponsibleIds] = useState<string[]>([]);
+  const [includeAllContacts, setIncludeAllContacts] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [estimating, setEstimating] = useState(false);
 
@@ -96,6 +100,13 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateVariables, setTemplateVariables] = useState<Record<string, string>>({});
   const [selectedCloudConnectionId, setSelectedCloudConnectionId] = useState<string>("");
+
+  // Audio recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Step 3
   const [intervalOption, setIntervalOption] = useState(30);
@@ -249,6 +260,57 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setAttachmentName(null);
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+        setRecordingTime(0);
+
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/ogg' });
+        if (blob.size < 100) return;
+
+        setUploading(true);
+        try {
+          const path = `${workspaceId}/${Date.now()}.ogg`;
+          const { error } = await supabase.storage.from("campaign-attachments").upload(path, blob, { contentType: 'audio/ogg' });
+          if (error) throw error;
+          const { data: urlData } = supabase.storage.from("campaign-attachments").getPublicUrl(path);
+          setAttachmentUrl(urlData.publicUrl);
+          setAttachmentType("audio");
+          setAttachmentName("audio-gravado.ogg");
+        } catch (err) {
+          console.error("Audio upload error:", err);
+          toast.error("Erro ao salvar áudio");
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      recordingTimerRef.current = setInterval(() => setRecordingTime(t => t + 1), 1000);
+    } catch (err) {
+      toast.error("Não foi possível acessar o microfone");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
   const toggleDay = (day: number) => {
     setScheduleDays(prev =>
       prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
@@ -279,7 +341,8 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         return selectedTemplateId.length > 0 && selectedCloudConnectionId.length > 0;
       }
       const hasInstance = roundRobinEnabled ? selectedInstances.length >= 2 : instanceName.length > 0;
-      return hasInstance && messageText.trim().length > 0;
+      const hasContent = messageText.trim().length > 0 || !!attachmentUrl;
+      return hasInstance && hasContent;
     }
     return true;
   };
@@ -289,11 +352,14 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     try {
       const primaryInstance = useTemplate ? "" : (roundRobinEnabled ? selectedInstances[0] : instanceName);
       const selectedTemplate = useTemplate ? templates.find(t => t.id === selectedTemplateId) : null;
+      const finalMessageText = useTemplate
+        ? (selectedTemplate?.template_name || '')
+        : (messageText.trim() || (attachmentUrl ? '📎 Áudio' : ''));
       const data: CreateCampaignData = {
         name,
         instance_name: primaryInstance,
         instance_names: roundRobinEnabled ? selectedInstances : [],
-        message_text: useTemplate ? (selectedTemplate?.template_name || '') : messageText,
+        message_text: finalMessageText,
         attachment_url: useTemplate ? null : attachmentUrl,
         attachment_type: useTemplate ? null : attachmentType,
         filter_tag_ids: filterTagIds,
@@ -306,6 +372,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
         scheduled_at: whenToStart === "scheduled" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
         template_id: useTemplate ? selectedTemplateId : undefined,
         template_variables: useTemplate ? Object.entries(templateVariables).map(([key, value]) => ({ key, value })) : undefined,
+        include_all_contacts: includeAllContacts,
       };
 
       const campaign = await createCampaign(data);
@@ -334,6 +401,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setFilterTagIds([]);
     setFilterStageIds([]);
     setFilterResponsibleIds([]);
+    setIncludeAllContacts(false);
     setInstanceName("");
     setSelectedInstances([]);
     setRoundRobinEnabled(false);
@@ -341,6 +409,9 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
     setAttachmentUrl(null);
     setAttachmentType(null);
     setAttachmentName(null);
+    setIsRecording(false);
+    setRecordingTime(0);
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     setIntervalOption(30);
     setCustomInterval(30);
     setRestrictTime(true);
@@ -447,6 +518,18 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                     </Badge>
                   ))}
                 </div>
+              </div>
+
+              {/* Include all WhatsApp contacts toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-secondary" />
+                  <div>
+                    <p className="text-sm font-medium">Incluir contatos do WhatsApp</p>
+                    <p className="text-xs text-muted-foreground">Enviar também para contatos que não são leads</p>
+                  </div>
+                </div>
+                <Switch checked={includeAllContacts} onCheckedChange={setIncludeAllContacts} />
               </div>
             </div>
 
@@ -672,7 +755,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
             ) : (
               <>
                 <div>
-                  <Label>Mensagem *</Label>
+                  <Label>Mensagem <span className="text-muted-foreground font-normal">(opcional se tiver áudio)</span></Label>
                   {/* Shortcode chips */}
                   <div className="flex flex-wrap gap-1 mt-2 mb-2">
                     {SHORTCODES.map((sc) => (
@@ -706,20 +789,49 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
-                {/* Attachment */}
+                {/* Attachment / Audio */}
                 <div>
-                  <Label>Anexo (opcional)</Label>
+                  <Label>Anexo ou Áudio (opcional)</Label>
                   {!attachmentUrl ? (
-                    <label className="mt-2 flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
-                      <Upload className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
-                      </span>
-                      <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading} />
-                    </label>
+                    <div className="mt-2 space-y-2">
+                      {/* File upload */}
+                      <label className="flex items-center gap-2 p-4 border-2 border-dashed rounded-lg cursor-pointer hover:border-secondary transition-colors">
+                        <Upload className="w-5 h-5 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground">
+                          {uploading ? "Enviando..." : "Clique para adicionar arquivo (JPG, PNG, PDF, MP4 — máx 16MB)"}
+                        </span>
+                        <input type="file" className="hidden" accept="image/*,application/pdf,video/*,audio/*" onChange={handleFileUpload} disabled={uploading || isRecording} />
+                      </label>
+
+                      {/* Audio recording */}
+                      <div className="flex items-center gap-3">
+                        {!isRecording ? (
+                          <Button type="button" variant="outline" className="gap-2" onClick={startRecording} disabled={uploading}>
+                            <Mic className="w-4 h-4" />
+                            Gravar áudio
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5 flex-1">
+                            <div className="w-3 h-3 rounded-full bg-destructive animate-pulse" />
+                            <span className="text-sm font-medium text-destructive">
+                              Gravando... {Math.floor(recordingTime / 60).toString().padStart(2, '0')}:{(recordingTime % 60).toString().padStart(2, '0')}
+                            </span>
+                            <Button type="button" variant="destructive" size="sm" className="ml-auto gap-1" onClick={stopRecording}>
+                              <Square className="w-3 h-3" />
+                              Parar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <div className="mt-2 flex items-center gap-3 p-3 rounded-lg border bg-muted/50">
-                      <span className="text-sm flex-1 truncate">{attachmentName}</span>
+                      {attachmentType === "audio" && attachmentUrl && (
+                        <audio src={attachmentUrl} controls className="h-8 flex-1" />
+                      )}
+                      {attachmentType !== "audio" && (
+                        <span className="text-sm flex-1 truncate">{attachmentName}</span>
+                      )}
                       <Badge variant="secondary">{attachmentType}</Badge>
                       <Button variant="ghost" size="icon" onClick={removeAttachment}>
                         <X className="w-4 h-4" />

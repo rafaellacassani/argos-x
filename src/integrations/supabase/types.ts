@@ -611,7 +611,7 @@ export type Database = {
           campaign_id: string
           error_message: string | null
           id: string
-          lead_id: string
+          lead_id: string | null
           personalized_message: string | null
           phone: string
           position: number
@@ -622,7 +622,7 @@ export type Database = {
           campaign_id: string
           error_message?: string | null
           id?: string
-          lead_id: string
+          lead_id?: string | null
           personalized_message?: string | null
           phone: string
           position?: number
@@ -633,7 +633,7 @@ export type Database = {
           campaign_id?: string
           error_message?: string | null
           id?: string
-          lead_id?: string
+          lead_id?: string | null
           personalized_message?: string | null
           phone?: string
           position?: number
@@ -669,6 +669,7 @@ export type Database = {
           filter_stage_ids: Json | null
           filter_tag_ids: Json | null
           id: string
+          include_all_contacts: boolean
           instance_name: string
           instance_names: Json | null
           interval_seconds: number
@@ -699,6 +700,7 @@ export type Database = {
           filter_stage_ids?: Json | null
           filter_tag_ids?: Json | null
           id?: string
+          include_all_contacts?: boolean
           instance_name: string
           instance_names?: Json | null
           interval_seconds?: number
@@ -729,6 +731,7 @@ export type Database = {
           filter_stage_ids?: Json | null
           filter_tag_ids?: Json | null
           id?: string
+          include_all_contacts?: boolean
           instance_name?: string
           instance_names?: Json | null
           interval_seconds?: number
