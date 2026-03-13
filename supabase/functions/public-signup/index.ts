@@ -215,7 +215,7 @@ async function sendMetaConversionEvent(
           event_name: "CompleteRegistration",
           event_time: Math.floor(Date.now() / 1000),
           event_id: params.eventId,
-          event_source_url: params.sourceUrl || "https://argosx.com.br/cadastro",
+          event_source_url: "https://argosx.com.br/cadastro",
           action_source: "website",
           user_data: {
             em: [emailHash],
