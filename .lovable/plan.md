@@ -1,35 +1,47 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Integração Meta Pixel para rastreamento de conversão no cadastro
 
-## O que será feito
+### Como funciona
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+O Meta Pixel é um snippet JavaScript que você adiciona ao site. Ele dispara eventos que o Meta Ads usa para medir conversões. No seu caso:
 
-## Detalhes técnicos
+1. O Pixel carrega em todas as páginas (PageView automático)
+2. Quando alguém completa o cadastro com sucesso, disparamos o evento `CompleteRegistration`
+3. No Meta Ads Manager, você configura a campanha para otimizar por esse evento
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+### O que precisa ser feito
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+**Pré-requisito**: Você precisa do **ID do Pixel** do Meta. Ele fica em Meta Business Suite → Events Manager → Data Sources. É um número público (ex: `123456789012345`), então pode ficar no código sem problema.
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+### Implementação
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+**Arquivo 1: `index.html`**
+- Adicionar o script base do Meta Pixel no `<head>`, com o ID do pixel
+- Chamar `fbq('init', 'SEU_PIXEL_ID')` e `fbq('track', 'PageView')`
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+**Arquivo 2: `src/pages/Cadastro.tsx`**
+- Após o cadastro bem-sucedido (linha 80, antes do `navigate`), disparar:
+  ```js
+  window.fbq?.('track', 'CompleteRegistration', {
+    content_name: 'Argos X Trial',
+    currency: 'BRL',
+    value: 0
+  });
+  ```
+
+**Arquivo 3: `src/pages/CadastroSucesso.tsx`** (opcional, reforço)
+- Disparar o mesmo evento no `useEffect` de montagem como fallback
+
+### Configuração no Meta Ads
+
+Após o deploy, você precisará:
+1. Ir no **Events Manager** do Meta e copiar o ID do Pixel
+2. Me passar o ID para eu colocar no código
+3. Criar a campanha no Meta Ads com destino para `https://argos-x.lovable.app/cadastro`
+4. Na configuração de conversão, selecionar o evento `CompleteRegistration`
+
+### Próximo passo
+
+Me passe o **ID do seu Meta Pixel** para eu implementar. É um número que fica no Events Manager do Meta Business Suite.
 
