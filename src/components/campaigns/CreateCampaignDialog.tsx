@@ -755,7 +755,7 @@ export default function CreateCampaignDialog({ open, onOpenChange }: Props) {
             ) : (
               <>
                 <div>
-                  <Label>Mensagem *</Label>
+                  <Label>Mensagem <span className="text-muted-foreground font-normal">(opcional se tiver áudio)</span></Label>
                   {/* Shortcode chips */}
                   <div className="flex flex-wrap gap-1 mt-2 mb-2">
                     {SHORTCODES.map((sc) => (
