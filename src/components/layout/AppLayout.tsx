@@ -87,6 +87,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         initialStep={workspace?.onboarding_step || 0}
         onComplete={handleTourComplete}
       />
+      <SupportChatWidget />
     </div>
   );
 }

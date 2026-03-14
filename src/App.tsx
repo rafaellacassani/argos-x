@@ -135,6 +135,7 @@ const App = () => (
                             <Route path="/treinamento" element={<Treinamento />} />
                             <Route path="/agent-training" element={<AgentTrainingDoc />} />
                             <Route path="/tour-guiado" element={<TourGuiado />} />
+                            <Route path="/suporte" element={<SupportAdmin />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
