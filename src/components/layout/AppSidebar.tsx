@@ -24,6 +24,7 @@ import {
   BookOpen,
   Map,
   X,
+  Headset,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
