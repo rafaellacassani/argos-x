@@ -2170,6 +2170,98 @@ export type Database = {
           },
         ]
       }
+      support_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          sender_id: string | null
+          sender_type: string
+          ticket_id: string
+          workspace_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          sender_type?: string
+          ticket_id: string
+          workspace_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          sender_type?: string
+          ticket_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          id: string
+          priority: string
+          resolved_at: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          priority?: string
+          resolved_at?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          priority?: string
+          resolved_at?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tag_rules: {
         Row: {
           created_at: string
@@ -2626,6 +2718,8 @@ export type Database = {
           stripe_price_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string
+          support_whatsapp_instance: string | null
+          support_whatsapp_number: string | null
           trial_end: string | null
           user_limit: number | null
           whatsapp_limit: number | null
@@ -2654,6 +2748,8 @@ export type Database = {
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
+          support_whatsapp_instance?: string | null
+          support_whatsapp_number?: string | null
           trial_end?: string | null
           user_limit?: number | null
           whatsapp_limit?: number | null
@@ -2682,6 +2778,8 @@ export type Database = {
           stripe_price_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
+          support_whatsapp_instance?: string | null
+          support_whatsapp_number?: string | null
           trial_end?: string | null
           user_limit?: number | null
           whatsapp_limit?: number | null
