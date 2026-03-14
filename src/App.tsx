@@ -46,6 +46,7 @@ const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
 const TourGuiado = lazy(() => import("./pages/TourGuiado"));
 const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
+const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
