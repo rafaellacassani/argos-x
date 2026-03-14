@@ -8,6 +8,7 @@ import { WorkspaceBlockedScreen } from "./WorkspaceBlockedScreen";
 import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
 import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
+import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
 
@@ -86,6 +87,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         initialStep={workspace?.onboarding_step || 0}
         onComplete={handleTourComplete}
       />
+      <SupportChatWidget />
     </div>
   );
 }

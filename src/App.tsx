@@ -46,6 +46,7 @@ const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
 const TourGuiado = lazy(() => import("./pages/TourGuiado"));
 const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
+const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -134,6 +135,7 @@ const App = () => (
                             <Route path="/treinamento" element={<Treinamento />} />
                             <Route path="/agent-training" element={<AgentTrainingDoc />} />
                             <Route path="/tour-guiado" element={<TourGuiado />} />
+                            <Route path="/suporte" element={<SupportAdmin />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
