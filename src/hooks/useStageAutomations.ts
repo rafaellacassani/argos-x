@@ -20,6 +20,7 @@ export interface StageAutomation {
 
 export function useStageAutomations() {
   const { workspaceId } = useWorkspace();
+  const { executeFlow } = useBotFlowExecution();
   const [automations, setAutomations] = useState<StageAutomation[]>([]);
   const [loading, setLoading] = useState(false);
 
