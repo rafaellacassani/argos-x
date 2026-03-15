@@ -84,6 +84,8 @@ export default function SalesBotBuilder() {
   const [showPreview, setShowPreview] = useState(false);
   const [templateName, setTemplateName] = useState<string | null>(null);
   const [whatsappInstances, setWhatsappInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [funnels, setFunnels] = useState<Array<{ id: string; name: string }>>([]);
+  const [funnelStages, setFunnelStages] = useState<Array<{ id: string; name: string; funnel_id: string }>>([]);
 
   const isEditing = !!id;
 
@@ -108,7 +110,7 @@ export default function SalesBotBuilder() {
     }
   }, []);
 
-  // Fetch WhatsApp instances
+  // Fetch WhatsApp instances + funnels/stages
   useEffect(() => {
     if (!workspaceId) return;
     supabase
@@ -118,6 +120,22 @@ export default function SalesBotBuilder() {
       .eq('instance_type', 'commercial')
       .then(({ data }) => {
         setWhatsappInstances(data || []);
+      });
+    supabase
+      .from('funnels')
+      .select('id, name')
+      .eq('workspace_id', workspaceId)
+      .order('name')
+      .then(({ data }) => {
+        setFunnels(data || []);
+      });
+    supabase
+      .from('funnel_stages')
+      .select('id, name, funnel_id')
+      .eq('workspace_id', workspaceId)
+      .order('position')
+      .then(({ data }) => {
+        setFunnelStages(data || []);
       });
   }, [workspaceId]);
 
@@ -300,6 +318,41 @@ export default function SalesBotBuilder() {
                     <Label>Expressão Cron</Label>
                     <Input placeholder="0 9 * * *" value={(triggerConfig.cron as string) || ''} onChange={(e) => { setTriggerConfig({ ...triggerConfig, cron: e.target.value }); setHasChanges(true); }} />
                     <p className="text-xs text-muted-foreground">Ex: "0 9 * * *" = todo dia às 9h</p>
+                  </div>
+                )}
+
+                {triggerType === 'stage_change' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Funil</Label>
+                      <Select
+                        value={(triggerConfig.funnel_id as string) || ''}
+                        onValueChange={(value) => { setTriggerConfig({ ...triggerConfig, funnel_id: value, stage_id: '' }); setHasChanges(true); }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Selecione o funil" /></SelectTrigger>
+                        <SelectContent>
+                          {funnels.map(f => (<SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {triggerConfig.funnel_id && (
+                      <div className="space-y-2">
+                        <Label>Etapa de destino</Label>
+                        <Select
+                          value={(triggerConfig.stage_id as string) || '__any__'}
+                          onValueChange={(value) => { setTriggerConfig({ ...triggerConfig, stage_id: value === '__any__' ? '' : value }); setHasChanges(true); }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__any__">Qualquer etapa</SelectItem>
+                            {funnelStages
+                              .filter(s => s.funnel_id === triggerConfig.funnel_id)
+                              .map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">O bot será executado quando um lead entrar nesta etapa</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
