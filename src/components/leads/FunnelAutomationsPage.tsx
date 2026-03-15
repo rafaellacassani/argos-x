@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock } from 'lucide-react';
+import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock, Play, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -80,8 +80,10 @@ export function FunnelAutomationsPage({
 }: FunnelAutomationsPageProps) {
   const {
     fetchAutomations, createAutomation, updateAutomation,
-    deleteAutomation, toggleAutomation,
+    deleteAutomation, toggleAutomation, executeStageAutomations,
   } = useStageAutomations();
+
+  const [executingAll, setExecutingAll] = useState(false);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
   const [loadingStages, setLoadingStages] = useState(false);
@@ -363,15 +365,10 @@ export function FunnelAutomationsPage({
                 </SelectContent>
               </Select>
               {form.trigger === 'after_time' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Após</span>
-                  <Input
-                    type="number" min={1} className="w-20"
-                    value={form.trigger_delay_hours}
-                    onChange={e => setForm(p => ({ ...p, trigger_delay_hours: parseInt(e.target.value) || 1 }))}
-                  />
-                  <span className="text-sm text-muted-foreground">horas</span>
-                </div>
+                <DelayInput
+                  hours={form.trigger_delay_hours}
+                  onChange={(h) => setForm(p => ({ ...p, trigger_delay_hours: h }))}
+                />
               )}
             </div>
 
@@ -479,6 +476,43 @@ export function FunnelAutomationsPage({
               </CollapsibleContent>
             </Collapsible>
 
+            {/* Execute for all in stage */}
+            {editingId !== 'new' && editingStageId && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
+                disabled={executingAll}
+                onClick={async () => {
+                  if (!editingStageId) return;
+                  setExecutingAll(true);
+                  try {
+                    const { data: leads } = await supabase
+                      .from('leads')
+                      .select('id')
+                      .eq('stage_id', editingStageId);
+                    if (leads && leads.length > 0) {
+                      for (const lead of leads) {
+                        await executeStageAutomations(editingStageId, lead.id, 'on_enter');
+                      }
+                      const { toast } = await import('sonner');
+                      toast.success(`Automação executada para ${leads.length} lead(s)!`);
+                    } else {
+                      const { toast } = await import('sonner');
+                      toast.info('Nenhum lead nesta etapa.');
+                    }
+                  } catch {
+                    const { toast } = await import('sonner');
+                    toast.error('Erro ao executar em massa');
+                  } finally {
+                    setExecutingAll(false);
+                  }
+                }}
+              >
+                {executingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Executar agora para todos na etapa
+              </Button>
+            )}
+
             {/* Actions */}
             <div className="flex gap-2 pt-2">
               <Button className="flex-1" onClick={handleSave}>Salvar</Button>
@@ -511,8 +545,10 @@ function ActionConfigForm({
           <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
             <SelectTrigger><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
             <SelectContent>
-              {bots.filter(b => b.is_active).map(b => (
-                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              {bots.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}{!b.is_active && ' (inativo)'}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -603,4 +639,36 @@ function ActionConfigForm({
     default:
       return <p className="text-sm text-muted-foreground">Selecione uma ação</p>;
   }
+}
+
+// Delay input with hours/days unit
+function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) => void }) {
+  const isDays = hours >= 24 && hours % 24 === 0;
+  const [unit, setUnit] = useState<'hours' | 'days'>(isDays ? 'days' : 'hours');
+  const displayValue = unit === 'days' ? Math.max(1, Math.floor(hours / 24)) : (hours || 1);
+
+  const handleValueChange = (val: number, u: 'hours' | 'days') => {
+    onChange(u === 'days' ? val * 24 : val);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">Após</span>
+      <Input
+        type="number" min={1} className="w-20"
+        value={displayValue}
+        onChange={e => handleValueChange(parseInt(e.target.value) || 1, unit)}
+      />
+      <Select value={unit} onValueChange={(v: 'hours' | 'days') => {
+        setUnit(v);
+        handleValueChange(displayValue, v);
+      }}>
+        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="hours">horas</SelectItem>
+          <SelectItem value="days">dias</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }

@@ -282,17 +282,10 @@ export function StageAutomationsDialog({
                       </SelectContent>
                     </Select>
                     {form.trigger === 'after_time' && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Após</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          className="w-20"
-                          value={form.trigger_delay_hours}
-                          onChange={e => setForm(p => ({ ...p, trigger_delay_hours: parseInt(e.target.value) || 1 }))}
-                        />
-                        <span className="text-sm text-muted-foreground">horas</span>
-                      </div>
+                      <DelayInput
+                        hours={form.trigger_delay_hours}
+                        onChange={(h) => setForm(p => ({ ...p, trigger_delay_hours: h }))}
+                      />
                     )}
                   </div>
 
@@ -441,8 +434,10 @@ function ActionConfigForm({
           <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
             <SelectTrigger><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
             <SelectContent>
-              {bots.filter(b => b.is_active).map(b => (
-                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              {bots.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}{!b.is_active && ' (inativo)'}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -566,4 +561,36 @@ function ActionConfigForm({
     default:
       return <p className="text-sm text-muted-foreground">Selecione uma ação</p>;
   }
+}
+
+// Delay input with hours/days unit
+function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) => void }) {
+  const isDays = hours >= 24 && hours % 24 === 0;
+  const [unit, setUnit] = useState<'hours' | 'days'>(isDays ? 'days' : 'hours');
+  const displayValue = unit === 'days' ? Math.max(1, Math.floor(hours / 24)) : (hours || 1);
+
+  const handleValueChange = (val: number, u: 'hours' | 'days') => {
+    onChange(u === 'days' ? val * 24 : val);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm text-muted-foreground">Após</span>
+      <Input
+        type="number" min={1} className="w-20"
+        value={displayValue}
+        onChange={e => handleValueChange(parseInt(e.target.value) || 1, unit)}
+      />
+      <Select value={unit} onValueChange={(v: 'hours' | 'days') => {
+        setUnit(v);
+        handleValueChange(displayValue, v);
+      }}>
+        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="hours">horas</SelectItem>
+          <SelectItem value="days">dias</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
