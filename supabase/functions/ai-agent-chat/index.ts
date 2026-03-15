@@ -31,18 +31,29 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function buildAiFallbackReply(userMessage: string, mediaType?: string | null): string {
+function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any): string {
   const text = (userMessage || "").trim().toLowerCase();
+  const agentName = agent?.name || "IA";
+  const companyInfo = agent?.company_info;
+  const companyName = companyInfo?.name || companyInfo?.company_name || "";
+  const niche = agent?.niche || "";
+  const role = agent?.agent_role || "";
+  
+  // Build a contextual greeting based on agent configuration
+  const intro = companyName
+    ? `Olá! 👋 Sou ${role === "vendedora" || role === "sdr" ? "a" : "o"} ${agentName}${companyName ? ` da ${companyName}` : ""}`
+    : `Olá! 👋 Sou ${agentName} e vou te atender agora`;
+
   if (mediaType === "audio") {
-    return "Recebi seu áudio ✅ e já estou te atendendo; me confirma em uma frase o que você precisa agora para eu seguir com o próximo passo.";
+    return `${intro}. Recebi seu áudio ✅! Para te ajudar melhor, pode me dizer seu nome e qual sua empresa?`;
   }
   if (mediaType === "image") {
-    return "Recebi sua imagem ✅ e já sigo com seu atendimento; me diz em uma frase qual é sua principal dúvida para eu te ajudar agora.";
+    return `${intro}. Recebi sua imagem ✅! Para te ajudar melhor, pode me dizer seu nome e qual sua empresa?`;
   }
-  if (!text || ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hello", "hi"].includes(text)) {
-    return "Oi! Recebi sua mensagem ✅ e já vou te ajudar agora; para começarmos, me diz seu nome, por favor.";
+  if (!text || ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hello", "hi", "boa", "bom"].includes(text)) {
+    return `${intro}! 😊 Para começarmos, pode me dizer seu nome e qual empresa você representa?`;
   }
-  return "Perfeito, recebi sua mensagem ✅ e vou te atender agora; me conta em uma frase o que você precisa para eu te orientar no próximo passo.";
+  return `${intro}! Recebi sua mensagem ✅. Para te direcionar da melhor forma, pode me dizer seu nome e qual empresa você representa?`;
 }
 
 function getToolDefinitions(enabledTools: string[]) {
