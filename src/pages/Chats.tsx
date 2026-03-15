@@ -1553,21 +1553,64 @@ export default function Chats() {
               jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
             }
 
+            const chatInst = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+
+            // Pull mapped message_ids for this canonical session to include @lid rows
+            const sessionIds = Array.from(allJids);
+            let mappedMessageIds: string[] = [];
+            if (workspaceId && sessionIds.length > 0) {
+              const { data: logRows } = await supabase
+                .from('webhook_message_log')
+                .select('message_id, session_id')
+                .eq('workspace_id', workspaceId)
+                .in('session_id', sessionIds)
+                .order('processed_at', { ascending: false })
+                .limit(400);
+
+              mappedMessageIds = (logRows || [])
+                .map((r) => r.message_id)
+                .filter((id): id is string => !!id);
+            }
+
             let dbMergeQuery = supabase
               .from('whatsapp_messages')
               .select('*')
               .or(jidFilters.join(','))
               .order('timestamp', { ascending: true })
-              .limit(200);
+              .limit(300);
 
             if (workspaceId) dbMergeQuery = dbMergeQuery.eq('workspace_id', workspaceId);
-            const chatInst = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
             if (chatInst) dbMergeQuery = dbMergeQuery.eq('instance_name', chatInst);
 
             const { data: dbMerge } = await dbMergeQuery;
-            if (dbMerge && dbMerge.length > 0) {
+
+            let dbRows = dbMerge || [];
+            if (mappedMessageIds.length > 0) {
+              let mappedQuery = supabase
+                .from('whatsapp_messages')
+                .select('*')
+                .in('message_id', mappedMessageIds)
+                .order('timestamp', { ascending: true })
+                .limit(300);
+
+              if (workspaceId) mappedQuery = mappedQuery.eq('workspace_id', workspaceId);
+              if (chatInst) mappedQuery = mappedQuery.eq('instance_name', chatInst);
+
+              const { data: mappedRows } = await mappedQuery;
+              if (mappedRows && mappedRows.length > 0) {
+                const mergedById = new Map<string, any>();
+                for (const row of [...dbRows, ...mappedRows]) {
+                  mergedById.set(row.message_id || row.id, row);
+                }
+                dbRows = Array.from(mergedById.values()).sort(
+                  (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                );
+              }
+            }
+
+            if (dbRows.length > 0) {
               const apiIds = new Set(apiMessages.map(m => m.id));
-              const dbOnly: Message[] = dbMerge
+              const dbOnly: Message[] = dbRows
                 .filter(m => !apiIds.has(m.message_id || '') && !apiIds.has(m.id))
                 .map(m => {
                   const date = new Date(m.timestamp);
