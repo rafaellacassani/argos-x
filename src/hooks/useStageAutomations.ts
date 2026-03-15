@@ -181,8 +181,6 @@ export function useStageAutomations() {
         .eq('is_active', true)
         .order('position', { ascending: true });
 
-      if (!autoList || autoList.length === 0) return;
-
       // Fetch lead data for condition checking
       const { data: lead } = await supabase
         .from('leads')
