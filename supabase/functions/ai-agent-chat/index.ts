@@ -586,25 +586,35 @@ serve(async (req) => {
           })
         });
 
+        let toolCalls: any[] = [];
+
         if (!aiResponse.ok) {
-          console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status}`);
-          if (aiResponse.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          if (aiResponse.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          throw new Error(`AI Gateway error: ${aiResponse.status}`);
+          const gatewayBody = await aiResponse.text().catch(() => "");
+          console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
+
+          if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
+            responseContent = buildAiFallbackReply(messageText, media_type);
+            console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
+          } else {
+            throw new Error(`AI Gateway error: ${aiResponse.status}`);
+          }
+        } else {
+          const aiData = await aiResponse.json();
+          const aiChoice = aiData.choices?.[0];
+          if (!aiChoice) throw new Error("No response from AI");
+
+          responseContent = aiChoice.message?.content || "";
+          toolCalls = aiChoice.message?.tool_calls || [];
         }
 
-        const aiData = await aiResponse.json();
-        const aiChoice = aiData.choices?.[0];
-        if (!aiChoice) throw new Error("No response from AI");
-
-        responseContent = aiChoice.message?.content || "";
-        const toolCalls = aiChoice.message?.tool_calls || [];
-        const toolsUsed: string[] = [];
+        if (!responseContent?.trim()) {
+          responseContent = buildAiFallbackReply(messageText, media_type);
+        }
 
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
-          toolsUsed.push(toolName);
+          if (toolName) toolsUsed.push(toolName);
           console.log(`[ai-agent-chat] 🔧 Tool call: ${toolName}`);
 
           switch (toolName) {
