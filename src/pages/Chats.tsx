@@ -855,21 +855,44 @@ export default function Chats() {
   // When "all" is selected, loads all chats; otherwise filters by instance_name
   const loadChatsFromDB = useCallback(async (instanceName?: string): Promise<(Chat & { _timestamp?: number })[]> => {
     try {
+      if (!workspaceId) return [];
+
       // Query whatsapp_messages grouped by remote_jid to build a chat list
       let query = supabase
-        .from('whatsapp_messages')
-        .select('remote_jid, push_name, content, direction, timestamp, instance_name, from_me')
-        .eq('workspace_id', workspaceId || '')
-        .order('timestamp', { ascending: false })
+        .from("whatsapp_messages")
+        .select("remote_jid, push_name, content, direction, timestamp, instance_name, from_me, message_id")
+        .eq("workspace_id", workspaceId)
+        .order("timestamp", { ascending: false })
         .limit(1000);
 
       // Filter by instance_name when a specific instance is selected
-      if (instanceName && instanceName !== 'all') {
-        query = query.eq('instance_name', instanceName);
+      if (instanceName && instanceName !== "all") {
+        query = query.eq("instance_name", instanceName);
       }
 
       const { data: msgs, error } = await query;
       if (error || !msgs || msgs.length === 0) return [];
+
+      // Resolve @lid messages to canonical session JID using webhook_message_log
+      const lidMessageIds = msgs
+        .filter((msg) => msg.remote_jid?.endsWith("@lid") && msg.message_id)
+        .map((msg) => msg.message_id as string)
+        .slice(0, 1000);
+
+      const sessionByMessageId = new Map<string, string>();
+      if (lidMessageIds.length > 0) {
+        const { data: logRows } = await supabase
+          .from("webhook_message_log")
+          .select("message_id, session_id")
+          .eq("workspace_id", workspaceId)
+          .in("message_id", lidMessageIds);
+
+        for (const row of logRows || []) {
+          if (row.message_id && row.session_id) {
+            sessionByMessageId.set(row.message_id, row.session_id);
+          }
+        }
+      }
 
       // Group by canonical phone-per-instance (preferred) to keep one chat per number
       const chatMap = new Map<string, {
@@ -881,62 +904,89 @@ export default function Chats() {
         fromMe: boolean;
         instanceName: string;
         leadId?: string;
+        resolvedSessionJid?: string;
       }>();
 
       // Build a lookup from leads for fast matching
       const currentLeads = leadsRef.current;
-      const leadByJid = new Map<string, typeof currentLeads[0]>();
-      const leadByPhone10 = new Map<string, typeof currentLeads[0]>();
+      const leadByJid = new Map<string, typeof currentLeads[number]>();
+      const leadByPhone10 = new Map<string, typeof currentLeads[number]>();
       for (const lead of currentLeads) {
         if (lead.whatsapp_jid) leadByJid.set(lead.whatsapp_jid, lead);
-        const ld = (lead.phone || '').replace(/[^0-9]/g, '');
+        const ld = (lead.phone || "").replace(/[^0-9]/g, "");
         if (ld.length >= 10) leadByPhone10.set(ld.slice(-10), lead);
       }
 
       for (const msg of msgs) {
-        if (!msg.remote_jid || msg.remote_jid.endsWith('@g.us')) continue;
+        if (!msg.remote_jid || msg.remote_jid.endsWith("@g.us")) continue;
 
-        // Find the matching lead for this message's remote_jid
+        const mappedSessionJid = msg.message_id ? sessionByMessageId.get(msg.message_id) : undefined;
+
+        // Find the matching lead for this message JID/session
         let matchedLead = leadByJid.get(msg.remote_jid);
-        const msgDigits = cleanPhoneNumber(msg.remote_jid);
-        const isRealPhone = msgDigits.length >= 10 && msgDigits.length <= 13;
-
-        if (!matchedLead && isRealPhone) {
-          matchedLead = leadByPhone10.get(msgDigits.slice(-10));
+        if (!matchedLead && mappedSessionJid) {
+          matchedLead = leadByJid.get(mappedSessionJid);
         }
 
-        const leadDigits = cleanPhoneNumber(matchedLead?.phone || '');
-        const phone10 = isRealPhone
-          ? msgDigits.slice(-10)
-          : (leadDigits.length >= 10 ? leadDigits.slice(-10) : '');
+        const msgDigits = cleanPhoneNumber(msg.remote_jid);
+        const sessionDigits = cleanPhoneNumber(mappedSessionJid || "");
+        const leadDigits = cleanPhoneNumber(matchedLead?.phone || "");
 
-        const dedupKey = phone10
-          ? `inst:${msg.instance_name}:phone:${phone10}`
-          : `inst:${msg.instance_name}:jid:${msg.remote_jid}`;
+        if (!matchedLead) {
+          const byMsgPhone = msgDigits.length >= 10 && msgDigits.length <= 13
+            ? leadByPhone10.get(msgDigits.slice(-10))
+            : undefined;
+          const bySessionPhone = sessionDigits.length >= 10 && sessionDigits.length <= 13
+            ? leadByPhone10.get(sessionDigits.slice(-10))
+            : undefined;
+          matchedLead = byMsgPhone || bySessionPhone;
+        }
+
+        const canonicalDigits = [leadDigits, sessionDigits, msgDigits].find(
+          (digits) => digits.length >= 10 && digits.length <= 13
+        ) || "";
+
+        const dedupKey = canonicalDigits
+          ? `inst:${msg.instance_name}:phone:${canonicalDigits.slice(-10)}`
+          : `inst:${msg.instance_name}:jid:${mappedSessionJid || msg.remote_jid}`;
+
+        const preferredRemoteJid =
+          (sessionDigits.length >= 10 && sessionDigits.length <= 13 && mappedSessionJid) ||
+          (msgDigits.length >= 10 && msgDigits.length <= 13 ? msg.remote_jid : undefined) ||
+          msg.remote_jid;
 
         const existing = chatMap.get(dedupKey);
         if (!existing) {
+          const allJids = [msg.remote_jid];
+          if (mappedSessionJid && !allJids.includes(mappedSessionJid)) allJids.push(mappedSessionJid);
+
           chatMap.set(dedupKey, {
-            remoteJid: msg.remote_jid,
-            allJids: [msg.remote_jid],
-            name: msg.push_name || '',
-            lastMessage: msg.content || '',
+            remoteJid: preferredRemoteJid,
+            allJids,
+            name: msg.push_name || "",
+            lastMessage: msg.content || "",
             timestamp: msg.timestamp,
-            fromMe: msg.from_me || msg.direction === 'outbound',
+            fromMe: msg.from_me || msg.direction === "outbound",
             instanceName: msg.instance_name,
             leadId: matchedLead?.id,
+            resolvedSessionJid: mappedSessionJid,
           });
         } else {
           if (!existing.allJids.includes(msg.remote_jid)) {
             existing.allJids.push(msg.remote_jid);
           }
+          if (mappedSessionJid && !existing.allJids.includes(mappedSessionJid)) {
+            existing.allJids.push(mappedSessionJid);
+          }
+          if (!existing.leadId && matchedLead?.id) existing.leadId = matchedLead.id;
+          if (!existing.resolvedSessionJid && mappedSessionJid) existing.resolvedSessionJid = mappedSessionJid;
 
           // Keep the newest message metadata
           if (new Date(msg.timestamp) > new Date(existing.timestamp)) {
             existing.lastMessage = msg.content || existing.lastMessage;
             existing.timestamp = msg.timestamp;
-            existing.fromMe = msg.from_me || msg.direction === 'outbound';
-            existing.remoteJid = msg.remote_jid;
+            existing.fromMe = msg.from_me || msg.direction === "outbound";
+            existing.remoteJid = preferredRemoteJid;
             if (msg.push_name) existing.name = msg.push_name;
           }
         }
@@ -946,37 +996,51 @@ export default function Chats() {
       const chats: (Chat & { _timestamp?: number })[] = [];
       for (const [, info] of chatMap) {
         const ts = new Date(info.timestamp).getTime() / 1000;
-        const preferredRealJid = info.allJids.find((jid) =>
-          jid.endsWith('@s.whatsapp.net') || jid.endsWith('@c.us')
-        );
+
+        const preferredRealJid = info.allJids.find((jid) => {
+          const digits = cleanPhoneNumber(jid);
+          return (jid.endsWith("@s.whatsapp.net") || jid.endsWith("@c.us")) && digits.length >= 10 && digits.length <= 13;
+        });
+
         const primaryJid = preferredRealJid || info.remoteJid;
         const secondaryJid = info.allJids.find((jid) => jid !== primaryJid);
 
         // Use already-matched lead or find one
         const primaryDigits = cleanPhoneNumber(primaryJid);
-        const secondaryDigits = cleanPhoneNumber(secondaryJid || '');
+        const secondaryDigits = cleanPhoneNumber(secondaryJid || "");
+        const resolvedDigits = cleanPhoneNumber(info.resolvedSessionJid || "");
+
         const matchingLead = info.leadId
-          ? currentLeads.find(l => l.id === info.leadId)
+          ? currentLeads.find((l) => l.id === info.leadId)
           : currentLeads.find((l) => {
               if (l.whatsapp_jid === primaryJid) return true;
               if (secondaryJid && l.whatsapp_jid === secondaryJid) return true;
-              const leadDigits = cleanPhoneNumber(l.phone || '');
+              if (info.resolvedSessionJid && l.whatsapp_jid === info.resolvedSessionJid) return true;
+
+              const leadDigits = cleanPhoneNumber(l.phone || "");
               if (leadDigits.length >= 10) {
                 if (primaryDigits.length >= 10 && leadDigits.slice(-10) === primaryDigits.slice(-10)) return true;
                 if (secondaryDigits.length >= 10 && leadDigits.slice(-10) === secondaryDigits.slice(-10)) return true;
+                if (resolvedDigits.length >= 10 && leadDigits.slice(-10) === resolvedDigits.slice(-10)) return true;
               }
               return false;
             });
 
-        const leadDigits = cleanPhoneNumber(matchingLead?.phone || '');
-        const bestPhoneDigits = [leadDigits, primaryDigits, secondaryDigits].find(
+        const leadDigits = cleanPhoneNumber(matchingLead?.phone || "");
+        const bestPhoneDigits = [leadDigits, primaryDigits, secondaryDigits, resolvedDigits].find(
           (digits) => digits.length >= 10 && digits.length <= 13
-        ) || '';
+        ) || "";
+
         const phone = formatPhoneDisplay(bestPhoneDigits);
-        const displayName = matchingLead?.name || info.name || phone || 'Contato WhatsApp';
+        const displayName = matchingLead?.name || info.name || phone || "Contato WhatsApp";
+        const canonicalId = info.instanceName
+          ? (bestPhoneDigits
+            ? `chat:${info.instanceName}:phone:${bestPhoneDigits.slice(-10)}`
+            : `chat:${info.instanceName}:jid:${primaryJid}`)
+          : (bestPhoneDigits ? `chat:all:phone:${bestPhoneDigits.slice(-10)}` : `chat:all:jid:${primaryJid}`);
 
         chats.push({
-          id: info.instanceName ? `${info.instanceName}:${primaryJid}` : primaryJid,
+          id: canonicalId,
           remoteJid: primaryJid,
           remoteJidAlt: secondaryJid,
           name: displayName,
@@ -993,13 +1057,13 @@ export default function Chats() {
       }
 
       chats.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
-      console.log(`[Chats] Loaded ${chats.length} chats from local DB${instanceName ? ` for ${instanceName}` : ''}`);
+      console.log(`[Chats] Loaded ${chats.length} chats from local DB${instanceName ? ` for ${instanceName}` : ""}`);
       return chats;
     } catch (err) {
-      console.error('[Chats] Error loading chats from DB:', err);
+      console.error("[Chats] Error loading chats from DB:", err);
       return [];
     }
-  }, []);
+  }, [workspaceId]);
 
   // Helper: deduplicate chats using canonical phone key per instance
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
