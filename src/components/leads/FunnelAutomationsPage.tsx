@@ -216,9 +216,10 @@ export function FunnelAutomationsPage({
 
   const getTriggerBadge = (auto: StageAutomation) => {
     if (auto.trigger === 'after_time') {
-      const h = auto.trigger_delay_hours;
-      if (h >= 24 && h % 24 === 0) return `Após ${h / 24}d`;
-      return `Após ${h}h`;
+      const m = auto.trigger_delay_minutes;
+      if (m >= 1440 && m % 1440 === 0) return `Após ${m / 1440}d`;
+      if (m >= 60 && m % 60 === 0) return `Após ${m / 60}h`;
+      return `Após ${m}min`;
     }
     return TRIGGER_LABELS[auto.trigger];
   };
