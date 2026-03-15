@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -84,15 +85,19 @@ export function StageAutomationsDialog({
     createAutomation, updateAutomation, deleteAutomation, toggleAutomation,
   } = useStageAutomations();
 
-  const [editing, setEditing] = useState<string | null>(null); // automation id or 'new'
+  const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
+  const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
   const [conditionsOpen, setConditionsOpen] = useState(false);
+  const { workspaceId } = useWorkspace();
 
   useEffect(() => {
     if (open && stage) {
       fetchAutomations(stage.id);
       fetchBots();
+      fetchInstances();
       setEditing(null);
     }
   }, [open, stage]);
@@ -103,6 +108,16 @@ export function StageAutomationsDialog({
       .select('id, name, is_active')
       .order('name');
     if (data) setBots(data);
+  };
+
+  const fetchInstances = async () => {
+    if (!workspaceId) return;
+    const [evoRes, cloudRes] = await Promise.all([
+      supabase.from('whatsapp_instances').select('instance_name, display_name').eq('workspace_id', workspaceId).neq('instance_type', 'alerts'),
+      supabase.from('whatsapp_cloud_connections').select('id, inbox_name, phone_number, phone_number_id').eq('workspace_id', workspaceId).eq('is_active', true),
+    ]);
+    if (evoRes.data) setInstances(evoRes.data);
+    if (cloudRes.data) setCloudConnections(cloudRes.data);
   };
 
   const handleEdit = (auto: StageAutomation) => {
@@ -315,6 +330,8 @@ export function StageAutomationsDialog({
                       bots={bots}
                       tags={tags}
                       teamMembers={teamMembers}
+                      instances={instances}
+                      cloudConnections={cloudConnections}
                     />
                   </div>
 
@@ -416,7 +433,7 @@ export function StageAutomationsDialog({
 
 // Sub-component for action-specific config
 function ActionConfigForm({
-  actionType, config, onChange, bots, tags, teamMembers,
+  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [],
 }: {
   actionType: string;
   config: Record<string, any>;
@@ -424,8 +441,12 @@ function ActionConfigForm({
   bots: Array<{ id: string; name: string; is_active: boolean }>;
   tags: LeadTag[];
   teamMembers: Array<{ id: string; full_name: string }>;
+  instances?: { instance_name: string; display_name: string | null }[];
+  cloudConnections?: { id: string; inbox_name: string; phone_number: string; phone_number_id: string }[];
 }) {
   const set = (key: string, value: any) => onChange({ ...config, [key]: value });
+
+  const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
   switch (actionType) {
     case 'run_bot':
@@ -441,6 +462,75 @@ function ActionConfigForm({
               ))}
             </SelectContent>
           </Select>
+
+          {/* WhatsApp instance */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Instância WhatsApp</Label>
+            <Select value={config.instance_name || '__auto__'} onValueChange={v => set('instance_name', v === '__auto__' ? '' : v)}>
+              <SelectTrigger><SelectValue placeholder="Automático (instância do lead)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__auto__">Automático (instância do lead)</SelectItem>
+                {instances.map(inst => (
+                  <SelectItem key={inst.instance_name} value={inst.instance_name}>
+                    {inst.display_name || inst.instance_name}
+                  </SelectItem>
+                ))}
+                {cloudConnections.map(conn => (
+                  <SelectItem key={conn.id} value={`cloud_${conn.phone_number_id}`}>
+                    {conn.inbox_name} ({conn.phone_number})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Schedule: days and time */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Agendamento (enviar para todos)</Label>
+            <div className="flex gap-1.5 flex-wrap">
+              {DAY_LABELS.map((day, idx) => {
+                const scheduleDays: number[] = config.schedule_days || [];
+                const isActive = scheduleDays.includes(idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      const next = isActive ? scheduleDays.filter((d: number) => d !== idx) : [...scheduleDays, idx];
+                      set('schedule_days', next.sort());
+                    }}
+                    className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                      isActive ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            <Input
+              type="time"
+              value={config.schedule_time || '09:00'}
+              onChange={e => set('schedule_time', e.target.value)}
+              className="w-32 h-8 text-sm"
+            />
+          </div>
+
+          {/* Interval between messages */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Intervalo entre mensagens</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min={5}
+                value={config.batch_interval_seconds || 30}
+                onChange={e => set('batch_interval_seconds', parseInt(e.target.value) || 30)}
+                className="w-20 h-8 text-sm"
+              />
+              <span className="text-xs text-muted-foreground">segundos</span>
+            </div>
+          </div>
+
           <div className="flex items-center gap-2">
             <Checkbox
               checked={config.skip_if_executed || false}
