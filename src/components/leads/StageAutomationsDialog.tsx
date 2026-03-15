@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
