@@ -1069,13 +1069,20 @@ export default function Chats() {
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
     const jidToKey = new Map<string, string>();
+    const phoneToKey = new Map<string, string>();
 
     const setAlias = (jid: string | undefined, key: string) => {
       if (!jid) return;
       jidToKey.set(jid, key);
     };
 
+    const setPhoneAlias = (instanceName: string, digits: string | undefined, key: string) => {
+      if (!digits || digits.length < 10 || digits.length > 13) return;
+      phoneToKey.set(`${instanceName}:${digits.slice(-10)}`, key);
+    };
+
     for (const c of chatList) {
+      const instanceKey = c.instanceName || "all";
       const matchedLead = findLeadByChat(c.remoteJid, c.remoteJidAlt, c.phone);
       const leadDigits = cleanPhoneNumber(matchedLead?.phone || "");
       const chatDigits = cleanPhoneNumber(c.phone || "");
@@ -1087,11 +1094,12 @@ export default function Chats() {
       );
 
       const computedKey = canonicalDigits
-        ? `${c.instanceName || "all"}:phone:${canonicalDigits.slice(-10)}`
-        : `${c.instanceName || "all"}:${matchedLead?.id || c.remoteJid}`;
+        ? `${instanceKey}:phone:${canonicalDigits.slice(-10)}`
+        : `${instanceKey}:${matchedLead?.id || c.remoteJid}`;
 
       const aliasKey = jidToKey.get(c.remoteJid) || (c.remoteJidAlt ? jidToKey.get(c.remoteJidAlt) : undefined);
-      const key = aliasKey || computedKey;
+      const phoneAliasKey = canonicalDigits ? phoneToKey.get(`${instanceKey}:${canonicalDigits.slice(-10)}`) : undefined;
+      const key = aliasKey || phoneAliasKey || computedKey;
 
       const existing = deduped.get(key);
       const currentTs = c._timestamp || 0;
@@ -1113,6 +1121,8 @@ export default function Chats() {
       setAlias(merged.remoteJidAlt, key);
       setAlias(c.remoteJid, key);
       setAlias(c.remoteJidAlt, key);
+      setPhoneAlias(instanceKey, canonicalDigits, key);
+      setPhoneAlias(instanceKey, cleanPhoneNumber(merged.phone || ""), key);
     }
 
     const result = Array.from(deduped.values());
