@@ -1799,7 +1799,83 @@ export default function Chats() {
     loadMessages();
   }, [selectedInstance, selectedChat?.id, selectedChat?.instanceName, selectedChat?.isMeta, fetchMetaMessages]);
 
-  // Infinite scroll: load older messages when scrolling up
+  // ═══ REALTIME: Subscribe to new whatsapp_messages for live updates ═══
+  useEffect(() => {
+    if (!workspaceId || !selectedChat || selectedChat.isMeta) return;
+
+    const channel = supabase
+      .channel(`chat-realtime-${selectedChat.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'whatsapp_messages',
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (!newRow) return;
+
+          // Check if this message belongs to the currently selected chat
+          const msgJid = newRow.remote_jid || "";
+          const chatJid = selectedChat.remoteJid || "";
+          const chatJidAlt = selectedChat.remoteJidAlt || "";
+          const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
+          const msgPhone = cleanPhoneNumber(msgJid);
+          const chatInst = selectedChat.instanceName;
+
+          // Instance must match (if set)
+          if (chatInst && newRow.instance_name && chatInst !== newRow.instance_name) return;
+
+          // JID or phone match
+          const jidMatch = msgJid === chatJid || msgJid === chatJidAlt;
+          const phoneMatch = chatPhone.length >= 10 && msgPhone.length >= 10 &&
+            chatPhone.slice(-10) === msgPhone.slice(-10);
+
+          if (!jidMatch && !phoneMatch) return;
+
+          const date = new Date(newRow.timestamp);
+          const newMessage: Message = {
+            id: newRow.message_id || newRow.id,
+            content: newRow.content || "",
+            time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            sent: newRow.from_me || newRow.direction === "outbound",
+            read: true,
+            type: (newRow.message_type || "text") as Message["type"],
+            _ts: date.getTime(),
+          } as Message & { _ts: number };
+
+          setMessages((prev) => {
+            // Avoid duplicates
+            if (prev.some((m) => m.id === newMessage.id)) return prev;
+            const updated = [...prev, newMessage];
+            messageCacheRef.current.set(selectedChat.id, updated);
+            return updated;
+          });
+
+          // Also update chat list preview
+          setChats((prev) =>
+            prev.map((c) => {
+              if (c.id !== selectedChat.id) return c;
+              return {
+                ...c,
+                lastMessage: newRow.content?.substring(0, 50) || c.lastMessage,
+                time: "agora",
+                lastMessageFromMe: newRow.from_me || newRow.direction === "outbound",
+              };
+            })
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [workspaceId, selectedChat?.id, selectedChat?.remoteJid, selectedChat?.remoteJidAlt, selectedChat?.phone, selectedChat?.instanceName, selectedChat?.isMeta]);
+
+
   const loadOlderMessages = useCallback(async () => {
     if (!selectedChat || loadingOlderMessages || !hasMoreMessages || selectedChat.isMeta) return;
     

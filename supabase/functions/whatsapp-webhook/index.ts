@@ -803,6 +803,30 @@ app.post("/", async (c) => {
     const workspaceId = instanceRecord.workspace_id;
     console.log(`[whatsapp-webhook] ✅ Workspace found: ${workspaceId}`);
 
+    // ═══ PERSIST INBOUND MESSAGE IMMEDIATELY ═══
+    // This ensures all received messages appear in the Chat UI in real-time
+    const agentMessage = messageText || mediaCaption || (mediaType ? `[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Áudio" : mediaType === "video" ? "Vídeo" : "Documento"} recebido]` : "");
+    if (agentMessage || mediaType) {
+      try {
+        await supabase.from("whatsapp_messages").insert({
+          workspace_id: workspaceId,
+          instance_name: instanceName,
+          remote_jid: canonicalSessionJid,
+          from_me: false,
+          direction: "inbound",
+          content: agentMessage,
+          message_type: mediaType || "text",
+          message_id: msgId || `in-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          push_name: pushName || null,
+          timestamp: new Date().toISOString(),
+        });
+        console.log(`[whatsapp-webhook] 💾 Inbound message persisted for ${canonicalSessionJid}`);
+      } catch (persistErr) {
+        // Don't block processing if persist fails (e.g. duplicate message_id)
+        console.warn(`[whatsapp-webhook] ⚠️ Inbound persist failed (non-blocking):`, persistErr);
+      }
+    }
+
     // Global webhook dedup + canonical session mapping (applies to AI and SalesBots)
     if (msgId) {
       const { error: dedupError } = await supabase

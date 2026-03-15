@@ -155,6 +155,24 @@ Deno.serve(async (req) => {
 
         console.log(`[check-missed] 🔔 MISSED MESSAGE from ${pushName} (${remoteJid} → ${resolvedJid}): "${messageText?.substring(0, 80)}"`);
 
+        // Persist inbound message to whatsapp_messages for Chat UI visibility
+        try {
+          await supabase.from("whatsapp_messages").insert({
+            workspace_id: workspaceId,
+            instance_name: instanceName,
+            remote_jid: resolvedJid,
+            from_me: false,
+            direction: "inbound",
+            content: messageText || (hasMedia ? "[Mídia recebida]" : ""),
+            message_type: hasMedia ? "media" : "text",
+            message_id: msgId,
+            push_name: pushName || null,
+            timestamp: new Date().toISOString(),
+          });
+        } catch (_persistErr) {
+          // Ignore duplicate inserts
+        }
+
         // 5. Log to webhook_message_log to prevent re-processing
         const { error: dupError } = await supabase
           .from("webhook_message_log")
