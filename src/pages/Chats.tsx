@@ -825,10 +825,16 @@ export default function Chats() {
     const maps = leadMapsRef.current;
     if (maps.byJid.has(remoteJid)) return maps.byJid.get(remoteJid);
     if (remoteJidAlt && maps.byJid.has(remoteJidAlt)) return maps.byJid.get(remoteJidAlt);
-    if (phone) {
-      const digits = phone.replace(/[^0-9]/g, '');
-      if (digits.length >= 10) return maps.byPhone10.get(digits.slice(-10));
+
+    const candidatePhones = [phone || "", remoteJidAlt || "", remoteJid || ""];
+    for (const candidate of candidatePhones) {
+      const digits = cleanPhoneNumber(candidate);
+      if (digits.length >= 10 && digits.length <= 13) {
+        const lead = maps.byPhone10.get(digits.slice(-10));
+        if (lead) return lead;
+      }
     }
+
     return undefined;
   }, []);
 
