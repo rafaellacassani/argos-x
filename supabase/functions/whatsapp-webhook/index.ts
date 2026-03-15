@@ -1065,7 +1065,7 @@ app.post("/", async (c) => {
                   await supabase.from("agent_followup_queue").insert({
                     agent_id: matchingAgent.id,
                     lead_id: leadId,
-                    session_id: remoteJid,
+                    session_id: canonicalSessionJid,
                     workspace_id: workspaceId,
                     step_index: 0,
                     execute_at: executeAt,
