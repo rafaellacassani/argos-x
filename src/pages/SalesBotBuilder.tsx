@@ -110,7 +110,7 @@ export default function SalesBotBuilder() {
     }
   }, []);
 
-  // Fetch WhatsApp instances
+  // Fetch WhatsApp instances + funnels/stages
   useEffect(() => {
     if (!workspaceId) return;
     supabase
@@ -120,6 +120,22 @@ export default function SalesBotBuilder() {
       .eq('instance_type', 'commercial')
       .then(({ data }) => {
         setWhatsappInstances(data || []);
+      });
+    supabase
+      .from('funnels')
+      .select('id, name')
+      .eq('workspace_id', workspaceId)
+      .order('name')
+      .then(({ data }) => {
+        setFunnels(data || []);
+      });
+    supabase
+      .from('funnel_stages')
+      .select('id, name, funnel_id')
+      .eq('workspace_id', workspaceId)
+      .order('position')
+      .then(({ data }) => {
+        setFunnelStages(data || []);
       });
   }, [workspaceId]);
 
