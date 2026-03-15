@@ -80,8 +80,10 @@ export function FunnelAutomationsPage({
 }: FunnelAutomationsPageProps) {
   const {
     fetchAutomations, createAutomation, updateAutomation,
-    deleteAutomation, toggleAutomation,
+    deleteAutomation, toggleAutomation, executeStageAutomations,
   } = useStageAutomations();
+
+  const [executingAll, setExecutingAll] = useState(false);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
   const [loadingStages, setLoadingStages] = useState(false);
