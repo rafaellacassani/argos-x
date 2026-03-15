@@ -721,6 +721,8 @@ app.post("/", async (c) => {
       phoneNumber = jidToNumber(remoteJid);
     }
 
+    const canonicalSessionJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
+
     console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
 
     const supabase = getSupabase();
