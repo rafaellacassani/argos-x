@@ -374,7 +374,7 @@ export default function Chats() {
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
   const { workspaceId } = useWorkspace();
-  const [leadPanelOpen, setLeadPanelOpen] = useState(true);
+  const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   
