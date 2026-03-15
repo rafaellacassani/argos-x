@@ -888,6 +888,10 @@ export default function Chats() {
         if (ld.length >= 10) leadByPhone10.set(ld.slice(-10), lead);
       }
 
+      // First pass: build a phone-to-dedupKey mapping from outbound messages to real phones
+      // This lets us link @lid inbound chats to their real phone counterparts
+      const phoneToDedupKey = new Map<string, string>();
+
       for (const msg of msgs) {
         if (!msg.remote_jid || msg.remote_jid.endsWith('@g.us')) continue;
 
@@ -902,8 +906,14 @@ export default function Chats() {
 
         // Dedup key: lead.id if found, otherwise phone suffix, otherwise raw JID
         const msgDigits = cleanPhoneNumber(msg.remote_jid);
+        const isRealPhone = msgDigits.length >= 10 && msgDigits.length <= 13;
         const dedupKey = matchedLead?.id
-          || (msgDigits.length >= 10 && msgDigits.length <= 13 ? `phone:${msgDigits.slice(-10)}` : msg.remote_jid);
+          || (isRealPhone ? `phone:${msgDigits.slice(-10)}` : msg.remote_jid);
+
+        // Track phone-to-dedupKey mapping for real phone JIDs
+        if (isRealPhone) {
+          phoneToDedupKey.set(msgDigits.slice(-10), dedupKey);
+        }
 
         const existing = chatMap.get(dedupKey);
         if (!existing) {
@@ -924,6 +934,42 @@ export default function Chats() {
           }
         }
       }
+
+      // Second pass: merge @lid entries that have a matching real-phone entry
+      // This handles the case where inbound uses @lid and outbound uses @s.whatsapp.net
+      const keysToDelete: string[] = [];
+      for (const [dedupKey, info] of chatMap) {
+        if (!info.remoteJid.endsWith('@lid')) continue;
+        // Check if any lead matches this LID by looking at lead phone
+        const matchedLead = currentLeads.find(l => {
+          if (l.whatsapp_jid === info.remoteJid) return true;
+          return false;
+        });
+        if (matchedLead) {
+          const targetKey = matchedLead.id;
+          if (targetKey !== dedupKey && chatMap.has(targetKey)) {
+            // Merge into the lead-based entry
+            const target = chatMap.get(targetKey)!;
+            for (const jid of info.allJids) {
+              if (!target.allJids.includes(jid)) target.allJids.push(jid);
+            }
+            // Keep the more recent timestamp
+            if (new Date(info.timestamp) > new Date(target.timestamp)) {
+              target.lastMessage = info.lastMessage;
+              target.timestamp = info.timestamp;
+              target.fromMe = info.fromMe;
+              target.remoteJid = info.remoteJid;
+            }
+            if (info.name && !target.name) target.name = info.name;
+            keysToDelete.push(dedupKey);
+          } else if (targetKey !== dedupKey) {
+            // Move to lead-based key
+            chatMap.set(targetKey, { ...info, leadId: matchedLead.id });
+            keysToDelete.push(dedupKey);
+          }
+        }
+      }
+      for (const k of keysToDelete) chatMap.delete(k);
 
       // Convert to Chat objects
       const chats: (Chat & { _timestamp?: number })[] = [];
