@@ -545,8 +545,10 @@ function ActionConfigForm({
           <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
             <SelectTrigger><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
             <SelectContent>
-              {bots.filter(b => b.is_active).map(b => (
-                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              {bots.map(b => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}{!b.is_active && ' (inativo)'}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
