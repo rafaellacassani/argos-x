@@ -2124,7 +2124,7 @@ export type Database = {
           position: number
           stage_id: string
           trigger: string
-          trigger_delay_hours: number | null
+          trigger_delay_minutes: number | null
           workspace_id: string
         }
         Insert: {
@@ -2137,7 +2137,7 @@ export type Database = {
           position?: number
           stage_id: string
           trigger?: string
-          trigger_delay_hours?: number | null
+          trigger_delay_minutes?: number | null
           workspace_id: string
         }
         Update: {
@@ -2150,7 +2150,7 @@ export type Database = {
           position?: number
           stage_id?: string
           trigger?: string
-          trigger_delay_hours?: number | null
+          trigger_delay_minutes?: number | null
           workspace_id?: string
         }
         Relationships: [
