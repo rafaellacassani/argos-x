@@ -414,6 +414,8 @@ export function FunnelAutomationsPage({
                 bots={bots}
                 tags={tags}
                 teamMembers={teamMembers}
+                instances={instances}
+                cloudConnections={cloudConnections}
               />
             </div>
 
