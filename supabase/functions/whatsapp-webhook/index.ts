@@ -837,18 +837,7 @@ app.post("/", async (c) => {
       }
 
       if (matchingAgent && (messageText || mediaType)) {
-        // ============ WEBHOOK DEDUPLICATION ============
-        if (msgId) {
-          const { error: dupError } = await supabase
-            .from("webhook_message_log")
-            .insert({ message_id: msgId, session_id: remoteJid, workspace_id: workspaceId });
-
-          if (dupError) {
-            console.log(`[whatsapp-webhook] ⚠️ Duplicate webhook event ignored: ${msgId}`);
-            return c.json({ received: true, skipped: "duplicate_message" }, 200, corsHeaders);
-          }
-          console.log(`[whatsapp-webhook] ✅ Message logged for dedup: ${msgId}`);
-        }
+        // Deduplication already handled globally above
 
         // Check respond_to filter
         let shouldRespond = true;
