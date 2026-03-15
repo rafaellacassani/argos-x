@@ -1217,7 +1217,7 @@ app.post("/", async (c) => {
         .insert({
           name: leadName,
           phone: validPhone,
-          whatsapp_jid: remoteJid,
+          whatsapp_jid: preferredLeadJid,
           instance_name: instanceName,
           source: "whatsapp",
           stage_id: stageId,
