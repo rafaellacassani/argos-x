@@ -2125,7 +2125,7 @@ export default function Chats() {
               <p>Nenhuma conversa encontrada</p>
             </div>
           ) : (
-            <div className="p-2">
+            <div className="p-2 overflow-x-auto">
               {filteredChats.map((chat, index) => (
                 <div
                   key={chat.id}
