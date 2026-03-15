@@ -128,9 +128,10 @@ app.post("/", async (c) => {
       // Also check via webhook_message_log for @lid mapped sessions
       const { data: mappedMsgs } = await supabase
         .from("webhook_message_log")
-        .select("message_id")
+        .select("message_id, processed_at")
         .eq("session_id", sessionId)
-        .gte("processed_at", mem.updated_at);
+        .order("processed_at", { ascending: false })
+        .limit(30);
 
       if (mappedMsgs && mappedMsgs.length > 0) {
         // There are messages logged for this session after the last AI response
