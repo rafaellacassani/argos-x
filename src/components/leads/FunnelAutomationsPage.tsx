@@ -153,7 +153,7 @@ export function FunnelAutomationsPage({
     const payload = {
       stage_id: editingStageId,
       trigger: form.trigger,
-      trigger_delay_hours: form.trigger === 'after_time' ? form.trigger_delay_hours : 0,
+      trigger_delay_minutes: form.trigger === 'after_time' ? form.trigger_delay_minutes : 0,
       action_type: form.action_type as StageAutomation['action_type'],
       action_config: form.action_config,
       conditions: form.conditions,
