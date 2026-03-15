@@ -1068,6 +1068,13 @@ export default function Chats() {
   // Helper: deduplicate chats using canonical phone key per instance
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
+    const jidToKey = new Map<string, string>();
+
+    const setAlias = (jid: string | undefined, key: string) => {
+      if (!jid) return;
+      jidToKey.set(jid, key);
+    };
+
     for (const c of chatList) {
       const matchedLead = findLeadByChat(c.remoteJid, c.remoteJidAlt, c.phone);
       const leadDigits = cleanPhoneNumber(matchedLead?.phone || "");
@@ -1079,14 +1086,33 @@ export default function Chats() {
         (digits) => digits.length >= 10 && digits.length <= 13
       );
 
-      const key = canonicalDigits
+      const computedKey = canonicalDigits
         ? `${c.instanceName || "all"}:phone:${canonicalDigits.slice(-10)}`
         : `${c.instanceName || "all"}:${matchedLead?.id || c.remoteJid}`;
 
+      const aliasKey = jidToKey.get(c.remoteJid) || (c.remoteJidAlt ? jidToKey.get(c.remoteJidAlt) : undefined);
+      const key = aliasKey || computedKey;
+
       const existing = deduped.get(key);
-      if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
-        deduped.set(key, c);
-      }
+      const currentTs = c._timestamp || 0;
+      const existingTs = existing?._timestamp || 0;
+      const winner = currentTs >= existingTs ? c : existing!;
+      const loser = currentTs >= existingTs ? existing : c;
+
+      const merged: Chat & { _timestamp?: number } = {
+        ...(loser || {} as Chat),
+        ...winner,
+        id: key,
+        remoteJidAlt: winner.remoteJidAlt || loser?.remoteJidAlt,
+        phone: winner.phone || loser?.phone || "",
+        _timestamp: Math.max(currentTs, existingTs),
+      };
+
+      deduped.set(key, merged);
+      setAlias(merged.remoteJid, key);
+      setAlias(merged.remoteJidAlt, key);
+      setAlias(c.remoteJid, key);
+      setAlias(c.remoteJidAlt, key);
     }
 
     const result = Array.from(deduped.values());
