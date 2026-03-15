@@ -476,6 +476,43 @@ export function FunnelAutomationsPage({
               </CollapsibleContent>
             </Collapsible>
 
+            {/* Execute for all in stage */}
+            {editingId !== 'new' && editingStageId && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
+                disabled={executingAll}
+                onClick={async () => {
+                  if (!editingStageId) return;
+                  setExecutingAll(true);
+                  try {
+                    const { data: leads } = await supabase
+                      .from('leads')
+                      .select('id')
+                      .eq('stage_id', editingStageId);
+                    if (leads && leads.length > 0) {
+                      for (const lead of leads) {
+                        await executeStageAutomations(editingStageId, lead.id, 'on_enter');
+                      }
+                      const { toast } = await import('sonner');
+                      toast.success(`Automação executada para ${leads.length} lead(s)!`);
+                    } else {
+                      const { toast } = await import('sonner');
+                      toast.info('Nenhum lead nesta etapa.');
+                    }
+                  } catch {
+                    const { toast } = await import('sonner');
+                    toast.error('Erro ao executar em massa');
+                  } finally {
+                    setExecutingAll(false);
+                  }
+                }}
+              >
+                {executingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Executar agora para todos na etapa
+              </Button>
+            )}
+
             {/* Actions */}
             <div className="flex gap-2 pt-2">
               <Button className="flex-1" onClick={handleSave}>Salvar</Button>
