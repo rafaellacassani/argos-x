@@ -330,6 +330,8 @@ export function StageAutomationsDialog({
                       bots={bots}
                       tags={tags}
                       teamMembers={teamMembers}
+                      instances={instances}
+                      cloudConnections={cloudConnections}
                     />
                   </div>
 
