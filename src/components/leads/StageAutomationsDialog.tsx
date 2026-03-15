@@ -233,7 +233,7 @@ export function StageAutomationsDialog({
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {TRIGGER_LABELS[auto.trigger]}
-                            {auto.trigger === 'after_time' && ` (${auto.trigger_delay_hours}h)`}
+                            {auto.trigger === 'after_time' && ` (${auto.trigger_delay_minutes >= 60 ? Math.floor(auto.trigger_delay_minutes / 60) + 'h' : auto.trigger_delay_minutes + 'min'})`}
                           </p>
                         </div>
                       </div>
