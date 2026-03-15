@@ -620,7 +620,7 @@ serve(async (req) => {
         }
 
         if (!responseContent?.trim()) {
-          responseContent = buildAiFallbackReply(messageText, media_type);
+          responseContent = buildAiFallbackReply(messageText, media_type, agent);
         }
 
         for (const toolCall of toolCalls) {
