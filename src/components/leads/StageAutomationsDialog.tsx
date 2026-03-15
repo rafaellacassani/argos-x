@@ -283,8 +283,8 @@ export function StageAutomationsDialog({
                     </Select>
                     {form.trigger === 'after_time' && (
                       <DelayInput
-                        hours={form.trigger_delay_hours}
-                        onChange={(h) => setForm(p => ({ ...p, trigger_delay_hours: h }))}
+                        minutes={form.trigger_delay_minutes}
+                        onChange={(m) => setForm(p => ({ ...p, trigger_delay_minutes: m }))}
                       />
                     )}
                   </div>
