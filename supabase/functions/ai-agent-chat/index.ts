@@ -605,7 +605,7 @@ serve(async (req) => {
           console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
 
           if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
-            responseContent = buildAiFallbackReply(messageText, media_type);
+            responseContent = buildAiFallbackReply(messageText, media_type, agent);
             console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
           } else {
             throw new Error(`AI Gateway error: ${aiResponse.status}`);
