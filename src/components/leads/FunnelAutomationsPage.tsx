@@ -56,7 +56,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 type FormData = {
   trigger: 'on_enter' | 'on_exit' | 'after_time';
-  trigger_delay_hours: number;
+  trigger_delay_minutes: number;
   action_type: string;
   action_config: Record<string, any>;
   conditions: Array<{ field: string; operator: string; value: string }>;
