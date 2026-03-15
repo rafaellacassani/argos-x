@@ -729,10 +729,11 @@ app.post("/", async (c) => {
 
     // ============ CHECK SALESBOT WAIT QUEUE FOR INBOUND MESSAGE ============
     try {
+      const waitSessionIds = Array.from(new Set([remoteJid, canonicalSessionJid]));
       const { data: pendingWaits } = await supabase
         .from("salesbot_wait_queue")
         .select("*")
-        .eq("session_id", remoteJid)
+        .in("session_id", waitSessionIds)
         .eq("status", "pending")
         .eq("condition_type", "message_received");
 
