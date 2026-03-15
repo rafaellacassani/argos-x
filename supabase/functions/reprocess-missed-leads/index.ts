@@ -33,15 +33,46 @@ app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 
 app.post("/", async (c) => {
   try {
-    const authHeader = c.req.header("authorization");
-    if (!authHeader?.includes(SUPABASE_SERVICE_KEY)) {
+    const supabase = getSupabase();
+
+    const authHeader = c.req.header("authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+    let authorized = false;
+
+    // Internal automation (service role)
+    if (token && token === SUPABASE_SERVICE_KEY) {
+      authorized = true;
+    }
+
+    // Manual operation by authenticated admin user
+    if (!authorized && token) {
+      const authClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+      const requesterUserId = claimsData?.claims?.sub;
+
+      if (!claimsError && requesterUserId) {
+        const { data: adminMembership } = await supabase
+          .from("workspace_members")
+          .select("id")
+          .eq("user_id", requesterUserId)
+          .eq("role", "admin")
+          .not("accepted_at", "is", null)
+          .limit(1);
+
+        authorized = !!(adminMembership && adminMembership.length > 0);
+      }
+    }
+
+    if (!authorized) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
     const body = await c.req.json().catch(() => ({}));
     const { hours_back = 48, dry_run = false } = body;
-
-    const supabase = getSupabase();
     const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
 
     // Find inbound WhatsApp messages with no outbound response within 10 minutes
