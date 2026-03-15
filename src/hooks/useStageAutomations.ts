@@ -8,7 +8,7 @@ export interface StageAutomation {
   stage_id: string;
   workspace_id: string;
   trigger: 'on_enter' | 'on_exit' | 'after_time';
-  trigger_delay_hours: number;
+  trigger_delay_minutes: number;
   action_type: 'run_bot' | 'notify_responsible' | 'change_responsible' | 'add_tag' | 'remove_tag' | 'create_task';
   action_config: Record<string, any>;
   conditions: Array<{ field: string; operator: string; value: string }>;
@@ -326,8 +326,8 @@ export function useStageAutomations() {
 
       if (timedAutos && timedAutos.length > 0 && lead.workspace_id) {
         for (const auto of timedAutos) {
-          const delayHours = auto.trigger_delay_hours || 1;
-          const executeAt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+          const delayMinutes = auto.trigger_delay_minutes || 60;
+          const executeAt = new Date(Date.now() + delayMinutes * 60 * 1000);
           await supabase.from('stage_automation_queue').insert({
             automation_id: auto.id,
             lead_id: leadId,

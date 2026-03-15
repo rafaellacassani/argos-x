@@ -56,7 +56,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 
 type FormData = {
   trigger: 'on_enter' | 'on_exit' | 'after_time';
-  trigger_delay_hours: number;
+  trigger_delay_minutes: number;
   action_type: string;
   action_config: Record<string, any>;
   conditions: Array<{ field: string; operator: string; value: string }>;
@@ -64,7 +64,7 @@ type FormData = {
 
 const DEFAULT_FORM: FormData = {
   trigger: 'on_enter',
-  trigger_delay_hours: 0,
+  trigger_delay_minutes: 0,
   action_type: 'run_bot',
   action_config: {},
   conditions: [],
@@ -138,7 +138,7 @@ export function FunnelAutomationsPage({
     setEditingId(auto.id);
     setForm({
       trigger: auto.trigger,
-      trigger_delay_hours: auto.trigger_delay_hours,
+      trigger_delay_minutes: auto.trigger_delay_minutes,
       action_type: auto.action_type,
       action_config: { ...auto.action_config },
       conditions: [...auto.conditions],
@@ -153,7 +153,7 @@ export function FunnelAutomationsPage({
     const payload = {
       stage_id: editingStageId,
       trigger: form.trigger,
-      trigger_delay_hours: form.trigger === 'after_time' ? form.trigger_delay_hours : 0,
+      trigger_delay_minutes: form.trigger === 'after_time' ? form.trigger_delay_minutes : 0,
       action_type: form.action_type as StageAutomation['action_type'],
       action_config: form.action_config,
       conditions: form.conditions,
@@ -216,9 +216,10 @@ export function FunnelAutomationsPage({
 
   const getTriggerBadge = (auto: StageAutomation) => {
     if (auto.trigger === 'after_time') {
-      const h = auto.trigger_delay_hours;
-      if (h >= 24 && h % 24 === 0) return `Após ${h / 24}d`;
-      return `Após ${h}h`;
+      const m = auto.trigger_delay_minutes;
+      if (m >= 1440 && m % 1440 === 0) return `Após ${m / 1440}d`;
+      if (m >= 60 && m % 60 === 0) return `Após ${m / 60}h`;
+      return `Após ${m}min`;
     }
     return TRIGGER_LABELS[auto.trigger];
   };
@@ -366,8 +367,8 @@ export function FunnelAutomationsPage({
               </Select>
               {form.trigger === 'after_time' && (
                 <DelayInput
-                  hours={form.trigger_delay_hours}
-                  onChange={(h) => setForm(p => ({ ...p, trigger_delay_hours: h }))}
+                  minutes={form.trigger_delay_minutes}
+                  onChange={(m) => setForm(p => ({ ...p, trigger_delay_minutes: m }))}
                 />
               )}
             </div>
@@ -641,15 +642,28 @@ function ActionConfigForm({
   }
 }
 
-// Delay input with hours/days unit
-function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) => void }) {
-  const isDays = hours >= 24 && hours % 24 === 0;
-  const [unit, setUnit] = useState<'hours' | 'days'>(isDays ? 'days' : 'hours');
-  const displayValue = unit === 'days' ? Math.max(1, Math.floor(hours / 24)) : (hours || 1);
-
-  const handleValueChange = (val: number, u: 'hours' | 'days') => {
-    onChange(u === 'days' ? val * 24 : val);
+// Delay input with minutes/hours/days unit
+type DelayUnit = 'minutes' | 'hours' | 'days';
+function DelayInput({ minutes, onChange }: { minutes: number; onChange: (m: number) => void }) {
+  const inferUnit = (): DelayUnit => {
+    if (minutes >= 1440 && minutes % 1440 === 0) return 'days';
+    if (minutes >= 60 && minutes % 60 === 0) return 'hours';
+    return 'minutes';
   };
+  const [unit, setUnit] = useState<DelayUnit>(inferUnit());
+  
+  const toDisplay = (m: number, u: DelayUnit) => {
+    if (u === 'days') return Math.max(1, Math.floor(m / 1440));
+    if (u === 'hours') return Math.max(1, Math.floor(m / 60));
+    return m || 1;
+  };
+  const toMinutes = (val: number, u: DelayUnit) => {
+    if (u === 'days') return val * 1440;
+    if (u === 'hours') return val * 60;
+    return val;
+  };
+
+  const displayValue = toDisplay(minutes, unit);
 
   return (
     <div className="flex items-center gap-2">
@@ -657,14 +671,15 @@ function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) 
       <Input
         type="number" min={1} className="w-20"
         value={displayValue}
-        onChange={e => handleValueChange(parseInt(e.target.value) || 1, unit)}
+        onChange={e => onChange(toMinutes(parseInt(e.target.value) || 1, unit))}
       />
-      <Select value={unit} onValueChange={(v: 'hours' | 'days') => {
+      <Select value={unit} onValueChange={(v: DelayUnit) => {
         setUnit(v);
-        handleValueChange(displayValue, v);
+        onChange(toMinutes(displayValue, v));
       }}>
-        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
         <SelectContent>
+          <SelectItem value="minutes">minutos</SelectItem>
           <SelectItem value="hours">horas</SelectItem>
           <SelectItem value="days">dias</SelectItem>
         </SelectContent>
