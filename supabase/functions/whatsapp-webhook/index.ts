@@ -989,7 +989,7 @@ app.post("/", async (c) => {
                     await supabase.from("whatsapp_messages").insert({
                       workspace_id: workspaceId,
                       instance_name: instanceName,
-                      remote_jid: remoteJid,
+                      remote_jid: canonicalSessionJid,
                       from_me: true,
                       direction: "outbound",
                       content: chunk,
@@ -1030,7 +1030,7 @@ app.post("/", async (c) => {
                 await supabase.from("whatsapp_messages").insert({
                   workspace_id: workspaceId,
                   instance_name: instanceName,
-                  remote_jid: remoteJid,
+                  remote_jid: canonicalSessionJid,
                   from_me: true,
                   direction: "outbound",
                   content: agentData.response,

@@ -112,134 +112,166 @@ app.post("/", async (c) => {
       const sessionId = mem.session_id;
       const sessionPhone = sessionId.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 
-      // Check if there are newer inbound messages for this session that got no AI response
+      // Check direct inbound messages tied to the canonical phone/session
       const { data: unansweredMsgs } = await supabase
         .from("whatsapp_messages")
-        .select("content, push_name, timestamp, remote_jid")
+        .select("content, push_name, timestamp, remote_jid, message_id")
         .eq("from_me", false)
         .eq("direction", "inbound")
         .gt("timestamp", mem.updated_at)
         .or(`remote_jid.like.%${sessionPhone.slice(-10)}%`)
         .order("timestamp", { ascending: true })
-        .limit(5);
+        .limit(20);
 
-      if (!unansweredMsgs || unansweredMsgs.length === 0) continue;
-
-      // Also check via webhook_message_log for @lid mapped sessions
+      // Also check via webhook_message_log for @lid mapped sessions (must run even when direct query is empty)
       const { data: mappedMsgs } = await supabase
         .from("webhook_message_log")
         .select("message_id, processed_at")
         .eq("session_id", sessionId)
         .order("processed_at", { ascending: false })
-        .limit(30);
+        .limit(50);
 
+      let actualMsgs: any[] = [];
       if (mappedMsgs && mappedMsgs.length > 0) {
-        // There are messages logged for this session after the last AI response
-        const msgIds = mappedMsgs.map((m: any) => m.message_id);
-        const { data: actualMsgs } = await supabase
-          .from("whatsapp_messages")
-          .select("content, push_name, timestamp")
-          .in("message_id", msgIds)
-          .eq("from_me", false)
-          .order("timestamp", { ascending: true });
+        const msgIds = mappedMsgs
+          .map((m: any) => m.message_id)
+          .filter((id: string | null) => !!id);
 
-        if (actualMsgs && actualMsgs.length > 0) {
-          const latestMsg = actualMsgs[actualMsgs.length - 1];
-          
-          console.log(`[reprocess] 🔄 Session ${sessionId}: unanswered message "${latestMsg.content?.substring(0, 50)}" from ${latestMsg.push_name}`);
+        if (msgIds.length > 0) {
+          const { data: mappedInbound } = await supabase
+            .from("whatsapp_messages")
+            .select("content, push_name, timestamp, remote_jid, message_id")
+            .in("message_id", msgIds)
+            .eq("from_me", false)
+            .order("timestamp", { ascending: true });
 
-          if (dry_run) {
-            results.push({ 
-              session_id: sessionId, 
-              lead_id: mem.lead_id,
-              message: latestMsg.content?.substring(0, 80),
-              push_name: latestMsg.push_name,
-              status: "would_reprocess"
-            });
-            totalReprocessed++;
-            continue;
-          }
-
-          // Get the agent's instance_name
-          const { data: agent } = await supabase
-            .from("ai_agents")
-            .select("instance_name, workspace_id, name")
-            .eq("id", mem.agent_id)
-            .single();
-
-          if (!agent) continue;
-
-          // Clear the stale last_message_id to avoid dedup blocking
-          await supabase.from("agent_memories")
-            .update({ last_message_id: null })
-            .eq("id", mem.id);
-
-          // Call ai-agent-chat
-          try {
-            const agentRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-chat`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-              },
-              body: JSON.stringify({
-                agent_id: mem.agent_id,
-                session_id: sessionId,
-                message: latestMsg.content,
-                lead_id: mem.lead_id,
-                _internal_webhook: true,
-                instance_name: agent.instance_name,
-              }),
-            });
-
-            const agentData = await agentRes.json();
-
-            if (agentData.skipped || agentData.error) {
-              console.log(`[reprocess] ⏭️ ${sessionId}: ${agentData.reason || agentData.error}`);
-              results.push({ session_id: sessionId, status: "skipped", reason: agentData.reason || agentData.error });
-              continue;
-            }
-
-            const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join("\n\n") : null);
-            if (responseText && agent.instance_name) {
-              const chunks = agentData.chunks || [responseText];
-              for (const chunk of chunks) {
-                if (!chunk?.trim()) continue;
-                const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
-                  number: sessionPhone,
-                  text: chunk,
-                  delay: 0,
-                  linkPreview: false,
-                });
-                if (sendResult) {
-                  await supabase.from("whatsapp_messages").insert({
-                    workspace_id: agent.workspace_id,
-                    instance_name: agent.instance_name,
-                    remote_jid: sessionId,
-                    from_me: true,
-                    direction: "outbound",
-                    content: chunk,
-                    message_type: "text",
-                    push_name: "IA",
-                    message_id: `out-reprocess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    timestamp: new Date().toISOString(),
-                  });
-                }
-                if (chunks.length > 1) await new Promise(r => setTimeout(r, 400));
-              }
-
-              console.log(`[reprocess] ✅ ${sessionId} - response sent (${responseText.length} chars)`);
-              results.push({ session_id: sessionId, status: "sent", response_length: responseText.length, push_name: latestMsg.push_name });
-              totalReprocessed++;
-            }
-          } catch (err) {
-            console.error(`[reprocess] ❌ ${sessionId}:`, err);
-            results.push({ session_id: sessionId, status: "error", error: String(err) });
-          }
-
-          await new Promise(r => setTimeout(r, 250));
+          actualMsgs = mappedInbound || [];
         }
       }
+
+      const candidateByKey = new Map<string, any>();
+      for (const m of [...(unansweredMsgs || []), ...(actualMsgs || [])]) {
+        const key = m.message_id || `${m.timestamp || ""}:${m.remote_jid || ""}:${(m.content || "").slice(0, 60)}`;
+        if (!candidateByKey.has(key)) candidateByKey.set(key, m);
+      }
+
+      const candidateMsgs = Array.from(candidateByKey.values())
+        .filter((m: any) => !!m?.timestamp)
+        .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      if (candidateMsgs.length === 0) continue;
+
+      const latestMsg = candidateMsgs[candidateMsgs.length - 1];
+
+      // Guard against duplicate resend: skip if there is already an outbound after this inbound
+      const outboundFilters = [`remote_jid.eq.${sessionId}`];
+      if (sessionPhone.length >= 10) outboundFilters.push(`remote_jid.like.%${sessionPhone.slice(-10)}%`);
+
+      const { data: outboundAfterInbound } = await supabase
+        .from("whatsapp_messages")
+        .select("id")
+        .eq("from_me", true)
+        .eq("direction", "outbound")
+        .gt("timestamp", latestMsg.timestamp)
+        .or(outboundFilters.join(","))
+        .limit(1);
+
+      if (outboundAfterInbound && outboundAfterInbound.length > 0) {
+        continue;
+      }
+
+      console.log(`[reprocess] 🔄 Session ${sessionId}: unanswered message "${latestMsg.content?.substring(0, 50)}" from ${latestMsg.push_name}`);
+
+      if (dry_run) {
+        results.push({ 
+          session_id: sessionId, 
+          lead_id: mem.lead_id,
+          message: latestMsg.content?.substring(0, 80),
+          push_name: latestMsg.push_name,
+          status: "would_reprocess"
+        });
+        totalReprocessed++;
+        continue;
+      }
+
+      // Get the agent's instance_name
+      const { data: agent } = await supabase
+        .from("ai_agents")
+        .select("instance_name, workspace_id, name")
+        .eq("id", mem.agent_id)
+        .single();
+
+      if (!agent) continue;
+
+      // Clear the stale last_message_id to avoid dedup blocking
+      await supabase.from("agent_memories")
+        .update({ last_message_id: null })
+        .eq("id", mem.id);
+
+      // Call ai-agent-chat
+      try {
+        const agentRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+          },
+          body: JSON.stringify({
+            agent_id: mem.agent_id,
+            session_id: sessionId,
+            message: latestMsg.content,
+            lead_id: mem.lead_id,
+            _internal_webhook: true,
+            instance_name: agent.instance_name,
+          }),
+        });
+
+        const agentData = await agentRes.json();
+
+        if (agentData.skipped || agentData.error) {
+          console.log(`[reprocess] ⏭️ ${sessionId}: ${agentData.reason || agentData.error}`);
+          results.push({ session_id: sessionId, status: "skipped", reason: agentData.reason || agentData.error });
+          continue;
+        }
+
+        const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join("\n\n") : null);
+        if (responseText && agent.instance_name) {
+          const chunks = agentData.chunks || [responseText];
+          for (const chunk of chunks) {
+            if (!chunk?.trim()) continue;
+            const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
+              number: sessionPhone,
+              text: chunk,
+              delay: 0,
+              linkPreview: false,
+            });
+            if (sendResult) {
+              await supabase.from("whatsapp_messages").insert({
+                workspace_id: agent.workspace_id,
+                instance_name: agent.instance_name,
+                remote_jid: sessionId,
+                from_me: true,
+                direction: "outbound",
+                content: chunk,
+                message_type: "text",
+                push_name: "IA",
+                message_id: `out-reprocess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                timestamp: new Date().toISOString(),
+              });
+            }
+            if (chunks.length > 1) await new Promise(r => setTimeout(r, 400));
+          }
+
+          console.log(`[reprocess] ✅ ${sessionId} - response sent (${responseText.length} chars)`);
+          results.push({ session_id: sessionId, status: "sent", response_length: responseText.length, push_name: latestMsg.push_name });
+          totalReprocessed++;
+        }
+      } catch (err) {
+        console.error(`[reprocess] ❌ ${sessionId}:`, err);
+        results.push({ session_id: sessionId, status: "error", error: String(err) });
+      }
+
+      await new Promise(r => setTimeout(r, 250));
     }
 
     return c.json({ message: `Reprocessed ${totalReprocessed} missed conversations`, total: totalReprocessed, results, dry_run }, 200);
