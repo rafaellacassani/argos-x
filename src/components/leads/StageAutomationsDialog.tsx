@@ -97,6 +97,7 @@ export function StageAutomationsDialog({
     if (open && stage) {
       fetchAutomations(stage.id);
       fetchBots();
+      fetchInstances();
       setEditing(null);
     }
   }, [open, stage]);
@@ -107,6 +108,16 @@ export function StageAutomationsDialog({
       .select('id, name, is_active')
       .order('name');
     if (data) setBots(data);
+  };
+
+  const fetchInstances = async () => {
+    if (!workspaceId) return;
+    const [evoRes, cloudRes] = await Promise.all([
+      supabase.from('whatsapp_instances').select('instance_name, display_name').eq('workspace_id', workspaceId).neq('instance_type', 'alerts'),
+      supabase.from('whatsapp_cloud_connections').select('id, inbox_name, phone_number, phone_number_id').eq('workspace_id', workspaceId).eq('is_active', true),
+    ]);
+    if (evoRes.data) setInstances(evoRes.data);
+    if (cloudRes.data) setCloudConnections(cloudRes.data);
   };
 
   const handleEdit = (auto: StageAutomation) => {
