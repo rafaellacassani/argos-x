@@ -31,6 +31,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function buildAiFallbackReply(userMessage: string, mediaType?: string | null): string {
+  const text = (userMessage || "").trim().toLowerCase();
+  if (mediaType === "audio") {
+    return "Recebi seu áudio ✅ e já estou te atendendo; me confirma em uma frase o que você precisa agora para eu seguir com o próximo passo.";
+  }
+  if (mediaType === "image") {
+    return "Recebi sua imagem ✅ e já sigo com seu atendimento; me diz em uma frase qual é sua principal dúvida para eu te ajudar agora.";
+  }
+  if (!text || ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hello", "hi"].includes(text)) {
+    return "Oi! Recebi sua mensagem ✅ e já vou te ajudar agora; para começarmos, me diz seu nome, por favor.";
+  }
+  return "Perfeito, recebi sua mensagem ✅ e vou te atender agora; me conta em uma frase o que você precisa para eu te orientar no próximo passo.";
+}
+
 function getToolDefinitions(enabledTools: string[]) {
   const allTools = [
     {
@@ -474,6 +488,7 @@ serve(async (req) => {
       }
 
       let responseContent = "";
+      const toolsUsed: string[] = [];
       const messages: ChatMessage[] = memory.messages || [];
       messages.push({ role: "user", content: messageText || `[${media_type === "image" ? "Imagem" : media_type === "audio" ? "Áudio" : "Mídia"}]`, timestamp: new Date().toISOString() });
 
@@ -572,25 +587,35 @@ serve(async (req) => {
           })
         });
 
+        let toolCalls: any[] = [];
+
         if (!aiResponse.ok) {
-          console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status}`);
-          if (aiResponse.status === 429) return new Response(JSON.stringify({ error: "Rate limit exceeded." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          if (aiResponse.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-          throw new Error(`AI Gateway error: ${aiResponse.status}`);
+          const gatewayBody = await aiResponse.text().catch(() => "");
+          console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
+
+          if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
+            responseContent = buildAiFallbackReply(messageText, media_type);
+            console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
+          } else {
+            throw new Error(`AI Gateway error: ${aiResponse.status}`);
+          }
+        } else {
+          const aiData = await aiResponse.json();
+          const aiChoice = aiData.choices?.[0];
+          if (!aiChoice) throw new Error("No response from AI");
+
+          responseContent = aiChoice.message?.content || "";
+          toolCalls = aiChoice.message?.tool_calls || [];
         }
 
-        const aiData = await aiResponse.json();
-        const aiChoice = aiData.choices?.[0];
-        if (!aiChoice) throw new Error("No response from AI");
-
-        responseContent = aiChoice.message?.content || "";
-        const toolCalls = aiChoice.message?.tool_calls || [];
-        const toolsUsed: string[] = [];
+        if (!responseContent?.trim()) {
+          responseContent = buildAiFallbackReply(messageText, media_type);
+        }
 
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
-          toolsUsed.push(toolName);
+          if (toolName) toolsUsed.push(toolName);
           console.log(`[ai-agent-chat] 🔧 Tool call: ${toolName}`);
 
           switch (toolName) {
@@ -851,7 +876,7 @@ serve(async (req) => {
       const latencyMs = Date.now() - startTime;
       const tokensUsed = 0;
 
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
 
       console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
 

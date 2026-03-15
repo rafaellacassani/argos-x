@@ -374,7 +374,7 @@ export default function Chats() {
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
   const { workspaceId } = useWorkspace();
-  const [leadPanelOpen, setLeadPanelOpen] = useState(true);
+  const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   
@@ -1610,6 +1610,15 @@ export default function Chats() {
             .or(jidFilters.join(','))
             .order('timestamp', { ascending: true })
             .limit(200);
+
+          if (workspaceId) {
+            dbQuery = dbQuery.eq('workspace_id', workspaceId);
+          }
+
+          const chatInstance = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+          if (chatInstance) {
+            dbQuery = dbQuery.eq('instance_name', chatInstance);
+          }
           
           const { data: dbMsgs } = await dbQuery;
           
@@ -1910,7 +1919,7 @@ export default function Chats() {
   return (
     <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-card" data-tour="chat-section">
       {/* Chat List */}
-      <div className="w-96 border-r border-border flex flex-col">
+      <div className="w-[19rem] border-r border-border flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
