@@ -232,15 +232,19 @@ export function useStageAutomations() {
                   .limit(1);
                 if (logs && logs.length > 0) continue;
               }
-              // Dynamic import to avoid circular deps
               const { data: bot } = await supabase
                 .from('salesbots')
                 .select('is_active')
                 .eq('id', config.bot_id)
                 .maybeSingle();
               if (bot?.is_active) {
-                // Trigger bot - reuse the existing bot_id logic from moveLead
-                console.log(`[StageAutomation] Triggering bot ${config.bot_id} for lead ${leadId}`);
+                console.log(`[StageAutomation] Executing bot ${config.bot_id} for lead ${leadId}`);
+                try {
+                  await executeFlow(config.bot_id, leadId);
+                  console.log(`[StageAutomation] Bot ${config.bot_id} executed successfully for lead ${leadId}`);
+                } catch (botErr) {
+                  console.error(`[StageAutomation] Bot execution error:`, botErr);
+                }
               }
             }
             break;
