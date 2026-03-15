@@ -85,10 +85,13 @@ export function StageAutomationsDialog({
     createAutomation, updateAutomation, deleteAutomation, toggleAutomation,
   } = useStageAutomations();
 
-  const [editing, setEditing] = useState<string | null>(null); // automation id or 'new'
+  const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState<FormData>(DEFAULT_FORM);
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
+  const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
   const [conditionsOpen, setConditionsOpen] = useState(false);
+  const { workspaceId } = useWorkspace();
 
   useEffect(() => {
     if (open && stage) {
