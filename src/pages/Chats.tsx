@@ -1069,13 +1069,20 @@ export default function Chats() {
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
     const jidToKey = new Map<string, string>();
+    const phoneToKey = new Map<string, string>();
 
     const setAlias = (jid: string | undefined, key: string) => {
       if (!jid) return;
       jidToKey.set(jid, key);
     };
 
+    const setPhoneAlias = (instanceName: string, digits: string | undefined, key: string) => {
+      if (!digits || digits.length < 10 || digits.length > 13) return;
+      phoneToKey.set(`${instanceName}:${digits.slice(-10)}`, key);
+    };
+
     for (const c of chatList) {
+      const instanceKey = c.instanceName || "all";
       const matchedLead = findLeadByChat(c.remoteJid, c.remoteJidAlt, c.phone);
       const leadDigits = cleanPhoneNumber(matchedLead?.phone || "");
       const chatDigits = cleanPhoneNumber(c.phone || "");
@@ -1087,11 +1094,12 @@ export default function Chats() {
       );
 
       const computedKey = canonicalDigits
-        ? `${c.instanceName || "all"}:phone:${canonicalDigits.slice(-10)}`
-        : `${c.instanceName || "all"}:${matchedLead?.id || c.remoteJid}`;
+        ? `${instanceKey}:phone:${canonicalDigits.slice(-10)}`
+        : `${instanceKey}:${matchedLead?.id || c.remoteJid}`;
 
       const aliasKey = jidToKey.get(c.remoteJid) || (c.remoteJidAlt ? jidToKey.get(c.remoteJidAlt) : undefined);
-      const key = aliasKey || computedKey;
+      const phoneAliasKey = canonicalDigits ? phoneToKey.get(`${instanceKey}:${canonicalDigits.slice(-10)}`) : undefined;
+      const key = aliasKey || phoneAliasKey || computedKey;
 
       const existing = deduped.get(key);
       const currentTs = c._timestamp || 0;
@@ -1113,6 +1121,8 @@ export default function Chats() {
       setAlias(merged.remoteJidAlt, key);
       setAlias(c.remoteJid, key);
       setAlias(c.remoteJidAlt, key);
+      setPhoneAlias(instanceKey, canonicalDigits, key);
+      setPhoneAlias(instanceKey, cleanPhoneNumber(merged.phone || ""), key);
     }
 
     const result = Array.from(deduped.values());
@@ -1849,10 +1859,11 @@ export default function Chats() {
           .slice(0, 50);
       }
       
-      setChats(allChats);
+      const refreshedChats = selectedInstance.startsWith("meta:") ? allChats : dedupChats(allChats);
+      setChats(refreshedChats);
       toast({
         title: "Conversas atualizadas",
-        description: `${allChats.length} conversas carregadas.`,
+        description: `${refreshedChats.length} conversas carregadas.`,
       });
     } catch (err) {
       console.error("[Chats] Error refreshing chats:", err);
@@ -2262,20 +2273,7 @@ export default function Chats() {
 
       {/* Lead Side Panel */}
       {selectedChat && (() => {
-        // Try matching by whatsapp_jid first, then by phone number
-        let currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
-        if (!currentLead && selectedChat.remoteJidAlt) {
-          currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJidAlt);
-        }
-        if (!currentLead && selectedChat.phone) {
-          const chatPhoneDigits = cleanPhoneNumber(selectedChat.phone);
-          if (chatPhoneDigits.length >= 10) {
-            currentLead = leads.find((l) => {
-              const leadDigits = cleanPhoneNumber(l.phone || "");
-              return leadDigits.length >= 10 && leadDigits.slice(-10) === chatPhoneDigits.slice(-10);
-            });
-          }
-        }
+        const currentLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
         return (
           <LeadSidePanel
             lead={currentLead || null}
@@ -2295,11 +2293,32 @@ export default function Chats() {
               instanceName: selectedChat.instanceName,
             } : undefined}
             onCreateLead={!currentLead ? async () => {
-              const phoneDigits = selectedChat.phone.replace(/[^0-9]/g, "");
+              const phoneCandidates = [
+                cleanPhoneNumber(selectedChat.phone || ""),
+                cleanPhoneNumber(selectedChat.remoteJidAlt || ""),
+                cleanPhoneNumber(selectedChat.remoteJid || ""),
+              ];
+              const normalizedPhone = phoneCandidates.find((digits) => digits.length >= 10 && digits.length <= 13) || "";
+
+              if (!normalizedPhone) {
+                toast({
+                  title: "Número não resolvido",
+                  description: "Não foi possível criar lead sem número real. Aguarde a próxima mensagem do contato.",
+                  variant: "destructive",
+                });
+                return false;
+              }
+
+              const preferredJid = selectedChat.remoteJidAlt?.endsWith("@s.whatsapp.net")
+                ? selectedChat.remoteJidAlt
+                : selectedChat.remoteJid.endsWith("@s.whatsapp.net")
+                  ? selectedChat.remoteJid
+                  : `${normalizedPhone}@s.whatsapp.net`;
+
               const newLead = await createLead({
-                name: selectedChat.name || phoneDigits || "Contato",
-                phone: phoneDigits || selectedChat.remoteJid,
-                whatsapp_jid: selectedChat.remoteJid,
+                name: selectedChat.name || normalizedPhone || "Contato",
+                phone: normalizedPhone,
+                whatsapp_jid: preferredJid,
                 instance_name: selectedChat.instanceName,
                 source: "whatsapp",
               });

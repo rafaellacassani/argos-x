@@ -721,16 +721,19 @@ app.post("/", async (c) => {
       phoneNumber = jidToNumber(remoteJid);
     }
 
+    const canonicalSessionJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
+
     console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
 
     const supabase = getSupabase();
 
     // ============ CHECK SALESBOT WAIT QUEUE FOR INBOUND MESSAGE ============
     try {
+      const waitSessionIds = Array.from(new Set([remoteJid, canonicalSessionJid]));
       const { data: pendingWaits } = await supabase
         .from("salesbot_wait_queue")
         .select("*")
-        .eq("session_id", remoteJid)
+        .in("session_id", waitSessionIds)
         .eq("status", "pending")
         .eq("condition_type", "message_received");
 
@@ -800,6 +803,19 @@ app.post("/", async (c) => {
     const workspaceId = instanceRecord.workspace_id;
     console.log(`[whatsapp-webhook] ✅ Workspace found: ${workspaceId}`);
 
+    // Global webhook dedup + canonical session mapping (applies to AI and SalesBots)
+    if (msgId) {
+      const { error: dedupError } = await supabase
+        .from("webhook_message_log")
+        .insert({ message_id: msgId, session_id: canonicalSessionJid, workspace_id: workspaceId });
+
+      if (dedupError) {
+        console.log(`[whatsapp-webhook] ⚠️ Duplicate webhook event ignored: ${msgId}`);
+        return c.json({ received: true, skipped: "duplicate_message" }, 200, corsHeaders);
+      }
+      console.log(`[whatsapp-webhook] ✅ Message logged for dedup: ${msgId} -> ${canonicalSessionJid}`);
+    }
+
     // --- STEP 1: Check for active AI Agent ---
     const { data: agents } = await supabase
       .from("ai_agents")
@@ -821,18 +837,7 @@ app.post("/", async (c) => {
       }
 
       if (matchingAgent && (messageText || mediaType)) {
-        // ============ WEBHOOK DEDUPLICATION ============
-        if (msgId) {
-          const { error: dupError } = await supabase
-            .from("webhook_message_log")
-            .insert({ message_id: msgId, session_id: remoteJid, workspace_id: workspaceId });
-
-          if (dupError) {
-            console.log(`[whatsapp-webhook] ⚠️ Duplicate webhook event ignored: ${msgId}`);
-            return c.json({ received: true, skipped: "duplicate_message" }, 200, corsHeaders);
-          }
-          console.log(`[whatsapp-webhook] ✅ Message logged for dedup: ${msgId}`);
-        }
+        // Deduplication already handled globally above
 
         // Check respond_to filter
         let shouldRespond = true;
@@ -864,11 +869,12 @@ app.post("/", async (c) => {
         if (shouldRespond) {
           // --- Cancel any pending follow-ups for this session ---
           try {
+            const followupSessionIds = Array.from(new Set([remoteJid, canonicalSessionJid]));
             await supabase.from("agent_followup_queue")
               .update({ status: "canceled", canceled_reason: "lead_responded" })
-              .eq("session_id", remoteJid)
+              .in("session_id", followupSessionIds)
               .eq("status", "pending");
-            console.log(`[whatsapp-webhook] 📅 Canceled pending follow-ups for session ${remoteJid}`);
+            console.log(`[whatsapp-webhook] 📅 Canceled pending follow-ups for session ${canonicalSessionJid}`);
           } catch (fErr) {
             console.error("[whatsapp-webhook] Follow-up cancel error:", fErr);
           }
@@ -922,7 +928,7 @@ app.post("/", async (c) => {
 
             const agentMessage = messageText || mediaCaption || (mediaType ? `[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Áudio" : "Mídia"} enviada pelo lead]` : "");
 
-            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
+            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${canonicalSessionJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
             
             const agentRes = await fetch(agentUrl, {
               method: "POST",
@@ -932,7 +938,7 @@ app.post("/", async (c) => {
               },
               body: JSON.stringify({
                 agent_id: matchingAgent.id,
-                session_id: remoteJid,
+                session_id: canonicalSessionJid,
                 message: agentMessage,
                 lead_id: leadId,
                 message_id: msgId,
@@ -1059,7 +1065,7 @@ app.post("/", async (c) => {
                   await supabase.from("agent_followup_queue").insert({
                     agent_id: matchingAgent.id,
                     lead_id: leadId,
-                    session_id: remoteJid,
+                    session_id: canonicalSessionJid,
                     workspace_id: workspaceId,
                     step_index: 0,
                     execute_at: executeAt,
@@ -1109,19 +1115,19 @@ app.post("/", async (c) => {
 
     const isNewLead = !existingLead;
 
-    // Update whatsapp_jid and instance_name if lead exists but JID is missing OR different from inbound
-    // This ensures the lead's JID always matches the current inbound format (@lid or @s.whatsapp.net)
-    if (existingLead && remoteJid) {
-      const needsJidUpdate = !existingLead.whatsapp_jid || existingLead.whatsapp_jid !== remoteJid;
+    // Keep lead linked to canonical JID (prefer real phone JID over @lid)
+    const preferredLeadJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
+    if (existingLead && preferredLeadJid) {
+      const needsJidUpdate = !existingLead.whatsapp_jid || existingLead.whatsapp_jid !== preferredLeadJid;
       const needsInstanceUpdate = !existingLead.instance_name && instanceName;
       if (needsJidUpdate || needsInstanceUpdate) {
         const updatePayload: Record<string, string> = {};
-        if (needsJidUpdate) updatePayload.whatsapp_jid = remoteJid;
+        if (needsJidUpdate) updatePayload.whatsapp_jid = preferredLeadJid;
         if (needsInstanceUpdate) updatePayload.instance_name = instanceName;
         await supabase.from("leads").update(updatePayload).eq("id", existingLead.id);
-        existingLead.whatsapp_jid = remoteJid;
+        existingLead.whatsapp_jid = preferredLeadJid;
         if (needsInstanceUpdate) existingLead.instance_name = instanceName;
-        console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} JID: ${remoteJid}`);
+        console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} JID: ${preferredLeadJid}`);
       }
     }
 
@@ -1211,7 +1217,7 @@ app.post("/", async (c) => {
         .insert({
           name: leadName,
           phone: validPhone,
-          whatsapp_jid: remoteJid,
+          whatsapp_jid: preferredLeadJid,
           instance_name: instanceName,
           source: "whatsapp",
           stage_id: stageId,
