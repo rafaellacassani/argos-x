@@ -642,15 +642,28 @@ function ActionConfigForm({
   }
 }
 
-// Delay input with hours/days unit
-function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) => void }) {
-  const isDays = hours >= 24 && hours % 24 === 0;
-  const [unit, setUnit] = useState<'hours' | 'days'>(isDays ? 'days' : 'hours');
-  const displayValue = unit === 'days' ? Math.max(1, Math.floor(hours / 24)) : (hours || 1);
-
-  const handleValueChange = (val: number, u: 'hours' | 'days') => {
-    onChange(u === 'days' ? val * 24 : val);
+// Delay input with minutes/hours/days unit
+type DelayUnit = 'minutes' | 'hours' | 'days';
+function DelayInput({ minutes, onChange }: { minutes: number; onChange: (m: number) => void }) {
+  const inferUnit = (): DelayUnit => {
+    if (minutes >= 1440 && minutes % 1440 === 0) return 'days';
+    if (minutes >= 60 && minutes % 60 === 0) return 'hours';
+    return 'minutes';
   };
+  const [unit, setUnit] = useState<DelayUnit>(inferUnit());
+  
+  const toDisplay = (m: number, u: DelayUnit) => {
+    if (u === 'days') return Math.max(1, Math.floor(m / 1440));
+    if (u === 'hours') return Math.max(1, Math.floor(m / 60));
+    return m || 1;
+  };
+  const toMinutes = (val: number, u: DelayUnit) => {
+    if (u === 'days') return val * 1440;
+    if (u === 'hours') return val * 60;
+    return val;
+  };
+
+  const displayValue = toDisplay(minutes, unit);
 
   return (
     <div className="flex items-center gap-2">
@@ -658,14 +671,15 @@ function DelayInput({ hours, onChange }: { hours: number; onChange: (h: number) 
       <Input
         type="number" min={1} className="w-20"
         value={displayValue}
-        onChange={e => handleValueChange(parseInt(e.target.value) || 1, unit)}
+        onChange={e => onChange(toMinutes(parseInt(e.target.value) || 1, unit))}
       />
-      <Select value={unit} onValueChange={(v: 'hours' | 'days') => {
+      <Select value={unit} onValueChange={(v: DelayUnit) => {
         setUnit(v);
-        handleValueChange(displayValue, v);
+        onChange(toMinutes(displayValue, v));
       }}>
-        <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
         <SelectContent>
+          <SelectItem value="minutes">minutos</SelectItem>
           <SelectItem value="hours">horas</SelectItem>
           <SelectItem value="days">dias</SelectItem>
         </SelectContent>
