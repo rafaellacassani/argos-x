@@ -2159,21 +2159,21 @@ export default function Chats() {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium text-foreground truncate">{chat.name}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">{chat.time}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
                       {/* Show source badge */}
                       {chat.isMeta && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 truncate max-w-[80px]">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap flex-shrink-0">
                           {chat.metaPlatform === "instagram" ? "📸 IG" : chat.metaPlatform === "whatsapp_business" ? "📱 WABA" : "💬 FB"}
                         </span>
                       )}
                       {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary truncate max-w-[80px]">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap flex-shrink-0 max-w-[100px] truncate" title={chat.instanceLabel}>
                           {chat.instanceLabel}
                         </span>
                       )}
