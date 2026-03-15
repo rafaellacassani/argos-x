@@ -84,6 +84,7 @@ export function FunnelAutomationsPage({
     deleteAutomation, toggleAutomation, executeStageAutomations,
   } = useStageAutomations();
 
+  const { workspaceId } = useWorkspace();
   const [executingAll, setExecutingAll] = useState(false);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
@@ -122,8 +123,6 @@ export function FunnelAutomationsPage({
     if (evoRes.data) setInstances(evoRes.data);
     if (cloudRes.data) setCloudConnections(cloudRes.data);
   };
-
-  const { workspaceId } = useWorkspace();
 
   useEffect(() => {
     if (open) {
