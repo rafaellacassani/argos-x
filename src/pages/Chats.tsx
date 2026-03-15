@@ -1510,7 +1510,7 @@ export default function Chats() {
             }
           }
 
-          const transformedMessages: Message[] = data
+          const apiMessages: Message[] = data
             .map((msg) => {
               const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
               const timestamp = msg.messageTimestamp;
@@ -1526,12 +1526,76 @@ export default function Chats() {
                 thumbnailBase64,
                 fileName,
                 duration,
+                _ts: timestamp ? timestamp * 1000 : Date.now(),
               };
             })
             .reverse();
-          setMessages(transformedMessages);
+
+          // ═══ MERGE: Also fetch DB messages to fill gaps (AI responses, missed inbound) ═══
+          let mergedMessages = apiMessages;
+          try {
+            const phoneDigits = cleanPhoneNumber(selectedChat.phone || "");
+            const allJids = new Set<string>([selectedChat.remoteJid]);
+            if (selectedChat.remoteJidAlt) allJids.add(selectedChat.remoteJidAlt);
+            const linkedLead = leadsRef.current.find((l) => {
+              if (l.whatsapp_jid === selectedChat.remoteJid) return true;
+              if (selectedChat.remoteJidAlt && l.whatsapp_jid === selectedChat.remoteJidAlt) return true;
+              if (phoneDigits.length >= 10) {
+                const ld = (l.phone || "").replace(/[^0-9]/g, "");
+                return ld.length >= 10 && ld.slice(-10) === phoneDigits.slice(-10);
+              }
+              return false;
+            });
+            if (linkedLead?.whatsapp_jid) allJids.add(linkedLead.whatsapp_jid);
+
+            const jidFilters = Array.from(allJids).map(j => `remote_jid.eq.${j}`);
+            if (phoneDigits.length >= 10) {
+              jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
+            }
+
+            let dbMergeQuery = supabase
+              .from('whatsapp_messages')
+              .select('*')
+              .or(jidFilters.join(','))
+              .order('timestamp', { ascending: true })
+              .limit(200);
+
+            if (workspaceId) dbMergeQuery = dbMergeQuery.eq('workspace_id', workspaceId);
+            const chatInst = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+            if (chatInst) dbMergeQuery = dbMergeQuery.eq('instance_name', chatInst);
+
+            const { data: dbMerge } = await dbMergeQuery;
+            if (dbMerge && dbMerge.length > 0) {
+              const apiIds = new Set(apiMessages.map(m => m.id));
+              const dbOnly: Message[] = dbMerge
+                .filter(m => !apiIds.has(m.message_id || '') && !apiIds.has(m.id))
+                .map(m => {
+                  const date = new Date(m.timestamp);
+                  return {
+                    id: m.message_id || m.id,
+                    content: m.content || '',
+                    time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                    sent: m.from_me || m.direction === 'outbound',
+                    read: true,
+                    type: (m.message_type || 'text') as Message["type"],
+                    _ts: date.getTime(),
+                  };
+                });
+
+              if (dbOnly.length > 0) {
+                const all = [...apiMessages, ...dbOnly];
+                all.sort((a, b) => ((a as any)._ts || 0) - ((b as any)._ts || 0));
+                mergedMessages = all;
+                console.log(`[Chats] Merged ${dbOnly.length} DB-only messages with ${apiMessages.length} API messages`);
+              }
+            }
+          } catch (mergeErr) {
+            console.warn("[Chats] DB merge failed, using API messages only:", mergeErr);
+          }
+
+          setMessages(mergedMessages);
           setHasMoreMessages(data.length >= 30);
-          messageCacheRef.current.set(chatId, transformedMessages);
+          messageCacheRef.current.set(chatId, mergedMessages);
 
           // Fire-and-forget: persist inbound WA messages for dashboard metrics
           if (workspaceId && !selectedChat.isMeta) {
@@ -2061,7 +2125,7 @@ export default function Chats() {
               <p>Nenhuma conversa encontrada</p>
             </div>
           ) : (
-            <div className="p-2">
+            <div className="p-2 overflow-x-auto">
               {filteredChats.map((chat, index) => (
                 <div
                   key={chat.id}
@@ -2095,21 +2159,21 @@ export default function Chats() {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium text-foreground truncate">{chat.name}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">{chat.time}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
                       {/* Show source badge */}
                       {chat.isMeta && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 truncate max-w-[80px]">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap flex-shrink-0">
                           {chat.metaPlatform === "instagram" ? "📸 IG" : chat.metaPlatform === "whatsapp_business" ? "📱 WABA" : "💬 FB"}
                         </span>
                       )}
                       {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary truncate max-w-[80px]">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap flex-shrink-0 max-w-[100px] truncate" title={chat.instanceLabel}>
                           {chat.instanceLabel}
                         </span>
                       )}
