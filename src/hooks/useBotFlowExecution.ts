@@ -141,7 +141,8 @@ export function useBotFlowExecution() {
           if (targetNumber.length < 10) return { success: false, message: 'Número de telefone inválido' };
         }
 
-        const instanceName = lead.instance_name;
+        // Use node's configured instanceName as fallback if lead has none
+        const instanceName = lead.instance_name || (node.data?.instanceName as string);
         if (!instanceName) return { success: false, message: 'Lead sem instância WhatsApp vinculada' };
 
         const sent = await sendText(instanceName, targetNumber, messageText);
