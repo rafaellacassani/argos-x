@@ -1109,15 +1109,20 @@ app.post("/", async (c) => {
 
     const isNewLead = !existingLead;
 
-    // Update whatsapp_jid and instance_name if lead exists but missing JID
-    if (existingLead && !existingLead.whatsapp_jid && remoteJid) {
-      await supabase
-        .from("leads")
-        .update({ whatsapp_jid: remoteJid, instance_name: instanceName })
-        .eq("id", existingLead.id);
-      existingLead.whatsapp_jid = remoteJid;
-      existingLead.instance_name = instanceName;
-      console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} with JID: ${remoteJid}`);
+    // Update whatsapp_jid and instance_name if lead exists but JID is missing OR different from inbound
+    // This ensures the lead's JID always matches the current inbound format (@lid or @s.whatsapp.net)
+    if (existingLead && remoteJid) {
+      const needsJidUpdate = !existingLead.whatsapp_jid || existingLead.whatsapp_jid !== remoteJid;
+      const needsInstanceUpdate = !existingLead.instance_name && instanceName;
+      if (needsJidUpdate || needsInstanceUpdate) {
+        const updatePayload: Record<string, string> = {};
+        if (needsJidUpdate) updatePayload.whatsapp_jid = remoteJid;
+        if (needsInstanceUpdate) updatePayload.instance_name = instanceName;
+        await supabase.from("leads").update(updatePayload).eq("id", existingLead.id);
+        existingLead.whatsapp_jid = remoteJid;
+        if (needsInstanceUpdate) existingLead.instance_name = instanceName;
+        console.log(`[whatsapp-webhook] 📝 Updated lead ${existingLead.name} JID: ${remoteJid}`);
+      }
     }
 
     let matchedBot: any = null;
