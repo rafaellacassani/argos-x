@@ -1172,21 +1172,24 @@ export default function Chats() {
       for (const chat of chats) {
         if (chat.isMeta) continue;
         if (processedJidsRef.current.has(chat.remoteJid)) continue;
-        
+
         const existingLead = findLeadByChat(chat.remoteJid, chat.remoteJidAlt, chat.phone);
-        
+        const preferredJid = chat.remoteJidAlt?.endsWith("@s.whatsapp.net")
+          ? chat.remoteJidAlt
+          : chat.remoteJid;
+
         if (!existingLead) {
           chatsNeedingLeads.push({ chat });
-        } else if (existingLead.whatsapp_jid !== chat.remoteJid) {
+        } else if (existingLead.whatsapp_jid !== preferredJid) {
           processedJidsRef.current.add(chat.remoteJid);
-          if (chat.remoteJid.endsWith("@s.whatsapp.net") && existingLead.whatsapp_jid?.endsWith("@lid")) {
-            updateLead(existingLead.id, { whatsapp_jid: chat.remoteJid }).catch(() => {});
+          if (preferredJid.endsWith("@s.whatsapp.net")) {
+            updateLead(existingLead.id, { whatsapp_jid: preferredJid }).catch(() => {});
           }
         } else {
           processedJidsRef.current.add(chat.remoteJid);
         }
       }
-      
+
       if (chatsNeedingLeads.length > 0) {
         console.log(`[Chats] Background: auto-creating ${chatsNeedingLeads.length} leads`);
         const BATCH_SIZE = 20;
@@ -1194,21 +1197,39 @@ export default function Chats() {
           const batch = chatsNeedingLeads.slice(i, i + BATCH_SIZE);
           for (const { chat } of batch) {
             try {
-              processedJidsRef.current.add(chat.remoteJid);
               const phoneDigits = cleanPhoneNumber(chat.phone || "");
-              const validPhone = phoneDigits.length <= 13 && phoneDigits.length >= 8 ? chat.phone : "";
-              const normalizedPhone = validPhone ? validPhone.replace(/[^0-9+]/g, "") : "";
+              const altDigits = cleanPhoneNumber(chat.remoteJidAlt || "");
+              const normalizedPhone = (phoneDigits.length >= 10 && phoneDigits.length <= 13)
+                ? phoneDigits
+                : (altDigits.length >= 10 && altDigits.length <= 13 ? altDigits : "");
+
+              // Não criar lead sem número real (evita duplicidade com phone vazio)
+              if (!normalizedPhone) {
+                console.log(`[Chats] Skipping auto-create for unresolved chat ${chat.remoteJid}`);
+                continue;
+              }
+
+              const preferredJid = chat.remoteJid.endsWith("@lid") && chat.remoteJidAlt?.endsWith("@s.whatsapp.net")
+                ? chat.remoteJidAlt
+                : chat.remoteJid;
+
+              processedJidsRef.current.add(chat.remoteJid);
+
               const isLidChat = chat.remoteJid?.endsWith("@lid");
               const rawName = chat.name || "";
               const nameIsJid = rawName.includes("@") || /^\d{14,}$/.test(rawName.replace(/[^0-9]/g, ""));
-              const leadName = nameIsJid ? (isLidChat ? "Contato WhatsApp" : (normalizedPhone || "Contato WhatsApp")) : (rawName || normalizedPhone || "Contato WhatsApp");
+              const leadName = nameIsJid
+                ? (isLidChat ? "Contato WhatsApp" : (normalizedPhone || "Contato WhatsApp"))
+                : (rawName || normalizedPhone || "Contato WhatsApp");
+
               const newLead = await createLeadSilentRef.current({
                 name: leadName,
                 phone: normalizedPhone,
-                whatsapp_jid: chat.remoteJid,
+                whatsapp_jid: preferredJid,
                 instance_name: chat.instanceName,
                 source: 'whatsapp',
               });
+
               if (newLead && chat.lastMessage && tagRulesRef.current.length > 0) {
                 const matchingTagIds = checkMessageAgainstRulesRef.current(chat.lastMessage);
                 for (const tagId of matchingTagIds) {
