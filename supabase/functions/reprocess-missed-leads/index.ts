@@ -75,11 +75,14 @@ app.post("/", async (c) => {
     const { hours_back = 48, dry_run = false } = body;
     const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
 
-    // Find inbound WhatsApp messages with no outbound response within 10 minutes
-    // These are leads that were left hanging
-    const { data: missedMessages } = await supabase.rpc("get_missed_messages_for_reprocess", {
-      cutoff_time: cutoff,
-    }).catch(() => ({ data: null }));
+    // Optional RPC path (if function exists) - best effort only
+    try {
+      await supabase.rpc("get_missed_messages_for_reprocess", {
+        cutoff_time: cutoff,
+      });
+    } catch (rpcErr) {
+      console.log("[reprocess] ℹ️ RPC get_missed_messages_for_reprocess unavailable, using fallback query");
+    }
 
     // Fallback: direct query approach
     // Find agent_memories where last message in array is role=assistant (qualification question)
