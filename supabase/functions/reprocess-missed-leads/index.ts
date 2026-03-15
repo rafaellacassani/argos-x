@@ -236,7 +236,7 @@ app.post("/", async (c) => {
             results.push({ session_id: sessionId, status: "error", error: String(err) });
           }
 
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 250));
         }
       }
     }
