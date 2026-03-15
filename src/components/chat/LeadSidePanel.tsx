@@ -298,15 +298,16 @@ export function LeadSidePanel({
   // Collapse toggle button (always visible)
   if (!isOpen) {
     return (
-      <div className="flex items-start border-l border-border bg-card">
+      <div className="flex items-center border-l border-border bg-card px-2">
         <Button
           variant="ghost"
-          size="icon"
-          className="m-2"
+          size="sm"
+          className="h-8 gap-1.5 text-xs text-muted-foreground"
           onClick={onToggle}
           title="Abrir painel do lead"
         >
-          <PanelRightOpen className="w-5 h-5" />
+          <PanelRightOpen className="w-4 h-4" />
+          Abrir painel
         </Button>
       </div>
     );
