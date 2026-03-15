@@ -546,12 +546,15 @@ serve(async (req) => {
 
         const tools = getToolDefinitions(agent.tools || []);
 
-        // Response delay
-        const delay = agent.response_delay_seconds || 0;
-        if (delay > 0) {
-          await sleep(delay * 1000);
-        } else if (delay === -1) {
-          await sleep(30000 + Math.random() * 90000);
+        // Response delay — SKIP when called from webhook (typing indicator handles humanization)
+        // Also cap delay at 15s max to prevent Edge Function timeouts
+        if (!_internal_webhook) {
+          const delay = agent.response_delay_seconds || 0;
+          if (delay > 0) {
+            await sleep(Math.min(delay * 1000, 15000));
+          } else if (delay === -1) {
+            await sleep(2000 + Math.random() * 5000); // 2-7s humanized delay (safe)
+          }
         }
 
         console.log(`[ai-agent-chat] 🧠 Calling AI model: ${agent.model}, messages: ${aiMessages.length}, tools: ${tools.length}`);
