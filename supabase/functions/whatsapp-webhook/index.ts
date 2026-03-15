@@ -803,6 +803,19 @@ app.post("/", async (c) => {
     const workspaceId = instanceRecord.workspace_id;
     console.log(`[whatsapp-webhook] ✅ Workspace found: ${workspaceId}`);
 
+    // Global webhook dedup + canonical session mapping (applies to AI and SalesBots)
+    if (msgId) {
+      const { error: dedupError } = await supabase
+        .from("webhook_message_log")
+        .insert({ message_id: msgId, session_id: canonicalSessionJid, workspace_id: workspaceId });
+
+      if (dedupError) {
+        console.log(`[whatsapp-webhook] ⚠️ Duplicate webhook event ignored: ${msgId}`);
+        return c.json({ received: true, skipped: "duplicate_message" }, 200, corsHeaders);
+      }
+      console.log(`[whatsapp-webhook] ✅ Message logged for dedup: ${msgId} -> ${canonicalSessionJid}`);
+    }
+
     // --- STEP 1: Check for active AI Agent ---
     const { data: agents } = await supabase
       .from("ai_agents")
