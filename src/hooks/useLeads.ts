@@ -55,13 +55,14 @@ async function executeBotFlow(botId: string, leadId: string) {
       // Execute node based on type
       if (currentNode.type === 'send_message') {
         const messageText = currentNode.data?.message as string;
-        if (messageText && lead.instance_name) {
+        const effectiveInstance = lead.instance_name || (currentNode.data?.instanceName as string);
+        if (messageText && effectiveInstance) {
           const targetNumber = lead.whatsapp_jid || lead.phone?.replace(/\D/g, '');
           if (targetNumber) {
             const { error } = await supabase.functions.invoke('evolution-api', {
               body: {
                 action: 'send-text',
-                instanceName: lead.instance_name,
+                instanceName: effectiveInstance,
                 data: { number: targetNumber, text: messageText }
               }
             });
