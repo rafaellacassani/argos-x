@@ -1859,10 +1859,11 @@ export default function Chats() {
           .slice(0, 50);
       }
       
-      setChats(allChats);
+      const refreshedChats = selectedInstance.startsWith("meta:") ? allChats : dedupChats(allChats);
+      setChats(refreshedChats);
       toast({
         title: "Conversas atualizadas",
-        description: `${allChats.length} conversas carregadas.`,
+        description: `${refreshedChats.length} conversas carregadas.`,
       });
     } catch (err) {
       console.error("[Chats] Error refreshing chats:", err);
