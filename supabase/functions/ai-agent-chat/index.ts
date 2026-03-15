@@ -31,6 +31,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function buildAiFallbackReply(userMessage: string, mediaType?: string | null): string {
+  const text = (userMessage || "").trim().toLowerCase();
+  if (mediaType === "audio") {
+    return "Recebi seu áudio ✅ e já estou te atendendo; me confirma em uma frase o que você precisa agora para eu seguir com o próximo passo.";
+  }
+  if (mediaType === "image") {
+    return "Recebi sua imagem ✅ e já sigo com seu atendimento; me diz em uma frase qual é sua principal dúvida para eu te ajudar agora.";
+  }
+  if (!text || ["oi", "olá", "ola", "bom dia", "boa tarde", "boa noite", "hello", "hi"].includes(text)) {
+    return "Oi! Recebi sua mensagem ✅ e já vou te ajudar agora; para começarmos, me diz seu nome, por favor.";
+  }
+  return "Perfeito, recebi sua mensagem ✅ e vou te atender agora; me conta em uma frase o que você precisa para eu te orientar no próximo passo.";
+}
+
 function getToolDefinitions(enabledTools: string[]) {
   const allTools = [
     {
