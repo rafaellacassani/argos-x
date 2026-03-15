@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.support-chat]
 verify_jwt = false
+
+[functions.reprocess-missed-leads]
+verify_jwt = false
