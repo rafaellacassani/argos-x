@@ -876,7 +876,7 @@ serve(async (req) => {
       const latencyMs = Date.now() - startTime;
       const tokensUsed = 0;
 
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: [], tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
 
       console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
 

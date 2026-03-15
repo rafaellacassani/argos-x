@@ -1610,6 +1610,15 @@ export default function Chats() {
             .or(jidFilters.join(','))
             .order('timestamp', { ascending: true })
             .limit(200);
+
+          if (workspaceId) {
+            dbQuery = dbQuery.eq('workspace_id', workspaceId);
+          }
+
+          const chatInstance = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+          if (chatInstance) {
+            dbQuery = dbQuery.eq('instance_name', chatInstance);
+          }
           
           const { data: dbMsgs } = await dbQuery;
           
