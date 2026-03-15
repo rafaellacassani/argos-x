@@ -563,7 +563,65 @@ export function useLeads() {
       toast.error('Limite de leads atingido. Acesse Configurações > Planos para adicionar mais.');
       return null;
     }
+
     try {
+      const rawPhone = leadData.phone || '';
+      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
+      const providedJid = (leadData.whatsapp_jid || '').trim();
+      const isWhatsappLead = leadData.source === 'whatsapp' || !!providedJid || !!leadData.instance_name;
+      const preferredJid = providedJid || (normalizedPhone ? `${normalizedPhone}@s.whatsapp.net` : undefined);
+
+      if (isWhatsappLead && !normalizedPhone) {
+        toast.error('Não foi possível criar lead sem número válido.');
+        return null;
+      }
+
+      if (isWhatsappLead) {
+        const orFilters: string[] = [];
+        if (providedJid) orFilters.push(`whatsapp_jid.eq.${providedJid}`);
+        if (preferredJid && preferredJid !== providedJid) orFilters.push(`whatsapp_jid.eq.${preferredJid}`);
+        if (normalizedPhone) orFilters.push(`phone.like.%${normalizedPhone.slice(-10)}`);
+
+        if (orFilters.length > 0) {
+          const { data: existingLeads } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('workspace_id', workspaceId)
+            .or(orFilters.join(','))
+            .limit(1);
+
+          if (existingLeads && existingLeads.length > 0) {
+            let existing = existingLeads[0] as Lead;
+            const updatePayload: Partial<Lead> = {};
+
+            if ((!existing.whatsapp_jid || existing.whatsapp_jid.endsWith('@lid')) && preferredJid) {
+              updatePayload.whatsapp_jid = preferredJid;
+            }
+            if ((!existing.phone || existing.phone.replace(/[^0-9]/g, '').length < 10) && normalizedPhone) {
+              updatePayload.phone = normalizedPhone;
+            }
+            if (!existing.instance_name && leadData.instance_name) {
+              updatePayload.instance_name = leadData.instance_name;
+            }
+
+            if (Object.keys(updatePayload).length > 0) {
+              const { data: updated } = await supabase
+                .from('leads')
+                .update(updatePayload)
+                .eq('id', existing.id)
+                .select()
+                .single();
+              if (updated) existing = { ...existing, ...updated } as Lead;
+            }
+
+            setLeads((prev) => prev.map((l) => (l.id === existing.id ? { ...l, ...existing } : l)));
+            toast.success('Lead já existente vinculado à conversa.');
+            return existing;
+          }
+        }
+      }
+
       let stageId = leadData.stage_id;
       if (!stageId && currentFunnel) {
         const { data: firstStage } = await supabase
@@ -573,7 +631,7 @@ export function useLeads() {
           .order('position', { ascending: true })
           .limit(1)
           .maybeSingle();
-        
+
         stageId = firstStage?.id;
       }
 
@@ -588,21 +646,21 @@ export function useLeads() {
         .order('position', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       const newPosition = (maxPosData?.position || 0) + 1;
 
       const { data, error } = await supabase
         .from('leads')
         .insert({
           name: leadData.name || 'Novo Lead',
-          phone: leadData.phone || '',
+          phone: normalizedPhone || (isWhatsappLead ? '' : rawPhone),
           email: leadData.email,
           avatar_url: leadData.avatar_url,
           company: leadData.company,
           value: leadData.value || 0,
           stage_id: stageId,
           source: leadData.source || 'manual',
-          whatsapp_jid: leadData.whatsapp_jid,
+          whatsapp_jid: preferredJid || leadData.whatsapp_jid,
           instance_name: leadData.instance_name,
           responsible_user: leadData.responsible_user,
           notes: leadData.notes,
@@ -628,7 +686,7 @@ export function useLeads() {
           .select('id')
           .eq('name', 'WhatsApp')
           .maybeSingle();
-        
+
         if (whatsappTag) {
           await supabase.from('lead_tag_assignments').insert({
             lead_id: data.id,
