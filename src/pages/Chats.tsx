@@ -1001,19 +1001,31 @@ export default function Chats() {
     }
   }, []);
 
-  // Helper: deduplicate chats using O(1) map lookups
+  // Helper: deduplicate chats using canonical phone key per instance
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
     for (const c of chatList) {
       const matchedLead = findLeadByChat(c.remoteJid, c.remoteJidAlt, c.phone);
+      const leadDigits = cleanPhoneNumber(matchedLead?.phone || "");
       const chatDigits = cleanPhoneNumber(c.phone || "");
-      const key = matchedLead?.id || (chatDigits.length >= 10 ? chatDigits.slice(-10) : c.remoteJid);
+      const altDigits = cleanPhoneNumber(c.remoteJidAlt || "");
+      const jidDigits = cleanPhoneNumber(c.remoteJid || "");
+
+      const canonicalDigits = [chatDigits, leadDigits, altDigits, jidDigits].find(
+        (digits) => digits.length >= 10 && digits.length <= 13
+      );
+
+      const key = canonicalDigits
+        ? `${c.instanceName || "all"}:phone:${canonicalDigits.slice(-10)}`
+        : `${c.instanceName || "all"}:${matchedLead?.id || c.remoteJid}`;
+
       const existing = deduped.get(key);
       if (!existing || ((c as any)._timestamp || 0) > ((existing as any)._timestamp || 0)) {
         deduped.set(key, c);
       }
     }
-    let result = Array.from(deduped.values());
+
+    const result = Array.from(deduped.values());
     result.sort((a, b) => (b._timestamp || 0) - (a._timestamp || 0));
     return result.slice(0, 100);
   }, [findLeadByChat]);
