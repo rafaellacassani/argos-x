@@ -25,17 +25,12 @@ async function evolutionFetch(endpoint: string, method: string, body?: Record<st
   const opts: RequestInit = { method, headers };
   if (body) opts.body = JSON.stringify(body);
   const res = await fetch(url, opts);
-  if (!res.ok) {
-    const text = await res.text();
-    console.error(`[reprocess] Evolution API error ${res.status}: ${text}`);
-    return null;
-  }
+  if (!res.ok) return null;
   return res.json();
 }
 
 app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 
-// POST - Reprocess leads that received inbound messages but got no AI response
 app.post("/", async (c) => {
   try {
     const authHeader = c.req.header("authorization");
@@ -44,100 +39,139 @@ app.post("/", async (c) => {
     }
 
     const body = await c.req.json().catch(() => ({}));
-    const { workspace_id, hours_back = 24, dry_run = false } = body;
+    const { hours_back = 48, dry_run = false } = body;
 
     const supabase = getSupabase();
+    const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
 
-    // Find all active AI agents
-    const agentFilter = workspace_id
-      ? supabase.from("ai_agents").select("id, instance_name, workspace_id, name").eq("is_active", true).eq("workspace_id", workspace_id)
-      : supabase.from("ai_agents").select("id, instance_name, workspace_id, name").eq("is_active", true);
+    // Find inbound WhatsApp messages with no outbound response within 10 minutes
+    // These are leads that were left hanging
+    const { data: missedMessages } = await supabase.rpc("get_missed_messages_for_reprocess", {
+      cutoff_time: cutoff,
+    }).catch(() => ({ data: null }));
 
-    const { data: agents } = await agentFilter;
-    if (!agents || agents.length === 0) {
-      return c.json({ message: "No active agents found", reprocessed: 0 }, 200);
+    // Fallback: direct query approach
+    // Find agent_memories where last message in array is role=assistant (qualification question)
+    // AND there exists a NEWER inbound whatsapp_message with no outbound response
+    const { data: memories } = await supabase
+      .from("agent_memories")
+      .select("id, agent_id, session_id, messages, lead_id, updated_at, is_paused")
+      .eq("is_paused", false)
+      .eq("is_processing", false)
+      .gte("updated_at", cutoff);
+
+    if (!memories || memories.length === 0) {
+      return c.json({ message: "No memories found in time window", reprocessed: 0 }, 200);
     }
 
-    console.log(`[reprocess] Found ${agents.length} active agents`);
-
-    const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
-    let totalReprocessed = 0;
     const results: any[] = [];
+    let totalReprocessed = 0;
 
-    for (const agent of agents) {
-      // Get all memories for this agent updated recently
-      const { data: memories } = await supabase
-        .from("agent_memories")
-        .select("id, session_id, messages, lead_id, is_paused, updated_at")
-        .eq("agent_id", agent.id)
-        .eq("is_paused", false)
-        .gte("updated_at", cutoff);
+    for (const mem of memories) {
+      const messages = Array.isArray(mem.messages) ? mem.messages : [];
+      if (messages.length === 0) continue;
 
-      if (!memories || memories.length === 0) continue;
+      const lastMsg = messages[messages.length - 1];
+      // Only reprocess if the LAST message is from assistant (AI asked something, lead may have responded but it was lost)
+      if (lastMsg.role !== "assistant") continue;
 
-      for (const mem of memories) {
-        const messages = Array.isArray(mem.messages) ? mem.messages : [];
-        if (messages.length === 0) continue;
+      const sessionId = mem.session_id;
+      const sessionPhone = sessionId.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 
-        // Check if the last message was from the user (no AI response)
-        const lastMsg = messages[messages.length - 1];
-        if (lastMsg.role !== "user") continue; // AI already responded
+      // Check if there are newer inbound messages for this session that got no AI response
+      const { data: unansweredMsgs } = await supabase
+        .from("whatsapp_messages")
+        .select("content, push_name, timestamp, remote_jid")
+        .eq("from_me", false)
+        .eq("direction", "inbound")
+        .gt("timestamp", mem.updated_at)
+        .or(`remote_jid.like.%${sessionPhone.slice(-10)}%`)
+        .order("timestamp", { ascending: true })
+        .limit(5);
 
-        // This lead got a message but no AI response — needs reprocessing
-        const sessionId = mem.session_id;
-        const lastUserMessage = lastMsg.content;
+      if (!unansweredMsgs || unansweredMsgs.length === 0) continue;
 
-        console.log(`[reprocess] 🔄 Session ${sessionId} has unanswered message: "${lastUserMessage?.substring(0, 50)}"`);
+      // Also check via webhook_message_log for @lid mapped sessions
+      const { data: mappedMsgs } = await supabase
+        .from("webhook_message_log")
+        .select("message_id")
+        .eq("session_id", sessionId)
+        .gte("processed_at", mem.updated_at);
 
-        if (dry_run) {
-          results.push({ session_id: sessionId, lead_id: mem.lead_id, last_message: lastUserMessage?.substring(0, 80), agent: agent.name });
-          totalReprocessed++;
-          continue;
-        }
+      if (mappedMsgs && mappedMsgs.length > 0) {
+        // There are messages logged for this session after the last AI response
+        const msgIds = mappedMsgs.map((m: any) => m.message_id);
+        const { data: actualMsgs } = await supabase
+          .from("whatsapp_messages")
+          .select("content, push_name, timestamp")
+          .in("message_id", msgIds)
+          .eq("from_me", false)
+          .order("timestamp", { ascending: true });
 
-        // Call ai-agent-chat to generate response
-        try {
-          const agentRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-chat`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-            },
-            body: JSON.stringify({
-              agent_id: agent.id,
-              session_id: sessionId,
-              message: lastUserMessage,
+        if (actualMsgs && actualMsgs.length > 0) {
+          const latestMsg = actualMsgs[actualMsgs.length - 1];
+          
+          console.log(`[reprocess] 🔄 Session ${sessionId}: unanswered message "${latestMsg.content?.substring(0, 50)}" from ${latestMsg.push_name}`);
+
+          if (dry_run) {
+            results.push({ 
+              session_id: sessionId, 
               lead_id: mem.lead_id,
-              _internal_webhook: true,
-              instance_name: agent.instance_name,
-            }),
-          });
-
-          const agentData = await agentRes.json();
-
-          if (agentData.skipped) {
-            console.log(`[reprocess] ⏭️ Skipped ${sessionId}: ${agentData.reason}`);
-            results.push({ session_id: sessionId, status: "skipped", reason: agentData.reason });
+              message: latestMsg.content?.substring(0, 80),
+              push_name: latestMsg.push_name,
+              status: "would_reprocess"
+            });
+            totalReprocessed++;
             continue;
           }
 
-          if (agentData.error) {
-            console.error(`[reprocess] ❌ Error for ${sessionId}: ${agentData.error}`);
-            results.push({ session_id: sessionId, status: "error", error: agentData.error });
-            continue;
-          }
+          // Get the agent's instance_name
+          const { data: agent } = await supabase
+            .from("ai_agents")
+            .select("instance_name, workspace_id, name")
+            .eq("id", mem.agent_id)
+            .single();
 
-          // Send response via Evolution API
-          const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join("\n\n") : null);
-          if (responseText && agent.instance_name) {
-            // Extract phone from session_id
-            const phone = sessionId.replace(/@s\.whatsapp\.net$|@lid$/i, "");
+          if (!agent) continue;
 
-            if (agentData.chunks && Array.isArray(agentData.chunks)) {
-              for (const chunk of agentData.chunks) {
+          // Clear the stale last_message_id to avoid dedup blocking
+          await supabase.from("agent_memories")
+            .update({ last_message_id: null })
+            .eq("id", mem.id);
+
+          // Call ai-agent-chat
+          try {
+            const agentRes = await fetch(`${SUPABASE_URL}/functions/v1/ai-agent-chat`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
+              },
+              body: JSON.stringify({
+                agent_id: mem.agent_id,
+                session_id: sessionId,
+                message: latestMsg.content,
+                lead_id: mem.lead_id,
+                _internal_webhook: true,
+                instance_name: agent.instance_name,
+              }),
+            });
+
+            const agentData = await agentRes.json();
+
+            if (agentData.skipped || agentData.error) {
+              console.log(`[reprocess] ⏭️ ${sessionId}: ${agentData.reason || agentData.error}`);
+              results.push({ session_id: sessionId, status: "skipped", reason: agentData.reason || agentData.error });
+              continue;
+            }
+
+            const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join("\n\n") : null);
+            if (responseText && agent.instance_name) {
+              const chunks = agentData.chunks || [responseText];
+              for (const chunk of chunks) {
                 if (!chunk?.trim()) continue;
                 const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
-                  number: phone,
+                  number: sessionPhone,
                   text: chunk,
                   delay: 0,
                   linkPreview: false,
@@ -156,51 +190,24 @@ app.post("/", async (c) => {
                     timestamp: new Date().toISOString(),
                   });
                 }
-                if (agentData.chunks.length > 1) await new Promise(r => setTimeout(r, 1500));
+                if (chunks.length > 1) await new Promise(r => setTimeout(r, 1500));
               }
-            } else {
-              const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
-                number: phone,
-                text: responseText,
-                delay: 0,
-                linkPreview: false,
-              });
-              if (sendResult) {
-                await supabase.from("whatsapp_messages").insert({
-                  workspace_id: agent.workspace_id,
-                  instance_name: agent.instance_name,
-                  remote_jid: sessionId,
-                  from_me: true,
-                  direction: "outbound",
-                  content: responseText,
-                  message_type: "text",
-                  push_name: "IA",
-                  message_id: `out-reprocess-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  timestamp: new Date().toISOString(),
-                });
-              }
+
+              console.log(`[reprocess] ✅ ${sessionId} - response sent (${responseText.length} chars)`);
+              results.push({ session_id: sessionId, status: "sent", response_length: responseText.length, push_name: latestMsg.push_name });
+              totalReprocessed++;
             }
-
-            console.log(`[reprocess] ✅ Reprocessed ${sessionId} - response sent`);
-            results.push({ session_id: sessionId, status: "sent", response_length: responseText.length });
-            totalReprocessed++;
+          } catch (err) {
+            console.error(`[reprocess] ❌ ${sessionId}:`, err);
+            results.push({ session_id: sessionId, status: "error", error: String(err) });
           }
-        } catch (err) {
-          console.error(`[reprocess] ❌ Error reprocessing ${sessionId}:`, err);
-          results.push({ session_id: sessionId, status: "error", error: String(err) });
-        }
 
-        // Small delay between reprocessing to avoid rate limits
-        await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 3000));
+        }
       }
     }
 
-    return c.json({
-      message: `Reprocessed ${totalReprocessed} missed conversations`,
-      total: totalReprocessed,
-      results,
-      dry_run,
-    }, 200);
+    return c.json({ message: `Reprocessed ${totalReprocessed} missed conversations`, total: totalReprocessed, results, dry_run }, 200);
   } catch (error) {
     console.error("[reprocess] ❌ Error:", error);
     return c.json({ error: "Internal server error" }, 500);
