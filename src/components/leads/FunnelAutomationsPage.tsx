@@ -88,6 +88,8 @@ export function FunnelAutomationsPage({
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
   const [loadingStages, setLoadingStages] = useState(false);
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
+  const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
 
   // Sheet form state
   const [sheetOpen, setSheetOpen] = useState(false);
