@@ -326,8 +326,8 @@ export function useStageAutomations() {
 
       if (timedAutos && timedAutos.length > 0 && lead.workspace_id) {
         for (const auto of timedAutos) {
-          const delayHours = auto.trigger_delay_hours || 1;
-          const executeAt = new Date(Date.now() + delayHours * 60 * 60 * 1000);
+          const delayMinutes = auto.trigger_delay_minutes || 60;
+          const executeAt = new Date(Date.now() + delayMinutes * 60 * 1000);
           await supabase.from('stage_automation_queue').insert({
             automation_id: auto.id,
             lead_id: leadId,
