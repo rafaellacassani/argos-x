@@ -84,6 +84,8 @@ export default function SalesBotBuilder() {
   const [showPreview, setShowPreview] = useState(false);
   const [templateName, setTemplateName] = useState<string | null>(null);
   const [whatsappInstances, setWhatsappInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
+  const [funnels, setFunnels] = useState<Array<{ id: string; name: string }>>([]);
+  const [funnelStages, setFunnelStages] = useState<Array<{ id: string; name: string; funnel_id: string }>>([]);
 
   const isEditing = !!id;
 
