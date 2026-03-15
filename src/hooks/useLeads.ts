@@ -657,45 +657,58 @@ export function useLeads() {
       // Normalize phone: digits only
       const rawPhone = leadData.phone || '';
       const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
-      const normalizedPhone = phoneDigits.length >= 8 && phoneDigits.length <= 13 ? phoneDigits : '';
+      const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
+
+      // Never auto-create lead with unresolved @lid and no real phone
+      if (!normalizedPhone) {
+        if (leadData.whatsapp_jid?.endsWith('@lid')) {
+          const { data: existingByLid } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('whatsapp_jid', leadData.whatsapp_jid)
+            .limit(1);
+
+          if (existingByLid && existingByLid.length > 0) {
+            return null;
+          }
+        }
+        console.log(`[createLeadSilent] Skipping creation without valid phone: ${leadData.whatsapp_jid || 'unknown'}`);
+        return null;
+      }
 
       // Pre-check: search for existing lead by JID or normalized phone (last 10 digits)
       const orFilters: string[] = [];
       if (leadData.whatsapp_jid) {
         orFilters.push(`whatsapp_jid.eq.${leadData.whatsapp_jid}`);
       }
-      if (normalizedPhone.length >= 10) {
-        // Use ilike with suffix match to find leads with same last 10 digits
-        orFilters.push(`phone.like.%${normalizedPhone.slice(-10)}`);
-      }
+      orFilters.push(`phone.like.%${normalizedPhone.slice(-10)}`);
       
-      if (orFilters.length > 0) {
-        const { data: existingLeads } = await supabase
-          .from('leads')
-          .select('id, whatsapp_jid, phone')
-          .eq('workspace_id', workspaceId)
-          .or(orFilters.join(','))
-          .limit(1);
-        
-        if (existingLeads && existingLeads.length > 0) {
-          const existing = existingLeads[0];
-          // Lead already exists — update its JID if we have a better one
-          if (leadData.whatsapp_jid && existing.whatsapp_jid !== leadData.whatsapp_jid) {
-            // Prefer @s.whatsapp.net over @lid
-            const shouldUpdate = 
-              !existing.whatsapp_jid || // no JID yet
-              (leadData.whatsapp_jid.endsWith('@s.whatsapp.net') && existing.whatsapp_jid.endsWith('@lid'));
-            if (shouldUpdate) {
-              await supabase.from('leads').update({ whatsapp_jid: leadData.whatsapp_jid }).eq('id', existing.id);
-            }
+      const { data: existingLeads } = await supabase
+        .from('leads')
+        .select('id, whatsapp_jid, phone')
+        .eq('workspace_id', workspaceId)
+        .or(orFilters.join(','))
+        .limit(1);
+      
+      if (existingLeads && existingLeads.length > 0) {
+        const existing = existingLeads[0];
+        // Lead already exists — update its JID if we have a better one
+        if (leadData.whatsapp_jid && existing.whatsapp_jid !== leadData.whatsapp_jid) {
+          // Prefer @s.whatsapp.net over @lid
+          const shouldUpdate = 
+            !existing.whatsapp_jid ||
+            (leadData.whatsapp_jid.endsWith('@s.whatsapp.net') && existing.whatsapp_jid.endsWith('@lid'));
+          if (shouldUpdate) {
+            await supabase.from('leads').update({ whatsapp_jid: leadData.whatsapp_jid }).eq('id', existing.id);
           }
-          // Update phone if missing
-          if (normalizedPhone && (!existing.phone || existing.phone.replace(/[^0-9]/g, '').length < 8)) {
-            await supabase.from('leads').update({ phone: normalizedPhone }).eq('id', existing.id);
-          }
-          console.log(`[createLeadSilent] Found existing lead ${existing.id} for ${leadData.whatsapp_jid || normalizedPhone}, skipping creation`);
-          return null; // Don't create duplicate
         }
+        // Update phone if missing
+        if (!existing.phone || existing.phone.replace(/[^0-9]/g, '').length < 10) {
+          await supabase.from('leads').update({ phone: normalizedPhone }).eq('id', existing.id);
+        }
+        console.log(`[createLeadSilent] Found existing lead ${existing.id} for ${leadData.whatsapp_jid || normalizedPhone}, skipping creation`);
+        return null;
       }
 
       let stageId = leadData.stage_id;
@@ -740,7 +753,14 @@ export function useLeads() {
         })
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        if ((error as any)?.code === '23505') {
+          console.log(`[createLeadSilent] Duplicate detected for ${leadData.whatsapp_jid || normalizedPhone}, skipping`);
+          return null;
+        }
+        throw error;
+      }
 
       await supabase.from('lead_history').insert({
         lead_id: data.id,
