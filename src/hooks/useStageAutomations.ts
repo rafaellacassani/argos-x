@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useWorkspace } from './useWorkspace';
+import { useBotFlowExecution } from './useBotFlowExecution';
 import { toast } from 'sonner';
 
 export interface StageAutomation {
