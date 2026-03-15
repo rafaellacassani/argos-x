@@ -224,7 +224,7 @@ app.post("/", async (c) => {
                     timestamp: new Date().toISOString(),
                   });
                 }
-                if (chunks.length > 1) await new Promise(r => setTimeout(r, 1500));
+                if (chunks.length > 1) await new Promise(r => setTimeout(r, 400));
               }
 
               console.log(`[reprocess] ✅ ${sessionId} - response sent (${responseText.length} chars)`);
