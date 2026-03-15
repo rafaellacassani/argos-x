@@ -1711,26 +1711,67 @@ export default function Chats() {
             jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
           }
 
+          const chatInstance = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+
+          // Include @lid records mapped to this canonical session through webhook_message_log
+          const sessionIds = Array.from(allJids);
+          let mappedMessageIds: string[] = [];
+          if (workspaceId && sessionIds.length > 0) {
+            const { data: logRows } = await supabase
+              .from('webhook_message_log')
+              .select('message_id, session_id')
+              .eq('workspace_id', workspaceId)
+              .in('session_id', sessionIds)
+              .order('processed_at', { ascending: false })
+              .limit(500);
+
+            mappedMessageIds = (logRows || [])
+              .map((r) => r.message_id)
+              .filter((id): id is string => !!id);
+          }
+
           let dbQuery = supabase
             .from('whatsapp_messages')
             .select('*')
             .or(jidFilters.join(','))
             .order('timestamp', { ascending: true })
-            .limit(200);
+            .limit(300);
 
           if (workspaceId) {
             dbQuery = dbQuery.eq('workspace_id', workspaceId);
           }
-
-          const chatInstance = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
           if (chatInstance) {
             dbQuery = dbQuery.eq('instance_name', chatInstance);
           }
-          
+
           const { data: dbMsgs } = await dbQuery;
-          
-          if (dbMsgs && dbMsgs.length > 0) {
-            const transformedMessages: Message[] = dbMsgs.map((msg) => {
+
+          let allDbMsgs = dbMsgs || [];
+          if (mappedMessageIds.length > 0) {
+            let mappedQuery = supabase
+              .from('whatsapp_messages')
+              .select('*')
+              .in('message_id', mappedMessageIds)
+              .order('timestamp', { ascending: true })
+              .limit(300);
+
+            if (workspaceId) mappedQuery = mappedQuery.eq('workspace_id', workspaceId);
+            if (chatInstance) mappedQuery = mappedQuery.eq('instance_name', chatInstance);
+
+            const { data: mappedMsgs } = await mappedQuery;
+            if (mappedMsgs && mappedMsgs.length > 0) {
+              const byId = new Map<string, any>();
+              for (const row of [...allDbMsgs, ...mappedMsgs]) {
+                byId.set(row.message_id || row.id, row);
+              }
+              allDbMsgs = Array.from(byId.values()).sort(
+                (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+              );
+            }
+          }
+
+          if (allDbMsgs.length > 0) {
+            const transformedMessages: Message[] = allDbMsgs.map((msg) => {
               const date = new Date(msg.timestamp);
               return {
                 id: msg.message_id || msg.id,
