@@ -2273,20 +2273,7 @@ export default function Chats() {
 
       {/* Lead Side Panel */}
       {selectedChat && (() => {
-        // Try matching by whatsapp_jid first, then by phone number
-        let currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJid);
-        if (!currentLead && selectedChat.remoteJidAlt) {
-          currentLead = leads.find((l) => l.whatsapp_jid === selectedChat.remoteJidAlt);
-        }
-        if (!currentLead && selectedChat.phone) {
-          const chatPhoneDigits = cleanPhoneNumber(selectedChat.phone);
-          if (chatPhoneDigits.length >= 10) {
-            currentLead = leads.find((l) => {
-              const leadDigits = cleanPhoneNumber(l.phone || "");
-              return leadDigits.length >= 10 && leadDigits.slice(-10) === chatPhoneDigits.slice(-10);
-            });
-          }
-        }
+        const currentLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
         return (
           <LeadSidePanel
             lead={currentLead || null}
@@ -2306,11 +2293,32 @@ export default function Chats() {
               instanceName: selectedChat.instanceName,
             } : undefined}
             onCreateLead={!currentLead ? async () => {
-              const phoneDigits = selectedChat.phone.replace(/[^0-9]/g, "");
+              const phoneCandidates = [
+                cleanPhoneNumber(selectedChat.phone || ""),
+                cleanPhoneNumber(selectedChat.remoteJidAlt || ""),
+                cleanPhoneNumber(selectedChat.remoteJid || ""),
+              ];
+              const normalizedPhone = phoneCandidates.find((digits) => digits.length >= 10 && digits.length <= 13) || "";
+
+              if (!normalizedPhone) {
+                toast({
+                  title: "Número não resolvido",
+                  description: "Não foi possível criar lead sem número real. Aguarde a próxima mensagem do contato.",
+                  variant: "destructive",
+                });
+                return false;
+              }
+
+              const preferredJid = selectedChat.remoteJidAlt?.endsWith("@s.whatsapp.net")
+                ? selectedChat.remoteJidAlt
+                : selectedChat.remoteJid.endsWith("@s.whatsapp.net")
+                  ? selectedChat.remoteJid
+                  : `${normalizedPhone}@s.whatsapp.net`;
+
               const newLead = await createLead({
-                name: selectedChat.name || phoneDigits || "Contato",
-                phone: phoneDigits || selectedChat.remoteJid,
-                whatsapp_jid: selectedChat.remoteJid,
+                name: selectedChat.name || normalizedPhone || "Contato",
+                phone: normalizedPhone,
+                whatsapp_jid: preferredJid,
                 instance_name: selectedChat.instanceName,
                 source: "whatsapp",
               });
