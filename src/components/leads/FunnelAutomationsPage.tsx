@@ -138,7 +138,7 @@ export function FunnelAutomationsPage({
     setEditingId(auto.id);
     setForm({
       trigger: auto.trigger,
-      trigger_delay_hours: auto.trigger_delay_hours,
+      trigger_delay_minutes: auto.trigger_delay_minutes,
       action_type: auto.action_type,
       action_config: { ...auto.action_config },
       conditions: [...auto.conditions],
