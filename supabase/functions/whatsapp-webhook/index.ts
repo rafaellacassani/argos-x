@@ -869,11 +869,12 @@ app.post("/", async (c) => {
         if (shouldRespond) {
           // --- Cancel any pending follow-ups for this session ---
           try {
+            const followupSessionIds = Array.from(new Set([remoteJid, canonicalSessionJid]));
             await supabase.from("agent_followup_queue")
               .update({ status: "canceled", canceled_reason: "lead_responded" })
-              .eq("session_id", remoteJid)
+              .in("session_id", followupSessionIds)
               .eq("status", "pending");
-            console.log(`[whatsapp-webhook] 📅 Canceled pending follow-ups for session ${remoteJid}`);
+            console.log(`[whatsapp-webhook] 📅 Canceled pending follow-ups for session ${canonicalSessionJid}`);
           } catch (fErr) {
             console.error("[whatsapp-webhook] Follow-up cancel error:", fErr);
           }
