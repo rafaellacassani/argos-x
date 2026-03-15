@@ -282,17 +282,10 @@ export function StageAutomationsDialog({
                       </SelectContent>
                     </Select>
                     {form.trigger === 'after_time' && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Após</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          className="w-20"
-                          value={form.trigger_delay_hours}
-                          onChange={e => setForm(p => ({ ...p, trigger_delay_hours: parseInt(e.target.value) || 1 }))}
-                        />
-                        <span className="text-sm text-muted-foreground">horas</span>
-                      </div>
+                      <DelayInput
+                        hours={form.trigger_delay_hours}
+                        onChange={(h) => setForm(p => ({ ...p, trigger_delay_hours: h }))}
+                      />
                     )}
                   </div>
 
