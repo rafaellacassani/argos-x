@@ -320,6 +320,41 @@ export default function SalesBotBuilder() {
                     <p className="text-xs text-muted-foreground">Ex: "0 9 * * *" = todo dia às 9h</p>
                   </div>
                 )}
+
+                {triggerType === 'stage_change' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Funil</Label>
+                      <Select
+                        value={(triggerConfig.funnel_id as string) || ''}
+                        onValueChange={(value) => { setTriggerConfig({ ...triggerConfig, funnel_id: value, stage_id: '' }); setHasChanges(true); }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Selecione o funil" /></SelectTrigger>
+                        <SelectContent>
+                          {funnels.map(f => (<SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {triggerConfig.funnel_id && (
+                      <div className="space-y-2">
+                        <Label>Etapa de destino</Label>
+                        <Select
+                          value={(triggerConfig.stage_id as string) || '__any__'}
+                          onValueChange={(value) => { setTriggerConfig({ ...triggerConfig, stage_id: value === '__any__' ? '' : value }); setHasChanges(true); }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Selecione a etapa" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__any__">Qualquer etapa</SelectItem>
+                            {funnelStages
+                              .filter(s => s.funnel_id === triggerConfig.funnel_id)
+                              .map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">O bot será executado quando um lead entrar nesta etapa</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </SheetContent>
           </Sheet>
