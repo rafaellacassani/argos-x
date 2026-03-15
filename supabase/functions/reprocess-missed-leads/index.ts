@@ -33,22 +33,56 @@ app.options("*", (c) => new Response(null, { headers: corsHeaders }));
 
 app.post("/", async (c) => {
   try {
-    const authHeader = c.req.header("authorization");
-    if (!authHeader?.includes(SUPABASE_SERVICE_KEY)) {
+    const supabase = getSupabase();
+
+    const authHeader = c.req.header("authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+    let authorized = false;
+
+    // Internal automation (service role)
+    if (token && token === SUPABASE_SERVICE_KEY) {
+      authorized = true;
+    }
+
+    // Manual operation by authenticated admin user
+    if (!authorized && token) {
+      const authClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY") || "", {
+        global: { headers: { Authorization: authHeader } },
+      });
+
+      const { data: claimsData, error: claimsError } = await authClient.auth.getClaims(token);
+      const requesterUserId = claimsData?.claims?.sub;
+
+      if (!claimsError && requesterUserId) {
+        const { data: adminMembership } = await supabase
+          .from("workspace_members")
+          .select("id")
+          .eq("user_id", requesterUserId)
+          .eq("role", "admin")
+          .not("accepted_at", "is", null)
+          .limit(1);
+
+        authorized = !!(adminMembership && adminMembership.length > 0);
+      }
+    }
+
+    if (!authorized) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
     const body = await c.req.json().catch(() => ({}));
     const { hours_back = 48, dry_run = false } = body;
-
-    const supabase = getSupabase();
     const cutoff = new Date(Date.now() - hours_back * 60 * 60 * 1000).toISOString();
 
-    // Find inbound WhatsApp messages with no outbound response within 10 minutes
-    // These are leads that were left hanging
-    const { data: missedMessages } = await supabase.rpc("get_missed_messages_for_reprocess", {
-      cutoff_time: cutoff,
-    }).catch(() => ({ data: null }));
+    // Optional RPC path (if function exists) - best effort only
+    try {
+      await supabase.rpc("get_missed_messages_for_reprocess", {
+        cutoff_time: cutoff,
+      });
+    } catch (rpcErr) {
+      console.log("[reprocess] ℹ️ RPC get_missed_messages_for_reprocess unavailable, using fallback query");
+    }
 
     // Fallback: direct query approach
     // Find agent_memories where last message in array is role=assistant (qualification question)
@@ -94,9 +128,10 @@ app.post("/", async (c) => {
       // Also check via webhook_message_log for @lid mapped sessions
       const { data: mappedMsgs } = await supabase
         .from("webhook_message_log")
-        .select("message_id")
+        .select("message_id, processed_at")
         .eq("session_id", sessionId)
-        .gte("processed_at", mem.updated_at);
+        .order("processed_at", { ascending: false })
+        .limit(30);
 
       if (mappedMsgs && mappedMsgs.length > 0) {
         // There are messages logged for this session after the last AI response
@@ -190,7 +225,7 @@ app.post("/", async (c) => {
                     timestamp: new Date().toISOString(),
                   });
                 }
-                if (chunks.length > 1) await new Promise(r => setTimeout(r, 1500));
+                if (chunks.length > 1) await new Promise(r => setTimeout(r, 400));
               }
 
               console.log(`[reprocess] ✅ ${sessionId} - response sent (${responseText.length} chars)`);
@@ -202,7 +237,7 @@ app.post("/", async (c) => {
             results.push({ session_id: sessionId, status: "error", error: String(err) });
           }
 
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 250));
         }
       }
     }
