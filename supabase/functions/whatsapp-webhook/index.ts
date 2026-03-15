@@ -928,7 +928,7 @@ app.post("/", async (c) => {
 
             const agentMessage = messageText || mediaCaption || (mediaType ? `[${mediaType === "image" ? "Imagem" : mediaType === "audio" ? "Áudio" : "Mídia"} enviada pelo lead]` : "");
 
-            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${remoteJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
+            console.log(`[whatsapp-webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, session ${canonicalSessionJid}, lead ${leadId}, msgId ${msgId}, media=${mediaType || 'none'}`);
             
             const agentRes = await fetch(agentUrl, {
               method: "POST",
@@ -938,7 +938,7 @@ app.post("/", async (c) => {
               },
               body: JSON.stringify({
                 agent_id: matchingAgent.id,
-                session_id: remoteJid,
+                session_id: canonicalSessionJid,
                 message: agentMessage,
                 lead_id: leadId,
                 message_id: msgId,
