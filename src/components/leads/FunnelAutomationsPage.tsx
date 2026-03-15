@@ -64,7 +64,7 @@ type FormData = {
 
 const DEFAULT_FORM: FormData = {
   trigger: 'on_enter',
-  trigger_delay_hours: 0,
+  trigger_delay_minutes: 0,
   action_type: 'run_bot',
   action_config: {},
   conditions: [],
