@@ -569,7 +569,13 @@ export function FunnelAutomationsPage({
                     const parts = [`✅ ${successCount} enviado(s)`];
                     if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
                     if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} pulado(s) (telefone inválido)`);
-                    toast.success(`Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`);
+
+                    const summaryMessage = `Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`;
+                    if (errorCount > 0 || skippedCount > 0) {
+                      toast.error(summaryMessage);
+                    } else {
+                      toast.success(summaryMessage);
+                    }
                   } catch (err) {
                     console.error('[BulkExec] Fatal error:', err);
                     const { toast } = await import('sonner');
@@ -628,26 +634,6 @@ function ActionConfigForm({
             </SelectContent>
           </Select>
 
-          {/* WhatsApp instance */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Instância WhatsApp</Label>
-            <Select value={config.instance_name || '__auto__'} onValueChange={v => set('instance_name', v === '__auto__' ? '' : v)}>
-              <SelectTrigger><SelectValue placeholder="Automático (instância do lead)" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__auto__">Automático (instância do lead)</SelectItem>
-                {instances.map(inst => (
-                  <SelectItem key={inst.instance_name} value={inst.instance_name}>
-                    {inst.display_name || inst.instance_name}
-                  </SelectItem>
-                ))}
-                {cloudConnections.map(conn => (
-                  <SelectItem key={conn.id} value={`cloud_${conn.phone_number_id}`}>
-                    {conn.inbox_name} ({conn.phone_number})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           {/* Schedule: days and time for batch execution */}
           <div className="space-y-1.5">
