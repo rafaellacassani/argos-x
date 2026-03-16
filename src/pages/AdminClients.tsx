@@ -1826,15 +1826,26 @@ export default function AdminClients() {
                               </div>
                             ))}
 
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => addCadenceMessage(day)}
-                            >
-                              <Plus className="w-3 h-3 mr-1" />
-                              Adicionar mensagem no dia {day > 0 ? `+${day}` : day}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => addCadenceMessage(day, "whatsapp")}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                <MessageSquare className="w-3 h-3 mr-1" /> WhatsApp
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => addCadenceMessage(day, "email")}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                <Mail className="w-3 h-3 mr-1" /> E-mail
+                              </Button>
+                            </div>
                           </AccordionContent>
                         </AccordionItem>
                       );
