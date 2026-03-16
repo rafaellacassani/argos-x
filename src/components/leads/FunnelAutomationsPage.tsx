@@ -569,7 +569,13 @@ export function FunnelAutomationsPage({
                     const parts = [`✅ ${successCount} enviado(s)`];
                     if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
                     if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} pulado(s) (telefone inválido)`);
-                    toast.success(`Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`);
+
+                    const summaryMessage = `Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`;
+                    if (errorCount > 0 || skippedCount > 0) {
+                      toast.error(summaryMessage);
+                    } else {
+                      toast.success(summaryMessage);
+                    }
                   } catch (err) {
                     console.error('[BulkExec] Fatal error:', err);
                     const { toast } = await import('sonner');
