@@ -692,13 +692,15 @@ serve(async (req) => {
         });
 
         let toolCalls: any[] = [];
+        let usedFallback = false;
 
         if (!aiResponse.ok) {
           const gatewayBody = await aiResponse.text().catch(() => "");
           console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
 
           if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
-            responseContent = buildAiFallbackReply(messageText, media_type, agent);
+            responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+            usedFallback = true;
             console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
           } else {
             throw new Error(`AI Gateway error: ${aiResponse.status}`);
@@ -713,7 +715,8 @@ serve(async (req) => {
         }
 
         if (!responseContent?.trim()) {
-          responseContent = buildAiFallbackReply(messageText, media_type, agent);
+          responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+          usedFallback = true;
         }
 
         for (const toolCall of toolCalls) {
