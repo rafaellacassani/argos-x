@@ -474,15 +474,23 @@ export function FunnelAutomationsPage({
               )}
             </div>
 
+            {/* Status - Kommo style */}
+            <Select value="always" onValueChange={() => {}}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="always">Ativo: sempre</SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Action Type */}
             <div className="space-y-2">
-              <Label>Ação</Label>
+              <Label className="text-xs text-muted-foreground">Ação</Label>
               <Select value={form.action_type} onValueChange={(v) => setForm(p => ({ ...p, action_type: v, action_config: {} }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="run_bot">🤖 Executar SalesBot</SelectItem>
+                  <SelectItem value="run_bot">🤖 Executar Robô de vendas</SelectItem>
                   <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
-                  <SelectItem value="change_responsible">👤 Mudar responsável</SelectItem>
+                  <SelectItem value="change_responsible">👤 Alterar usuário de lead</SelectItem>
                   <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
                   <SelectItem value="remove_tag">🏷️ Remover tag</SelectItem>
                   <SelectItem value="create_task">✅ Criar tarefa</SelectItem>
@@ -492,7 +500,7 @@ export function FunnelAutomationsPage({
 
             {/* Action Config */}
             <div className="space-y-2">
-              <Label>Configuração</Label>
+              {form.action_type === 'run_bot' && <Label className="text-xs text-muted-foreground">Salesbot</Label>}
               <ActionConfigForm
                 actionType={form.action_type}
                 config={form.action_config}
@@ -504,81 +512,6 @@ export function FunnelAutomationsPage({
                 cloudConnections={cloudConnections}
               />
             </div>
-
-            {/* Conditions */}
-            <Collapsible open={conditionsOpen} onOpenChange={setConditionsOpen}>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2 w-full justify-start text-muted-foreground">
-                  <ChevronDown className={`h-4 w-4 transition-transform ${conditionsOpen ? 'rotate-180' : ''}`} />
-                  Condições ({form.conditions.length})
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 pt-2">
-                {form.conditions.map((cond, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <Select value={cond.field} onValueChange={v => updateCondition(idx, 'field', v)}>
-                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="source">Fonte</SelectItem>
-                        <SelectItem value="value">Valor</SelectItem>
-                        <SelectItem value="tag">Tag</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={cond.operator} onValueChange={v => updateCondition(idx, 'operator', v)}>
-                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {cond.field === 'value' ? (
-                          <>
-                            <SelectItem value="greater_than">Maior que</SelectItem>
-                            <SelectItem value="less_than">Menor que</SelectItem>
-                          </>
-                        ) : (
-                          <>
-                            <SelectItem value="equals">É</SelectItem>
-                            <SelectItem value="not_equals">Não é</SelectItem>
-                            {cond.field === 'tag' && (
-                              <>
-                                <SelectItem value="contains">Contém</SelectItem>
-                                <SelectItem value="not_contains">Não contém</SelectItem>
-                              </>
-                            )}
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    {cond.field === 'source' ? (
-                      <Select value={cond.value} onValueChange={v => updateCondition(idx, 'value', v)}>
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Valor" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                          <SelectItem value="instagram">Instagram</SelectItem>
-                          <SelectItem value="manual">Manual</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : cond.field === 'tag' ? (
-                      <Select value={cond.value} onValueChange={v => updateCondition(idx, 'value', v)}>
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Tag" /></SelectTrigger>
-                        <SelectContent>
-                          {tags.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        type="number" placeholder="R$ valor" className="flex-1"
-                        value={cond.value}
-                        onChange={e => updateCondition(idx, 'value', e.target.value)}
-                      />
-                    )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeCondition(idx)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-                <Button variant="ghost" size="sm" onClick={addCondition} className="gap-1">
-                  <Plus className="h-3.5 w-3.5" /> Adicionar condição
-                </Button>
-              </CollapsibleContent>
-            </Collapsible>
 
             {/* Execute for all in stage */}
             {editingId !== 'new' && editingStageId && form.action_type === 'run_bot' && (
