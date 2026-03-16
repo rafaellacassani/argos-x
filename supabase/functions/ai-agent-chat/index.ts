@@ -682,7 +682,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: agent.model || "google/gemini-3-flash-preview",
+            model: agent.model || "google/gemini-2.5-flash",
             messages: aiMessages,
             temperature: agent.temperature || 0.7,
             max_tokens: agent.max_tokens || 2048,
