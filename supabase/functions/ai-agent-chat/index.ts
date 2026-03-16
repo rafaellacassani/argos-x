@@ -275,11 +275,13 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
     const rawEvolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionApiUrl = rawEvolutionUrl.replace(/\/manager\/?$/, "");
 
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!lovableApiKey && !openaiApiKey && !anthropicApiKey) throw new Error("No AI API key configured (OPENAI_API_KEY, ANTHROPIC_API_KEY or LOVABLE_API_KEY)");
 
     const body = await req.json();
     const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
