@@ -680,7 +680,7 @@ serve(async (req) => {
 
         console.log(`[ai-agent-chat] 🧠 Calling AI model: ${agent.model}, messages: ${aiMessages.length}, tools: ${tools.length}`);
 
-        const modelName = agent.model || "openai/gpt-4o-mini";
+        const modelName = agent.model || "openai/gpt-5-mini";
         const provider = modelName.split("/")[0]; // "openai", "anthropic", or "google"
 
         let aiResponse: Response;
