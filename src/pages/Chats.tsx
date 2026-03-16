@@ -364,7 +364,26 @@ export default function Chats() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
+  const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
+    // Initialize filters from URL params on mount
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("responseStatus")) {
+      return {
+        periodPreset: "any",
+        stageIds: [],
+        starred: false,
+        responseStatus: params.get("responseStatus")!.split(","),
+        interactionStatus: "",
+        chatSource: [],
+        responsibleUser: "",
+        leadSearch: "",
+        participantSearch: "",
+        lastMessageSender: "any",
+        tagIds: [],
+      } as ChatFiltersFormData;
+    }
+    return null;
+  });
   
   // Message cache: stores messages per chat ID to avoid re-fetching
   const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
@@ -1877,51 +1896,139 @@ export default function Chats() {
 
 
   const loadOlderMessages = useCallback(async () => {
-    if (!selectedChat || loadingOlderMessages || !hasMoreMessages || selectedChat.isMeta) return;
+    if (!selectedChat || loadingOlderMessages || !hasMoreMessages) return;
     
-    const targetInstance = selectedChat.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all") return;
-
     setLoadingOlderMessages(true);
+    const scrollContainer = messagesContainerRef.current;
+    const prevScrollHeight = scrollContainer?.scrollHeight || 0;
+    
     try {
-      // Fetch more messages with a higher limit offset
       const currentCount = messages.length;
-      const data = await fetchMessages(targetInstance, selectedChat.remoteJid, currentCount + 30);
-      
-      if (data.length <= currentCount) {
-        setHasMoreMessages(false);
-        return;
+
+      // Strategy 1: Try Evolution API for WhatsApp chats
+      const targetInstance = selectedChat.instanceName || selectedInstance;
+      if (!selectedChat.isMeta && targetInstance && targetInstance !== "all") {
+        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, currentCount + 50);
+        
+        if (data.length <= currentCount) {
+          // API exhausted — try DB fallback
+        } else {
+          const allTransformed: Message[] = data
+            .map((msg) => {
+              const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
+              const timestamp = msg.messageTimestamp;
+              const date = timestamp ? new Date(timestamp * 1000) : new Date();
+              return {
+                id: msg.key?.id || Math.random().toString(),
+                content,
+                time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                sent: msg.key?.fromMe || false,
+                read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
+                type,
+                mediaUrl,
+                thumbnailBase64,
+                fileName,
+                duration,
+                _ts: timestamp ? timestamp * 1000 : Date.now(),
+              };
+            })
+            .reverse();
+
+          setMessages(allTransformed);
+          setHasMoreMessages(data.length >= currentCount + 50);
+          messageCacheRef.current.set(selectedChat.id, allTransformed);
+          
+          // Preserve scroll position
+          requestAnimationFrame(() => {
+            if (scrollContainer) {
+              const newScrollHeight = scrollContainer.scrollHeight;
+              scrollContainer.scrollTop = newScrollHeight - prevScrollHeight;
+            }
+          });
+          return;
+        }
       }
 
-      const allTransformed: Message[] = data
-        .map((msg) => {
-          const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
-          const timestamp = msg.messageTimestamp;
-          const date = timestamp ? new Date(timestamp * 1000) : new Date();
-          return {
-            id: msg.key?.id || Math.random().toString(),
-            content,
-            time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-            sent: msg.key?.fromMe || false,
-            read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
-            type,
-            mediaUrl,
-            thumbnailBase64,
-            fileName,
-            duration,
-          };
-        })
-        .reverse();
+      // Strategy 2: Load older messages from DB (works for all chat types)
+      if (workspaceId) {
+        const oldestMessage = messages[0];
+        const oldestTs = oldestMessage ? (oldestMessage as any)._ts 
+          ? new Date((oldestMessage as any)._ts).toISOString()
+          : null : null;
 
-      setMessages(allTransformed);
-      setHasMoreMessages(data.length >= currentCount + 30);
-      messageCacheRef.current.set(selectedChat.id, allTransformed);
+        const phoneDigits = cleanPhoneNumber(selectedChat.phone || "");
+        const allJids = new Set<string>([selectedChat.remoteJid]);
+        if (selectedChat.remoteJidAlt) allJids.add(selectedChat.remoteJidAlt);
+
+        const jidFilters = Array.from(allJids).map(j => `remote_jid.eq.${j}`);
+        if (phoneDigits.length >= 10) {
+          jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
+        }
+
+        const chatInst = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+
+        let dbQuery = supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .or(jidFilters.join(','))
+          .order('timestamp', { ascending: false })
+          .limit(50);
+
+        if (workspaceId) dbQuery = dbQuery.eq('workspace_id', workspaceId);
+        if (chatInst) dbQuery = dbQuery.eq('instance_name', chatInst);
+        if (oldestTs) dbQuery = dbQuery.lt('timestamp', oldestTs);
+
+        const { data: dbRows } = await dbQuery;
+
+        if (!dbRows || dbRows.length === 0) {
+          setHasMoreMessages(false);
+          return;
+        }
+
+        const existingIds = new Set(messages.map(m => m.id));
+        const olderMessages: Message[] = dbRows
+          .filter(m => !existingIds.has(m.message_id || '') && !existingIds.has(m.id))
+          .map(m => {
+            const date = new Date(m.timestamp);
+            return {
+              id: m.message_id || m.id,
+              content: m.content || '',
+              time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              sent: m.from_me || m.direction === 'outbound',
+              read: true,
+              type: (m.message_type || 'text') as Message["type"],
+              _ts: date.getTime(),
+            };
+          });
+
+        if (olderMessages.length === 0) {
+          setHasMoreMessages(false);
+          return;
+        }
+
+        const allMessages = [...olderMessages.reverse(), ...messages];
+        allMessages.sort((a, b) => ((a as any)._ts || 0) - ((b as any)._ts || 0));
+        
+        setMessages(allMessages);
+        setHasMoreMessages(dbRows.length >= 50);
+        messageCacheRef.current.set(selectedChat.id, allMessages);
+
+        // Preserve scroll position
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            const newScrollHeight = scrollContainer.scrollHeight;
+            scrollContainer.scrollTop = newScrollHeight - prevScrollHeight;
+          }
+        });
+      } else {
+        setHasMoreMessages(false);
+      }
     } catch (err) {
       console.error("[Chats] Error loading older messages:", err);
     } finally {
       setLoadingOlderMessages(false);
     }
-  }, [selectedChat, selectedInstance, messages.length, loadingOlderMessages, hasMoreMessages, fetchMessages]);
+  }, [selectedChat, selectedInstance, messages, loadingOlderMessages, hasMoreMessages, fetchMessages, workspaceId]);
 
   // Handle scroll to detect when user scrolls to top
   const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -1979,34 +2086,25 @@ export default function Chats() {
       }
 
       // Filter by response status
-      // "answered" = last message was from team (fromMe = true)
-      // "awaiting" = last message was from client (fromMe = false) - waiting for team response
-      // "unanswered" = has unread messages and last was from client
+      // "answered" = last message was from team (fromMe = true)  
+      // "unanswered" = lead sent message and WE (team) didn't reply yet
+      //   → last message is from client (lastMessageFromMe === false)
       if (activeFilters.responseStatus && activeFilters.responseStatus.length > 0) {
         const statuses = activeFilters.responseStatus;
-        console.log(`[Chats] Applying filter with statuses: ${statuses.join(', ')}`);
-        console.log(`[Chats] Before filter: ${result.length} chats`);
         
         result = result.filter((chat) => {
-          // If "answered" is selected: show chats where last message was from team
+          // "answered": last message was sent BY US (team replied)
           if (statuses.includes("answered") && chat.lastMessageFromMe === true) {
             return true;
           }
           
-          // If "awaiting" is selected: show chats where last message was from client (awaiting team response)
-          if (statuses.includes("awaiting") && chat.lastMessageFromMe === false) {
-            return true;
-          }
-          
-          // If "unanswered" is selected: show chats where last message was from client (regardless of read status)
+          // "unanswered": last message was from the LEAD/CLIENT, meaning WE haven't replied
           if (statuses.includes("unanswered") && chat.lastMessageFromMe === false) {
             return true;
           }
           
           return false;
         });
-        
-        console.log(`[Chats] After filter: ${result.length} chats`);
       }
 
       // Filter by last message sender
@@ -2264,7 +2362,7 @@ export default function Chats() {
         </div>
 
         {/* Chat List */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 [&>div]:!overflow-x-auto">
           {loadingChats ? (
             <div className="flex items-center justify-center p-8">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -2319,7 +2417,7 @@ export default function Chats() {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium text-foreground truncate">{chat.name}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
@@ -2445,6 +2543,19 @@ export default function Chats() {
                     <div className="flex items-center justify-center py-2">
                       <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
                       <span className="text-xs text-muted-foreground ml-2">Carregando anteriores...</span>
+                    </div>
+                  )}
+                  {hasMoreMessages && !loadingOlderMessages && (
+                    <div className="flex items-center justify-center py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={loadOlderMessages}
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Carregar mensagens anteriores
+                      </Button>
                     </div>
                   )}
                   {!hasMoreMessages && messages.length > 30 && (
