@@ -86,6 +86,8 @@ export function FunnelAutomationsPage({
 
   const { workspaceId } = useWorkspace();
   const [executingAll, setExecutingAll] = useState(false);
+  const [executionProgress, setExecutionProgress] = useState<{ current: number; total: number } | null>(null);
+  const [executionResults, setExecutionResults] = useState<Array<{ name: string; status: 'success' | 'error' | 'skipped' | 'duplicate'; reason?: string }> | null>(null);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
   const [loadingStages, setLoadingStages] = useState(false);
