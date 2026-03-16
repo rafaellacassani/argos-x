@@ -136,7 +136,7 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
 
   const { data: config } = await supabaseAdmin
     .from("reactivation_cadence_config")
-    .select("whatsapp_instance_name, welcome_message_template")
+    .select("id, whatsapp_instance_name, welcome_message_template")
     .limit(1)
     .single();
 
@@ -147,25 +147,65 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
     cleanPhone = "55" + cleanPhone;
   }
 
-  const defaultMessage = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
-
-  const message = config.welcome_message_template
-    ? config.welcome_message_template.replace(/\{nome\}/g, name)
-    : defaultMessage;
-
   const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
 
-  try {
-    await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: EVOLUTION_API_KEY,
-      },
-      body: JSON.stringify({ number: cleanPhone, text: message }),
-    });
-  } catch (e) {
-    console.warn("Welcome WhatsApp failed:", e);
+  // Check for cadence_messages on day -7 (signup day)
+  const { data: signupMessages } = await supabaseAdmin
+    .from("cadence_messages")
+    .select("*")
+    .eq("config_id", config.id)
+    .eq("cadence_day", -7)
+    .eq("channel", "whatsapp")
+    .eq("is_active", true)
+    .order("position", { ascending: true });
+
+  if (signupMessages && signupMessages.length > 0) {
+    // Send configured messages
+    for (let i = 0; i < signupMessages.length; i++) {
+      const msg = signupMessages[i];
+      try {
+        if (msg.message_type === "audio" && msg.audio_url) {
+          await fetch(`${apiUrl}/message/sendWhatsAppAudio/${config.whatsapp_instance_name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+            body: JSON.stringify({ number: cleanPhone, audio: msg.audio_url }),
+          });
+        } else {
+          const text = (msg.content || "").replace(/\{nome\}/g, name);
+          await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+            body: JSON.stringify({ number: cleanPhone, text }),
+          });
+        }
+        // Wait between messages
+        if (i < signupMessages.length - 1) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      } catch (e) {
+        console.warn("Welcome WhatsApp message failed:", e);
+      }
+    }
+  } else {
+    // Fallback to welcome_message_template or default
+    const defaultMessage = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+
+    const message = config.welcome_message_template
+      ? config.welcome_message_template.replace(/\{nome\}/g, name)
+      : defaultMessage;
+
+    try {
+      await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: EVOLUTION_API_KEY,
+        },
+        body: JSON.stringify({ number: cleanPhone, text: message }),
+      });
+    } catch (e) {
+      console.warn("Welcome WhatsApp failed:", e);
+    }
   }
 }
 
