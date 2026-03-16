@@ -206,7 +206,7 @@ serve(async (req) => {
       const ownerEmail = profile.email;
       const ownerPhone = profile.personal_whatsapp || profile.phone;
       const daysSinceExpiry = Math.max(0, daysFromExpiry);
-      const planLink = "https://argosx.com.br/auth";
+      const planLink = "https://argosx.com.br/planos";
 
       const vars = {
         nome: ownerName,

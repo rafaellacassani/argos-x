@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Loader2 } from "lucide-react";
@@ -11,6 +11,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, skipWorkspaceCheck }: ProtectedRouteProps) {
   const { user, loading: authLoading } = useAuth();
   const { hasWorkspace, loading: wsLoading } = useWorkspace();
+  const location = useLocation();
 
   if (authLoading || wsLoading) {
     return (
@@ -21,7 +22,8 @@ export function ProtectedRoute({ children, skipWorkspaceCheck }: ProtectedRouteP
   }
 
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    const returnTo = location.pathname + location.search;
+    return <Navigate to={`/auth?returnTo=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   if (!skipWorkspaceCheck && !hasWorkspace) {

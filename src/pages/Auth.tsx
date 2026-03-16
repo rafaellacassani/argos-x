@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +23,8 @@ type AuthMode = "login" | "signup" | "forgot";
 
 export default function Auth() {
   const { user, loading, signIn, signUp, resetPassword } = useAuth();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("returnTo") || "/";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,7 +40,7 @@ export default function Auth() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={returnTo} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
