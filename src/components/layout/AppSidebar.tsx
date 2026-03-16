@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lock,
+  Crown,
   Shield,
   GraduationCap,
   BookOpen,
@@ -59,6 +60,7 @@ const menuItems: MenuItem[] = [
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: FileText, label: "Templates WA", path: "/templates", requiredPermission: 'canManageCampaigns' },
   { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
+  { icon: Crown, label: "Planos", path: "/planos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
 
