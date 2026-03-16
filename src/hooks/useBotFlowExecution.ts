@@ -130,6 +130,124 @@ export function useBotFlowExecution() {
   ): Promise<{ success: boolean; message: string; conditionResult?: boolean }> => {
     switch (node.type) {
       case 'send_message': {
+        // Check if this is a WABA template message
+        const useWabaTemplate = node.data?.useWabaTemplate as boolean;
+
+        if (useWabaTemplate) {
+          // Send via WABA Cloud API template
+          const wabaTemplateId = node.data?.wabaTemplateId as string;
+          if (!wabaTemplateId) return { success: false, message: 'Template WABA não selecionado no bloco' };
+
+          let targetNumber = lead.whatsapp_jid || lead.phone;
+          if (!targetNumber) return { success: false, message: 'Lead sem telefone' };
+          // Clean number for Graph API (digits only, no @suffix)
+          targetNumber = targetNumber.replace(/@.*$/, '').replace(/\D/g, '');
+          if (targetNumber.length < 10) return { success: false, message: 'Número de telefone inválido' };
+
+          try {
+            // Fetch template details
+            const { data: tpl } = await supabase
+              .from('whatsapp_templates')
+              .select('template_name, language, components, cloud_connection_id')
+              .eq('id', wabaTemplateId)
+              .single();
+            if (!tpl) return { success: false, message: 'Template WABA não encontrado no banco' };
+
+            const { data: conn } = await supabase
+              .from('whatsapp_cloud_connections')
+              .select('phone_number_id, access_token')
+              .eq('id', tpl.cloud_connection_id)
+              .single();
+            if (!conn) return { success: false, message: 'Conexão Cloud API não encontrada' };
+
+            // Build template variables
+            const wabaTemplateVars = (node.data?.wabaTemplateVars || {}) as Record<string, string>;
+            const bodyComponent = (tpl.components as any[])?.find((c: any) => c.type === 'BODY');
+            const bodyParams: any[] = [];
+
+            if (bodyComponent?.text) {
+              // Fetch lead details for variable replacement
+              const { data: leadDetails } = await supabase
+                .from('leads')
+                .select('name, email, company, phone')
+                .eq('id', lead.id)
+                .maybeSingle();
+
+              const namedParams: { param_name: string }[] =
+                bodyComponent.example?.body_text_named_params || [];
+              const namedParamMap = new Map<number, string>();
+              namedParams.forEach((np: any, idx: number) => {
+                if (np.param_name) namedParamMap.set(idx, np.param_name);
+              });
+
+              const matches = bodyComponent.text.match(/\{\{[^}]+\}\}/g) || [];
+              for (let i = 0; i < matches.length; i++) {
+                const match = matches[i];
+                let paramValue = wabaTemplateVars[match] || '';
+                // Replace shortcodes
+                if (paramValue === '#nome#' || paramValue === '{nome}') paramValue = leadDetails?.name || '';
+                else if (paramValue === '#empresa#') paramValue = leadDetails?.company || '';
+                else if (paramValue === '#telefone#') paramValue = leadDetails?.phone || '';
+                else if (paramValue === '#email#') paramValue = leadDetails?.email || '';
+                if (!paramValue) paramValue = leadDetails?.name || match;
+
+                const param: any = { type: 'text', text: paramValue };
+                const pName = namedParamMap.get(i);
+                if (pName) param.parameter_name = pName;
+                bodyParams.push(param);
+              }
+            }
+
+            // Build URL button component if configured
+            const urlButton = node.data?.url_button as { label: string; url: string } | null;
+            const components: any[] = [];
+            if (bodyParams.length > 0) {
+              components.push({ type: 'body', parameters: bodyParams });
+            }
+            if (urlButton?.url) {
+              components.push({
+                type: 'button',
+                sub_type: 'url',
+                index: '0',
+                parameters: [{ type: 'text', text: urlButton.url }],
+              });
+            }
+
+            const templatePayload: any = {
+              messaging_product: 'whatsapp',
+              to: targetNumber,
+              type: 'template',
+              template: {
+                name: tpl.template_name,
+                language: { code: tpl.language },
+                ...(components.length > 0 ? { components } : {}),
+              },
+            };
+
+            const graphRes = await fetch(
+              `https://graph.facebook.com/v21.0/${conn.phone_number_id}/messages`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${conn.access_token}`,
+                },
+                body: JSON.stringify(templatePayload),
+              }
+            );
+
+            if (!graphRes.ok) {
+              const errBody = await graphRes.text();
+              return { success: false, message: `Graph API erro ${graphRes.status}: ${errBody.slice(0, 200)}` };
+            }
+
+            return { success: true, message: 'Template WABA enviado com sucesso' };
+          } catch (err) {
+            return { success: false, message: `Erro ao enviar template: ${err instanceof Error ? err.message : 'desconhecido'}` };
+          }
+        }
+
+        // Regular text message via Evolution API
         const messageText = node.data?.message as string;
         if (!messageText) return { success: false, message: 'Mensagem não configurada no bloco' };
 
