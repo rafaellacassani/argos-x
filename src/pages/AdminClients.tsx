@@ -1701,27 +1701,46 @@ export default function AdminClients() {
                             {dayMsgs.map((msg, posInDay) => (
                               <div key={msg._idx} className="rounded-lg border p-3 space-y-3">
                                 <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <Badge variant="outline" className="text-xs">
                                       #{posInDay + 1}
                                     </Badge>
-                                    {/* Type toggle */}
+                                    {/* Channel toggle */}
                                     <div className="flex rounded-md border overflow-hidden">
                                       <button
                                         type="button"
-                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "text" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
-                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "text" })}
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.channel === "whatsapp" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { channel: "whatsapp" })}
                                       >
-                                        <Type className="w-3 h-3" /> Texto
+                                        <MessageSquare className="w-3 h-3" /> WhatsApp
                                       </button>
                                       <button
                                         type="button"
-                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "audio" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
-                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "audio" })}
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.channel === "email" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { channel: "email", message_type: "text" })}
                                       >
-                                        <Music className="w-3 h-3" /> Áudio
+                                        <Mail className="w-3 h-3" /> E-mail
                                       </button>
                                     </div>
+                                    {/* Type toggle (only for whatsapp) */}
+                                    {msg.channel === "whatsapp" && (
+                                      <div className="flex rounded-md border overflow-hidden">
+                                        <button
+                                          type="button"
+                                          className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "text" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                          onClick={() => updateCadenceMessage(msg._idx, { message_type: "text" })}
+                                        >
+                                          <Type className="w-3 h-3" /> Texto
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "audio" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                          onClick={() => updateCadenceMessage(msg._idx, { message_type: "audio" })}
+                                        >
+                                          <Music className="w-3 h-3" /> Áudio
+                                        </button>
+                                      </div>
+                                    )}
                                     <Switch
                                       checked={msg.is_active}
                                       onCheckedChange={(v) => updateCadenceMessage(msg._idx, { is_active: v })}
