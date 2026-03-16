@@ -234,14 +234,20 @@ export function useStageAutomations() {
         switch (auto.action_type) {
           case 'run_bot': {
             if (config.bot_id) {
-              if (config.skip_if_executed) {
+              // In bulk mode, always check if bot was already executed for this lead
+              const shouldSkip = config.skip_if_executed || options?.forceBulk;
+              if (shouldSkip) {
                 const { data: logs } = await supabase
                   .from('bot_execution_logs')
                   .select('id')
                   .eq('bot_id', config.bot_id)
                   .eq('lead_id', leadId)
+                  .eq('status', 'success')
                   .limit(1);
-                if (logs && logs.length > 0) continue;
+                if (logs && logs.length > 0) {
+                  console.log(`[StageAutomation] Skipping bot ${config.bot_id} for lead ${leadId}: already executed`);
+                  continue;
+                }
               }
               const { data: bot } = await supabase
                 .from('salesbots')
@@ -265,6 +271,9 @@ export function useStageAutomations() {
                   result.errors.push(`Bot error: ${botErr instanceof Error ? botErr.message : 'desconhecido'}`);
                   console.error(`[StageAutomation] Bot execution error:`, botErr);
                 }
+              } else {
+                result.success = false;
+                result.errors.push('Bot inativo');
               }
             }
             break;

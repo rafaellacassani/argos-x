@@ -675,53 +675,23 @@ function ActionConfigForm({
     case 'run_bot':
       return (
         <div className="space-y-3">
-          <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
-            <SelectTrigger><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
-            <SelectContent>
-              {bots.map(b => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}{!b.is_active && ' (inativo)'}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-
-          {/* Schedule: days and time for batch execution */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Agendamento (enviar para todos)</Label>
-            <div className="flex gap-1.5 flex-wrap">
-              {DAY_LABELS.map((day, idx) => {
-                const scheduleDays: number[] = config.schedule_days || [];
-                const isActive = scheduleDays.includes(idx);
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      const next = isActive ? scheduleDays.filter((d: number) => d !== idx) : [...scheduleDays, idx];
-                      set('schedule_days', next.sort());
-                    }}
-                    className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
-                      isActive ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-            <Input
-              type="time"
-              value={config.schedule_time || '09:00'}
-              onChange={e => set('schedule_time', e.target.value)}
-              className="w-32 h-8 text-sm"
-            />
+          <div className="flex items-center gap-2">
+            <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
+              <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
+              <SelectContent>
+                {bots.map(b => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}{!b.is_active && ' (inativo)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <p className="text-xs text-muted-foreground">Crie um novo robô ou selecione um existente</p>
 
           {/* Interval between messages */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Intervalo entre mensagens</Label>
+            <Label className="text-xs text-muted-foreground">Intervalo entre mensagens (envio em massa)</Label>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
@@ -735,9 +705,15 @@ function ActionConfigForm({
           </div>
 
           <div className="flex items-center gap-2">
-            <Checkbox checked={config.skip_if_executed || false} onCheckedChange={v => set('skip_if_executed', v)} />
-            <span className="text-sm">Pular se já executou</span>
+            <Checkbox checked={config.skip_if_executed !== false} onCheckedChange={v => set('skip_if_executed', v)} />
+            <span className="text-sm">Pular se já executou este bot para o lead</span>
           </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox checked={config.mark_unanswered || false} onCheckedChange={v => set('mark_unanswered', v)} />
+            <span className="text-sm">Deixar mensagem sem resposta</span>
+          </div>
+          <p className="text-xs text-muted-foreground">As mensagens às quais o Salesbot responde serão marcadas como não respondidas</p>
         </div>
       );
     case 'notify_responsible':
