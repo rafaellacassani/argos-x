@@ -374,11 +374,23 @@ serve(async (req) => {
           .maybeSingle();
 
         if (existingWs) {
+          const env = {
+            STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+            STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+            STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+          };
+          const planConfig = getPlanConfig(priceId || "", env);
+
           await supabaseAdmin
             .from("workspaces")
             .update({
               subscription_status: "trialing",
               plan_type: "trialing",
+              plan_name: planConfig.plan_name,
+              lead_limit: planConfig.lead_limit,
+              whatsapp_limit: planConfig.whatsapp_limit,
+              user_limit: planConfig.user_limit,
+              ai_interactions_limit: planConfig.ai_interactions_limit,
               stripe_subscription_id: subscription.id,
               stripe_price_id: priceId,
               trial_end: subscription.trial_end
@@ -400,8 +412,19 @@ serve(async (req) => {
         };
 
         if (status === "active") {
+          const env = {
+            STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+            STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+            STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+          };
+          const planConfig = getPlanConfig(updates.stripe_price_id || "", env);
           updates.plan_type = "active";
           updates.blocked_at = null;
+          updates.plan_name = planConfig.plan_name;
+          updates.lead_limit = planConfig.lead_limit;
+          updates.whatsapp_limit = planConfig.whatsapp_limit;
+          updates.user_limit = planConfig.user_limit;
+          updates.ai_interactions_limit = planConfig.ai_interactions_limit;
         } else if (status === "past_due") {
           updates.plan_type = "past_due";
         } else if (status === "canceled") {
@@ -474,12 +497,32 @@ serve(async (req) => {
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
+
+        // Get current workspace to read stripe_price_id
+        const { data: wsForLimits } = await supabaseAdmin
+          .from("workspaces")
+          .select("stripe_price_id")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+
+        const envLimits = {
+          STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+          STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+          STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+        };
+        const paidPlanConfig = getPlanConfig(wsForLimits?.stripe_price_id || "", envLimits);
+
         await supabaseAdmin
           .from("workspaces")
           .update({
             subscription_status: "active",
             plan_type: "active",
             blocked_at: null,
+            plan_name: paidPlanConfig.plan_name,
+            lead_limit: paidPlanConfig.lead_limit,
+            whatsapp_limit: paidPlanConfig.whatsapp_limit,
+            user_limit: paidPlanConfig.user_limit,
+            ai_interactions_limit: paidPlanConfig.ai_interactions_limit,
           })
           .eq("stripe_customer_id", customerId);
 
