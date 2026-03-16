@@ -133,10 +133,12 @@ async function resumeFlowFromNode(
         case "send_message": {
           const rawText = currentNode.data?.message || currentNode.data?.text || "";
           if (rawText) {
-            const text = replaceVars(rawText, lead, instanceName);
+            const nodeInstance = currentNode.data?.instanceName || "";
+            const effectiveInstance = instanceName || nodeInstance;
+            const text = replaceVars(rawText, lead, effectiveInstance);
             const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
-            if (number) {
-              await sendWhatsApp(instanceName, number, text);
+            if (number && effectiveInstance) {
+              await sendWhatsApp(effectiveInstance, number, text);
               await supabase.from("bot_execution_logs").insert({
                 bot_id: botId, lead_id: lead.id, node_id: currentNode.id,
                 status: "success", message: text.substring(0, 200), workspace_id: workspaceId,
