@@ -38,7 +38,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     navigate("/dashboard", { replace: true });
   }, [refreshWorkspace, navigate]);
 
-  if (!loading && !allowed && !isAdminViewing) {
+  const isPlansPage = location.pathname === "/planos";
+  if (!loading && !allowed && !isAdminViewing && !isPlansPage) {
     return <WorkspaceBlockedScreen reason={reason as "blocked" | "canceled" | "past_due"} />;
   }
 
