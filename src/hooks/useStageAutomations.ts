@@ -18,6 +18,12 @@ export interface StageAutomation {
   created_at: string;
 }
 
+export interface StageAutomationResult {
+  success: boolean;
+  errors: string[];
+  actionsExecuted: number;
+}
+
 export function useStageAutomations() {
   const { workspaceId } = useWorkspace();
   const { executeFlow } = useBotFlowExecution();
