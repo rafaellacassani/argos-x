@@ -31,19 +31,73 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any): string {
+// --- Rejection detection ---
+const REJECTION_KEYWORDS = [
+  "não mande mais", "nao mande mais", "não mandar mais", "nao mandar mais",
+  "pare de mandar", "parar de mandar", "não quero", "nao quero",
+  "não tenho interesse", "nao tenho interesse", "favor não mandar", "favor nao mandar",
+  "sair", "cancelar", "não me procure", "nao me procure",
+  "bloquear", "para de me mandar", "me deixa em paz",
+  "não entre mais em contato", "nao entre mais em contato",
+  "stop", "unsubscribe",
+];
+
+function detectRejection(text: string): boolean {
+  const normalized = (text || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return REJECTION_KEYWORDS.some(kw => {
+    const normalizedKw = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return normalized.includes(normalizedKw);
+  });
+}
+
+function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any, memoryMessages?: ChatMessage[]): string {
   const text = (userMessage || "").trim().toLowerCase();
   const agentName = agent?.name || "IA";
   const companyInfo = agent?.company_info;
   const companyName = companyInfo?.name || companyInfo?.company_name || "";
-  const niche = agent?.niche || "";
   const role = agent?.agent_role || "";
   
-  // Build a contextual greeting based on agent configuration
   const intro = companyName
     ? `Olá! 👋 Sou ${role === "vendedora" || role === "sdr" ? "a" : "o"} ${agentName}${companyName ? ` da ${companyName}` : ""}`
     : `Olá! 👋 Sou ${agentName} e vou te atender agora`;
 
+  const hasHistory = memoryMessages && memoryMessages.length > 1;
+
+  // Extract lead name from history if available
+  let leadName = "";
+  if (memoryMessages) {
+    const summaryMessages = memoryMessages.filter(m => m.role === "user");
+    for (const m of summaryMessages) {
+      const match = m.content?.match(/(?:sou|meu nome[: é]*|me chamo)\s+([A-ZÀ-Ú][a-zà-ú]+)/i);
+      if (match) { leadName = match[1]; break; }
+    }
+  }
+
+  // If there's conversation history, DON'T repeat the greeting
+  if (hasHistory) {
+    const lastAssistantMsg = [...(memoryMessages || [])].reverse().find(m => m.role === "assistant")?.content || "";
+    
+    const fallbackPool = [
+      leadName ? `${leadName}, desculpe, tive uma instabilidade técnica. Pode repetir sua pergunta? 😊` : `Desculpe, tive uma instabilidade técnica. Pode repetir sua pergunta? 😊`,
+      leadName ? `Oi ${leadName}! Me perdoe, houve um problema no meu sistema. Como posso te ajudar?` : `Me perdoe, houve um problema no meu sistema. Como posso te ajudar?`,
+      `Desculpe pela demora! Estou com um probleminha técnico, mas já volto. Um momento, por favor! 🙏`,
+      leadName ? `${leadName}, tive um erro aqui. Vou acionar a equipe para te atender diretamente!` : `Tive um erro aqui. Vou acionar a equipe para te atender diretamente!`,
+      `Desculpe, estou com dificuldade técnica no momento. Se preferir, posso te encaminhar para a equipe! 😊`,
+    ];
+
+    // Pick a fallback that's different from the last assistant message
+    let chosen = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+    for (const candidate of fallbackPool) {
+      if (candidate !== lastAssistantMsg && !lastAssistantMsg.includes(candidate.substring(0, 30))) {
+        chosen = candidate;
+        break;
+      }
+    }
+    return chosen;
+  }
+
+  // First message — use greeting
   if (mediaType === "audio") {
     return `${intro}. Recebi seu áudio ✅! Para te ajudar melhor, pode me dizer seu nome e qual sua empresa?`;
   }
@@ -466,6 +520,45 @@ serve(async (req) => {
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- REJECTION DETECTION (works even without AI credits) ---
+      if (detectRejection(messageText)) {
+        console.log(`[ai-agent-chat] 🚫 Rejection detected: "${messageText.substring(0, 50)}"`);
+        
+        // Pause session
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "lead_rejected" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+        
+        const rejectResponse = "Entendido! Peço desculpas pelo incômodo. Não enviarei mais mensagens. Caso precise de algo no futuro, é só nos chamar. Tenha um ótimo dia! 😊";
+        
+        // Save to memory
+        const existingMessages: ChatMessage[] = memory.messages || [];
+        existingMessages.push({ role: "user", content: messageText, timestamp: new Date().toISOString() });
+        existingMessages.push({ role: "assistant", content: rejectResponse, timestamp: new Date().toISOString() });
+        await supabase.from("agent_memories").update({
+          messages: existingMessages,
+          is_processing: false,
+          processing_started_at: null,
+          last_message_id: message_id || memory.last_message_id,
+        }).eq("id", memory.id);
+        lockAcquired = false;
+        
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText,
+          output_message: rejectResponse,
+          status: "rejected",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+        
+        return new Response(JSON.stringify({ response: rejectResponse, chunks: [rejectResponse], rejected: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- Qualification flow ---
       const qualificationEnabled = agent.qualification_enabled || false;
       const qualificationFields = agent.qualification_fields || [];
@@ -589,7 +682,7 @@ serve(async (req) => {
           method: "POST",
           headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: agent.model || "google/gemini-3-flash-preview",
+            model: agent.model || "google/gemini-2.5-flash",
             messages: aiMessages,
             temperature: agent.temperature || 0.7,
             max_tokens: agent.max_tokens || 2048,
@@ -599,13 +692,15 @@ serve(async (req) => {
         });
 
         let toolCalls: any[] = [];
+        let usedFallback = false;
 
         if (!aiResponse.ok) {
           const gatewayBody = await aiResponse.text().catch(() => "");
           console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
 
           if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
-            responseContent = buildAiFallbackReply(messageText, media_type, agent);
+            responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+            usedFallback = true;
             console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
           } else {
             throw new Error(`AI Gateway error: ${aiResponse.status}`);
@@ -620,7 +715,8 @@ serve(async (req) => {
         }
 
         if (!responseContent?.trim()) {
-          responseContent = buildAiFallbackReply(messageText, media_type, agent);
+          responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+          usedFallback = true;
         }
 
         for (const toolCall of toolCalls) {
@@ -843,9 +939,37 @@ serve(async (req) => {
 
       messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
 
+      // --- Anti-spam: consecutive fallback tracking ---
+      const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+      const prevConsecutiveFallbacks = existingSummary.consecutive_fallbacks || 0;
+      // usedFallback is only defined in the else branch (non-qualification), default to false
+      const wasFallback = typeof usedFallback !== "undefined" ? usedFallback : false;
+      const newConsecutiveFallbacks = wasFallback ? prevConsecutiveFallbacks + 1 : 0;
+
+      if (newConsecutiveFallbacks >= 3) {
+        console.warn(`[ai-agent-chat] 🚨 Fallback limit reached (${newConsecutiveFallbacks}) for session ${session_id}. Auto-pausing.`);
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "fallback_limit" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: responseContent,
+          status: "fallback_limit",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+      }
+
       const summaryData = {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
+        consecutive_fallbacks: newConsecutiveFallbacks,
       };
 
       // Update memory with messages and release lock
