@@ -160,6 +160,9 @@ serve(async (req) => {
       .in("plan_type", ["trial_manual", "trialing", "blocked"])
       .not("trial_end", "is", null);
 
+    // Also fetch active trial workspaces for engagement messages (negative days)
+    // These are already included above since trial_manual/trialing covers active trials
+
     if (wsErr) throw wsErr;
 
     const now = new Date();

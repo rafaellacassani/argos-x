@@ -372,13 +372,13 @@ export default function AdminClients() {
     }
   };
 
-  const addCadenceMessage = (day: number) => {
+  const addCadenceMessage = (day: number, channel: string = "whatsapp") => {
     if (!cadenceConfig) return;
     const dayMsgs = cadenceMessages.filter(m => m.cadence_day === day);
     setCadenceMessages([...cadenceMessages, {
       config_id: cadenceConfig.id,
       cadence_day: day,
-      channel: "whatsapp",
+      channel,
       message_type: "text",
       content: "",
       audio_url: null,
@@ -1441,31 +1441,72 @@ export default function AdminClients() {
                   {/* Cadence days */}
                   <div className="space-y-2">
                     <Label>Dias de envio (relativo ao vencimento do trial)</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {[-3, -2, -1, 0, 1, 2, 3, 5, 7, 10, 14, 21, 30].map((day) => {
-                        const isSelected = cadenceConfig.cadence_days.includes(day);
-                        return (
-                          <Button
-                            key={day}
-                            type="button"
-                            size="sm"
-                            variant={isSelected ? "default" : "outline"}
-                            className="h-8 min-w-10"
-                            onClick={() => {
-                              const newDays = isSelected
-                                ? cadenceConfig.cadence_days.filter((d) => d !== day)
-                                : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
-                              setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
-                            }}
-                          >
-                            {day > 0 ? `+${day}` : day}
-                          </Button>
-                        );
-                      })}
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">📩 Signup & Trial (antes do vencimento)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[-7, -6, -5, -4, -3, -2, -1].map((day) => {
+                            const isSelected = cadenceConfig.cadence_days.includes(day);
+                            const dayLabels: Record<number, string> = {
+                              [-7]: "Signup",
+                              [-6]: "Dia 2",
+                              [-5]: "Dia 3",
+                              [-4]: "Dia 4",
+                              [-3]: "Dia 5",
+                              [-2]: "Dia 6",
+                              [-1]: "Último dia",
+                            };
+                            return (
+                              <Button
+                                key={day}
+                                type="button"
+                                size="sm"
+                                variant={isSelected ? "default" : "outline"}
+                                className="h-8"
+                                onClick={() => {
+                                  const newDays = isSelected
+                                    ? cadenceConfig.cadence_days.filter((d) => d !== day)
+                                    : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
+                                  setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
+                                }}
+                              >
+                                {dayLabels[day] || day}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">🔒 Vencimento & Pós-trial</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[0, 1, 2, 3, 5, 7, 10, 14, 21, 30].map((day) => {
+                            const isSelected = cadenceConfig.cadence_days.includes(day);
+                            return (
+                              <Button
+                                key={day}
+                                type="button"
+                                size="sm"
+                                variant={isSelected ? "default" : "outline"}
+                                className="h-8 min-w-10"
+                                onClick={() => {
+                                  const newDays = isSelected
+                                    ? cadenceConfig.cadence_days.filter((d) => d !== day)
+                                    : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
+                                  setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
+                                }}
+                              >
+                                {day === 0 ? "Vencimento" : `+${day}`}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Negativos = antes de expirar, 0 = dia do vencimento, positivos = após expirar.
-                      Selecionados: {cadenceConfig.cadence_days.map(d => d > 0 ? `+${d}` : String(d)).join(", ")}
+                      Selecionados: {cadenceConfig.cadence_days.map(d => {
+                        const labels: Record<number, string> = { [-7]: "Signup", [-6]: "Dia 2", [-5]: "Dia 3", [-4]: "Dia 4", [-3]: "Dia 5", [-2]: "Dia 6", [-1]: "Último dia", [0]: "Vencimento" };
+                        return labels[d] || (d > 0 ? `+${d}` : String(d));
+                      }).join(", ")}
                     </p>
                   </div>
 
@@ -1562,22 +1603,11 @@ export default function AdminClients() {
 
                   <Separator />
 
-                  {/* Welcome message template */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4" />
-                      Mensagem de boas-vindas (signup WhatsApp)
-                    </Label>
-                    <Textarea
-                      rows={5}
-                      value={cadenceConfig.welcome_message_template || ""}
-                      onChange={(e) =>
-                        setCadenceConfig({ ...cadenceConfig, welcome_message_template: e.target.value || null })
-                      }
-                      placeholder={`Olá, {nome}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`}
-                    />
+                  <div className="rounded-lg border border-dashed p-3 bg-muted/30">
                     <p className="text-xs text-muted-foreground">
-                      Mensagem enviada ao novo cliente no signup. Variável: {"{nome}"}. Deixe vazio para usar o texto padrão.
+                      💡 <strong>Mensagem de boas-vindas (signup):</strong> Para configurar mensagens enviadas no momento do cadastro, 
+                      ative o dia <strong>"Signup"</strong> acima e adicione suas mensagens (texto ou áudio) na seção abaixo.
+                      Se nenhuma mensagem for configurada para o dia do signup, o sistema usará a mensagem padrão.
                     </p>
                   </div>
 
@@ -1624,48 +1654,93 @@ export default function AdminClients() {
                       const dayMsgs = cadenceMessages
                         .map((m, idx) => ({ ...m, _idx: idx }))
                         .filter(m => m.cadence_day === day);
-                      const dayLabel = day < 0 ? `${day} dias (antes)` : day === 0 ? "Dia 0 (vencimento)" : `+${day} dias (após)`;
+                      const dayLabelsMap: Record<number, string> = {
+                        [-7]: "📩 Signup (boas-vindas)",
+                        [-6]: "📅 Dia 2 do trial",
+                        [-5]: "📅 Dia 3 do trial",
+                        [-4]: "📅 Dia 4 do trial",
+                        [-3]: "📅 Dia 5 do trial",
+                        [-2]: "⚠️ Dia 6 (penúltimo)",
+                        [-1]: "🚨 Último dia do trial",
+                        [0]: "🔒 Dia do vencimento",
+                      };
+                      const dayLabel = dayLabelsMap[day] || (day > 0 ? `+${day} dias após vencimento` : `${day} dias`);
+                      const whatsappCount = dayMsgs.filter(m => m.channel === "whatsapp").length;
+                      const emailCount = dayMsgs.filter(m => m.channel === "email").length;
 
                       return (
                         <AccordionItem key={day} value={`day-${day}`}>
                           <AccordionTrigger className="text-sm">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="font-mono">{day > 0 ? `+${day}` : day}</Badge>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {day === -7 ? "Signup" : day > 0 ? `+${day}` : day}
+                              </Badge>
                               <span>{dayLabel}</span>
-                              <Badge variant="secondary" className="ml-2">{dayMsgs.length} msg</Badge>
+                              {whatsappCount > 0 && (
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <MessageSquare className="w-3 h-3" />{whatsappCount}
+                                </Badge>
+                              )}
+                              {emailCount > 0 && (
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <Mail className="w-3 h-3" />{emailCount}
+                                </Badge>
+                              )}
+                              {dayMsgs.length === 0 && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">sem mensagens</Badge>
+                              )}
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="space-y-3 pt-2">
                             {dayMsgs.length === 0 && (
                               <p className="text-xs text-muted-foreground text-center py-2">
-                                Nenhuma mensagem configurada para este dia. O sistema usará os templates padrão.
+                                Nenhuma mensagem configurada. {day === -7 ? "O sistema usará a mensagem padrão de boas-vindas." : "O sistema usará os templates padrão."}
                               </p>
                             )}
 
                             {dayMsgs.map((msg, posInDay) => (
                               <div key={msg._idx} className="rounded-lg border p-3 space-y-3">
                                 <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <Badge variant="outline" className="text-xs">
                                       #{posInDay + 1}
                                     </Badge>
-                                    {/* Type toggle */}
+                                    {/* Channel toggle */}
                                     <div className="flex rounded-md border overflow-hidden">
                                       <button
                                         type="button"
-                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "text" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
-                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "text" })}
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.channel === "whatsapp" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { channel: "whatsapp" })}
                                       >
-                                        <Type className="w-3 h-3" /> Texto
+                                        <MessageSquare className="w-3 h-3" /> WhatsApp
                                       </button>
                                       <button
                                         type="button"
-                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "audio" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
-                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "audio" })}
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.channel === "email" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { channel: "email", message_type: "text" })}
                                       >
-                                        <Music className="w-3 h-3" /> Áudio
+                                        <Mail className="w-3 h-3" /> E-mail
                                       </button>
                                     </div>
+                                    {/* Type toggle (only for whatsapp) */}
+                                    {msg.channel === "whatsapp" && (
+                                      <div className="flex rounded-md border overflow-hidden">
+                                        <button
+                                          type="button"
+                                          className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "text" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                          onClick={() => updateCadenceMessage(msg._idx, { message_type: "text" })}
+                                        >
+                                          <Type className="w-3 h-3" /> Texto
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "audio" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                          onClick={() => updateCadenceMessage(msg._idx, { message_type: "audio" })}
+                                        >
+                                          <Music className="w-3 h-3" /> Áudio
+                                        </button>
+                                      </div>
+                                    )}
                                     <Switch
                                       checked={msg.is_active}
                                       onCheckedChange={(v) => updateCadenceMessage(msg._idx, { is_active: v })}
@@ -1751,15 +1826,26 @@ export default function AdminClients() {
                               </div>
                             ))}
 
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => addCadenceMessage(day)}
-                            >
-                              <Plus className="w-3 h-3 mr-1" />
-                              Adicionar mensagem no dia {day > 0 ? `+${day}` : day}
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => addCadenceMessage(day, "whatsapp")}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                <MessageSquare className="w-3 h-3 mr-1" /> WhatsApp
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1"
+                                onClick={() => addCadenceMessage(day, "email")}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                <Mail className="w-3 h-3 mr-1" /> E-mail
+                              </Button>
+                            </div>
                           </AccordionContent>
                         </AccordionItem>
                       );
