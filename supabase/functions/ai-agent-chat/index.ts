@@ -939,9 +939,37 @@ serve(async (req) => {
 
       messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
 
+      // --- Anti-spam: consecutive fallback tracking ---
+      const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+      const prevConsecutiveFallbacks = existingSummary.consecutive_fallbacks || 0;
+      // usedFallback is only defined in the else branch (non-qualification), default to false
+      const wasFallback = typeof usedFallback !== "undefined" ? usedFallback : false;
+      const newConsecutiveFallbacks = wasFallback ? prevConsecutiveFallbacks + 1 : 0;
+
+      if (newConsecutiveFallbacks >= 3) {
+        console.warn(`[ai-agent-chat] 🚨 Fallback limit reached (${newConsecutiveFallbacks}) for session ${session_id}. Auto-pausing.`);
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "fallback_limit" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: responseContent,
+          status: "fallback_limit",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+      }
+
       const summaryData = {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
+        consecutive_fallbacks: newConsecutiveFallbacks,
       };
 
       // Update memory with messages and release lock
