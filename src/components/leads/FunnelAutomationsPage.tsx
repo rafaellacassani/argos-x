@@ -371,18 +371,101 @@ export function FunnelAutomationsPage({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-5 mt-6">
-            {/* Trigger */}
+          <div className="space-y-5 mt-4">
+            {/* Conditions header - Kommo style */}
+            <Collapsible open={conditionsOpen} onOpenChange={setConditionsOpen}>
+              <CollapsibleTrigger asChild>
+                <div className="rounded-lg border p-3 cursor-pointer hover:bg-muted/30 transition-colors">
+                  <p className="text-sm font-medium text-foreground">Para todos os leads com:</p>
+                  {form.conditions.length > 0 ? (
+                    <p className="text-xs text-muted-foreground mt-1">{form.conditions.length} condição(ões) configurada(s)</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Adicionar uma condição</p>
+                  )}
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-2 pt-2 pl-1">
+                {form.conditions.map((cond, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Select value={cond.field} onValueChange={v => updateCondition(idx, 'field', v)}>
+                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="source">Fonte</SelectItem>
+                        <SelectItem value="value">Valor</SelectItem>
+                        <SelectItem value="tag">Tag</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={cond.operator} onValueChange={v => updateCondition(idx, 'operator', v)}>
+                      <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {cond.field === 'value' ? (
+                          <>
+                            <SelectItem value="greater_than">Maior que</SelectItem>
+                            <SelectItem value="less_than">Menor que</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="equals">É</SelectItem>
+                            <SelectItem value="not_equals">Não é</SelectItem>
+                            {cond.field === 'tag' && (
+                              <>
+                                <SelectItem value="contains">Contém</SelectItem>
+                                <SelectItem value="not_contains">Não contém</SelectItem>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {cond.field === 'source' ? (
+                      <Select value={cond.value} onValueChange={v => updateCondition(idx, 'value', v)}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Valor" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                          <SelectItem value="instagram">Instagram</SelectItem>
+                          <SelectItem value="manual">Manual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : cond.field === 'tag' ? (
+                      <Select value={cond.value} onValueChange={v => updateCondition(idx, 'value', v)}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Tag" /></SelectTrigger>
+                        <SelectContent>
+                          {tags.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input type="number" placeholder="R$ valor" className="flex-1" value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)} />
+                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeCondition(idx)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="ghost" size="sm" onClick={addCondition} className="gap-1">
+                  <Plus className="h-3.5 w-3.5" /> Adicionar condição
+                </Button>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* Trigger - Kommo style */}
             <div className="space-y-2">
-              <Label>Gatilho</Label>
               <Select value={form.trigger} onValueChange={(v) => setForm(p => ({ ...p, trigger: v as any }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="on_enter">Ao entrar na etapa</SelectItem>
-                  <SelectItem value="on_exit">Ao sair da etapa</SelectItem>
-                  <SelectItem value="after_time">Após tempo na etapa</SelectItem>
+                  <SelectItem value="on_enter">Executar: Quando movido para esta etapa</SelectItem>
+                  <SelectItem value="on_exit">Executar: Quando sair desta etapa</SelectItem>
+                  <SelectItem value="after_time">Executar: Após tempo na etapa</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.trigger === 'on_enter' 
+                  ? 'A ação será executada quando um lead entrar ou for criado nesta etapa'
+                  : form.trigger === 'on_exit'
+                  ? 'A ação será executada quando um lead sair desta etapa'
+                  : 'A ação será executada após o tempo configurado na etapa'}
+              </p>
               {form.trigger === 'after_time' && (
                 <DelayInput
                   minutes={form.trigger_delay_minutes}
