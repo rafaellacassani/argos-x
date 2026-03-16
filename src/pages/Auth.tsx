@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { z } from "zod";
 import { useAuth } from "@/hooks/useAuth";
