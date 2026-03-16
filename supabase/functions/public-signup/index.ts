@@ -136,7 +136,7 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
 
   const { data: config } = await supabaseAdmin
     .from("reactivation_cadence_config")
-    .select("whatsapp_instance_name")
+    .select("whatsapp_instance_name, welcome_message_template")
     .limit(1)
     .single();
 
@@ -147,7 +147,11 @@ async function sendWelcomeWhatsApp(phone: string, name: string) {
     cleanPhone = "55" + cleanPhone;
   }
 
-  const message = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+  const defaultMessage = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+
+  const message = config.welcome_message_template
+    ? config.welcome_message_template.replace(/\{nome\}/g, name)
+    : defaultMessage;
 
   const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
 
