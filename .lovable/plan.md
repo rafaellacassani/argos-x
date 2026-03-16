@@ -1,48 +1,53 @@
 
 
-## Diagnóstico
+## Problema identificado
 
-Conferi as suas agentes. Aqui está o status atual:
+O link nos e-mails e WhatsApp da régua de reativação aponta para `https://argosx.com.br/auth` (página de login). Quando o cliente clica em "Ativar antes que expire", ele vê a tela de login — não a de pagamento.
 
-| Agente | Modelo | Ativo |
-|--------|--------|-------|
-| **Iara** | `anthropic/claude-3-5-sonnet-20241022` | ✅ |
-| **Iara da Argos X** | `anthropic/claude-3-5-sonnet-20241022` | ✅ |
+**Porém**, mesmo depois de logar, o fluxo funciona: o `AppLayout` detecta workspace bloqueado e mostra a `WorkspaceBlockedScreen` com os botões de checkout. O problema é a **experiência confusa** — o cliente espera ir direto para pagar e vê um login.
 
-As duas Iaras estão corretamente configuradas com **Claude 3.5 Sonnet** e ativas. O roteamento direto para a API da Anthropic usando sua `ANTHROPIC_API_KEY` está implementado no backend. Tudo certo.
+## Mapeamento de todos os pontos de ativação
 
-**Porém há um problema**: existem **6 outros agentes** (Rebeca, Aslan, Maya, Sofia, Ana Cristina, e um com nome estranho) ainda usando `google/gemini-3-flash-preview`, que é o gateway Lovable (e pode dar erro 402). Esses parecem ser de teste ou de outros workspaces.
+| Local | Link atual | Problema |
+|-------|-----------|----------|
+| **E-mails da régua** (`process-reactivation`) | `https://argosx.com.br/auth` | Leva para login, não para planos |
+| **WhatsApp da régua** (`process-reactivation`) | `https://argosx.com.br/auth` | Idem |
+| **TrialBanner** (dentro do app) | `navigate("/planos")` | OK — já aponta para planos |
+| **WorkspaceBlockedScreen** (workspace bloqueado) | `create-checkout-session` → Stripe | OK — checkout direto |
+| **Página /planos** | `create-checkout-session` → Stripe | OK — checkout direto |
 
----
+## Solução
 
-## O que precisa ser feito
+### 1. Corrigir link na régua de reativação (`process-reactivation/index.ts`)
 
-O default `openai/gpt-4o-mini` já está configurado no wizard de criação (`CreateAgentDialog`), mas os agentes **já existentes** em outros workspaces continuam com o modelo antigo. Precisamos:
-
-### 1. Migrar agentes existentes que usam modelos do gateway Lovable
-Uma migration SQL para trocar todos os agentes que ainda usam `google/gemini-3-flash-preview` (ou outros modelos google) para `openai/gpt-4o-mini` — **exceto** os seus (que já estão com Claude).
-
-```sql
-UPDATE ai_agents 
-SET model = 'openai/gpt-4o-mini' 
-WHERE model LIKE 'google/%';
+Mudar a linha 209 de:
+```
+const planLink = "https://argosx.com.br/auth";
+```
+Para:
+```
+const planLink = "https://argosx.com.br/planos";
 ```
 
-### 2. Garantir no backend que o fallback default seja `openai/gpt-4o-mini`
-Na linha 683 do `ai-agent-chat/index.ts`, o fallback já é `openai/gpt-4o-mini`. Correto.
+Quando o cliente clicar:
+- **Se já estiver logado**: vai direto para `/planos` com os botões de checkout do Stripe
+- **Se não estiver logado**: o `ProtectedRoute` redireciona para `/auth`, e após login o React Router o leva de volta ao app — onde o `AppLayout` mostra a `WorkspaceBlockedScreen` com checkout
 
-### 3. Nenhuma mudança no frontend necessária
-O `CreateAgentDialog` já usa `openai/gpt-4o-mini` como default. A lista de modelos no `AdvancedTab` está correta.
+### 2. Melhorar redirect pós-login para workspace bloqueado (`ProtectedRoute`)
 
----
+Atualmente, quando um usuário não-autenticado acessa `/planos`, é redirecionado para `/auth` mas **sem salvar a URL de retorno**. Após login, vai para `/` em vez de `/planos`.
 
-## Resumo
+Corrigir o `ProtectedRoute` para salvar a rota de destino e o `Auth.tsx` para redirecionar de volta após login. Isso garante que o fluxo email → login → planos funcione sem atrito.
 
-- Suas duas Iaras com Claude Sonnet: **OK, confirmado**
-- Roteamento OpenAI/Anthropic direto com suas API keys: **OK, implementado**
-- Default para novos agentes em qualquer workspace: **GPT-4o Mini** (já configurado)
-- Ação necessária: **1 migration SQL** para migrar agentes existentes de `google/*` para `openai/gpt-4o-mini`
+### 3. Garantir que `/planos` funcione mesmo com workspace bloqueado (`AppLayout`)
+
+Atualmente, se o workspace está bloqueado, o `AppLayout` intercepta **todas** as rotas e mostra `WorkspaceBlockedScreen`. Isso inclui `/planos`, que nunca renderiza.
+
+Adicionar exceção para que `/planos` passe pelo bloqueio — já que a própria página de planos é o lugar correto para resolver o bloqueio.
 
 ### Arquivos alterados
-- Migration SQL (nova) — atualizar modelo dos agentes existentes
+- `supabase/functions/process-reactivation/index.ts` — link corrigido para `/planos`
+- `src/components/layout/ProtectedRoute.tsx` — salvar URL de retorno ao redirecionar para login
+- `src/pages/Auth.tsx` — respeitar URL de retorno após login
+- `src/components/layout/AppLayout.tsx` — permitir `/planos` mesmo com workspace bloqueado
 
