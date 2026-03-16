@@ -2362,7 +2362,7 @@ export default function Chats() {
         </div>
 
         {/* Chat List */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 [&>div]:!overflow-x-auto">
           {loadingChats ? (
             <div className="flex items-center justify-center p-8">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
