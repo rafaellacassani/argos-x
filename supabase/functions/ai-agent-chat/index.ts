@@ -520,6 +520,45 @@ serve(async (req) => {
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- REJECTION DETECTION (works even without AI credits) ---
+      if (detectRejection(messageText)) {
+        console.log(`[ai-agent-chat] 🚫 Rejection detected: "${messageText.substring(0, 50)}"`);
+        
+        // Pause session
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "lead_rejected" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+        
+        const rejectResponse = "Entendido! Peço desculpas pelo incômodo. Não enviarei mais mensagens. Caso precise de algo no futuro, é só nos chamar. Tenha um ótimo dia! 😊";
+        
+        // Save to memory
+        const existingMessages: ChatMessage[] = memory.messages || [];
+        existingMessages.push({ role: "user", content: messageText, timestamp: new Date().toISOString() });
+        existingMessages.push({ role: "assistant", content: rejectResponse, timestamp: new Date().toISOString() });
+        await supabase.from("agent_memories").update({
+          messages: existingMessages,
+          is_processing: false,
+          processing_started_at: null,
+          last_message_id: message_id || memory.last_message_id,
+        }).eq("id", memory.id);
+        lockAcquired = false;
+        
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText,
+          output_message: rejectResponse,
+          status: "rejected",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+        
+        return new Response(JSON.stringify({ response: rejectResponse, chunks: [rejectResponse], rejected: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- Qualification flow ---
       const qualificationEnabled = agent.qualification_enabled || false;
       const qualificationFields = agent.qualification_fields || [];
