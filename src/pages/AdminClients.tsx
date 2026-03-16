@@ -209,11 +209,29 @@ export default function AdminClients() {
     email_template: string;
     send_whatsapp: boolean;
     send_email: boolean;
+    welcome_message_template: string | null;
   } | null>(null);
   const [cadenceLoading, setCadenceLoading] = useState(false);
   const [cadenceSaving, setCadenceSaving] = useState(false);
   const [reactivationLog, setReactivationLog] = useState<any[]>([]);
   const [evolutionInstances, setEvolutionInstances] = useState<{ instance_name: string; display_name: string | null; instance_type: string; workspace_id: string }[]>([]);
+
+  // Cadence messages state
+  interface CadenceMessage {
+    id?: string;
+    config_id: string;
+    cadence_day: number;
+    channel: string;
+    message_type: string;
+    content: string | null;
+    audio_url: string | null;
+    position: number;
+    is_active: boolean;
+  }
+  const [cadenceMessages, setCadenceMessages] = useState<CadenceMessage[]>([]);
+  const [cadenceMessagesSaving, setCadenceMessagesSaving] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState<string | null>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   // Filter state
   const [filterPlan, setFilterPlan] = useState<string>("all");
