@@ -374,11 +374,23 @@ serve(async (req) => {
           .maybeSingle();
 
         if (existingWs) {
+          const env = {
+            STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+            STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+            STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+          };
+          const planConfig = getPlanConfig(priceId || "", env);
+
           await supabaseAdmin
             .from("workspaces")
             .update({
               subscription_status: "trialing",
               plan_type: "trialing",
+              plan_name: planConfig.plan_name,
+              lead_limit: planConfig.lead_limit,
+              whatsapp_limit: planConfig.whatsapp_limit,
+              user_limit: planConfig.user_limit,
+              ai_interactions_limit: planConfig.ai_interactions_limit,
               stripe_subscription_id: subscription.id,
               stripe_price_id: priceId,
               trial_end: subscription.trial_end
