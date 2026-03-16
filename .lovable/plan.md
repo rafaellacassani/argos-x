@@ -1,35 +1,48 @@
 
 
-# Plano: Google Meet automático + link nos lembretes da IA
+## Diagnóstico
 
-## O que será feito
+Conferi as suas agentes. Aqui está o status atual:
 
-1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
-2. **Salvar o link do Meet** na tabela `calendar_events`
-3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
-4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
-5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
+| Agente | Modelo | Ativo |
+|--------|--------|-------|
+| **Iara** | `anthropic/claude-3-5-sonnet-20241022` | ✅ |
+| **Iara da Argos X** | `anthropic/claude-3-5-sonnet-20241022` | ✅ |
 
-## Detalhes técnicos
+As duas Iaras estão corretamente configuradas com **Claude 3.5 Sonnet** e ativas. O roteamento direto para a API da Anthropic usando sua `ANTHROPIC_API_KEY` está implementado no backend. Tudo certo.
 
-### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
-- Nova coluna `meet_link text nullable`
+**Porém há um problema**: existem **6 outros agentes** (Rebeca, Aslan, Maya, Sofia, Ana Cristina, e um com nome estranho) ainda usando `google/gemini-3-flash-preview`, que é o gateway Lovable (e pode dar erro 402). Esses parecem ser de teste ou de outros workspaces.
 
-### 2. Edge Function `sync-google-calendar` (push)
-- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
-- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+---
 
-### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
-- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
-- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
-- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
-- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
-- Adicionar toggle `include_meet_link` no `calendar_config`
+## O que precisa ser feito
 
-### 4. Frontend `ToolsTab.tsx`
-- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
-- Salvar como `calendar_config.generate_meet_link: boolean`
+O default `openai/gpt-4o-mini` já está configurado no wizard de criação (`CreateAgentDialog`), mas os agentes **já existentes** em outros workspaces continuam com o modelo antigo. Precisamos:
 
-### 5. Pull de eventos (`/pull`)
-- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
+### 1. Migrar agentes existentes que usam modelos do gateway Lovable
+Uma migration SQL para trocar todos os agentes que ainda usam `google/gemini-3-flash-preview` (ou outros modelos google) para `openai/gpt-4o-mini` — **exceto** os seus (que já estão com Claude).
+
+```sql
+UPDATE ai_agents 
+SET model = 'openai/gpt-4o-mini' 
+WHERE model LIKE 'google/%';
+```
+
+### 2. Garantir no backend que o fallback default seja `openai/gpt-4o-mini`
+Na linha 683 do `ai-agent-chat/index.ts`, o fallback já é `openai/gpt-4o-mini`. Correto.
+
+### 3. Nenhuma mudança no frontend necessária
+O `CreateAgentDialog` já usa `openai/gpt-4o-mini` como default. A lista de modelos no `AdvancedTab` está correta.
+
+---
+
+## Resumo
+
+- Suas duas Iaras com Claude Sonnet: **OK, confirmado**
+- Roteamento OpenAI/Anthropic direto com suas API keys: **OK, implementado**
+- Default para novos agentes em qualquer workspace: **GPT-4o Mini** (já configurado)
+- Ação necessária: **1 migration SQL** para migrar agentes existentes de `google/*` para `openai/gpt-4o-mini`
+
+### Arquivos alterados
+- Migration SQL (nova) — atualizar modelo dos agentes existentes
 
