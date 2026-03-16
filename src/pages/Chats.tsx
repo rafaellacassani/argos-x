@@ -1998,34 +1998,25 @@ export default function Chats() {
       }
 
       // Filter by response status
-      // "answered" = last message was from team (fromMe = true)
-      // "awaiting" = last message was from client (fromMe = false) - waiting for team response
-      // "unanswered" = has unread messages and last was from client
+      // "answered" = last message was from team (fromMe = true)  
+      // "unanswered" = lead sent message and WE (team) didn't reply yet
+      //   → last message is from client (lastMessageFromMe === false)
       if (activeFilters.responseStatus && activeFilters.responseStatus.length > 0) {
         const statuses = activeFilters.responseStatus;
-        console.log(`[Chats] Applying filter with statuses: ${statuses.join(', ')}`);
-        console.log(`[Chats] Before filter: ${result.length} chats`);
         
         result = result.filter((chat) => {
-          // If "answered" is selected: show chats where last message was from team
+          // "answered": last message was sent BY US (team replied)
           if (statuses.includes("answered") && chat.lastMessageFromMe === true) {
             return true;
           }
           
-          // If "awaiting" is selected: show chats where last message was from client (awaiting team response)
-          if (statuses.includes("awaiting") && chat.lastMessageFromMe === false) {
-            return true;
-          }
-          
-          // If "unanswered" is selected: show chats where last message was from client (regardless of read status)
+          // "unanswered": last message was from the LEAD/CLIENT, meaning WE haven't replied
           if (statuses.includes("unanswered") && chat.lastMessageFromMe === false) {
             return true;
           }
           
           return false;
         });
-        
-        console.log(`[Chats] After filter: ${result.length} chats`);
       }
 
       // Filter by last message sender
