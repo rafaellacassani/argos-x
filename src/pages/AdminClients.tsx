@@ -1603,22 +1603,11 @@ export default function AdminClients() {
 
                   <Separator />
 
-                  {/* Welcome message template */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4" />
-                      Mensagem de boas-vindas (signup WhatsApp)
-                    </Label>
-                    <Textarea
-                      rows={5}
-                      value={cadenceConfig.welcome_message_template || ""}
-                      onChange={(e) =>
-                        setCadenceConfig({ ...cadenceConfig, welcome_message_template: e.target.value || null })
-                      }
-                      placeholder={`Olá, {nome}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`}
-                    />
+                  <div className="rounded-lg border border-dashed p-3 bg-muted/30">
                     <p className="text-xs text-muted-foreground">
-                      Mensagem enviada ao novo cliente no signup. Variável: {"{nome}"}. Deixe vazio para usar o texto padrão.
+                      💡 <strong>Mensagem de boas-vindas (signup):</strong> Para configurar mensagens enviadas no momento do cadastro, 
+                      ative o dia <strong>"Signup"</strong> acima e adicione suas mensagens (texto ou áudio) na seção abaixo.
+                      Se nenhuma mensagem for configurada para o dia do signup, o sistema usará a mensagem padrão.
                     </p>
                   </div>
 
