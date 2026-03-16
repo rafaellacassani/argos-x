@@ -1696,7 +1696,6 @@ export default function AdminClients() {
                               <p className="text-xs text-muted-foreground text-center py-2">
                                 Nenhuma mensagem configurada. {day === -7 ? "O sistema usará a mensagem padrão de boas-vindas." : "O sistema usará os templates padrão."}
                               </p>
-                              </p>
                             )}
 
                             {dayMsgs.map((msg, posInDay) => (
