@@ -1413,6 +1413,7 @@ export default function AdminClients() {
             </div>
           ) : cadenceConfig ? (
             <>
+              {/* General config card */}
               <Card className="max-w-2xl">
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -1439,9 +1440,9 @@ export default function AdminClients() {
                 <CardContent className="space-y-6">
                   {/* Cadence days */}
                   <div className="space-y-2">
-                    <Label>Dias de envio (após início do trial)</Label>
+                    <Label>Dias de envio (relativo ao vencimento do trial)</Label>
                     <div className="flex flex-wrap gap-2">
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 21, 30].map((day) => {
+                      {[-3, -2, -1, 0, 1, 2, 3, 5, 7, 10, 14, 21, 30].map((day) => {
                         const isSelected = cadenceConfig.cadence_days.includes(day);
                         return (
                           <Button
@@ -1449,7 +1450,7 @@ export default function AdminClients() {
                             type="button"
                             size="sm"
                             variant={isSelected ? "default" : "outline"}
-                            className="h-8 w-10"
+                            className="h-8 min-w-10"
                             onClick={() => {
                               const newDays = isSelected
                                 ? cadenceConfig.cadence_days.filter((d) => d !== day)
@@ -1457,13 +1458,14 @@ export default function AdminClients() {
                               setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
                             }}
                           >
-                            {day}
+                            {day > 0 ? `+${day}` : day}
                           </Button>
                         );
                       })}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Selecionados: dia {cadenceConfig.cadence_days.join(", ")}
+                      Negativos = antes de expirar, 0 = dia do vencimento, positivos = após expirar.
+                      Selecionados: {cadenceConfig.cadence_days.map(d => d > 0 ? `+${d}` : String(d)).join(", ")}
                     </p>
                   </div>
 
@@ -1525,36 +1527,16 @@ export default function AdminClients() {
                           )}
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-muted-foreground">
-                        Selecione a instância configurada na Evolution API para disparar as mensagens.
-                      </p>
                     </div>
                   )}
 
                   <Separator />
 
-                  {/* WhatsApp template */}
-                  {cadenceConfig.send_whatsapp && (
-                    <div className="space-y-2">
-                      <Label>Template WhatsApp</Label>
-                      <Textarea
-                        rows={6}
-                        value={cadenceConfig.whatsapp_template}
-                        onChange={(e) =>
-                          setCadenceConfig({ ...cadenceConfig, whatsapp_template: e.target.value })
-                        }
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Variáveis: {"{nome}"}, {"{email}"}, {"{link}"}, {"{dias_expirado}"}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Email template */}
+                  {/* Email fallback template */}
                   {cadenceConfig.send_email && (
                     <>
                       <div className="space-y-2">
-                        <Label>Assunto do e-mail</Label>
+                        <Label>Assunto do e-mail (fallback)</Label>
                         <Input
                           value={cadenceConfig.email_subject}
                           onChange={(e) =>
@@ -1563,26 +1545,232 @@ export default function AdminClients() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Template do e-mail</Label>
+                        <Label>Template do e-mail (fallback)</Label>
                         <Textarea
-                          rows={8}
+                          rows={6}
                           value={cadenceConfig.email_template}
                           onChange={(e) =>
                             setCadenceConfig({ ...cadenceConfig, email_template: e.target.value })
                           }
                         />
                         <p className="text-xs text-muted-foreground">
-                          Variáveis: {"{nome}"}, {"{email}"}, {"{link}"}, {"{dias_expirado}"}
+                          Variáveis: {"{nome}"}, {"{link}"}, {"{dias_expirado}"}
                         </p>
                       </div>
                     </>
                   )}
 
+                  <Separator />
+
+                  {/* Welcome message template */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4" />
+                      Mensagem de boas-vindas (signup WhatsApp)
+                    </Label>
+                    <Textarea
+                      rows={5}
+                      value={cadenceConfig.welcome_message_template || ""}
+                      onChange={(e) =>
+                        setCadenceConfig({ ...cadenceConfig, welcome_message_template: e.target.value || null })
+                      }
+                      placeholder={`Olá, {nome}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi criada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Mensagem enviada ao novo cliente no signup. Variável: {"{nome}"}. Deixe vazio para usar o texto padrão.
+                    </p>
+                  </div>
+
                   <Button onClick={handleSaveCadence} disabled={cadenceSaving} className="w-full">
                     {cadenceSaving ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
                     ) : (
-                      <><Check className="w-4 h-4 mr-2" /> Salvar configurações</>
+                      <><Check className="w-4 h-4 mr-2" /> Salvar configurações gerais</>
+                    )}
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* ── Mensagens por dia de cadência ── */}
+              <Card className="max-w-2xl">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Mensagens por dia de cadência
+                  </CardTitle>
+                  <CardDescription>
+                    Configure múltiplas mensagens (texto ou áudio) para cada dia. 
+                    Elas são enviadas em ordem, com intervalo de ~2s entre cada.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept=".ogg,.mp3,.m4a,.wav,audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      const idx = audioInputRef.current?.dataset.messageIndex;
+                      if (file && idx !== undefined) {
+                        handleAudioUpload(file, Number(idx));
+                      }
+                      e.target.value = "";
+                    }}
+                  />
+
+                  <Accordion type="multiple" className="w-full">
+                    {cadenceConfig.cadence_days.map((day) => {
+                      const dayMsgs = cadenceMessages
+                        .map((m, idx) => ({ ...m, _idx: idx }))
+                        .filter(m => m.cadence_day === day);
+                      const dayLabel = day < 0 ? `${day} dias (antes)` : day === 0 ? "Dia 0 (vencimento)" : `+${day} dias (após)`;
+
+                      return (
+                        <AccordionItem key={day} value={`day-${day}`}>
+                          <AccordionTrigger className="text-sm">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="font-mono">{day > 0 ? `+${day}` : day}</Badge>
+                              <span>{dayLabel}</span>
+                              <Badge variant="secondary" className="ml-2">{dayMsgs.length} msg</Badge>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="space-y-3 pt-2">
+                            {dayMsgs.length === 0 && (
+                              <p className="text-xs text-muted-foreground text-center py-2">
+                                Nenhuma mensagem configurada para este dia. O sistema usará os templates padrão.
+                              </p>
+                            )}
+
+                            {dayMsgs.map((msg, posInDay) => (
+                              <div key={msg._idx} className="rounded-lg border p-3 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      #{posInDay + 1}
+                                    </Badge>
+                                    {/* Type toggle */}
+                                    <div className="flex rounded-md border overflow-hidden">
+                                      <button
+                                        type="button"
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "text" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "text" })}
+                                      >
+                                        <Type className="w-3 h-3" /> Texto
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`px-2 py-1 text-xs flex items-center gap-1 ${msg.message_type === "audio" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}
+                                        onClick={() => updateCadenceMessage(msg._idx, { message_type: "audio" })}
+                                      >
+                                        <Music className="w-3 h-3" /> Áudio
+                                      </button>
+                                    </div>
+                                    <Switch
+                                      checked={msg.is_active}
+                                      onCheckedChange={(v) => updateCadenceMessage(msg._idx, { is_active: v })}
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      disabled={posInDay === 0}
+                                      onClick={() => moveCadenceMessage(msg._idx, "up")}
+                                    >
+                                      <ArrowUp className="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      disabled={posInDay === dayMsgs.length - 1}
+                                      onClick={() => moveCadenceMessage(msg._idx, "down")}
+                                    >
+                                      <ArrowDown className="w-3 h-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive"
+                                      onClick={() => removeCadenceMessage(msg._idx)}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {msg.message_type === "text" ? (
+                                  <div className="space-y-1">
+                                    <Textarea
+                                      rows={4}
+                                      value={msg.content || ""}
+                                      onChange={(e) => updateCadenceMessage(msg._idx, { content: e.target.value })}
+                                      placeholder="Digite a mensagem... Variáveis: {nome}, {link}, {dias_expirado}"
+                                    />
+                                    <p className="text-[10px] text-muted-foreground">
+                                      Variáveis: {"{nome}"}, {"{link}"}, {"{dias_expirado}"}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {msg.audio_url ? (
+                                      <div className="flex items-center gap-2">
+                                        <audio controls src={msg.audio_url} className="flex-1 h-8" />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-destructive"
+                                          onClick={() => updateCadenceMessage(msg._idx, { audio_url: null })}
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={uploadingAudio === String(msg._idx)}
+                                        onClick={() => {
+                                          if (audioInputRef.current) {
+                                            audioInputRef.current.dataset.messageIndex = String(msg._idx);
+                                            audioInputRef.current.click();
+                                          }
+                                        }}
+                                      >
+                                        {uploadingAudio === String(msg._idx) ? (
+                                          <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Enviando...</>
+                                        ) : (
+                                          <><Upload className="w-3 h-3 mr-1" /> Enviar áudio (.ogg, .mp3)</>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                              onClick={() => addCadenceMessage(day)}
+                            >
+                              <Plus className="w-3 h-3 mr-1" />
+                              Adicionar mensagem no dia {day > 0 ? `+${day}` : day}
+                            </Button>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+
+                  <Button onClick={handleSaveCadenceMessages} disabled={cadenceMessagesSaving} className="w-full">
+                    {cadenceMessagesSaving ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando mensagens...</>
+                    ) : (
+                      <><Check className="w-4 h-4 mr-2" /> Salvar mensagens de cadência</>
                     )}
                   </Button>
                 </CardContent>
