@@ -2417,7 +2417,7 @@ export default function Chats() {
                       <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0 overflow-x-auto scrollbar-thin">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="font-medium text-foreground truncate">{chat.name}</span>
                       <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
