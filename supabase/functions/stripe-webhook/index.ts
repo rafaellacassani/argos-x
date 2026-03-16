@@ -412,8 +412,19 @@ serve(async (req) => {
         };
 
         if (status === "active") {
+          const env = {
+            STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+            STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+            STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+          };
+          const planConfig = getPlanConfig(updates.stripe_price_id || "", env);
           updates.plan_type = "active";
           updates.blocked_at = null;
+          updates.plan_name = planConfig.plan_name;
+          updates.lead_limit = planConfig.lead_limit;
+          updates.whatsapp_limit = planConfig.whatsapp_limit;
+          updates.user_limit = planConfig.user_limit;
+          updates.ai_interactions_limit = planConfig.ai_interactions_limit;
         } else if (status === "past_due") {
           updates.plan_type = "past_due";
         } else if (status === "canceled") {
