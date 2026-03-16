@@ -372,13 +372,13 @@ export default function AdminClients() {
     }
   };
 
-  const addCadenceMessage = (day: number) => {
+  const addCadenceMessage = (day: number, channel: string = "whatsapp") => {
     if (!cadenceConfig) return;
     const dayMsgs = cadenceMessages.filter(m => m.cadence_day === day);
     setCadenceMessages([...cadenceMessages, {
       config_id: cadenceConfig.id,
       cadence_day: day,
-      channel: "whatsapp",
+      channel,
       message_type: "text",
       content: "",
       audio_url: null,
