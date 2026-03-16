@@ -256,7 +256,11 @@ export function useBotFlowExecution() {
 
         if (!targetNumber.includes('@')) {
           targetNumber = targetNumber.replace(/\D/g, '');
-          if (targetNumber.length < 10) return { success: false, message: 'Número de telefone inválido' };
+          // Normalize Brazilian numbers: add country code if missing
+          if (targetNumber.length === 11 || targetNumber.length === 10) {
+            targetNumber = `55${targetNumber}`;
+          }
+          if (targetNumber.length < 12) return { success: false, message: `Número inválido: ${targetNumber}` };
         }
 
         // Use node's configured instanceName as fallback if lead has none
@@ -264,7 +268,7 @@ export function useBotFlowExecution() {
         if (!instanceName) return { success: false, message: 'Lead sem instância WhatsApp vinculada' };
 
         const sent = await sendText(instanceName, targetNumber, messageText);
-        return { success: sent, message: sent ? 'Mensagem enviada com sucesso' : 'Falha ao enviar mensagem' };
+        return { success: sent, message: sent ? 'Mensagem enviada com sucesso' : `Falha ao enviar para ${targetNumber}` };
       }
 
       case 'condition': {

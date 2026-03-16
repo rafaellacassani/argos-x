@@ -18,6 +18,12 @@ export interface StageAutomation {
   created_at: string;
 }
 
+export interface StageAutomationResult {
+  success: boolean;
+  errors: string[];
+  actionsExecuted: number;
+}
+
 export function useStageAutomations() {
   const { workspaceId } = useWorkspace();
   const { executeFlow } = useBotFlowExecution();
@@ -170,8 +176,11 @@ export function useStageAutomations() {
   const executeStageAutomations = useCallback(async (
     stageId: string,
     leadId: string,
-    trigger: 'on_enter' | 'on_exit'
-  ) => {
+    trigger: 'on_enter' | 'on_exit',
+    options?: { skipStageChangeBots?: boolean }
+  ): Promise<StageAutomationResult> => {
+    const result: StageAutomationResult = { success: true, errors: [], actionsExecuted: 0 };
+
     try {
       const { data: autoList } = await supabase
         .from('stage_automations')
@@ -188,7 +197,11 @@ export function useStageAutomations() {
         .eq('id', leadId)
         .maybeSingle();
 
-      if (!lead) return;
+      if (!lead) {
+        result.success = false;
+        result.errors.push('Lead não encontrado');
+        return result;
+      }
 
       for (const auto of (autoList || [])) {
         const conditions = (auto.conditions || []) as Array<{ field: string; operator: string; value: string }>;
@@ -238,9 +251,18 @@ export function useStageAutomations() {
               if (bot?.is_active) {
                 console.log(`[StageAutomation] Executing bot ${config.bot_id} for lead ${leadId}`);
                 try {
-                  await executeFlow(config.bot_id, leadId);
-                  console.log(`[StageAutomation] Bot ${config.bot_id} executed successfully for lead ${leadId}`);
+                  const flowResult = await executeFlow(config.bot_id, leadId);
+                  result.actionsExecuted++;
+                  if (!flowResult.success) {
+                    result.success = false;
+                    result.errors.push(...flowResult.errors);
+                    console.error(`[StageAutomation] Bot ${config.bot_id} failed for lead ${leadId}:`, flowResult.errors);
+                  } else {
+                    console.log(`[StageAutomation] Bot ${config.bot_id} executed successfully for lead ${leadId}`);
+                  }
                 } catch (botErr) {
+                  result.success = false;
+                  result.errors.push(`Bot error: ${botErr instanceof Error ? botErr.message : 'desconhecido'}`);
                   console.error(`[StageAutomation] Bot execution error:`, botErr);
                 }
               }
@@ -255,6 +277,7 @@ export function useStageAutomations() {
                   { lead_id: leadId, tag_id: config.tag_id, workspace_id: lead.workspace_id },
                   { onConflict: 'lead_id,tag_id' }
                 );
+              result.actionsExecuted++;
             }
             break;
           }
@@ -265,6 +288,7 @@ export function useStageAutomations() {
                 .delete()
                 .eq('lead_id', leadId)
                 .eq('tag_id', config.tag_id);
+              result.actionsExecuted++;
             }
             break;
           }
@@ -274,15 +298,14 @@ export function useStageAutomations() {
                 .from('leads')
                 .update({ responsible_user: config.user_id })
                 .eq('id', leadId);
+              result.actionsExecuted++;
             } else if (config.round_robin) {
-              // Simple round robin: pick random team member
               const { data: members } = await supabase
                 .from('workspace_members')
                 .select('user_id')
                 .eq('workspace_id', lead.workspace_id)
                 .eq('role', 'seller');
               if (members && members.length > 0) {
-                // Get user_profiles to get profile id
                 const { data: profiles } = await supabase
                   .from('user_profiles')
                   .select('id, user_id')
@@ -293,6 +316,7 @@ export function useStageAutomations() {
                     .from('leads')
                     .update({ responsible_user: pick.id })
                     .eq('id', leadId);
+                  result.actionsExecuted++;
                 }
               }
             }
@@ -300,6 +324,7 @@ export function useStageAutomations() {
           }
           case 'notify_responsible': {
             console.log(`[StageAutomation] Notification: ${config.message || 'Sem mensagem'}`);
+            result.actionsExecuted++;
             break;
           }
           case 'create_task': {
@@ -314,6 +339,7 @@ export function useStageAutomations() {
                 },
                 workspace_id: lead.workspace_id,
               });
+              result.actionsExecuted++;
             }
             break;
           }
@@ -342,10 +368,9 @@ export function useStageAutomations() {
         }
       }
 
-      // Handle stage_change SalesBots - check if any SalesBots have trigger_type 'stage_change' matching this stage
-      if (trigger === 'on_enter') {
+      // Handle stage_change SalesBots — skip if called from bulk execution to avoid duplicates
+      if (trigger === 'on_enter' && !options?.skipStageChangeBots) {
         try {
-          // Get the funnel_id for this stage
           const { data: stageData } = await supabase
             .from('funnel_stages')
             .select('funnel_id')
@@ -369,8 +394,10 @@ export function useStageAutomations() {
                 if (matchesFunnel && matchesStage) {
                   console.log(`[StageAutomation] Triggering stage_change SalesBot ${bot.id} for lead ${leadId} entering stage ${stageId}`);
                   try {
-                    await executeFlow(bot.id, leadId);
-                    console.log(`[StageAutomation] stage_change SalesBot ${bot.id} executed successfully`);
+                    const flowResult = await executeFlow(bot.id, leadId);
+                    if (!flowResult.success) {
+                      result.errors.push(...flowResult.errors);
+                    }
                   } catch (botErr) {
                     console.error(`[StageAutomation] stage_change SalesBot execution error:`, botErr);
                   }
@@ -384,7 +411,11 @@ export function useStageAutomations() {
       }
     } catch (err) {
       console.error('[StageAutomation] Execution error:', err);
+      result.success = false;
+      result.errors.push(`Erro geral: ${err instanceof Error ? err.message : 'desconhecido'}`);
     }
+
+    return result;
   }, [executeFlow]);
 
   return {

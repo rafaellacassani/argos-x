@@ -505,13 +505,13 @@ export function FunnelAutomationsPage({
                   setExecutingAll(true);
                   try {
                     // Fetch ALL leads in the stage (handle >1000 with pagination)
-                    let allLeads: { id: string }[] = [];
+                    let allLeads: { id: string; phone: string; whatsapp_jid: string | null }[] = [];
                     let from = 0;
                     const pageSize = 1000;
                     while (true) {
                       const { data: batch } = await supabase
                         .from('leads')
-                        .select('id')
+                        .select('id, phone, whatsapp_jid')
                         .eq('stage_id', editingStageId)
                         .eq('workspace_id', workspaceId)
                         .range(from, from + pageSize - 1);
@@ -533,12 +533,29 @@ export function FunnelAutomationsPage({
                     const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
                     let successCount = 0;
                     let errorCount = 0;
+                    let skippedCount = 0;
 
                     for (let i = 0; i < allLeads.length; i++) {
                       const lead = allLeads[i];
+
+                      // Pre-validate: check if lead has a usable phone
+                      const phone = lead.whatsapp_jid || lead.phone;
+                      const digits = (phone || '').replace(/\D/g, '');
+                      if (!phone || digits.length < 10) {
+                        console.warn(`[BulkExec] Skipping lead ${lead.id}: invalid phone "${phone}"`);
+                        skippedCount++;
+                        continue;
+                      }
+
                       try {
-                        await executeStageAutomations(editingStageId, lead.id, 'on_enter');
-                        successCount++;
+                        // Use executeStageAutomations with skipStageChangeBots to avoid double triggers
+                        const autoResult = await executeStageAutomations(editingStageId, lead.id, 'on_enter', { skipStageChangeBots: true });
+                        if (autoResult.success) {
+                          successCount++;
+                        } else {
+                          errorCount++;
+                          console.warn(`[BulkExec] Lead ${lead.id} errors:`, autoResult.errors);
+                        }
                       } catch (err) {
                         console.error(`[BulkExec] Error for lead ${lead.id}:`, err);
                         errorCount++;
@@ -549,7 +566,10 @@ export function FunnelAutomationsPage({
                       }
                     }
 
-                    toast.success(`Concluído: ${successCount} enviado(s), ${errorCount} erro(s) de ${allLeads.length} lead(s).`);
+                    const parts = [`✅ ${successCount} enviado(s)`];
+                    if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
+                    if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} pulado(s) (telefone inválido)`);
+                    toast.success(`Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`);
                   } catch (err) {
                     console.error('[BulkExec] Fatal error:', err);
                     const { toast } = await import('sonner');
