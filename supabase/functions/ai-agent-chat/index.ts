@@ -275,11 +275,13 @@ serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
     const rawEvolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionApiUrl = rawEvolutionUrl.replace(/\/manager\/?$/, "");
 
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!lovableApiKey && !openaiApiKey && !anthropicApiKey) throw new Error("No AI API key configured (OPENAI_API_KEY, ANTHROPIC_API_KEY or LOVABLE_API_KEY)");
 
     const body = await req.json();
     const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
@@ -678,25 +680,97 @@ serve(async (req) => {
 
         console.log(`[ai-agent-chat] 🧠 Calling AI model: ${agent.model}, messages: ${aiMessages.length}, tools: ${tools.length}`);
 
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: agent.model || "google/gemini-2.5-flash",
-            messages: aiMessages,
-            temperature: agent.temperature || 0.7,
-            max_tokens: agent.max_tokens || 2048,
-            tools: tools.length > 0 ? tools : undefined,
-            tool_choice: tools.length > 0 ? "auto" : undefined
-          })
-        });
+        const modelName = agent.model || "openai/gpt-4o-mini";
+        const provider = modelName.split("/")[0]; // "openai", "anthropic", or "google"
+
+        let aiResponse: Response;
+
+        if (provider === "openai" && openaiApiKey) {
+          // --- Direct OpenAI API call ---
+          const openaiModel = modelName.replace("openai/", "");
+          console.log(`[ai-agent-chat] 🔑 Using OpenAI API directly: ${openaiModel}`);
+          aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: openaiModel,
+              messages: aiMessages,
+              temperature: agent.temperature || 0.7,
+              max_tokens: agent.max_tokens || 2048,
+              tools: tools.length > 0 ? tools : undefined,
+              tool_choice: tools.length > 0 ? "auto" : undefined,
+            }),
+          });
+        } else if (provider === "anthropic" && anthropicApiKey) {
+          // --- Direct Anthropic API call ---
+          const anthropicModel = modelName.replace("anthropic/", "");
+          console.log(`[ai-agent-chat] 🔑 Using Anthropic API directly: ${anthropicModel}`);
+          
+          // Anthropic has different format: system goes in a separate field
+          const systemMsg = aiMessages.find((m: any) => m.role === "system")?.content || "";
+          const nonSystemMessages = aiMessages
+            .filter((m: any) => m.role !== "system")
+            .map((m: any) => ({
+              role: m.role === "assistant" ? "assistant" : "user",
+              content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+            }));
+
+          // Build Anthropic tools format
+          const anthropicTools = tools.length > 0 ? tools.map((t: any) => ({
+            name: t.function.name,
+            description: t.function.description,
+            input_schema: t.function.parameters,
+          })) : undefined;
+
+          aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "x-api-key": anthropicApiKey,
+              "anthropic-version": "2023-06-01",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: anthropicModel,
+              system: systemMsg,
+              messages: nonSystemMessages,
+              max_tokens: agent.max_tokens || 2048,
+              temperature: agent.temperature || 0.7,
+              tools: anthropicTools,
+            }),
+          });
+        } else {
+          // --- Lovable Gateway fallback (Google/Gemini or when no provider key) ---
+          console.log(`[ai-agent-chat] 🌐 Using Lovable Gateway: ${modelName}`);
+          if (!lovableApiKey) {
+            console.error(`[ai-agent-chat] ❌ No API key for provider "${provider}" and no LOVABLE_API_KEY fallback`);
+            responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+            const existingMessages2: ChatMessage[] = messages;
+            existingMessages2.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
+            await supabase.from("agent_memories").update({ messages: existingMessages2, is_processing: false, processing_started_at: null, last_message_id: message_id || memory.last_message_id }).eq("id", memory.id);
+            lockAcquired = false;
+            await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, status: "fallback_no_key", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+            return new Response(JSON.stringify({ response: responseContent, chunks: agent.message_split_enabled ? splitMessage(responseContent, agent.message_split_length || 400) : [responseContent] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
+          aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: modelName,
+              messages: aiMessages,
+              temperature: agent.temperature || 0.7,
+              max_tokens: agent.max_tokens || 2048,
+              tools: tools.length > 0 ? tools : undefined,
+              tool_choice: tools.length > 0 ? "auto" : undefined,
+            }),
+          });
+        }
 
         let toolCalls: any[] = [];
         let usedFallback = false;
 
         if (!aiResponse.ok) {
           const gatewayBody = await aiResponse.text().catch(() => "");
-          console.error(`[ai-agent-chat] ❌ AI Gateway error: ${aiResponse.status} ${gatewayBody}`);
+          console.error(`[ai-agent-chat] ❌ AI ${provider} error: ${aiResponse.status} ${gatewayBody}`);
 
           if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
             responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
@@ -707,11 +781,25 @@ serve(async (req) => {
           }
         } else {
           const aiData = await aiResponse.json();
-          const aiChoice = aiData.choices?.[0];
-          if (!aiChoice) throw new Error("No response from AI");
-
-          responseContent = aiChoice.message?.content || "";
-          toolCalls = aiChoice.message?.tool_calls || [];
+          
+          // Handle Anthropic response format (different from OpenAI)
+          if (provider === "anthropic" && anthropicApiKey) {
+            // Anthropic returns { content: [{ type: "text", text: "..." }, { type: "tool_use", ... }] }
+            const contentBlocks = aiData.content || [];
+            const textBlocks = contentBlocks.filter((b: any) => b.type === "text");
+            responseContent = textBlocks.map((b: any) => b.text).join("\n");
+            
+            const toolUseBlocks = contentBlocks.filter((b: any) => b.type === "tool_use");
+            toolCalls = toolUseBlocks.map((b: any) => ({
+              function: { name: b.name, arguments: JSON.stringify(b.input) }
+            }));
+          } else {
+            // OpenAI / Lovable Gateway format
+            const aiChoice = aiData.choices?.[0];
+            if (!aiChoice) throw new Error("No response from AI");
+            responseContent = aiChoice.message?.content || "";
+            toolCalls = aiChoice.message?.tool_calls || [];
+          }
         }
 
         if (!responseContent?.trim()) {

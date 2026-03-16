@@ -309,7 +309,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       qualification_fields: qualificationFields.filter(f => f.active),
       is_active: activateOnCreate,
       system_prompt: generatedPrompt,
-      model: "google/gemini-2.5-flash",
+      model: "openai/gpt-4o-mini",
       temperature: 0.7,
       max_tokens: 2048,
       tools: ["atualizar_lead", "aplicar_tag", "mover_etapa", "pausar_ia"],

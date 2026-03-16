@@ -13,14 +13,13 @@ interface Props {
 }
 
 const models = [
-  { id: "google/gemini-2.5-flash", label: "⭐ Gemini 2.5 Flash (Recomendado)" },
-  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Econômico)" },
-  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash Preview" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Avançado)" },
-  { id: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Próx. Geração)" },
-  { id: "openai/gpt-5-mini", label: "GPT-5 Mini (Eficiente)" },
-  { id: "openai/gpt-5", label: "GPT-5 (Premium)" },
-  { id: "openai/gpt-5.2", label: "GPT-5.2 (Último)" },
+  { id: "openai/gpt-4o-mini", label: "⭐ GPT-4o Mini (Recomendado - Econômico)" },
+  { id: "openai/gpt-4o", label: "GPT-4o (Equilibrado)" },
+  { id: "openai/gpt-4-turbo", label: "GPT-4 Turbo (Avançado)" },
+  { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Inteligente)" },
+  { id: "anthropic/claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (Rápido)" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
 ];
 
 export function AdvancedTab({ formData, updateField }: Props) {
@@ -33,7 +32,7 @@ export function AdvancedTab({ formData, updateField }: Props) {
 
       <div className="space-y-2">
         <Label>Modelo de IA</Label>
-        <Select value={formData.model || "google/gemini-2.5-flash"} onValueChange={(v) => updateField("model", v)}>
+        <Select value={formData.model || "openai/gpt-4o-mini"} onValueChange={(v) => updateField("model", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             {models.map((m) => (
