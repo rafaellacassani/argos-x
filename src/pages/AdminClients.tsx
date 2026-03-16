@@ -282,8 +282,17 @@ export default function AdminClients() {
       if (configRes.data) {
         setCadenceConfig({
           ...configRes.data,
-          cadence_days: Array.isArray(configRes.data.cadence_days) ? configRes.data.cadence_days as number[] : [6, 7, 9, 14, 21],
+          cadence_days: Array.isArray(configRes.data.cadence_days) ? configRes.data.cadence_days as number[] : [-2, -1, 0, 3, 7],
+          welcome_message_template: (configRes.data as any).welcome_message_template || null,
         });
+
+        // Fetch cadence messages
+        const { data: msgs } = await supabase
+          .from("cadence_messages")
+          .select("*")
+          .eq("config_id", configRes.data.id)
+          .order("position", { ascending: true });
+        setCadenceMessages((msgs || []) as CadenceMessage[]);
       }
       setReactivationLog(logsRes.data || []);
       setEvolutionInstances(instancesRes.data || []);
@@ -309,7 +318,8 @@ export default function AdminClients() {
           email_template: cadenceConfig.email_template,
           send_whatsapp: cadenceConfig.send_whatsapp,
           send_email: cadenceConfig.send_email,
-        })
+          welcome_message_template: cadenceConfig.welcome_message_template,
+        } as any)
         .eq("id", cadenceConfig.id);
 
       if (error) throw error;
@@ -318,6 +328,109 @@ export default function AdminClients() {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
     } finally {
       setCadenceSaving(false);
+    }
+  };
+
+  const handleSaveCadenceMessages = async () => {
+    if (!cadenceConfig) return;
+    setCadenceMessagesSaving(true);
+    try {
+      // Delete all existing messages for this config
+      await supabase
+        .from("cadence_messages")
+        .delete()
+        .eq("config_id", cadenceConfig.id);
+
+      // Insert all current messages
+      if (cadenceMessages.length > 0) {
+        const toInsert = cadenceMessages.map((m, idx) => ({
+          config_id: cadenceConfig.id,
+          cadence_day: m.cadence_day,
+          channel: m.channel,
+          message_type: m.message_type,
+          content: m.content,
+          audio_url: m.audio_url,
+          position: idx,
+          is_active: m.is_active,
+        }));
+        const { error } = await supabase.from("cadence_messages").insert(toInsert);
+        if (error) throw error;
+      }
+
+      toast({ title: "Mensagens salvas!", description: "Mensagens de cadência atualizadas com sucesso." });
+      // Refresh
+      const { data: msgs } = await supabase
+        .from("cadence_messages")
+        .select("*")
+        .eq("config_id", cadenceConfig.id)
+        .order("position", { ascending: true });
+      setCadenceMessages((msgs || []) as CadenceMessage[]);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setCadenceMessagesSaving(false);
+    }
+  };
+
+  const addCadenceMessage = (day: number) => {
+    if (!cadenceConfig) return;
+    const dayMsgs = cadenceMessages.filter(m => m.cadence_day === day);
+    setCadenceMessages([...cadenceMessages, {
+      config_id: cadenceConfig.id,
+      cadence_day: day,
+      channel: "whatsapp",
+      message_type: "text",
+      content: "",
+      audio_url: null,
+      position: dayMsgs.length,
+      is_active: true,
+    }]);
+  };
+
+  const removeCadenceMessage = (index: number) => {
+    setCadenceMessages(cadenceMessages.filter((_, i) => i !== index));
+  };
+
+  const updateCadenceMessage = (index: number, updates: Partial<CadenceMessage>) => {
+    setCadenceMessages(cadenceMessages.map((m, i) => i === index ? { ...m, ...updates } : m));
+  };
+
+  const moveCadenceMessage = (index: number, direction: "up" | "down") => {
+    const dayMsgs = cadenceMessages.filter(m => m.cadence_day === cadenceMessages[index].cadence_day);
+    if (dayMsgs.length <= 1) return;
+    const newMsgs = [...cadenceMessages];
+    const sameDayIndices = cadenceMessages
+      .map((m, i) => m.cadence_day === cadenceMessages[index].cadence_day ? i : -1)
+      .filter(i => i >= 0);
+    const posInDay = sameDayIndices.indexOf(index);
+    const swapPos = direction === "up" ? posInDay - 1 : posInDay + 1;
+    if (swapPos < 0 || swapPos >= sameDayIndices.length) return;
+    const swapIndex = sameDayIndices[swapPos];
+    [newMsgs[index], newMsgs[swapIndex]] = [newMsgs[swapIndex], newMsgs[index]];
+    setCadenceMessages(newMsgs);
+  };
+
+  const handleAudioUpload = async (file: File, messageIndex: number) => {
+    if (!cadenceConfig) return;
+    setUploadingAudio(String(messageIndex));
+    try {
+      const ext = file.name.split(".").pop() || "ogg";
+      const filePath = `${cadenceConfig.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("cadence-audio")
+        .upload(filePath, file, { contentType: file.type });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("cadence-audio")
+        .getPublicUrl(filePath);
+
+      updateCadenceMessage(messageIndex, { audio_url: urlData.publicUrl });
+      toast({ title: "Áudio enviado!" });
+    } catch (err: any) {
+      toast({ title: "Erro no upload", description: err.message, variant: "destructive" });
+    } finally {
+      setUploadingAudio(null);
     }
   };
 
