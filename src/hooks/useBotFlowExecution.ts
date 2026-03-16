@@ -440,10 +440,18 @@ export function useBotFlowExecution() {
 
         if (!execResult.success) { result.success = false; result.errors.push(`${currentNode.type}: ${execResult.message}`); break; }
 
+        // Add delay between send_message nodes to avoid rate limiting
+        const nextNodeType = currentNode.type;
+
         if (currentNode.type === 'condition' && execResult.conditionResult !== undefined) {
           currentNode = getNextNode(currentNode.id, nodes, edges, execResult.conditionResult ? 'true' : 'false');
         } else {
           currentNode = getNextNode(currentNode.id, nodes, edges);
+        }
+
+        // 2s delay between message sends
+        if (nextNodeType === 'send_message' && currentNode?.type === 'send_message') {
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
 
