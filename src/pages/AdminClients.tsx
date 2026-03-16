@@ -93,6 +93,12 @@ import {
   CalendarClock,
   Eye,
   Filter,
+  Plus,
+  ArrowUp,
+  ArrowDown,
+  Music,
+  Type,
+  Upload,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
