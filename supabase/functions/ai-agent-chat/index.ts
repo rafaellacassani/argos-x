@@ -781,11 +781,25 @@ serve(async (req) => {
           }
         } else {
           const aiData = await aiResponse.json();
-          const aiChoice = aiData.choices?.[0];
-          if (!aiChoice) throw new Error("No response from AI");
-
-          responseContent = aiChoice.message?.content || "";
-          toolCalls = aiChoice.message?.tool_calls || [];
+          
+          // Handle Anthropic response format (different from OpenAI)
+          if (provider === "anthropic" && anthropicApiKey) {
+            // Anthropic returns { content: [{ type: "text", text: "..." }, { type: "tool_use", ... }] }
+            const contentBlocks = aiData.content || [];
+            const textBlocks = contentBlocks.filter((b: any) => b.type === "text");
+            responseContent = textBlocks.map((b: any) => b.text).join("\n");
+            
+            const toolUseBlocks = contentBlocks.filter((b: any) => b.type === "tool_use");
+            toolCalls = toolUseBlocks.map((b: any) => ({
+              function: { name: b.name, arguments: JSON.stringify(b.input) }
+            }));
+          } else {
+            // OpenAI / Lovable Gateway format
+            const aiChoice = aiData.choices?.[0];
+            if (!aiChoice) throw new Error("No response from AI");
+            responseContent = aiChoice.message?.content || "";
+            toolCalls = aiChoice.message?.tool_calls || [];
+          }
         }
 
         if (!responseContent?.trim()) {
