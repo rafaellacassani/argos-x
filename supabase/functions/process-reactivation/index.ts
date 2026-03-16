@@ -32,7 +32,16 @@ ${bodyHtml}
 </html>`;
 }
 
-const preExpiryTemplates: Record<number, { subject: string; body: (name: string, days: number, link: string) => string }> = {
+// Fallback templates used when no cadence_messages exist for a given day
+const fallbackWhatsappTemplates: Record<number, (name: string, link: string, days: number) => string> = {
+  [-2]: (name, link) => `Olá, ${name}! ⏳\n\nSeu trial no *Argos X* acaba em *2 dias*.\n\nAtive seu plano para não perder o acesso:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
+  [-1]: (name, link) => `🚨 ${name}, *último dia* do seu trial no Argos X!\n\nAmanhã seu acesso será bloqueado.\n\nAtive agora:\n👉 ${link}`,
+  [0]: (name, link) => `🔒 ${name}, seu acesso ao *Argos X* foi bloqueado.\n\nMas seus dados estão salvos! Escolha um plano e continue de onde parou:\n👉 ${link}`,
+  [3]: (name, link) => `📊 ${name}, seus leads continuam esperando!\n\nReative sua conta no Argos X:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
+  [7]: (name, link) => `⚠️ ${name}, última chance!\n\nSeu trial expirou há 7 dias. Reative agora antes que seus dados sejam removidos:\n👉 ${link}`,
+};
+
+const fallbackEmailTemplates: Record<number, { subject: string; body: (name: string, days: number, link: string) => string }> = {
   [-2]: {
     subject: "⏳ Seu trial acaba em 2 dias — ative seu plano!",
     body: (name, _, link) => `
@@ -91,13 +100,17 @@ const preExpiryTemplates: Record<number, { subject: string; body: (name: string,
   },
 };
 
-const whatsappTemplates: Record<number, (name: string, link: string) => string> = {
-  [-2]: (name, link) => `Olá, ${name}! ⏳\n\nSeu trial no *Argos X* acaba em *2 dias*.\n\nAtive seu plano para não perder o acesso:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [-1]: (name, link) => `🚨 ${name}, *último dia* do seu trial no Argos X!\n\nAmanhã seu acesso será bloqueado.\n\nAtive agora:\n👉 ${link}`,
-  [0]: (name, link) => `🔒 ${name}, seu acesso ao *Argos X* foi bloqueado.\n\nMas seus dados estão salvos! Escolha um plano e continue de onde parou:\n👉 ${link}`,
-  [3]: (name, link) => `📊 ${name}, seus leads continuam esperando!\n\nReative sua conta no Argos X:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [7]: (name, link) => `⚠️ ${name}, última chance!\n\nSeu trial expirou há 7 dias. Reative agora antes que seus dados sejam removidos:\n👉 ${link}`,
-};
+function replaceVars(text: string, vars: Record<string, string>): string {
+  let result = text;
+  for (const [key, val] of Object.entries(vars)) {
+    result = result.replace(new RegExp(`\\{${key}\\}`, "g"), val);
+  }
+  return result;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -125,7 +138,22 @@ serve(async (req) => {
 
     const cadenceDays: number[] = Array.isArray(config.cadence_days) ? config.cadence_days : [-2, -1, 0, 3, 7];
 
-    // 2. Fetch workspaces with trials (active or expired)
+    // 1b. Fetch all cadence messages from DB
+    const { data: allCadenceMessages } = await supabaseAdmin
+      .from("cadence_messages")
+      .select("*")
+      .eq("config_id", config.id)
+      .eq("is_active", true)
+      .order("position", { ascending: true });
+
+    // Group messages by day
+    const messagesByDay: Record<number, any[]> = {};
+    for (const msg of allCadenceMessages || []) {
+      if (!messagesByDay[msg.cadence_day]) messagesByDay[msg.cadence_day] = [];
+      messagesByDay[msg.cadence_day].push(msg);
+    }
+
+    // 2. Fetch workspaces with trials
     const { data: workspaces, error: wsErr } = await supabaseAdmin
       .from("workspaces")
       .select("id, name, trial_end, plan_type, created_by, blocked_at")
@@ -138,16 +166,18 @@ serve(async (req) => {
     let sentCount = 0;
     let skippedCount = 0;
 
+    const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
     for (const ws of workspaces || []) {
       const trialEnd = new Date(ws.trial_end);
-      // Days relative to expiration: negative = before, 0 = day of, positive = after
       const daysFromExpiry = Math.round((now.getTime() - trialEnd.getTime()) / 86400000);
 
-      // Check if today matches any cadence day
       const matchingDay = cadenceDays.find((d) => d === daysFromExpiry);
       if (matchingDay === undefined) continue;
 
-      // Check if already sent for this day + workspace
+      // Check if already sent
       const { data: existing } = await supabaseAdmin
         .from("reactivation_log")
         .select("id")
@@ -175,12 +205,141 @@ serve(async (req) => {
       const daysSinceExpiry = Math.max(0, daysFromExpiry);
       const planLink = "https://argosx.com.br/auth";
 
-      // Send Email
-      if (config.send_email && ownerEmail) {
+      const vars = {
+        nome: ownerName,
+        link: planLink,
+        dias_expirado: String(daysSinceExpiry),
+        email: ownerEmail || "",
+      };
+
+      const dayMessages = messagesByDay[matchingDay];
+      const hasCustomMessages = dayMessages && dayMessages.length > 0;
+
+      // ── Send WhatsApp ──
+      if (config.send_whatsapp && ownerPhone && config.whatsapp_instance_name) {
         try {
-          const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-          if (RESEND_API_KEY) {
-            const template = preExpiryTemplates[matchingDay];
+          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+            let cleanPhone = ownerPhone.replace(/\D/g, "");
+            if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+              cleanPhone = "55" + cleanPhone;
+            }
+
+            const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+            const whatsappMsgs = hasCustomMessages
+              ? dayMessages.filter((m: any) => m.channel === "whatsapp")
+              : null;
+
+            if (whatsappMsgs && whatsappMsgs.length > 0) {
+              // Send custom messages from DB
+              for (let i = 0; i < whatsappMsgs.length; i++) {
+                const msg = whatsappMsgs[i];
+                let res: Response;
+
+                if (msg.message_type === "audio" && msg.audio_url) {
+                  res = await fetch(`${apiUrl}/message/sendWhatsAppAudio/${config.whatsapp_instance_name}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                    body: JSON.stringify({ number: cleanPhone, audio: msg.audio_url }),
+                  });
+                } else {
+                  const text = replaceVars(msg.content || "", vars);
+                  res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                    body: JSON.stringify({ number: cleanPhone, text }),
+                  });
+                }
+
+                if (res.ok) sentCount++;
+
+                await supabaseAdmin.from("reactivation_log").insert({
+                  workspace_id: ws.id,
+                  cadence_day: matchingDay,
+                  channel: "whatsapp",
+                  status: res.ok ? "sent" : "failed",
+                  error_message: res.ok ? null : `HTTP ${res.status}`,
+                });
+
+                // Wait between messages
+                if (i < whatsappMsgs.length - 1) await sleep(2000);
+              }
+            } else {
+              // Fallback to hardcoded templates
+              const fallbackFn = fallbackWhatsappTemplates[matchingDay];
+              const message = fallbackFn
+                ? fallbackFn(ownerName, planLink, daysSinceExpiry)
+                : replaceVars(config.whatsapp_template || "", vars);
+
+              const res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                body: JSON.stringify({ number: cleanPhone, text: message }),
+              });
+
+              await supabaseAdmin.from("reactivation_log").insert({
+                workspace_id: ws.id,
+                cadence_day: matchingDay,
+                channel: "whatsapp",
+                status: res.ok ? "sent" : "failed",
+                error_message: res.ok ? null : `HTTP ${res.status}`,
+              });
+
+              if (res.ok) sentCount++;
+            }
+          }
+        } catch (e) {
+          console.warn("WhatsApp send failed:", e);
+          await supabaseAdmin.from("reactivation_log").insert({
+            workspace_id: ws.id,
+            cadence_day: matchingDay,
+            channel: "whatsapp",
+            status: "failed",
+            error_message: String(e),
+          });
+        }
+      }
+
+      // ── Send Email ──
+      if (config.send_email && ownerEmail && RESEND_API_KEY) {
+        try {
+          const emailMsgs = hasCustomMessages
+            ? dayMessages.filter((m: any) => m.channel === "email" && m.message_type === "text")
+            : null;
+
+          if (emailMsgs && emailMsgs.length > 0) {
+            // Use first email message content as body
+            const emailContent = replaceVars(emailMsgs[0].content || "", vars);
+            const htmlEmail = buildHtmlEmail(
+              config.email_subject || "Argos X — Reative sua conta",
+              `<div style="color:#475569;font-size:15px;line-height:1.6;white-space:pre-line">${emailContent}</div>`
+            );
+
+            const res = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${RESEND_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: "Argos X <noreply@argosx.com.br>",
+                to: [ownerEmail],
+                subject: config.email_subject,
+                html: htmlEmail,
+              }),
+            });
+
+            await supabaseAdmin.from("reactivation_log").insert({
+              workspace_id: ws.id,
+              cadence_day: matchingDay,
+              channel: "email",
+              status: res.ok ? "sent" : "failed",
+              error_message: res.ok ? null : `HTTP ${res.status}`,
+            });
+
+            if (res.ok) sentCount++;
+          } else {
+            // Fallback to hardcoded email templates
+            const template = fallbackEmailTemplates[matchingDay];
             if (template) {
               const bodyHtml = template.body(ownerName, daysSinceExpiry, planLink);
               const htmlEmail = buildHtmlEmail(template.subject, bodyHtml);
@@ -216,59 +375,6 @@ serve(async (req) => {
             workspace_id: ws.id,
             cadence_day: matchingDay,
             channel: "email",
-            status: "failed",
-            error_message: String(e),
-          });
-        }
-      }
-
-      // Send WhatsApp
-      if (config.send_whatsapp && ownerPhone && config.whatsapp_instance_name) {
-        try {
-          const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
-          const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
-
-          if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
-            let cleanPhone = ownerPhone.replace(/\D/g, "");
-            if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
-              cleanPhone = "55" + cleanPhone;
-            }
-
-            const whatsappFn = whatsappTemplates[matchingDay];
-            const message = whatsappFn
-              ? whatsappFn(ownerName, planLink)
-              : config.whatsapp_template
-                  .replace(/{nome}/g, ownerName)
-                  .replace(/{link}/g, planLink)
-                  .replace(/{dias_expirado}/g, String(daysSinceExpiry));
-
-            const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
-
-            const res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                apikey: EVOLUTION_API_KEY,
-              },
-              body: JSON.stringify({ number: cleanPhone, text: message }),
-            });
-
-            await supabaseAdmin.from("reactivation_log").insert({
-              workspace_id: ws.id,
-              cadence_day: matchingDay,
-              channel: "whatsapp",
-              status: res.ok ? "sent" : "failed",
-              error_message: res.ok ? null : `HTTP ${res.status}`,
-            });
-
-            if (res.ok) sentCount++;
-          }
-        } catch (e) {
-          console.warn("WhatsApp send failed:", e);
-          await supabaseAdmin.from("reactivation_log").insert({
-            workspace_id: ws.id,
-            cadence_day: matchingDay,
-            channel: "whatsapp",
             status: "failed",
             error_message: String(e),
           });

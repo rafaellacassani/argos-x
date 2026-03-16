@@ -528,6 +528,53 @@ export type Database = {
           },
         ]
       }
+      cadence_messages: {
+        Row: {
+          audio_url: string | null
+          cadence_day: number
+          channel: string
+          config_id: string
+          content: string | null
+          created_at: string | null
+          id: string
+          is_active: boolean
+          message_type: string
+          position: number
+        }
+        Insert: {
+          audio_url?: string | null
+          cadence_day: number
+          channel?: string
+          config_id: string
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          message_type?: string
+          position?: number
+        }
+        Update: {
+          audio_url?: string | null
+          cadence_day?: number
+          channel?: string
+          config_id?: string
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          is_active?: boolean
+          message_type?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cadence_messages_config_id_fkey"
+            columns: ["config_id"]
+            isOneToOne: false
+            referencedRelation: "reactivation_cadence_config"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean
@@ -1782,6 +1829,7 @@ export type Database = {
           send_email: boolean
           send_whatsapp: boolean
           updated_at: string
+          welcome_message_template: string | null
           whatsapp_instance_name: string | null
           whatsapp_template: string
         }
@@ -1795,6 +1843,7 @@ export type Database = {
           send_email?: boolean
           send_whatsapp?: boolean
           updated_at?: string
+          welcome_message_template?: string | null
           whatsapp_instance_name?: string | null
           whatsapp_template?: string
         }
@@ -1808,6 +1857,7 @@ export type Database = {
           send_email?: boolean
           send_whatsapp?: boolean
           updated_at?: string
+          welcome_message_template?: string | null
           whatsapp_instance_name?: string | null
           whatsapp_template?: string
         }
