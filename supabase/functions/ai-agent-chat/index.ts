@@ -31,19 +31,73 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any): string {
+// --- Rejection detection ---
+const REJECTION_KEYWORDS = [
+  "não mande mais", "nao mande mais", "não mandar mais", "nao mandar mais",
+  "pare de mandar", "parar de mandar", "não quero", "nao quero",
+  "não tenho interesse", "nao tenho interesse", "favor não mandar", "favor nao mandar",
+  "sair", "cancelar", "não me procure", "nao me procure",
+  "bloquear", "para de me mandar", "me deixa em paz",
+  "não entre mais em contato", "nao entre mais em contato",
+  "stop", "unsubscribe",
+];
+
+function detectRejection(text: string): boolean {
+  const normalized = (text || "").trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return REJECTION_KEYWORDS.some(kw => {
+    const normalizedKw = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return normalized.includes(normalizedKw);
+  });
+}
+
+function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any, memoryMessages?: ChatMessage[]): string {
   const text = (userMessage || "").trim().toLowerCase();
   const agentName = agent?.name || "IA";
   const companyInfo = agent?.company_info;
   const companyName = companyInfo?.name || companyInfo?.company_name || "";
-  const niche = agent?.niche || "";
   const role = agent?.agent_role || "";
   
-  // Build a contextual greeting based on agent configuration
   const intro = companyName
     ? `Olá! 👋 Sou ${role === "vendedora" || role === "sdr" ? "a" : "o"} ${agentName}${companyName ? ` da ${companyName}` : ""}`
     : `Olá! 👋 Sou ${agentName} e vou te atender agora`;
 
+  const hasHistory = memoryMessages && memoryMessages.length > 1;
+
+  // Extract lead name from history if available
+  let leadName = "";
+  if (memoryMessages) {
+    const summaryMessages = memoryMessages.filter(m => m.role === "user");
+    for (const m of summaryMessages) {
+      const match = m.content?.match(/(?:sou|meu nome[: é]*|me chamo)\s+([A-ZÀ-Ú][a-zà-ú]+)/i);
+      if (match) { leadName = match[1]; break; }
+    }
+  }
+
+  // If there's conversation history, DON'T repeat the greeting
+  if (hasHistory) {
+    const lastAssistantMsg = [...(memoryMessages || [])].reverse().find(m => m.role === "assistant")?.content || "";
+    
+    const fallbackPool = [
+      leadName ? `${leadName}, desculpe, tive uma instabilidade técnica. Pode repetir sua pergunta? 😊` : `Desculpe, tive uma instabilidade técnica. Pode repetir sua pergunta? 😊`,
+      leadName ? `Oi ${leadName}! Me perdoe, houve um problema no meu sistema. Como posso te ajudar?` : `Me perdoe, houve um problema no meu sistema. Como posso te ajudar?`,
+      `Desculpe pela demora! Estou com um probleminha técnico, mas já volto. Um momento, por favor! 🙏`,
+      leadName ? `${leadName}, tive um erro aqui. Vou acionar a equipe para te atender diretamente!` : `Tive um erro aqui. Vou acionar a equipe para te atender diretamente!`,
+      `Desculpe, estou com dificuldade técnica no momento. Se preferir, posso te encaminhar para a equipe! 😊`,
+    ];
+
+    // Pick a fallback that's different from the last assistant message
+    let chosen = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+    for (const candidate of fallbackPool) {
+      if (candidate !== lastAssistantMsg && !lastAssistantMsg.includes(candidate.substring(0, 30))) {
+        chosen = candidate;
+        break;
+      }
+    }
+    return chosen;
+  }
+
+  // First message — use greeting
   if (mediaType === "audio") {
     return `${intro}. Recebi seu áudio ✅! Para te ajudar melhor, pode me dizer seu nome e qual sua empresa?`;
   }

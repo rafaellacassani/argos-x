@@ -33,7 +33,7 @@ export function AdvancedTab({ formData, updateField }: Props) {
 
       <div className="space-y-2">
         <Label>Modelo de IA</Label>
-        <Select value={formData.model || "google/gemini-3-flash-preview"} onValueChange={(v) => updateField("model", v)}>
+        <Select value={formData.model || "google/gemini-2.5-flash"} onValueChange={(v) => updateField("model", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             {models.map((m) => (
