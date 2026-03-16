@@ -13,10 +13,11 @@ interface Props {
 }
 
 const models = [
-  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (Rápido)" },
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Balanceado)" },
+  { id: "google/gemini-2.5-flash", label: "⭐ Gemini 2.5 Flash (Recomendado)" },
+  { id: "google/gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite (Econômico)" },
+  { id: "google/gemini-3-flash-preview", label: "Gemini 3 Flash Preview" },
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Avançado)" },
-  { id: "google/gemini-3-pro-preview", label: "Gemini 3 Pro (Próx. Geração)" },
+  { id: "google/gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Próx. Geração)" },
   { id: "openai/gpt-5-mini", label: "GPT-5 Mini (Eficiente)" },
   { id: "openai/gpt-5", label: "GPT-5 (Premium)" },
   { id: "openai/gpt-5.2", label: "GPT-5.2 (Último)" },
