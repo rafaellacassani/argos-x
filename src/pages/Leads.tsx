@@ -204,14 +204,20 @@ export default function Leads() {
   }, [moveLead, userProfileId, leads, updateLead, executeStageAutomations]);
 
   const handleMoveFromSheet = useCallback(async (leadId: string, stageId: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    const oldStageId = lead?.stage_id;
     if (userProfileId) {
-      const lead = leads.find(l => l.id === leadId);
       if (lead && !lead.responsible_user) await updateLead(leadId, { responsible_user: userProfileId });
     }
     const stageLeads = leads.filter(l => l.stage_id === stageId);
     const maxPosition = stageLeads.length > 0 ? Math.max(...stageLeads.map(l => l.position)) + 1 : 0;
     await moveLead(leadId, stageId, maxPosition);
-  }, [leads, moveLead, userProfileId, updateLead]);
+    // Trigger stage automations
+    if (oldStageId && oldStageId !== stageId) {
+      executeStageAutomations(oldStageId, leadId, 'on_exit');
+      executeStageAutomations(stageId, leadId, 'on_enter');
+    }
+  }, [leads, moveLead, userProfileId, updateLead, executeStageAutomations]);
 
   const handleAddLead = useCallback((stageId: string) => {
     setCreateDialogStageId(stageId);

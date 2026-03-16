@@ -133,10 +133,12 @@ async function resumeFlowFromNode(
         case "send_message": {
           const rawText = currentNode.data?.message || currentNode.data?.text || "";
           if (rawText) {
-            const text = replaceVars(rawText, lead, instanceName);
+            const nodeInstance = currentNode.data?.instanceName || "";
+            const effectiveInstance = instanceName || nodeInstance;
+            const text = replaceVars(rawText, lead, effectiveInstance);
             const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
-            if (number) {
-              await sendWhatsApp(instanceName, number, text);
+            if (number && effectiveInstance) {
+              await sendWhatsApp(effectiveInstance, number, text);
               await supabase.from("bot_execution_logs").insert({
                 bot_id: botId, lead_id: lead.id, node_id: currentNode.id,
                 status: "success", message: text.substring(0, 200), workspace_id: workspaceId,
@@ -625,38 +627,14 @@ Deno.serve(async (req) => {
                   const nodes = flowData.nodes || [];
                   const edges = flowData.edges || [];
 
-                  const startNode = nodes.find((n: any) => n.type === "trigger" || n.data?.nodeType === "trigger");
+                  // Find start node: first node that has no incoming edges
+                  const startNode = findStartNode(nodes, edges);
                   if (startNode) {
-                    let currentNodeId = startNode.id;
-                    let executedNodes = 0;
-                    const maxNodes = 20;
-
-                    while (currentNodeId && executedNodes < maxNodes) {
-                      const outEdge = edges.find((e: any) => e.source === currentNodeId);
-                      if (!outEdge) break;
-
-                      const nextNode = nodes.find((n: any) => n.id === outEdge.target);
-                      if (!nextNode) break;
-
-                      currentNodeId = nextNode.id;
-                      executedNodes++;
-
-                      if (nextNode.data?.nodeType === "send_message" && nextNode.data?.message) {
-                        const instanceName = lead.instance_name;
-                        const phone = lead.phone || lead.whatsapp_jid;
-                        if (instanceName && phone) {
-                          await sendWhatsApp(instanceName, phone, nextNode.data.message);
-                          await supabase.from("bot_execution_logs").insert({
-                            bot_id: bot.id,
-                            lead_id: lead.id,
-                            node_id: nextNode.id,
-                            status: "sent",
-                            message: nextNode.data.message?.slice(0, 500),
-                            workspace_id: lead.workspace_id,
-                          });
-                        }
-                      }
-                    }
+                    const instanceForBot = lead.instance_name || config.instance_name || "";
+                    await resumeFlowFromNode(supabase, bot.id, lead, startNode.id, instanceForBot, lead.workspace_id);
+                    console.log(`[automations-queue] ✅ Bot ${bot.id} executed for lead ${lead.name}`);
+                  } else {
+                    console.warn(`[automations-queue] No start node found for bot ${bot.id}`);
                   }
                 }
               }
