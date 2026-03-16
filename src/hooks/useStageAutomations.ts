@@ -177,7 +177,7 @@ export function useStageAutomations() {
     stageId: string,
     leadId: string,
     trigger: 'on_enter' | 'on_exit',
-    options?: { skipStageChangeBots?: boolean }
+    options?: { skipStageChangeBots?: boolean; forceBulk?: boolean }
   ): Promise<StageAutomationResult> => {
     const result: StageAutomationResult = { success: true, errors: [], actionsExecuted: 0 };
 
