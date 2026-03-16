@@ -364,7 +364,26 @@ export default function Chats() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(null);
+  const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
+    // Initialize filters from URL params on mount
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("responseStatus")) {
+      return {
+        periodPreset: "any",
+        stageIds: [],
+        starred: false,
+        responseStatus: params.get("responseStatus")!.split(","),
+        interactionStatus: "",
+        chatSource: [],
+        responsibleUser: "",
+        leadSearch: "",
+        participantSearch: "",
+        lastMessageSender: "any",
+        tagIds: [],
+      } as ChatFiltersFormData;
+    }
+    return null;
+  });
   
   // Message cache: stores messages per chat ID to avoid re-fetching
   const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
