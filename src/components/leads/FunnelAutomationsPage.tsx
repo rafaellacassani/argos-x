@@ -497,99 +497,132 @@ export function FunnelAutomationsPage({
             </Collapsible>
 
             {/* Execute for all in stage */}
-            {editingId !== 'new' && editingStageId && (
-              <Button
-                variant="outline"
-                className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
-                disabled={executingAll}
-                onClick={async () => {
-                  if (!editingStageId || !workspaceId) return;
-                  setExecutingAll(true);
-                  try {
-                    // Fetch ALL leads in the stage (handle >1000 with pagination)
-                    let allLeads: { id: string; phone: string; whatsapp_jid: string | null }[] = [];
-                    let from = 0;
-                    const pageSize = 1000;
-                    while (true) {
-                      const { data: batch } = await supabase
-                        .from('leads')
-                        .select('id, phone, whatsapp_jid')
-                        .eq('stage_id', editingStageId)
-                        .eq('workspace_id', workspaceId)
-                        .range(from, from + pageSize - 1);
-                      if (!batch || batch.length === 0) break;
-                      allLeads = allLeads.concat(batch);
-                      if (batch.length < pageSize) break;
-                      from += pageSize;
-                    }
-
-                    if (allLeads.length === 0) {
-                      const { toast } = await import('sonner');
-                      toast.info('Nenhum lead nesta etapa.');
-                      return;
-                    }
-
-                    const { toast } = await import('sonner');
-                    toast.info(`Executando para ${allLeads.length} lead(s)... Aguarde.`);
-
-                    const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
-                    let successCount = 0;
-                    let errorCount = 0;
-                    let skippedCount = 0;
-
-                    for (let i = 0; i < allLeads.length; i++) {
-                      const lead = allLeads[i];
-
-                      // Pre-validate: check if lead has a usable phone
-                      const phone = lead.whatsapp_jid || lead.phone;
-                      const digits = (phone || '').replace(/\D/g, '');
-                      if (!phone || digits.length < 10) {
-                        console.warn(`[BulkExec] Skipping lead ${lead.id}: invalid phone "${phone}"`);
-                        skippedCount++;
-                        continue;
+            {editingId !== 'new' && editingStageId && form.action_type === 'run_bot' && (
+              <div className="space-y-3 border-t pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
+                  disabled={executingAll}
+                  onClick={async () => {
+                    if (!editingStageId || !workspaceId) return;
+                    setExecutingAll(true);
+                    setExecutionResults(null);
+                    setExecutionProgress(null);
+                    try {
+                      // Fetch ALL leads in the stage with names
+                      let allLeads: { id: string; name: string; phone: string; whatsapp_jid: string | null }[] = [];
+                      let from = 0;
+                      const pageSize = 1000;
+                      while (true) {
+                        const { data: batch } = await supabase
+                          .from('leads')
+                          .select('id, name, phone, whatsapp_jid')
+                          .eq('stage_id', editingStageId)
+                          .eq('workspace_id', workspaceId)
+                          .range(from, from + pageSize - 1);
+                        if (!batch || batch.length === 0) break;
+                        allLeads = allLeads.concat(batch);
+                        if (batch.length < pageSize) break;
+                        from += pageSize;
                       }
 
-                      try {
-                        // Use executeStageAutomations with skipStageChangeBots to avoid double triggers
-                        const autoResult = await executeStageAutomations(editingStageId, lead.id, 'on_enter', { skipStageChangeBots: true });
-                        if (autoResult.success) {
-                          successCount++;
-                        } else {
-                          errorCount++;
-                          console.warn(`[BulkExec] Lead ${lead.id} errors:`, autoResult.errors);
+                      if (allLeads.length === 0) {
+                        const { toast } = await import('sonner');
+                        toast.info('Nenhum lead nesta etapa.');
+                        return;
+                      }
+
+                      setExecutionProgress({ current: 0, total: allLeads.length });
+                      const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
+                      const results: Array<{ name: string; status: 'success' | 'error' | 'skipped' | 'duplicate'; reason?: string }> = [];
+
+                      for (let i = 0; i < allLeads.length; i++) {
+                        const lead = allLeads[i];
+                        setExecutionProgress({ current: i + 1, total: allLeads.length });
+
+                        // Pre-validate phone
+                        const phone = lead.whatsapp_jid || lead.phone;
+                        const digits = (phone || '').replace(/\D/g, '');
+                        if (!phone || digits.length < 10) {
+                          results.push({ name: lead.name, status: 'skipped', reason: `Telefone inválido: ${lead.phone || 'vazio'}` });
+                          continue;
                         }
-                      } catch (err) {
-                        console.error(`[BulkExec] Error for lead ${lead.id}:`, err);
-                        errorCount++;
-                      }
-                      // Delay between leads to avoid API rate limiting (skip after last)
-                      if (i < allLeads.length - 1 && delayMs > 0) {
-                        await new Promise(r => setTimeout(r, delayMs));
-                      }
-                    }
 
-                    const parts = [`✅ ${successCount} enviado(s)`];
-                    if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
-                    if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} pulado(s) (telefone inválido)`);
+                        try {
+                          const autoResult = await executeStageAutomations(editingStageId, lead.id, 'on_enter', { skipStageChangeBots: true, forceBulk: true });
+                          if (autoResult.success && autoResult.actionsExecuted > 0) {
+                            results.push({ name: lead.name, status: 'success' });
+                          } else if (autoResult.actionsExecuted === 0) {
+                            results.push({ name: lead.name, status: 'duplicate', reason: 'Já executado anteriormente' });
+                          } else {
+                            results.push({ name: lead.name, status: 'error', reason: autoResult.errors.join('; ') || 'Falha desconhecida' });
+                          }
+                        } catch (err) {
+                          results.push({ name: lead.name, status: 'error', reason: err instanceof Error ? err.message : 'Erro inesperado' });
+                        }
+                        // Delay between leads
+                        if (i < allLeads.length - 1 && delayMs > 0) {
+                          await new Promise(r => setTimeout(r, delayMs));
+                        }
+                      }
 
-                    const summaryMessage = `Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`;
-                    if (errorCount > 0 || skippedCount > 0) {
-                      toast.error(summaryMessage);
-                    } else {
-                      toast.success(summaryMessage);
+                      setExecutionResults(results);
+                      setExecutionProgress(null);
+
+                      const successCount = results.filter(r => r.status === 'success').length;
+                      const errorCount = results.filter(r => r.status === 'error').length;
+                      const skippedCount = results.filter(r => r.status === 'skipped').length;
+                      const dupCount = results.filter(r => r.status === 'duplicate').length;
+
+                      const { toast } = await import('sonner');
+                      const parts = [`✅ ${successCount} enviado(s)`];
+                      if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
+                      if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} inválido(s)`);
+                      if (dupCount > 0) parts.push(`⏭️ ${dupCount} já executado(s)`);
+
+                      const summaryMessage = `${parts.join(', ')} de ${allLeads.length} lead(s).`;
+                      if (errorCount > 0) toast.error(summaryMessage);
+                      else if (skippedCount > 0 || dupCount > 0) toast.warning(summaryMessage);
+                      else toast.success(summaryMessage);
+                    } catch (err) {
+                      console.error('[BulkExec] Fatal error:', err);
+                      const { toast } = await import('sonner');
+                      toast.error('Erro ao executar em massa');
+                    } finally {
+                      setExecutingAll(false);
                     }
-                  } catch (err) {
-                    console.error('[BulkExec] Fatal error:', err);
-                    const { toast } = await import('sonner');
-                    toast.error('Erro ao executar em massa');
-                  } finally {
-                    setExecutingAll(false);
-                  }
-                }}
-              >
-                {executingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Executar agora para todos na etapa
-              </Button>
+                  }}
+                >
+                  {executingAll ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {executionProgress ? `${executionProgress.current}/${executionProgress.total}` : 'Executando...'}
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Executar agora para todos na etapa
+                    </>
+                  )}
+                </Button>
+
+                {/* Execution results report */}
+                {executionResults && executionResults.length > 0 && (
+                  <div className="rounded-lg border bg-muted/30 p-3 max-h-[200px] overflow-y-auto space-y-1">
+                    <p className="text-xs font-semibold text-foreground mb-2">Relatório de execução:</p>
+                    {executionResults.map((r, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        {r.status === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                        {r.status === 'error' && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                        {r.status === 'skipped' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                        {r.status === 'duplicate' && <SkipForward className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                        <span className="truncate font-medium">{r.name}</span>
+                        {r.reason && <span className="text-muted-foreground truncate ml-auto text-[10px]">{r.reason}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Actions */}
