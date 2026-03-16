@@ -13,13 +13,11 @@ interface Props {
 }
 
 const models = [
-  { id: "openai/gpt-4o-mini", label: "⭐ GPT-4o Mini (Recomendado - Econômico)" },
-  { id: "openai/gpt-4o", label: "GPT-4o (Equilibrado)" },
-  { id: "openai/gpt-4-turbo", label: "GPT-4 Turbo (Avançado)" },
-  { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Inteligente)" },
-  { id: "anthropic/claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku (Rápido)" },
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  { id: "openai/gpt-5-mini", label: "⭐ GPT-5 Mini (Recomendado)" },
+  { id: "openai/gpt-5-nano", label: "GPT-5 Nano (Econômico)" },
+  { id: "openai/gpt-5", label: "GPT-5 (Avançado)" },
+  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Alternativa rápida)" },
+  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Alternativa premium)" },
 ];
 
 export function AdvancedTab({ formData, updateField }: Props) {
@@ -32,7 +30,7 @@ export function AdvancedTab({ formData, updateField }: Props) {
 
       <div className="space-y-2">
         <Label>Modelo de IA</Label>
-        <Select value={formData.model || "openai/gpt-4o-mini"} onValueChange={(v) => updateField("model", v)}>
+        <Select value={formData.model || "openai/gpt-5-mini"} onValueChange={(v) => updateField("model", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             {models.map((m) => (

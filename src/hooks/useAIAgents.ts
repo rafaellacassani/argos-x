@@ -101,7 +101,7 @@ export function useAIAgents() {
           description: agentData.description || null,
           type: agentData.type,
           system_prompt: agentData.system_prompt,
-          model: agentData.model || "openai/gpt-4o-mini",
+          model: agentData.model || "openai/gpt-5-mini",
           temperature: agentData.temperature || 0.7,
           max_tokens: agentData.max_tokens || 2048,
           tools: agentData.tools || [],

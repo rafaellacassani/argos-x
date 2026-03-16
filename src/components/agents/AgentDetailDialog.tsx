@@ -78,7 +78,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         followup_enabled: (agent as any).followup_enabled ?? false,
         followup_sequence: (agent as any).followup_sequence || [],
         followup_end_stage_id: (agent as any).followup_end_stage_id || "",
-        model: agent.model || "google/gemini-3-flash-preview",
+        model: agent.model || "openai/gpt-5-mini",
         temperature: agent.temperature ?? 0.7,
         max_tokens: agent.max_tokens ?? 2048,
         message_split_enabled: agent.message_split_enabled ?? true,
