@@ -2545,6 +2545,19 @@ export default function Chats() {
                       <span className="text-xs text-muted-foreground ml-2">Carregando anteriores...</span>
                     </div>
                   )}
+                  {hasMoreMessages && !loadingOlderMessages && (
+                    <div className="flex items-center justify-center py-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground hover:text-foreground"
+                        onClick={loadOlderMessages}
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        Carregar mensagens anteriores
+                      </Button>
+                    </div>
+                  )}
                   {!hasMoreMessages && messages.length > 30 && (
                     <div className="flex items-center gap-4">
                       <div className="flex-1 h-px bg-border" />
