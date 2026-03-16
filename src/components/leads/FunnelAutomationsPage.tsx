@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWorkspace } from '@/hooks/useWorkspace';
-import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock, Play, Loader2 } from 'lucide-react';
+import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock, Play, Loader2, AlertTriangle, CheckCircle2, XCircle, SkipForward } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
