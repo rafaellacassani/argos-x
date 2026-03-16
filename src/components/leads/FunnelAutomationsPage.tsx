@@ -302,38 +302,39 @@ export function FunnelAutomationsPage({
                       {autos.map(auto => (
                         <div
                           key={auto.id}
-                          className="rounded-lg border bg-card p-3 space-y-2 transition-colors hover:bg-muted/30"
+                          className={`rounded-lg border p-3 space-y-2 transition-colors cursor-pointer ${
+                            auto.is_active 
+                              ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' 
+                              : 'bg-card hover:bg-muted/30 opacity-60'
+                          }`}
+                          onClick={() => handleEdit(stage.id, auto)}
                         >
                           <div className="flex items-start gap-2">
                             <span className="shrink-0 mt-0.5">
                               {ACTION_ICONS[auto.action_type]}
                             </span>
                             <div className="min-w-0 flex-1">
+                              <p className="text-[10px] text-muted-foreground leading-tight">
+                                {auto.trigger === 'on_enter' ? 'Quando movido para ou criado nesta etapa' :
+                                 auto.trigger === 'on_exit' ? 'Quando sair desta etapa' :
+                                 getTriggerBadge(auto)}
+                              </p>
                               <p className="text-sm font-medium leading-tight truncate">
                                 {getActionSummary(auto)}
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center justify-between gap-1">
-                            <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0">
-                              <Clock className="h-3 w-3" />
-                              {getTriggerBadge(auto)}
-                            </Badge>
                             <div className="flex items-center gap-0.5">
                               <Switch
                                 checked={auto.is_active}
-                                onCheckedChange={(v) => handleToggle(stage.id, auto.id, v)}
+                                onCheckedChange={(v) => { handleToggle(stage.id, auto.id, v); }}
+                                onClick={(e) => e.stopPropagation()}
                                 className="scale-[0.65]"
                               />
                               <Button
-                                variant="ghost" size="icon" className="h-6 w-6"
-                                onClick={() => handleEdit(stage.id, auto)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
                                 variant="ghost" size="icon" className="h-6 w-6 text-destructive"
-                                onClick={() => handleDelete(stage.id, auto.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(stage.id, auto.id); }}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
