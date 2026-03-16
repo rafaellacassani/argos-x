@@ -501,24 +501,57 @@ export function FunnelAutomationsPage({
                 className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
                 disabled={executingAll}
                 onClick={async () => {
-                  if (!editingStageId) return;
+                  if (!editingStageId || !workspaceId) return;
                   setExecutingAll(true);
                   try {
-                    const { data: leads } = await supabase
-                      .from('leads')
-                      .select('id')
-                      .eq('stage_id', editingStageId);
-                    if (leads && leads.length > 0) {
-                      for (const lead of leads) {
-                        await executeStageAutomations(editingStageId, lead.id, 'on_enter');
-                      }
-                      const { toast } = await import('sonner');
-                      toast.success(`Automação executada para ${leads.length} lead(s)!`);
-                    } else {
+                    // Fetch ALL leads in the stage (handle >1000 with pagination)
+                    let allLeads: { id: string }[] = [];
+                    let from = 0;
+                    const pageSize = 1000;
+                    while (true) {
+                      const { data: batch } = await supabase
+                        .from('leads')
+                        .select('id')
+                        .eq('stage_id', editingStageId)
+                        .eq('workspace_id', workspaceId)
+                        .range(from, from + pageSize - 1);
+                      if (!batch || batch.length === 0) break;
+                      allLeads = allLeads.concat(batch);
+                      if (batch.length < pageSize) break;
+                      from += pageSize;
+                    }
+
+                    if (allLeads.length === 0) {
                       const { toast } = await import('sonner');
                       toast.info('Nenhum lead nesta etapa.');
+                      return;
                     }
-                  } catch {
+
+                    const { toast } = await import('sonner');
+                    toast.info(`Executando para ${allLeads.length} lead(s)... Aguarde.`);
+
+                    const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
+                    let successCount = 0;
+                    let errorCount = 0;
+
+                    for (let i = 0; i < allLeads.length; i++) {
+                      const lead = allLeads[i];
+                      try {
+                        await executeStageAutomations(editingStageId, lead.id, 'on_enter');
+                        successCount++;
+                      } catch (err) {
+                        console.error(`[BulkExec] Error for lead ${lead.id}:`, err);
+                        errorCount++;
+                      }
+                      // Delay between leads to avoid API rate limiting (skip after last)
+                      if (i < allLeads.length - 1 && delayMs > 0) {
+                        await new Promise(r => setTimeout(r, delayMs));
+                      }
+                    }
+
+                    toast.success(`Concluído: ${successCount} enviado(s), ${errorCount} erro(s) de ${allLeads.length} lead(s).`);
+                  } catch (err) {
+                    console.error('[BulkExec] Fatal error:', err);
                     const { toast } = await import('sonner');
                     toast.error('Erro ao executar em massa');
                   } finally {
