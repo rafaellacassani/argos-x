@@ -858,6 +858,13 @@ Deno.serve(async (req) => {
         const instanceName = isWabaSession ? null : (lead.instance_name || agent.instance_name);
         const phoneNumber = (lead.phone || "").replace(/\D/g, "") || (lead.whatsapp_jid || "").replace(/@.*$/, "");
 
+        if (!phoneNumber) {
+          console.error(`[followup-queue] ❌ No phone for lead ${lead.name}, skipping`);
+          await supabase.from("agent_followup_queue").update({ status: "error", canceled_reason: "no_phone" }).eq("id", item.id);
+          followupsProcessed++;
+          continue;
+        }
+
         // Check 24h window for WABA sessions
         if (isWabaSession && agent.cloud_24h_window_only !== false) {
           const windowCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -881,10 +888,11 @@ Deno.serve(async (req) => {
           }
         }
 
+        let sendSuccess = false;
+
         if (isWabaSession && phoneNumber) {
           // Send via WhatsApp Cloud API
           const cloudPhoneNumberId = item.session_id.replace("waba_", "");
-          // Get access token from cloud connection matching agent instance or workspace
           const agentCloudId = agent.instance_name?.startsWith("cloud_") ? agent.instance_name.replace("cloud_", "") : null;
           
           let cloudQuery = supabase
@@ -911,6 +919,7 @@ Deno.serve(async (req) => {
               }),
             });
             if (res.ok) {
+              sendSuccess = true;
               console.log(`[followup-queue] ✅ WABA follow-up sent: step ${stepNum}, lead: ${lead.name}`);
             } else {
               console.error(`[followup-queue] ❌ WABA send failed: ${res.status} ${await res.text()}`);
@@ -919,12 +928,64 @@ Deno.serve(async (req) => {
             console.error(`[followup-queue] ❌ No cloud connection found for WABA follow-up`);
           }
         } else if (instanceName && phoneNumber) {
-          const sent = await sendWhatsApp(instanceName, phoneNumber, followupMessage);
-          if (sent) {
-            console.log(`[followup-queue] ✅ Follow-up sent: step ${stepNum}, lead: ${lead.name}`);
+          sendSuccess = await sendWhatsApp(instanceName, phoneNumber, followupMessage);
+          if (sendSuccess) {
+            console.log(`[followup-queue] ✅ Follow-up sent: step ${stepNum}, lead: ${lead.name}, instance: ${instanceName}`);
           } else {
-            console.error(`[followup-queue] ❌ Failed to send follow-up to ${lead.name}`);
+            console.error(`[followup-queue] ❌ Failed to send follow-up to ${lead.name} via instance ${instanceName}`);
           }
+        } else {
+          console.error(`[followup-queue] ❌ No instance for lead ${lead.name} (lead.instance: ${lead.instance_name}, agent.instance: ${agent.instance_name})`);
+        }
+
+        if (!sendSuccess) {
+          // Mark as error but don't advance to next step
+          await supabase.from("agent_followup_queue").update({ status: "error", canceled_reason: "send_failed" }).eq("id", item.id);
+          followupsProcessed++;
+          continue;
+        }
+
+        // ✅ Persist the follow-up message to whatsapp_messages so it appears in chat
+        try {
+          const remoteJid = item.session_id.includes("@") ? item.session_id : `${phoneNumber}@s.whatsapp.net`;
+          const effectiveInstance = instanceName || "cloud_api";
+          
+          await supabase.from("whatsapp_messages").insert({
+            workspace_id: item.workspace_id,
+            instance_name: effectiveInstance,
+            remote_jid: remoteJid,
+            direction: "outbound",
+            from_me: true,
+            content: followupMessage,
+            message_type: "text",
+            message_id: `followup_${item.id}`,
+            push_name: agent.name || "IA",
+            timestamp: new Date().toISOString(),
+          });
+          console.log(`[followup-queue] 💾 Message persisted to whatsapp_messages`);
+        } catch (persistErr) {
+          console.error(`[followup-queue] ⚠️ Failed to persist message:`, persistErr);
+        }
+
+        // ✅ Update agent_memories with the follow-up message so AI has context
+        try {
+          const { data: memoryData } = await supabase
+            .from("agent_memories")
+            .select("id, messages")
+            .eq("agent_id", agent.id)
+            .eq("session_id", item.session_id)
+            .single();
+
+          if (memoryData) {
+            const msgs = Array.isArray(memoryData.messages) ? memoryData.messages : [];
+            msgs.push({ role: "assistant", content: followupMessage });
+            await supabase.from("agent_memories")
+              .update({ messages: msgs, updated_at: new Date().toISOString() })
+              .eq("id", memoryData.id);
+            console.log(`[followup-queue] 🧠 Memory updated with follow-up message`);
+          }
+        } catch (memErr) {
+          console.error(`[followup-queue] ⚠️ Failed to update memory:`, memErr);
         }
 
         await supabase.from("agent_followup_queue").update({ status: "executed", executed_at: new Date().toISOString() }).eq("id", item.id);
