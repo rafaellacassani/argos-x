@@ -1896,51 +1896,139 @@ export default function Chats() {
 
 
   const loadOlderMessages = useCallback(async () => {
-    if (!selectedChat || loadingOlderMessages || !hasMoreMessages || selectedChat.isMeta) return;
+    if (!selectedChat || loadingOlderMessages || !hasMoreMessages) return;
     
-    const targetInstance = selectedChat.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all") return;
-
     setLoadingOlderMessages(true);
+    const scrollContainer = messagesContainerRef.current;
+    const prevScrollHeight = scrollContainer?.scrollHeight || 0;
+    
     try {
-      // Fetch more messages with a higher limit offset
       const currentCount = messages.length;
-      const data = await fetchMessages(targetInstance, selectedChat.remoteJid, currentCount + 30);
-      
-      if (data.length <= currentCount) {
-        setHasMoreMessages(false);
-        return;
+
+      // Strategy 1: Try Evolution API for WhatsApp chats
+      const targetInstance = selectedChat.instanceName || selectedInstance;
+      if (!selectedChat.isMeta && targetInstance && targetInstance !== "all") {
+        const data = await fetchMessages(targetInstance, selectedChat.remoteJid, currentCount + 50);
+        
+        if (data.length <= currentCount) {
+          // API exhausted — try DB fallback
+        } else {
+          const allTransformed: Message[] = data
+            .map((msg) => {
+              const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
+              const timestamp = msg.messageTimestamp;
+              const date = timestamp ? new Date(timestamp * 1000) : new Date();
+              return {
+                id: msg.key?.id || Math.random().toString(),
+                content,
+                time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+                sent: msg.key?.fromMe || false,
+                read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
+                type,
+                mediaUrl,
+                thumbnailBase64,
+                fileName,
+                duration,
+                _ts: timestamp ? timestamp * 1000 : Date.now(),
+              };
+            })
+            .reverse();
+
+          setMessages(allTransformed);
+          setHasMoreMessages(data.length >= currentCount + 50);
+          messageCacheRef.current.set(selectedChat.id, allTransformed);
+          
+          // Preserve scroll position
+          requestAnimationFrame(() => {
+            if (scrollContainer) {
+              const newScrollHeight = scrollContainer.scrollHeight;
+              scrollContainer.scrollTop = newScrollHeight - prevScrollHeight;
+            }
+          });
+          return;
+        }
       }
 
-      const allTransformed: Message[] = data
-        .map((msg) => {
-          const { content, type, mediaUrl, thumbnailBase64, fileName, duration } = extractMessageContent(msg);
-          const timestamp = msg.messageTimestamp;
-          const date = timestamp ? new Date(timestamp * 1000) : new Date();
-          return {
-            id: msg.key?.id || Math.random().toString(),
-            content,
-            time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-            sent: msg.key?.fromMe || false,
-            read: msg.status === "READ" || msg.status === "DELIVERY_ACK",
-            type,
-            mediaUrl,
-            thumbnailBase64,
-            fileName,
-            duration,
-          };
-        })
-        .reverse();
+      // Strategy 2: Load older messages from DB (works for all chat types)
+      if (workspaceId) {
+        const oldestMessage = messages[0];
+        const oldestTs = oldestMessage ? (oldestMessage as any)._ts 
+          ? new Date((oldestMessage as any)._ts).toISOString()
+          : null : null;
 
-      setMessages(allTransformed);
-      setHasMoreMessages(data.length >= currentCount + 30);
-      messageCacheRef.current.set(selectedChat.id, allTransformed);
+        const phoneDigits = cleanPhoneNumber(selectedChat.phone || "");
+        const allJids = new Set<string>([selectedChat.remoteJid]);
+        if (selectedChat.remoteJidAlt) allJids.add(selectedChat.remoteJidAlt);
+
+        const jidFilters = Array.from(allJids).map(j => `remote_jid.eq.${j}`);
+        if (phoneDigits.length >= 10) {
+          jidFilters.push(`remote_jid.like.%${phoneDigits.slice(-10)}%`);
+        }
+
+        const chatInst = selectedChat.instanceName || (selectedInstance && selectedInstance !== 'all' ? selectedInstance : null);
+
+        let dbQuery = supabase
+          .from('whatsapp_messages')
+          .select('*')
+          .or(jidFilters.join(','))
+          .order('timestamp', { ascending: false })
+          .limit(50);
+
+        if (workspaceId) dbQuery = dbQuery.eq('workspace_id', workspaceId);
+        if (chatInst) dbQuery = dbQuery.eq('instance_name', chatInst);
+        if (oldestTs) dbQuery = dbQuery.lt('timestamp', oldestTs);
+
+        const { data: dbRows } = await dbQuery;
+
+        if (!dbRows || dbRows.length === 0) {
+          setHasMoreMessages(false);
+          return;
+        }
+
+        const existingIds = new Set(messages.map(m => m.id));
+        const olderMessages: Message[] = dbRows
+          .filter(m => !existingIds.has(m.message_id || '') && !existingIds.has(m.id))
+          .map(m => {
+            const date = new Date(m.timestamp);
+            return {
+              id: m.message_id || m.id,
+              content: m.content || '',
+              time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+              sent: m.from_me || m.direction === 'outbound',
+              read: true,
+              type: (m.message_type || 'text') as Message["type"],
+              _ts: date.getTime(),
+            };
+          });
+
+        if (olderMessages.length === 0) {
+          setHasMoreMessages(false);
+          return;
+        }
+
+        const allMessages = [...olderMessages.reverse(), ...messages];
+        allMessages.sort((a, b) => ((a as any)._ts || 0) - ((b as any)._ts || 0));
+        
+        setMessages(allMessages);
+        setHasMoreMessages(dbRows.length >= 50);
+        messageCacheRef.current.set(selectedChat.id, allMessages);
+
+        // Preserve scroll position
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            const newScrollHeight = scrollContainer.scrollHeight;
+            scrollContainer.scrollTop = newScrollHeight - prevScrollHeight;
+          }
+        });
+      } else {
+        setHasMoreMessages(false);
+      }
     } catch (err) {
       console.error("[Chats] Error loading older messages:", err);
     } finally {
       setLoadingOlderMessages(false);
     }
-  }, [selectedChat, selectedInstance, messages.length, loadingOlderMessages, hasMoreMessages, fetchMessages]);
+  }, [selectedChat, selectedInstance, messages, loadingOlderMessages, hasMoreMessages, fetchMessages, workspaceId]);
 
   // Handle scroll to detect when user scrolls to top
   const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
