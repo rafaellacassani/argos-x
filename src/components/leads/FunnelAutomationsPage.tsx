@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useWorkspace } from '@/hooks/useWorkspace';
-import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock, Play, Loader2 } from 'lucide-react';
+import { X, Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, Pencil, Clock, Play, Loader2, AlertTriangle, CheckCircle2, XCircle, SkipForward } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,8 @@ export function FunnelAutomationsPage({
 
   const { workspaceId } = useWorkspace();
   const [executingAll, setExecutingAll] = useState(false);
+  const [executionProgress, setExecutionProgress] = useState<{ current: number; total: number } | null>(null);
+  const [executionResults, setExecutionResults] = useState<Array<{ name: string; status: 'success' | 'error' | 'skipped' | 'duplicate'; reason?: string }> | null>(null);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
   const [loadingStages, setLoadingStages] = useState(false);
@@ -300,38 +302,39 @@ export function FunnelAutomationsPage({
                       {autos.map(auto => (
                         <div
                           key={auto.id}
-                          className="rounded-lg border bg-card p-3 space-y-2 transition-colors hover:bg-muted/30"
+                          className={`rounded-lg border p-3 space-y-2 transition-colors cursor-pointer ${
+                            auto.is_active 
+                              ? 'bg-primary/5 border-primary/20 hover:bg-primary/10' 
+                              : 'bg-card hover:bg-muted/30 opacity-60'
+                          }`}
+                          onClick={() => handleEdit(stage.id, auto)}
                         >
                           <div className="flex items-start gap-2">
                             <span className="shrink-0 mt-0.5">
                               {ACTION_ICONS[auto.action_type]}
                             </span>
                             <div className="min-w-0 flex-1">
+                              <p className="text-[10px] text-muted-foreground leading-tight">
+                                {auto.trigger === 'on_enter' ? 'Quando movido para ou criado nesta etapa' :
+                                 auto.trigger === 'on_exit' ? 'Quando sair desta etapa' :
+                                 getTriggerBadge(auto)}
+                              </p>
                               <p className="text-sm font-medium leading-tight truncate">
                                 {getActionSummary(auto)}
                               </p>
                             </div>
                           </div>
                           <div className="flex items-center justify-between gap-1">
-                            <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0">
-                              <Clock className="h-3 w-3" />
-                              {getTriggerBadge(auto)}
-                            </Badge>
                             <div className="flex items-center gap-0.5">
                               <Switch
                                 checked={auto.is_active}
-                                onCheckedChange={(v) => handleToggle(stage.id, auto.id, v)}
+                                onCheckedChange={(v) => { handleToggle(stage.id, auto.id, v); }}
+                                onClick={(e) => e.stopPropagation()}
                                 className="scale-[0.65]"
                               />
                               <Button
-                                variant="ghost" size="icon" className="h-6 w-6"
-                                onClick={() => handleEdit(stage.id, auto)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
                                 variant="ghost" size="icon" className="h-6 w-6 text-destructive"
-                                onClick={() => handleDelete(stage.id, auto.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDelete(stage.id, auto.id); }}
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
@@ -368,66 +371,20 @@ export function FunnelAutomationsPage({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-5 mt-6">
-            {/* Trigger */}
-            <div className="space-y-2">
-              <Label>Gatilho</Label>
-              <Select value={form.trigger} onValueChange={(v) => setForm(p => ({ ...p, trigger: v as any }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="on_enter">Ao entrar na etapa</SelectItem>
-                  <SelectItem value="on_exit">Ao sair da etapa</SelectItem>
-                  <SelectItem value="after_time">Após tempo na etapa</SelectItem>
-                </SelectContent>
-              </Select>
-              {form.trigger === 'after_time' && (
-                <DelayInput
-                  minutes={form.trigger_delay_minutes}
-                  onChange={(m) => setForm(p => ({ ...p, trigger_delay_minutes: m }))}
-                />
-              )}
-            </div>
-
-            {/* Action Type */}
-            <div className="space-y-2">
-              <Label>Ação</Label>
-              <Select value={form.action_type} onValueChange={(v) => setForm(p => ({ ...p, action_type: v, action_config: {} }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="run_bot">🤖 Executar SalesBot</SelectItem>
-                  <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
-                  <SelectItem value="change_responsible">👤 Mudar responsável</SelectItem>
-                  <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
-                  <SelectItem value="remove_tag">🏷️ Remover tag</SelectItem>
-                  <SelectItem value="create_task">✅ Criar tarefa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Action Config */}
-            <div className="space-y-2">
-              <Label>Configuração</Label>
-              <ActionConfigForm
-                actionType={form.action_type}
-                config={form.action_config}
-                onChange={(cfg) => setForm(p => ({ ...p, action_config: cfg }))}
-                bots={bots}
-                tags={tags}
-                teamMembers={teamMembers}
-                instances={instances}
-                cloudConnections={cloudConnections}
-              />
-            </div>
-
-            {/* Conditions */}
+          <div className="space-y-5 mt-4">
+            {/* Conditions header - Kommo style */}
             <Collapsible open={conditionsOpen} onOpenChange={setConditionsOpen}>
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-2 w-full justify-start text-muted-foreground">
-                  <ChevronDown className={`h-4 w-4 transition-transform ${conditionsOpen ? 'rotate-180' : ''}`} />
-                  Condições ({form.conditions.length})
-                </Button>
+                <div className="rounded-lg border p-3 cursor-pointer hover:bg-muted/30 transition-colors">
+                  <p className="text-sm font-medium text-foreground">Para todos os leads com:</p>
+                  {form.conditions.length > 0 ? (
+                    <p className="text-xs text-muted-foreground mt-1">{form.conditions.length} condição(ões) configurada(s)</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Adicionar uma condição</p>
+                  )}
+                </div>
               </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 pt-2">
+              <CollapsibleContent className="space-y-2 pt-2 pl-1">
                 {form.conditions.map((cond, idx) => (
                   <div key={idx} className="flex gap-2 items-center">
                     <Select value={cond.field} onValueChange={v => updateCondition(idx, 'field', v)}>
@@ -477,11 +434,7 @@ export function FunnelAutomationsPage({
                         </SelectContent>
                       </Select>
                     ) : (
-                      <Input
-                        type="number" placeholder="R$ valor" className="flex-1"
-                        value={cond.value}
-                        onChange={e => updateCondition(idx, 'value', e.target.value)}
-                      />
+                      <Input type="number" placeholder="R$ valor" className="flex-1" value={cond.value} onChange={e => updateCondition(idx, 'value', e.target.value)} />
                     )}
                     <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeCondition(idx)}>
                       <Trash2 className="h-3.5 w-3.5" />
@@ -494,100 +447,199 @@ export function FunnelAutomationsPage({
               </CollapsibleContent>
             </Collapsible>
 
+            {/* Trigger - Kommo style */}
+            <div className="space-y-2">
+              <Select value={form.trigger} onValueChange={(v) => setForm(p => ({ ...p, trigger: v as any }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="on_enter">Executar: Quando movido para esta etapa</SelectItem>
+                  <SelectItem value="on_exit">Executar: Quando sair desta etapa</SelectItem>
+                  <SelectItem value="after_time">Executar: Após tempo na etapa</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.trigger === 'on_enter' 
+                  ? 'A ação será executada quando um lead entrar ou for criado nesta etapa'
+                  : form.trigger === 'on_exit'
+                  ? 'A ação será executada quando um lead sair desta etapa'
+                  : 'A ação será executada após o tempo configurado na etapa'}
+              </p>
+              {form.trigger === 'after_time' && (
+                <DelayInput
+                  minutes={form.trigger_delay_minutes}
+                  onChange={(m) => setForm(p => ({ ...p, trigger_delay_minutes: m }))}
+                />
+              )}
+            </div>
+
+            {/* Status - Kommo style */}
+            <Select value="always" onValueChange={() => {}}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="always">Ativo: sempre</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Action Type */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Ação</Label>
+              <Select value={form.action_type} onValueChange={(v) => setForm(p => ({ ...p, action_type: v, action_config: {} }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="run_bot">🤖 Executar Robô de vendas</SelectItem>
+                  <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
+                  <SelectItem value="change_responsible">👤 Alterar usuário de lead</SelectItem>
+                  <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
+                  <SelectItem value="remove_tag">🏷️ Remover tag</SelectItem>
+                  <SelectItem value="create_task">✅ Criar tarefa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Action Config */}
+            <div className="space-y-2">
+              {form.action_type === 'run_bot' && <Label className="text-xs text-muted-foreground">Salesbot</Label>}
+              <ActionConfigForm
+                actionType={form.action_type}
+                config={form.action_config}
+                onChange={(cfg) => setForm(p => ({ ...p, action_config: cfg }))}
+                bots={bots}
+                tags={tags}
+                teamMembers={teamMembers}
+                instances={instances}
+                cloudConnections={cloudConnections}
+              />
+            </div>
+
             {/* Execute for all in stage */}
-            {editingId !== 'new' && editingStageId && (
-              <Button
-                variant="outline"
-                className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
-                disabled={executingAll}
-                onClick={async () => {
-                  if (!editingStageId || !workspaceId) return;
-                  setExecutingAll(true);
-                  try {
-                    // Fetch ALL leads in the stage (handle >1000 with pagination)
-                    let allLeads: { id: string; phone: string; whatsapp_jid: string | null }[] = [];
-                    let from = 0;
-                    const pageSize = 1000;
-                    while (true) {
-                      const { data: batch } = await supabase
-                        .from('leads')
-                        .select('id, phone, whatsapp_jid')
-                        .eq('stage_id', editingStageId)
-                        .eq('workspace_id', workspaceId)
-                        .range(from, from + pageSize - 1);
-                      if (!batch || batch.length === 0) break;
-                      allLeads = allLeads.concat(batch);
-                      if (batch.length < pageSize) break;
-                      from += pageSize;
-                    }
-
-                    if (allLeads.length === 0) {
-                      const { toast } = await import('sonner');
-                      toast.info('Nenhum lead nesta etapa.');
-                      return;
-                    }
-
-                    const { toast } = await import('sonner');
-                    toast.info(`Executando para ${allLeads.length} lead(s)... Aguarde.`);
-
-                    const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
-                    let successCount = 0;
-                    let errorCount = 0;
-                    let skippedCount = 0;
-
-                    for (let i = 0; i < allLeads.length; i++) {
-                      const lead = allLeads[i];
-
-                      // Pre-validate: check if lead has a usable phone
-                      const phone = lead.whatsapp_jid || lead.phone;
-                      const digits = (phone || '').replace(/\D/g, '');
-                      if (!phone || digits.length < 10) {
-                        console.warn(`[BulkExec] Skipping lead ${lead.id}: invalid phone "${phone}"`);
-                        skippedCount++;
-                        continue;
+            {editingId !== 'new' && editingStageId && form.action_type === 'run_bot' && (
+              <div className="space-y-3 border-t pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 text-amber-600 border-amber-300 hover:bg-amber-50"
+                  disabled={executingAll}
+                  onClick={async () => {
+                    if (!editingStageId || !workspaceId) return;
+                    setExecutingAll(true);
+                    setExecutionResults(null);
+                    setExecutionProgress(null);
+                    try {
+                      // Fetch ALL leads in the stage with names
+                      let allLeads: { id: string; name: string; phone: string; whatsapp_jid: string | null }[] = [];
+                      let from = 0;
+                      const pageSize = 1000;
+                      while (true) {
+                        const { data: batch } = await supabase
+                          .from('leads')
+                          .select('id, name, phone, whatsapp_jid')
+                          .eq('stage_id', editingStageId)
+                          .eq('workspace_id', workspaceId)
+                          .range(from, from + pageSize - 1);
+                        if (!batch || batch.length === 0) break;
+                        allLeads = allLeads.concat(batch);
+                        if (batch.length < pageSize) break;
+                        from += pageSize;
                       }
 
-                      try {
-                        // Use executeStageAutomations with skipStageChangeBots to avoid double triggers
-                        const autoResult = await executeStageAutomations(editingStageId, lead.id, 'on_enter', { skipStageChangeBots: true });
-                        if (autoResult.success) {
-                          successCount++;
-                        } else {
-                          errorCount++;
-                          console.warn(`[BulkExec] Lead ${lead.id} errors:`, autoResult.errors);
+                      if (allLeads.length === 0) {
+                        const { toast } = await import('sonner');
+                        toast.info('Nenhum lead nesta etapa.');
+                        return;
+                      }
+
+                      setExecutionProgress({ current: 0, total: allLeads.length });
+                      const delayMs = (form.action_config.batch_interval_seconds || 30) * 1000;
+                      const results: Array<{ name: string; status: 'success' | 'error' | 'skipped' | 'duplicate'; reason?: string }> = [];
+
+                      for (let i = 0; i < allLeads.length; i++) {
+                        const lead = allLeads[i];
+                        setExecutionProgress({ current: i + 1, total: allLeads.length });
+
+                        // Pre-validate phone
+                        const phone = lead.whatsapp_jid || lead.phone;
+                        const digits = (phone || '').replace(/\D/g, '');
+                        if (!phone || digits.length < 10) {
+                          results.push({ name: lead.name, status: 'skipped', reason: `Telefone inválido: ${lead.phone || 'vazio'}` });
+                          continue;
                         }
-                      } catch (err) {
-                        console.error(`[BulkExec] Error for lead ${lead.id}:`, err);
-                        errorCount++;
-                      }
-                      // Delay between leads to avoid API rate limiting (skip after last)
-                      if (i < allLeads.length - 1 && delayMs > 0) {
-                        await new Promise(r => setTimeout(r, delayMs));
-                      }
-                    }
 
-                    const parts = [`✅ ${successCount} enviado(s)`];
-                    if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
-                    if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} pulado(s) (telefone inválido)`);
+                        try {
+                          const autoResult = await executeStageAutomations(editingStageId, lead.id, 'on_enter', { skipStageChangeBots: true, forceBulk: true });
+                          if (autoResult.success && autoResult.actionsExecuted > 0) {
+                            results.push({ name: lead.name, status: 'success' });
+                          } else if (autoResult.actionsExecuted === 0) {
+                            results.push({ name: lead.name, status: 'duplicate', reason: 'Já executado anteriormente' });
+                          } else {
+                            results.push({ name: lead.name, status: 'error', reason: autoResult.errors.join('; ') || 'Falha desconhecida' });
+                          }
+                        } catch (err) {
+                          results.push({ name: lead.name, status: 'error', reason: err instanceof Error ? err.message : 'Erro inesperado' });
+                        }
+                        // Delay between leads
+                        if (i < allLeads.length - 1 && delayMs > 0) {
+                          await new Promise(r => setTimeout(r, delayMs));
+                        }
+                      }
 
-                    const summaryMessage = `Concluído: ${parts.join(', ')} de ${allLeads.length} lead(s).`;
-                    if (errorCount > 0 || skippedCount > 0) {
-                      toast.error(summaryMessage);
-                    } else {
-                      toast.success(summaryMessage);
+                      setExecutionResults(results);
+                      setExecutionProgress(null);
+
+                      const successCount = results.filter(r => r.status === 'success').length;
+                      const errorCount = results.filter(r => r.status === 'error').length;
+                      const skippedCount = results.filter(r => r.status === 'skipped').length;
+                      const dupCount = results.filter(r => r.status === 'duplicate').length;
+
+                      const { toast } = await import('sonner');
+                      const parts = [`✅ ${successCount} enviado(s)`];
+                      if (errorCount > 0) parts.push(`❌ ${errorCount} erro(s)`);
+                      if (skippedCount > 0) parts.push(`⚠️ ${skippedCount} inválido(s)`);
+                      if (dupCount > 0) parts.push(`⏭️ ${dupCount} já executado(s)`);
+
+                      const summaryMessage = `${parts.join(', ')} de ${allLeads.length} lead(s).`;
+                      if (errorCount > 0) toast.error(summaryMessage);
+                      else if (skippedCount > 0 || dupCount > 0) toast.warning(summaryMessage);
+                      else toast.success(summaryMessage);
+                    } catch (err) {
+                      console.error('[BulkExec] Fatal error:', err);
+                      const { toast } = await import('sonner');
+                      toast.error('Erro ao executar em massa');
+                    } finally {
+                      setExecutingAll(false);
                     }
-                  } catch (err) {
-                    console.error('[BulkExec] Fatal error:', err);
-                    const { toast } = await import('sonner');
-                    toast.error('Erro ao executar em massa');
-                  } finally {
-                    setExecutingAll(false);
-                  }
-                }}
-              >
-                {executingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                Executar agora para todos na etapa
-              </Button>
+                  }}
+                >
+                  {executingAll ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {executionProgress ? `${executionProgress.current}/${executionProgress.total}` : 'Executando...'}
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Executar agora para todos na etapa
+                    </>
+                  )}
+                </Button>
+
+                {/* Execution results report */}
+                {executionResults && executionResults.length > 0 && (
+                  <div className="rounded-lg border bg-muted/30 p-3 max-h-[200px] overflow-y-auto space-y-1">
+                    <p className="text-xs font-semibold text-foreground mb-2">Relatório de execução:</p>
+                    {executionResults.map((r, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        {r.status === 'success' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                        {r.status === 'error' && <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />}
+                        {r.status === 'skipped' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                        {r.status === 'duplicate' && <SkipForward className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                        <span className="truncate font-medium">{r.name}</span>
+                        {r.reason && <span className="text-muted-foreground truncate ml-auto text-[10px]">{r.reason}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Actions */}
@@ -623,53 +675,23 @@ function ActionConfigForm({
     case 'run_bot':
       return (
         <div className="space-y-3">
-          <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
-            <SelectTrigger><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
-            <SelectContent>
-              {bots.map(b => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}{!b.is_active && ' (inativo)'}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-
-          {/* Schedule: days and time for batch execution */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Agendamento (enviar para todos)</Label>
-            <div className="flex gap-1.5 flex-wrap">
-              {DAY_LABELS.map((day, idx) => {
-                const scheduleDays: number[] = config.schedule_days || [];
-                const isActive = scheduleDays.includes(idx);
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      const next = isActive ? scheduleDays.filter((d: number) => d !== idx) : [...scheduleDays, idx];
-                      set('schedule_days', next.sort());
-                    }}
-                    className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
-                      isActive ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
-            </div>
-            <Input
-              type="time"
-              value={config.schedule_time || '09:00'}
-              onChange={e => set('schedule_time', e.target.value)}
-              className="w-32 h-8 text-sm"
-            />
+          <div className="flex items-center gap-2">
+            <Select value={config.bot_id || ''} onValueChange={v => set('bot_id', v)}>
+              <SelectTrigger className="flex-1"><SelectValue placeholder="Selecione um bot" /></SelectTrigger>
+              <SelectContent>
+                {bots.map(b => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}{!b.is_active && ' (inativo)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          <p className="text-xs text-muted-foreground">Crie um novo robô ou selecione um existente</p>
 
           {/* Interval between messages */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Intervalo entre mensagens</Label>
+            <Label className="text-xs text-muted-foreground">Intervalo entre mensagens (envio em massa)</Label>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
@@ -683,9 +705,15 @@ function ActionConfigForm({
           </div>
 
           <div className="flex items-center gap-2">
-            <Checkbox checked={config.skip_if_executed || false} onCheckedChange={v => set('skip_if_executed', v)} />
-            <span className="text-sm">Pular se já executou</span>
+            <Checkbox checked={config.skip_if_executed !== false} onCheckedChange={v => set('skip_if_executed', v)} />
+            <span className="text-sm">Pular se já executou este bot para o lead</span>
           </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox checked={config.mark_unanswered || false} onCheckedChange={v => set('mark_unanswered', v)} />
+            <span className="text-sm">Deixar mensagem sem resposta</span>
+          </div>
+          <p className="text-xs text-muted-foreground">As mensagens às quais o Salesbot responde serão marcadas como não respondidas</p>
         </div>
       );
     case 'notify_responsible':
