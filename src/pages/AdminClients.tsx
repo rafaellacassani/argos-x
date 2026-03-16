@@ -1441,31 +1441,72 @@ export default function AdminClients() {
                   {/* Cadence days */}
                   <div className="space-y-2">
                     <Label>Dias de envio (relativo ao vencimento do trial)</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {[-3, -2, -1, 0, 1, 2, 3, 5, 7, 10, 14, 21, 30].map((day) => {
-                        const isSelected = cadenceConfig.cadence_days.includes(day);
-                        return (
-                          <Button
-                            key={day}
-                            type="button"
-                            size="sm"
-                            variant={isSelected ? "default" : "outline"}
-                            className="h-8 min-w-10"
-                            onClick={() => {
-                              const newDays = isSelected
-                                ? cadenceConfig.cadence_days.filter((d) => d !== day)
-                                : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
-                              setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
-                            }}
-                          >
-                            {day > 0 ? `+${day}` : day}
-                          </Button>
-                        );
-                      })}
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">📩 Signup & Trial (antes do vencimento)</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[-7, -6, -5, -4, -3, -2, -1].map((day) => {
+                            const isSelected = cadenceConfig.cadence_days.includes(day);
+                            const dayLabels: Record<number, string> = {
+                              [-7]: "Signup",
+                              [-6]: "Dia 2",
+                              [-5]: "Dia 3",
+                              [-4]: "Dia 4",
+                              [-3]: "Dia 5",
+                              [-2]: "Dia 6",
+                              [-1]: "Último dia",
+                            };
+                            return (
+                              <Button
+                                key={day}
+                                type="button"
+                                size="sm"
+                                variant={isSelected ? "default" : "outline"}
+                                className="h-8"
+                                onClick={() => {
+                                  const newDays = isSelected
+                                    ? cadenceConfig.cadence_days.filter((d) => d !== day)
+                                    : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
+                                  setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
+                                }}
+                              >
+                                {dayLabels[day] || day}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">🔒 Vencimento & Pós-trial</p>
+                        <div className="flex flex-wrap gap-2">
+                          {[0, 1, 2, 3, 5, 7, 10, 14, 21, 30].map((day) => {
+                            const isSelected = cadenceConfig.cadence_days.includes(day);
+                            return (
+                              <Button
+                                key={day}
+                                type="button"
+                                size="sm"
+                                variant={isSelected ? "default" : "outline"}
+                                className="h-8 min-w-10"
+                                onClick={() => {
+                                  const newDays = isSelected
+                                    ? cadenceConfig.cadence_days.filter((d) => d !== day)
+                                    : [...cadenceConfig.cadence_days, day].sort((a, b) => a - b);
+                                  setCadenceConfig({ ...cadenceConfig, cadence_days: newDays });
+                                }}
+                              >
+                                {day === 0 ? "Vencimento" : `+${day}`}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Negativos = antes de expirar, 0 = dia do vencimento, positivos = após expirar.
-                      Selecionados: {cadenceConfig.cadence_days.map(d => d > 0 ? `+${d}` : String(d)).join(", ")}
+                      Selecionados: {cadenceConfig.cadence_days.map(d => {
+                        const labels: Record<number, string> = { [-7]: "Signup", [-6]: "Dia 2", [-5]: "Dia 3", [-4]: "Dia 4", [-3]: "Dia 5", [-2]: "Dia 6", [-1]: "Último dia", [0]: "Vencimento" };
+                        return labels[d] || (d > 0 ? `+${d}` : String(d));
+                      }).join(", ")}
                     </p>
                   </div>
 
