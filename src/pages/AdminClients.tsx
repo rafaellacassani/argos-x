@@ -1654,21 +1654,48 @@ export default function AdminClients() {
                       const dayMsgs = cadenceMessages
                         .map((m, idx) => ({ ...m, _idx: idx }))
                         .filter(m => m.cadence_day === day);
-                      const dayLabel = day < 0 ? `${day} dias (antes)` : day === 0 ? "Dia 0 (vencimento)" : `+${day} dias (após)`;
+                      const dayLabelsMap: Record<number, string> = {
+                        [-7]: "📩 Signup (boas-vindas)",
+                        [-6]: "📅 Dia 2 do trial",
+                        [-5]: "📅 Dia 3 do trial",
+                        [-4]: "📅 Dia 4 do trial",
+                        [-3]: "📅 Dia 5 do trial",
+                        [-2]: "⚠️ Dia 6 (penúltimo)",
+                        [-1]: "🚨 Último dia do trial",
+                        [0]: "🔒 Dia do vencimento",
+                      };
+                      const dayLabel = dayLabelsMap[day] || (day > 0 ? `+${day} dias após vencimento` : `${day} dias`);
+                      const whatsappCount = dayMsgs.filter(m => m.channel === "whatsapp").length;
+                      const emailCount = dayMsgs.filter(m => m.channel === "email").length;
 
                       return (
                         <AccordionItem key={day} value={`day-${day}`}>
                           <AccordionTrigger className="text-sm">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="font-mono">{day > 0 ? `+${day}` : day}</Badge>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {day === -7 ? "Signup" : day > 0 ? `+${day}` : day}
+                              </Badge>
                               <span>{dayLabel}</span>
-                              <Badge variant="secondary" className="ml-2">{dayMsgs.length} msg</Badge>
+                              {whatsappCount > 0 && (
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <MessageSquare className="w-3 h-3" />{whatsappCount}
+                                </Badge>
+                              )}
+                              {emailCount > 0 && (
+                                <Badge variant="secondary" className="text-xs gap-1">
+                                  <Mail className="w-3 h-3" />{emailCount}
+                                </Badge>
+                              )}
+                              {dayMsgs.length === 0 && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">sem mensagens</Badge>
+                              )}
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="space-y-3 pt-2">
                             {dayMsgs.length === 0 && (
                               <p className="text-xs text-muted-foreground text-center py-2">
-                                Nenhuma mensagem configurada para este dia. O sistema usará os templates padrão.
+                                Nenhuma mensagem configurada. {day === -7 ? "O sistema usará a mensagem padrão de boas-vindas." : "O sistema usará os templates padrão."}
+                              </p>
                               </p>
                             )}
 
