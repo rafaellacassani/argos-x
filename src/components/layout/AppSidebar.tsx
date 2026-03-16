@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Lock,
+  Crown,
   Shield,
   GraduationCap,
   BookOpen,
