@@ -1016,6 +1016,116 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          bairro: string | null
+          bdr: string | null
+          cep: string | null
+          closer: string | null
+          cnpj: string | null
+          created_at: string | null
+          created_by: string | null
+          data_inicio_pagamento: string | null
+          endereco: string | null
+          estado: string | null
+          financeiro_email: string | null
+          id: string
+          municipio: string | null
+          negociacoes_personalizadas: string | null
+          nome_fantasia: string | null
+          numero: string | null
+          pacote: string
+          pais: string | null
+          razao_social: string
+          socio_cpf: string | null
+          socio_email: string | null
+          socio_nome: string
+          socio_telefone: string | null
+          stage: string
+          stakeholder_email: string | null
+          stakeholder_nome: string | null
+          status: string
+          updated_at: string | null
+          valor_extenso: string | null
+          valor_negociado: number
+          workspace_id: string
+        }
+        Insert: {
+          bairro?: string | null
+          bdr?: string | null
+          cep?: string | null
+          closer?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          data_inicio_pagamento?: string | null
+          endereco?: string | null
+          estado?: string | null
+          financeiro_email?: string | null
+          id?: string
+          municipio?: string | null
+          negociacoes_personalizadas?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          pacote?: string
+          pais?: string | null
+          razao_social: string
+          socio_cpf?: string | null
+          socio_email?: string | null
+          socio_nome: string
+          socio_telefone?: string | null
+          stage?: string
+          stakeholder_email?: string | null
+          stakeholder_nome?: string | null
+          status?: string
+          updated_at?: string | null
+          valor_extenso?: string | null
+          valor_negociado?: number
+          workspace_id: string
+        }
+        Update: {
+          bairro?: string | null
+          bdr?: string | null
+          cep?: string | null
+          closer?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          data_inicio_pagamento?: string | null
+          endereco?: string | null
+          estado?: string | null
+          financeiro_email?: string | null
+          id?: string
+          municipio?: string | null
+          negociacoes_personalizadas?: string | null
+          nome_fantasia?: string | null
+          numero?: string | null
+          pacote?: string
+          pais?: string | null
+          razao_social?: string
+          socio_cpf?: string | null
+          socio_email?: string | null
+          socio_nome?: string
+          socio_telefone?: string | null
+          stage?: string
+          stakeholder_email?: string | null
+          stakeholder_nome?: string | null
+          status?: string
+          updated_at?: string | null
+          valor_extenso?: string | null
+          valor_negociado?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_accounts: {
         Row: {
           access_token: string

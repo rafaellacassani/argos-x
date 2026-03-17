@@ -26,6 +26,7 @@ import {
   Map,
   X,
   Headset,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -179,6 +180,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
       { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
       { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
       { icon: Headset, label: "Suporte", path: "/suporte" } as MenuItem,
+      { icon: Building2, label: "Clientes ECX", path: "/clients" } as MenuItem,
     ] : []),
     ...(permissions.isAdmin ? [
       { icon: Map, label: "Tour Guiado", path: "/tour-guiado" } as MenuItem,
