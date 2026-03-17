@@ -20,14 +20,35 @@ export type ApiResourceKey = typeof API_RESOURCES[number]['key'];
 
 export type ApiPermissions = Record<ApiResourceKey, PermissionLevel>;
 
+export const AVAILABLE_SCOPES = [
+  { key: 'leads:read', label: 'Leads (leitura)', group: 'Leads' },
+  { key: 'leads:write', label: 'Leads (escrita)', group: 'Leads' },
+  { key: 'agents:read', label: 'Agentes (leitura)', group: 'Agentes IA' },
+  { key: 'agents:write', label: 'Agentes (escrita)', group: 'Agentes IA' },
+  { key: 'agents:execute', label: 'Agentes (execução)', group: 'Agentes IA' },
+  { key: 'messages:read', label: 'Mensagens (leitura)', group: 'Mensagens' },
+  { key: 'messages:write', label: 'Mensagens (escrita)', group: 'Mensagens' },
+  { key: 'campaigns:read', label: 'Campanhas (leitura)', group: 'Campanhas' },
+  { key: 'calendar:read', label: 'Calendário (leitura)', group: 'Calendário' },
+  { key: 'calendar:write', label: 'Calendário (escrita)', group: 'Calendário' },
+  { key: 'tags:read', label: 'Tags (leitura)', group: 'Tags' },
+  { key: 'tags:write', label: 'Tags (escrita)', group: 'Tags' },
+  { key: 'funnels:read', label: 'Funis (leitura)', group: 'Funis' },
+  { key: 'funnels:write', label: 'Funis (escrita)', group: 'Funis' },
+  { key: 'webhooks:read', label: 'Webhooks (leitura)', group: 'Webhooks' },
+  { key: 'webhooks:write', label: 'Webhooks (escrita)', group: 'Webhooks' },
+] as const;
+
 export interface ApiKey {
   id: string;
   name: string;
   key_prefix: string;
   permissions: ApiPermissions;
+  scopes: string[];
   is_active: boolean;
   last_used_at: string | null;
   expires_at: string | null;
+  revoked_at: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -59,11 +80,12 @@ export function useApiKeys() {
   const createKey = useCallback(async (
     name: string,
     permissions: ApiPermissions,
-    expiresAt?: string
+    expiresAt?: string,
+    scopes?: string[]
   ): Promise<{ key: ApiKey; raw_key: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('api-keys', {
-        body: { action: 'create', name, permissions, expires_at: expiresAt || null },
+        body: { action: 'create', name, permissions, scopes: scopes || [], expires_at: expiresAt || null },
       });
 
       if (error) throw error;
