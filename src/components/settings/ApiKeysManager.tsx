@@ -607,12 +607,15 @@ function verifySignature(secret, body, signature) {
                         <code className="bg-muted px-2 py-1 rounded text-xs font-mono">{key.key_prefix}...****</code>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {summary.read > 0 && (
                             <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">{summary.read}R</Badge>
                           )}
                           {summary.write > 0 && (
                             <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">{summary.write}W</Badge>
+                          )}
+                          {key.scopes && key.scopes.length > 0 && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">{key.scopes.length} scopes</Badge>
                           )}
                           <Button variant="ghost" size="icon" className="h-6 w-6"
                             onClick={() => { setEditKey(key); setEditPermissions({ ...key.permissions }); }}>
