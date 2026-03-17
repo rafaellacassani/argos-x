@@ -38,6 +38,9 @@ export const AVAILABLE_SCOPES = [
   { key: 'funnels:write', label: 'Funis (escrita)', group: 'Funis' },
   { key: 'webhooks:read', label: 'Webhooks (leitura)', group: 'Webhooks' },
   { key: 'webhooks:write', label: 'Webhooks (escrita)', group: 'Webhooks' },
+  { key: 'clients:read', label: 'Clientes (leitura)', group: 'Clientes' },
+  { key: 'clients:write', label: 'Clientes (escrita)', group: 'Clientes' },
+  { key: 'clients:delete', label: 'Clientes (exclusão)', group: 'Clientes' },
 ] as const;
 
 export interface ApiKey {
