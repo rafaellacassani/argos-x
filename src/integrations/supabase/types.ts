@@ -530,6 +530,7 @@ export type Database = {
           last_used_at: string | null
           name: string
           permissions: Json
+          rate_limit_per_hour: number
           workspace_id: string
         }
         Insert: {
@@ -543,6 +544,7 @@ export type Database = {
           last_used_at?: string | null
           name: string
           permissions?: Json
+          rate_limit_per_hour?: number
           workspace_id: string
         }
         Update: {
@@ -556,6 +558,7 @@ export type Database = {
           last_used_at?: string | null
           name?: string
           permissions?: Json
+          rate_limit_per_hour?: number
           workspace_id?: string
         }
         Relationships: [
@@ -2566,6 +2569,63 @@ export type Database = {
           },
         ]
       }
+      webhook_deliveries: {
+        Row: {
+          attempt: number
+          created_at: string
+          delivered_at: string | null
+          event_type: string
+          id: string
+          payload: Json
+          response_body: string | null
+          response_status: number | null
+          status: string
+          webhook_id: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_type: string
+          id?: string
+          payload?: Json
+          response_body?: string | null
+          response_status?: number | null
+          status?: string
+          webhook_id: string
+          workspace_id: string
+        }
+        Update: {
+          attempt?: number
+          created_at?: string
+          delivered_at?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          response_body?: string | null
+          response_status?: number | null
+          status?: string
+          webhook_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_deliveries_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_deliveries_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       webhook_message_log: {
         Row: {
           id: string
@@ -2589,6 +2649,60 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: []
+      }
+      webhooks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          events: Json
+          id: string
+          is_active: boolean
+          secret_hash: string
+          secret_prefix: string
+          updated_at: string
+          url: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          events?: Json
+          id?: string
+          is_active?: boolean
+          secret_hash: string
+          secret_prefix: string
+          updated_at?: string
+          url: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          events?: Json
+          id?: string
+          is_active?: boolean
+          secret_hash?: string
+          secret_prefix?: string
+          updated_at?: string
+          url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhooks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_cloud_connections: {
         Row: {
