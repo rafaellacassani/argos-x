@@ -390,8 +390,70 @@ function buildOpenApiSpec(baseUrl: string): object {
           },
         },
       },
+      "/v1/webhooks": {
+        get: {
+          summary: "Listar webhooks registrados",
+          operationId: "listWebhooks",
+          tags: ["Webhooks"],
+          responses: {
+            200: { description: "Lista de webhooks" },
+            403: { description: "Scope webhooks:read necessário" },
+          },
+        },
+        post: {
+          summary: "Registrar novo webhook",
+          operationId: "createWebhook",
+          tags: ["Webhooks"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url", "events"],
+                  properties: {
+                    url: { type: "string", format: "uri" },
+                    events: {
+                      type: "array",
+                      items: { type: "string", enum: ["lead.created", "message.received", "deal.stage_changed"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Webhook criado. O campo 'secret' é exibido uma única vez." },
+            403: { description: "Scope webhooks:write necessário" },
+          },
+        },
+      },
+      "/v1/webhooks/{id}": {
+        patch: {
+          summary: "Atualizar webhook",
+          operationId: "updateWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Webhook atualizado" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+        delete: {
+          summary: "Remover webhook",
+          operationId: "deleteWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Webhook removido" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+      },
+      "/v1/webhooks/{id}/test": {
+        post: {
+          summary: "Enviar evento de teste",
+          operationId: "testWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Evento de teste enviado" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+      },
     },
-  };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -913,6 +975,124 @@ Deno.serve(async (req) => {
           .single();
         if (error) throw error;
         result = data;
+      } else {
+        return json({ error: "Method not allowed" }, 405);
+      }
+    }
+
+    // ── WEBHOOKS ──
+    else if (resource === "webhooks") {
+      if (req.method === "GET") {
+        const denied = requireScope(scopes, "webhooks:read");
+        if (denied) return denied;
+
+        const { data, error } = await supabase
+          .from("webhooks")
+          .select("id, url, events, is_active, secret_prefix, created_at, updated_at")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        result = { items: data || [], has_more: false, next_cursor: null, count: data?.length || 0 };
+      } else if (req.method === "POST" && subpath && action === "test") {
+        // POST /v1/webhooks/:id/test
+        const denied = requireScope(scopes, "webhooks:write");
+        if (denied) return denied;
+
+        endpointPath = `/webhooks/${subpath}/test`;
+        const { data: wh, error: whErr } = await supabase
+          .from("webhooks")
+          .select("id, url, secret_hash, is_active, events")
+          .eq("id", subpath)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (whErr || !wh) return json({ error: "Webhook not found" }, 404);
+
+        const testPayload = {
+          event: "test",
+          workspace_id: workspaceId,
+          timestamp: new Date().toISOString(),
+          data: { message: "This is a test event from Argos X" },
+        };
+
+        const delivery = await deliverWebhook(supabase, wh, testPayload, workspaceId);
+        result = { webhook_id: wh.id, delivery };
+      } else if (req.method === "POST" && !subpath) {
+        // POST /v1/webhooks — register new webhook
+        const denied = requireScope(scopes, "webhooks:write");
+        if (denied) return denied;
+
+        if (!body.url || !body.events || !Array.isArray(body.events) || body.events.length === 0) {
+          return json({ error: "url and events[] are required" }, 400);
+        }
+
+        const validEvents = ["lead.created", "message.received", "deal.stage_changed"];
+        const invalidEvents = (body.events as string[]).filter(e => !validEvents.includes(e));
+        if (invalidEvents.length > 0) {
+          return json({ error: `Invalid events: ${invalidEvents.join(", ")}. Valid: ${validEvents.join(", ")}` }, 400);
+        }
+
+        // Generate whsec_ secret
+        const rawBytes = new Uint8Array(32);
+        crypto.getRandomValues(rawBytes);
+        const rawSecret = "whsec_" + Array.from(rawBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+        const secretPrefix = rawSecret.substring(0, 12);
+
+        // Hash the secret for storage
+        const encoder = new TextEncoder();
+        const hashBuffer = await crypto.subtle.digest("SHA-256", encoder.encode(rawSecret));
+        const secretHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+        const { data: webhook, error: insertErr } = await supabase
+          .from("webhooks")
+          .insert({
+            workspace_id: workspaceId,
+            url: body.url,
+            events: body.events,
+            secret_hash: secretHash,
+            secret_prefix: secretPrefix,
+            is_active: true,
+            created_by: null,
+          })
+          .select("id, url, events, is_active, secret_prefix, created_at")
+          .single();
+        if (insertErr) throw insertErr;
+
+        result = {
+          webhook,
+          secret: rawSecret,
+          warning: "Salve o secret agora! Ele não será exibido novamente.",
+        };
+      } else if (req.method === "PATCH" && subpath && !action) {
+        // PATCH /v1/webhooks/:id — toggle active
+        const denied = requireScope(scopes, "webhooks:write");
+        if (denied) return denied;
+
+        const updates: Record<string, unknown> = {};
+        if (typeof body.is_active === "boolean") updates.is_active = body.is_active;
+        if (body.url) updates.url = body.url;
+        if (body.events && Array.isArray(body.events)) updates.events = body.events;
+
+        const { data, error } = await supabase
+          .from("webhooks")
+          .update(updates)
+          .eq("id", subpath)
+          .eq("workspace_id", workspaceId)
+          .select("id, url, events, is_active, secret_prefix, created_at, updated_at")
+          .single();
+        if (error) throw error;
+        result = data;
+      } else if (req.method === "DELETE" && subpath) {
+        // DELETE /v1/webhooks/:id
+        const denied = requireScope(scopes, "webhooks:write");
+        if (denied) return denied;
+
+        const { error } = await supabase
+          .from("webhooks")
+          .delete()
+          .eq("id", subpath)
+          .eq("workspace_id", workspaceId);
+        if (error) throw error;
+        result = { deleted: true, id: subpath };
       } else {
         return json({ error: "Method not allowed" }, 405);
       }

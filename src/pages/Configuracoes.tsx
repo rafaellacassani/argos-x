@@ -1,10 +1,11 @@
-import { Tag, Zap, Users, Bell, Key } from "lucide-react";
+import { Tag, Zap, Users, Bell, Key, Webhook } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagManager } from "@/components/settings/TagManager";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { TeamManager } from "@/components/settings/TeamManager";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
+import { WebhooksManager } from "@/components/settings/WebhooksManager";
 import { PermissionGuard } from "@/components/layout/PermissionGuard";
 
 export default function Configuracoes() {
@@ -22,7 +23,7 @@ export default function Configuracoes() {
 
       {/* Tabs */}
       <Tabs defaultValue="team" className="space-y-6">
-        <TabsList className="grid w-full max-w-3xl grid-cols-5">
+        <TabsList className="grid w-full max-w-4xl grid-cols-6">
           <TabsTrigger value="team" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Equipe
@@ -42,6 +43,10 @@ export default function Configuracoes() {
           <TabsTrigger value="api" className="flex items-center gap-2">
             <Key className="h-4 w-4" />
             API
+          </TabsTrigger>
+          <TabsTrigger value="webhooks" className="flex items-center gap-2">
+            <Webhook className="h-4 w-4" />
+            Webhooks
           </TabsTrigger>
         </TabsList>
 
@@ -64,6 +69,12 @@ export default function Configuracoes() {
         <TabsContent value="api">
           <PermissionGuard permission="canManageWorkspaceSettings">
             <ApiKeysManager />
+          </PermissionGuard>
+        </TabsContent>
+
+        <TabsContent value="webhooks">
+          <PermissionGuard permission="canManageWorkspaceSettings">
+            <WebhooksManager />
           </PermissionGuard>
         </TabsContent>
       </Tabs>
