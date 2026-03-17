@@ -65,7 +65,8 @@ export function ApiKeysManager() {
 
   const handleEditPermissions = async () => {
     if (!editKey || !editPermissions) return;
-    await updateKey(editKey.id, { permissions: editPermissions });
+    const scopes = deriveScopes(editPermissions);
+    await updateKey(editKey.id, { permissions: editPermissions, scopes } as any);
     setEditKey(null);
     setEditPermissions(null);
   };
