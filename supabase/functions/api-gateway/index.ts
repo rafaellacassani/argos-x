@@ -390,8 +390,70 @@ function buildOpenApiSpec(baseUrl: string): object {
           },
         },
       },
+      "/v1/webhooks": {
+        get: {
+          summary: "Listar webhooks registrados",
+          operationId: "listWebhooks",
+          tags: ["Webhooks"],
+          responses: {
+            200: { description: "Lista de webhooks" },
+            403: { description: "Scope webhooks:read necessário" },
+          },
+        },
+        post: {
+          summary: "Registrar novo webhook",
+          operationId: "createWebhook",
+          tags: ["Webhooks"],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["url", "events"],
+                  properties: {
+                    url: { type: "string", format: "uri" },
+                    events: {
+                      type: "array",
+                      items: { type: "string", enum: ["lead.created", "message.received", "deal.stage_changed"] },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: "Webhook criado. O campo 'secret' é exibido uma única vez." },
+            403: { description: "Scope webhooks:write necessário" },
+          },
+        },
+      },
+      "/v1/webhooks/{id}": {
+        patch: {
+          summary: "Atualizar webhook",
+          operationId: "updateWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Webhook atualizado" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+        delete: {
+          summary: "Remover webhook",
+          operationId: "deleteWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Webhook removido" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+      },
+      "/v1/webhooks/{id}/test": {
+        post: {
+          summary: "Enviar evento de teste",
+          operationId: "testWebhook",
+          tags: ["Webhooks"],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          responses: { 200: { description: "Evento de teste enviado" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+      },
     },
-  };
 }
 
 // ══════════════════════════════════════════════════════════
