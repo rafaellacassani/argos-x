@@ -39,6 +39,7 @@ import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
 import { LeadFollowupsTab } from "./LeadFollowupsTab";
 import { LeadProposalsTab } from "@/components/leads/LeadProposalsTab";
+import { LeadCustomFields } from "@/components/leads/LeadCustomFields";
 
 interface ChatContactInfo {
   name: string;
@@ -474,6 +475,9 @@ export function LeadSidePanel({
                   onSave={(val) => onUpdateLead(lead.id, { company: val })}
                 />
               </div>
+
+              {/* Custom Fields */}
+              {lead && <LeadCustomFields leadId={lead.id} />}
 
               {/* Notes */}
               <div className="space-y-1">

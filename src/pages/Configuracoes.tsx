@@ -1,4 +1,4 @@
-import { Tag, Zap, Users, Bell, Key, Webhook } from "lucide-react";
+import { Tag, Zap, Users, Bell, Key, Webhook, Settings2, FileInput } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagManager } from "@/components/settings/TagManager";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
@@ -6,6 +6,8 @@ import { TeamManager } from "@/components/settings/TeamManager";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
 import { WebhooksManager } from "@/components/settings/WebhooksManager";
+import { CustomFieldsManager } from "@/components/settings/CustomFieldsManager";
+import { FormWebhookConfig } from "@/components/settings/FormWebhookConfig";
 import { PermissionGuard } from "@/components/layout/PermissionGuard";
 
 export default function Configuracoes() {
@@ -23,7 +25,7 @@ export default function Configuracoes() {
 
       {/* Tabs */}
       <Tabs defaultValue="team" className="space-y-6">
-        <TabsList className="grid w-full max-w-4xl grid-cols-6">
+        <TabsList className="grid w-full max-w-5xl grid-cols-8">
           <TabsTrigger value="team" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Equipe
@@ -39,6 +41,14 @@ export default function Configuracoes() {
           <TabsTrigger value="automations" className="flex items-center gap-2">
             <Zap className="h-4 w-4" />
             Automações
+          </TabsTrigger>
+          <TabsTrigger value="fields" className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            Campos
+          </TabsTrigger>
+          <TabsTrigger value="forms" className="flex items-center gap-2">
+            <FileInput className="h-4 w-4" />
+            Formulários
           </TabsTrigger>
           <TabsTrigger value="api" className="flex items-center gap-2">
             <Key className="h-4 w-4" />
@@ -64,6 +74,18 @@ export default function Configuracoes() {
 
         <TabsContent value="automations">
           <AutoTagRules />
+        </TabsContent>
+
+        <TabsContent value="fields">
+          <PermissionGuard permission="canManageWorkspaceSettings">
+            <CustomFieldsManager />
+          </PermissionGuard>
+        </TabsContent>
+
+        <TabsContent value="forms">
+          <PermissionGuard permission="canManageWorkspaceSettings">
+            <FormWebhookConfig />
+          </PermissionGuard>
         </TabsContent>
 
         <TabsContent value="api">

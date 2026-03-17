@@ -1308,6 +1308,102 @@ export type Database = {
           },
         ]
       }
+      lead_custom_field_definitions: {
+        Row: {
+          created_at: string | null
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          is_active: boolean | null
+          options: Json | null
+          position: number | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          position?: number | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          is_active?: boolean | null
+          options?: Json | null
+          position?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_custom_field_definitions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_custom_field_values: {
+        Row: {
+          created_at: string | null
+          field_definition_id: string
+          id: string
+          lead_id: string
+          updated_at: string | null
+          value: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          field_definition_id: string
+          id?: string
+          lead_id: string
+          updated_at?: string | null
+          value?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          field_definition_id?: string
+          id?: string
+          lead_id?: string
+          updated_at?: string | null
+          value?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_custom_field_values_field_definition_id_fkey"
+            columns: ["field_definition_id"]
+            isOneToOne: false
+            referencedRelation: "lead_custom_field_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_custom_field_values_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_custom_field_values_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_history: {
         Row: {
           action: string
@@ -3008,6 +3104,9 @@ export type Database = {
           created_at: string
           created_by: string
           extra_leads: number | null
+          form_default_stage_id: string | null
+          form_field_mapping: Json | null
+          form_webhook_token: string | null
           id: string
           lead_limit: number | null
           logo_url: string | null
@@ -3038,6 +3137,9 @@ export type Database = {
           created_at?: string
           created_by: string
           extra_leads?: number | null
+          form_default_stage_id?: string | null
+          form_field_mapping?: Json | null
+          form_webhook_token?: string | null
           id?: string
           lead_limit?: number | null
           logo_url?: string | null
@@ -3068,6 +3170,9 @@ export type Database = {
           created_at?: string
           created_by?: string
           extra_leads?: number | null
+          form_default_stage_id?: string | null
+          form_field_mapping?: Json | null
+          form_webhook_token?: string | null
           id?: string
           lead_limit?: number | null
           logo_url?: string | null

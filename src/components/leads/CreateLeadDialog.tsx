@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import {
   Dialog,
@@ -10,6 +10,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { useCustomFields, type CustomFieldDefinition } from '@/hooks/useCustomFields';
 
 interface CreateLeadDialogProps {
   open: boolean;
@@ -39,6 +44,15 @@ export function CreateLeadDialog({
     company: '',
     value: 0
   });
+  const [customValues, setCustomValues] = useState<Record<string, string>>({});
+  const { definitions, saveLeadCustomValues } = useCustomFields();
+
+  // Reset custom values when dialog opens
+  useEffect(() => {
+    if (open) {
+      setCustomValues({});
+    }
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,20 +60,94 @@ export function CreateLeadDialog({
 
     setIsCreating(true);
     try {
-      await onCreate({
+      const result = await onCreate({
         ...formData,
         stage_id: defaultStageId
-      });
+      }) as any;
+
+      // Save custom field values if we got a lead ID back
+      const leadId = result?.id || result?.data?.id;
+      if (leadId && Object.keys(customValues).length > 0) {
+        await saveLeadCustomValues(leadId, customValues);
+      }
+
       setFormData({ name: '', phone: '', email: '', company: '', value: 0 });
+      setCustomValues({});
       onOpenChange(false);
     } finally {
       setIsCreating(false);
     }
   };
 
+  const renderCustomField = (def: CustomFieldDefinition) => {
+    const value = customValues[def.id] || '';
+    switch (def.field_type) {
+      case 'boolean':
+        return (
+          <div key={def.id} className="flex items-center justify-between">
+            <Label>{def.field_label}</Label>
+            <Switch
+              checked={value === 'true'}
+              onCheckedChange={(checked) =>
+                setCustomValues(prev => ({ ...prev, [def.id]: checked ? 'true' : 'false' }))
+              }
+            />
+          </div>
+        );
+      case 'select':
+        return (
+          <div key={def.id} className="space-y-2">
+            <Label>{def.field_label}</Label>
+            <Select value={value} onValueChange={v => setCustomValues(prev => ({ ...prev, [def.id]: v }))}>
+              <SelectTrigger><SelectValue placeholder={`Selecione ${def.field_label}`} /></SelectTrigger>
+              <SelectContent>
+                {def.options.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        );
+      case 'number':
+        return (
+          <div key={def.id} className="space-y-2">
+            <Label>{def.field_label}</Label>
+            <Input
+              type="number"
+              value={value}
+              onChange={e => setCustomValues(prev => ({ ...prev, [def.id]: e.target.value }))}
+              placeholder={def.field_label}
+            />
+          </div>
+        );
+      case 'date':
+        return (
+          <div key={def.id} className="space-y-2">
+            <Label>{def.field_label}</Label>
+            <Input
+              type="date"
+              value={value}
+              onChange={e => setCustomValues(prev => ({ ...prev, [def.id]: e.target.value }))}
+            />
+          </div>
+        );
+      default:
+        return (
+          <div key={def.id} className="space-y-2">
+            <Label>{def.field_label}</Label>
+            <Input
+              value={value}
+              onChange={e => setCustomValues(prev => ({ ...prev, [def.id]: e.target.value }))}
+              placeholder={def.field_label}
+            />
+          </div>
+        );
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
@@ -126,6 +214,16 @@ export function CreateLeadDialog({
               placeholder="0,00"
             />
           </div>
+
+          {/* Custom fields */}
+          {definitions.length > 0 && (
+            <div className="space-y-3 pt-2 border-t border-border">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Campos Personalizados
+              </p>
+              {definitions.map(renderCustomField)}
+            </div>
+          )}
 
           <div className="flex gap-2 pt-4">
             <Button

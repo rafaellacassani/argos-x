@@ -33,6 +33,7 @@ import { LeadSalesTab } from "@/components/chat/LeadSalesTab";
 import { LeadProposalsTab } from "./LeadProposalsTab";
 import { LeadFollowupsTab } from "@/components/chat/LeadFollowupsTab";
 import { LeadStatsTab } from "@/components/chat/LeadStatsTab";
+import { LeadCustomFields } from "./LeadCustomFields";
 
 interface TeamMember {
   id: string;
@@ -358,6 +359,9 @@ export function LeadDetailModal({
                 <InlineEditField label="Empresa" value={lead.company || ""} icon={Building2}
                   onSave={(v) => onUpdate(lead.id, { company: v })} />
               </div>
+
+              {/* Custom Fields */}
+              {lead && <LeadCustomFields leadId={lead.id} />}
 
               {/* Notes */}
               <div className="space-y-1">
