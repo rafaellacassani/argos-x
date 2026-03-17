@@ -27,10 +27,27 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && workspace && workspace.onboarding_completed === false) {
-      setTourActive(true);
+    if (!loading && workspace) {
+      // Only show tour if never started (step 0 or null) AND not completed
+      // Also don't show if workspace is blocked/expired
+      const neverStarted = !workspace.onboarding_step || workspace.onboarding_step === 0;
+      const notCompleted = workspace.onboarding_completed === false;
+      const isAllowed = allowed !== false;
+      
+      if (notCompleted && neverStarted && isAllowed) {
+        setTourActive(true);
+      } else if (notCompleted && !neverStarted) {
+        // User started tour before but didn't finish — auto-complete it
+        import("@/integrations/supabase/client").then(({ supabase }) => {
+          supabase
+            .from("workspaces")
+            .update({ onboarding_completed: true })
+            .eq("id", workspace.id)
+            .then(() => refreshWorkspace());
+        });
+      }
     }
-  }, [loading, workspace]);
+  }, [loading, workspace, allowed, refreshWorkspace]);
 
   const handleTourComplete = useCallback(() => {
     setTourActive(false);
