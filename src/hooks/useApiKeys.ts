@@ -80,11 +80,12 @@ export function useApiKeys() {
   const createKey = useCallback(async (
     name: string,
     permissions: ApiPermissions,
-    expiresAt?: string
+    expiresAt?: string,
+    scopes?: string[]
   ): Promise<{ key: ApiKey; raw_key: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('api-keys', {
-        body: { action: 'create', name, permissions, expires_at: expiresAt || null },
+        body: { action: 'create', name, permissions, scopes: scopes || [], expires_at: expiresAt || null },
       });
 
       if (error) throw error;
