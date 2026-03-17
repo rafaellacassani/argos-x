@@ -1,8 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ══════════════════════════════════════════════════════════
 // Argos X — API Gateway v1 (Phase 1)
-// Scopes · Pepper hash · Timing-safe · Deno KV rate limit
+// Scopes · Pepper hash · Timing-safe · Postgres rate limit (fail-open)
 // ══════════════════════════════════════════════════════════
 
 const corsHeaders = {
@@ -67,14 +66,8 @@ function extractPrefix(apiKey: string): string | null {
 }
 
 // ══════════════════════════════════════════════════════════
-// ── DENO KV RATE LIMITING ──
+// ── POSTGRES RATE LIMITING (fail-open) ──
 // ══════════════════════════════════════════════════════════
-
-let kv: Deno.Kv;
-async function getKv() {
-  if (!kv) kv = await Deno.openKv();
-  return kv;
-}
 
 interface RateLimitInfo {
   allowed: boolean;
@@ -83,30 +76,34 @@ interface RateLimitInfo {
   resetAt: number;
 }
 
-async function checkRateLimit(keyId: string, maxReqs = RATE_LIMIT_PER_MIN): Promise<RateLimitInfo> {
-  const store = await getKv();
+async function checkRateLimit(supabase: any, keyId: string, maxReqs = RATE_LIMIT_PER_MIN): Promise<RateLimitInfo> {
   const now = Date.now();
-  const windowStart = now - RATE_WINDOW_MS;
-  const kvKey = ["rl", keyId];
+  const resetAt = now + RATE_WINDOW_MS;
+  try {
+    const windowStart = new Date(now - RATE_WINDOW_MS).toISOString();
+    const { count, error } = await supabase
+      .from("api_key_usage_log")
+      .select("id", { count: "exact", head: true })
+      .eq("api_key_id", keyId)
+      .gte("created_at", windowStart);
 
-  const entry = await store.get<{ ts: number[] }>(kvKey);
-  let ts = entry.value?.ts || [];
-  ts = ts.filter((t) => t > windowStart);
+    if (error) {
+      console.error("[gateway] rate-limit query error (fail-open):", error.message);
+      return { allowed: true, limit: maxReqs, remaining: maxReqs, resetAt };
+    }
 
-  const allowed = ts.length < maxReqs;
-  if (allowed) {
-    ts.push(now);
-    await store.set(kvKey, { ts }, { expireIn: RATE_WINDOW_MS });
+    const used = count || 0;
+    const allowed = used < maxReqs;
+    return {
+      allowed,
+      limit: maxReqs,
+      remaining: Math.max(0, maxReqs - used),
+      resetAt,
+    };
+  } catch (err) {
+    console.error("[gateway] rate-limit exception (fail-open):", (err as Error).message);
+    return { allowed: true, limit: maxReqs, remaining: maxReqs, resetAt };
   }
-
-  const resetAt = ts.length > 0 ? ts[0] + RATE_WINDOW_MS : now + RATE_WINDOW_MS;
-
-  return {
-    allowed,
-    limit: maxReqs,
-    remaining: Math.max(0, maxReqs - ts.length),
-    resetAt,
-  };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -701,8 +698,8 @@ Deno.serve(async (req) => {
       return json({ error: "Invalid API key" }, 401);
     }
 
-    // ── RATE LIMIT (Deno KV) ──
-    const rl = await checkRateLimit(keyRecord.id, keyRecord.rate_limit_per_hour ? Math.ceil(keyRecord.rate_limit_per_hour / 60) : RATE_LIMIT_PER_MIN);
+    // ── RATE LIMIT (Postgres, fail-open) ──
+    const rl = await checkRateLimit(supabase, keyRecord.id, keyRecord.rate_limit_per_hour ? Math.ceil(keyRecord.rate_limit_per_hour / 60) : RATE_LIMIT_PER_MIN);
 
     if (!rl.allowed) {
       const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
