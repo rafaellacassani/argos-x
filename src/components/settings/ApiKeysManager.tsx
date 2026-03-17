@@ -624,7 +624,13 @@ function verifySignature(secret, body, signature) {
                             <Badge variant="outline" className="text-xs text-muted-foreground">{key.scopes.length} scopes</Badge>
                           )}
                           <Button variant="ghost" size="icon" className="h-6 w-6"
-                            onClick={() => { setEditKey(key); setEditPermissions({ ...key.permissions }); }}>
+                            onClick={() => {
+                              setEditKey(key);
+                              // Ensure all resources have a permission level (fill missing with 'denied')
+                              const fullPerms: ApiPermissions = {} as ApiPermissions;
+                              API_RESOURCES.forEach(r => { fullPerms[r.key] = key.permissions?.[r.key] || 'denied'; });
+                              setEditPermissions(fullPerms);
+                            }}>
                             <Settings2 className="h-3 w-3" />
                           </Button>
                         </div>
