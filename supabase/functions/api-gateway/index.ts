@@ -698,8 +698,8 @@ Deno.serve(async (req) => {
       return json({ error: "Invalid API key" }, 401);
     }
 
-    // ── RATE LIMIT (Deno KV) ──
-    const rl = await checkRateLimit(keyRecord.id, keyRecord.rate_limit_per_hour ? Math.ceil(keyRecord.rate_limit_per_hour / 60) : RATE_LIMIT_PER_MIN);
+    // ── RATE LIMIT (Postgres, fail-open) ──
+    const rl = await checkRateLimit(supabase, keyRecord.id, keyRecord.rate_limit_per_hour ? Math.ceil(keyRecord.rate_limit_per_hour / 60) : RATE_LIMIT_PER_MIN);
 
     if (!rl.allowed) {
       const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
