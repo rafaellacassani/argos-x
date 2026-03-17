@@ -476,6 +476,9 @@ export function LeadSidePanel({
                 />
               </div>
 
+              {/* Custom Fields */}
+              {lead && <LeadCustomFields leadId={lead.id} />}
+
               {/* Notes */}
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-foreground mb-1">Observações</p>
