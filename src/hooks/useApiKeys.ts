@@ -34,7 +34,7 @@ export interface ApiKey {
 }
 
 export function useApiKeys() {
-  const { currentWorkspace } = useWorkspace();
+  
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(false);
 
