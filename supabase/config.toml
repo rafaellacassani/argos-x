@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.api-gateway]
 verify_jwt = false
+
+[functions.form-webhook]
+verify_jwt = false
