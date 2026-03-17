@@ -1,8 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ══════════════════════════════════════════════════════════
 // Argos X — API Gateway v1 (Phase 1)
-// Scopes · Pepper hash · Timing-safe · Deno KV rate limit
+// Scopes · Pepper hash · Timing-safe · Postgres rate limit (fail-open)
 // ══════════════════════════════════════════════════════════
 
 const corsHeaders = {
