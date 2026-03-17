@@ -454,6 +454,7 @@ function buildOpenApiSpec(baseUrl: string): object {
         },
       },
     },
+  };
 }
 
 // ══════════════════════════════════════════════════════════
