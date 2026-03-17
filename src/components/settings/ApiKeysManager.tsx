@@ -604,7 +604,13 @@ function verifySignature(secret, body, signature) {
                     <TableRow key={key.id}>
                       <TableCell className="font-medium">{key.name}</TableCell>
                       <TableCell>
-                        <code className="bg-muted px-2 py-1 rounded text-xs font-mono">{key.key_prefix}...****</code>
+                        <div className="flex items-center gap-1">
+                          <code className="bg-muted px-2 py-1 rounded text-xs font-mono select-all">{key.key_prefix}...****</code>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0"
+                            onClick={() => { navigator.clipboard.writeText(key.key_prefix); toast.success('Prefixo copiado!'); }}>
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5 flex-wrap">
