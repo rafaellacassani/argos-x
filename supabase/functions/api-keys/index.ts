@@ -33,6 +33,7 @@ async function hashWithPepper(key: string): Promise<string> {
 
 const VALID_SCOPES = [
   "leads:read", "leads:write",
+  "contacts:read", "contacts:write",
   "agents:read", "agents:write", "agents:execute",
   "messages:read", "messages:write",
   "campaigns:read",
