@@ -20,6 +20,7 @@ const VALID_SCOPES = [
   "tags:read", "tags:write",
   "funnels:read", "funnels:write",
   "webhooks:read", "webhooks:write",
+  "clients:read",
 ] as const;
 type Scope = typeof VALID_SCOPES[number];
 
@@ -448,6 +449,21 @@ function buildOpenApiSpec(baseUrl: string): object {
           tags: ["Webhooks"],
           parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           responses: { 200: { description: "Evento de teste enviado" }, 403: { description: "Scope webhooks:write necessário" } },
+        },
+      },
+      "/v1/clients": {
+        get: {
+          summary: "Listar clientes do workspace",
+          operationId: "listClients",
+          tags: ["Clients"],
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 1000, default: 200 } },
+            { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } },
+          ],
+          responses: {
+            200: { description: "Lista de clientes com total" },
+            403: { description: "Scope clients:read necessário" },
+          },
         },
       },
     },
@@ -1116,6 +1132,38 @@ Deno.serve(async (req) => {
           .eq("workspace_id", workspaceId);
         if (error) throw error;
         result = { deleted: true, id: subpath };
+      } else {
+        return json({ error: "Method not allowed" }, 405);
+      }
+    }
+
+    // ── CLIENTS ──
+    else if (resource === "clients") {
+      if (req.method === "GET") {
+        const denied = requireScope(scopes, "clients:read");
+        if (denied) return denied;
+
+        const limitParam = url.searchParams.get("limit");
+        const offsetParam = url.searchParams.get("offset");
+        const limit = Math.min(Math.max(parseInt(limitParam || "200", 10) || 200, 1), 1000);
+        const offset = Math.max(parseInt(offsetParam || "0", 10) || 0, 0);
+
+        // Get total count
+        const { count: totalCount, error: countErr } = await supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", workspaceId);
+        if (countErr) throw countErr;
+
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false })
+          .range(offset, offset + limit - 1);
+        if (error) throw error;
+
+        result = { clients: data || [], total: totalCount || 0, limit, offset };
       } else {
         return json({ error: "Method not allowed" }, 405);
       }
