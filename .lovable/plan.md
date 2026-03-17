@@ -1,21 +1,35 @@
 
 
-## Criar arquivo de mapa operacional do Argos X
+# Plano: Google Meet automático + link nos lembretes da IA
 
-Vou criar um arquivo Markdown com o mapa operacional completo do negócio, baseado em tudo que extraí do código, landing pages e configurações do produto.
+## O que será feito
 
-### Arquivo a criar
-- `docs/mapa-operacional-argos-x.md`
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-### Conteúdo
-Documento estruturado com:
+## Detalhes técnicos
 
-1. **Visão geral do Argos X** — O que é, posicionamento, público-alvo
-2. **O que vende** — SaaS B2B (CRM com IA para WhatsApp), 3 planos recorrentes + pacotes de leads
-3. **Ticket médio e LTV** — Baseado nos planos (R$47, R$97, R$197) com estimativas de LTV
-4. **Canal principal de aquisição** — Landing page + Meta Ads (rastreamento integrado no produto), trial de 7 dias
-5. **Maior gargalo atual** — Baseado nos dados reais (40+ workspaces, 0 pagantes, baixa ativação)
-6. **Links dos sites** — argosx.com.br e argosx.gomktboost.com
-7. **Segmentos-alvo** — E-commerce, infoprodutores, agências, negócios locais, saúde, educação
-8. **Stack de monetização** — Stripe, planos recorrentes, pacotes extras de leads
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
+
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
+
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
+
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
+
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 
