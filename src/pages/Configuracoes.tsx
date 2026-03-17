@@ -1,9 +1,11 @@
-import { Tag, Zap, Users, Bell } from "lucide-react";
+import { Tag, Zap, Users, Bell, Key } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagManager } from "@/components/settings/TagManager";
 import { AutoTagRules } from "@/components/settings/AutoTagRules";
 import { TeamManager } from "@/components/settings/TeamManager";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
+import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
+import { PermissionGuard } from "@/components/layout/PermissionGuard";
 
 export default function Configuracoes() {
   return (
@@ -20,7 +22,7 @@ export default function Configuracoes() {
 
       {/* Tabs */}
       <Tabs defaultValue="team" className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-5">
           <TabsTrigger value="team" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Equipe
@@ -36,6 +38,10 @@ export default function Configuracoes() {
           <TabsTrigger value="automations" className="flex items-center gap-2">
             <Zap className="h-4 w-4" />
             Automações
+          </TabsTrigger>
+          <TabsTrigger value="api" className="flex items-center gap-2">
+            <Key className="h-4 w-4" />
+            API
           </TabsTrigger>
         </TabsList>
 
@@ -53,6 +59,12 @@ export default function Configuracoes() {
 
         <TabsContent value="automations">
           <AutoTagRules />
+        </TabsContent>
+
+        <TabsContent value="api">
+          <PermissionGuard permission="canManageWorkspaceSettings">
+            <ApiKeysManager />
+          </PermissionGuard>
         </TabsContent>
       </Tabs>
     </div>
