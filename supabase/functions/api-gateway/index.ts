@@ -1122,6 +1122,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── CLIENTS ──
+    else if (resource === "clients") {
+      if (req.method === "GET") {
+        const denied = requireScope(scopes, "clients:read");
+        if (denied) return denied;
+
+        const limitParam = url.searchParams.get("limit");
+        const offsetParam = url.searchParams.get("offset");
+        const limit = Math.min(Math.max(parseInt(limitParam || "200", 10) || 200, 1), 1000);
+        const offset = Math.max(parseInt(offsetParam || "0", 10) || 0, 0);
+
+        // Get total count
+        const { count: totalCount, error: countErr } = await supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .eq("workspace_id", workspaceId);
+        if (countErr) throw countErr;
+
+        const { data, error } = await supabase
+          .from("clients")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .order("created_at", { ascending: false })
+          .range(offset, offset + limit - 1);
+        if (error) throw error;
+
+        result = { clients: data || [], total: totalCount || 0, limit, offset };
+      } else {
+        return json({ error: "Method not allowed" }, 405);
+      }
+    }
+
     // ── UNKNOWN RESOURCE ──
     else {
       return json({ error: `Unknown resource: ${resource}` }, 404);
