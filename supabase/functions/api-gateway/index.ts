@@ -454,6 +454,7 @@ function buildOpenApiSpec(baseUrl: string): object {
         },
       },
     },
+  };
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1118,3 +1119,4 @@ Deno.serve(async (req) => {
     return json({ error: "Internal server error" }, 500);
   }
 });
+
