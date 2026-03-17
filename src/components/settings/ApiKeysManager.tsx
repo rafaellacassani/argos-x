@@ -34,9 +34,22 @@ export function ApiKeysManager() {
 
   useEffect(() => { fetchKeys(); }, [fetchKeys]);
 
+  const deriveScopes = (perms: ApiPermissions): string[] => {
+    const scopes: string[] = [];
+    for (const [resource, level] of Object.entries(perms)) {
+      if (level === 'read') scopes.push(`${resource}:read`);
+      else if (level === 'write') {
+        scopes.push(`${resource}:read`, `${resource}:write`);
+      }
+    }
+    if (perms.agents === 'write') scopes.push('agents:execute');
+    return [...new Set(scopes)];
+  };
+
   const handleCreate = async (name: string, permissions: ApiPermissions, expiresAt?: string) => {
     setCreating(true);
-    const result = await createKey(name, permissions, expiresAt);
+    const scopes = deriveScopes(permissions);
+    const result = await createKey(name, permissions, expiresAt, scopes);
     setCreating(false);
     if (result) {
       setCreateOpen(false);
