@@ -32,7 +32,6 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Authenticate user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -55,7 +54,6 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Get user's workspace and verify admin
     const { data: membership } = await supabase
       .from("workspace_members")
       .select("workspace_id, role")
@@ -73,18 +71,18 @@ Deno.serve(async (req) => {
 
     const workspaceId = membership.workspace_id;
 
-    // Get user profile id
     const { data: profile } = await supabase
       .from("user_profiles")
       .select("id")
       .eq("user_id", user.id)
       .single();
 
-    const url = new URL(req.url);
-    const method = req.method;
+    // All requests come as POST with an "action" field
+    const body = await req.json();
+    const { action } = body;
 
     // LIST
-    if (method === "GET") {
+    if (action === "list") {
       const { data: keys, error } = await supabase
         .from("api_keys")
         .select("id, name, key_prefix, permissions, is_active, last_used_at, expires_at, created_by, created_at")
@@ -99,8 +97,7 @@ Deno.serve(async (req) => {
     }
 
     // CREATE
-    if (method === "POST") {
-      const body = await req.json();
+    if (action === "create") {
       const { name, permissions, expires_at } = body;
 
       if (!name || !permissions) {
@@ -136,10 +133,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // UPDATE (PATCH)
-    if (method === "PATCH") {
-      const body = await req.json();
+    // UPDATE
+    if (action === "update") {
       const { id, ...updates } = body;
+      delete updates.action;
 
       if (!id) {
         return new Response(JSON.stringify({ error: "id required" }), {
@@ -148,7 +145,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Only allow updating certain fields
       const allowedFields: Record<string, unknown> = {};
       if ("name" in updates) allowedFields.name = updates.name;
       if ("permissions" in updates) allowedFields.permissions = updates.permissions;
@@ -171,8 +167,7 @@ Deno.serve(async (req) => {
     }
 
     // DELETE
-    if (method === "DELETE") {
-      const body = await req.json();
+    if (action === "delete") {
       const { id } = body;
 
       if (!id) {
@@ -195,8 +190,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
+    return new Response(JSON.stringify({ error: "Invalid action" }), {
+      status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
