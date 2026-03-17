@@ -39,6 +39,7 @@ import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
 import { LeadFollowupsTab } from "./LeadFollowupsTab";
 import { LeadProposalsTab } from "@/components/leads/LeadProposalsTab";
+import { LeadCustomFields } from "@/components/leads/LeadCustomFields";
 
 interface ChatContactInfo {
   name: string;
