@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useWorkspace } from './useWorkspace';
+
 import { toast } from 'sonner';
 
 export type PermissionLevel = 'denied' | 'read' | 'write';
