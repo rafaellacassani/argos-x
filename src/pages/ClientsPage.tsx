@@ -102,6 +102,9 @@ export default function ClientsPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={exportCSV}>
+              <Download className="w-4 h-4 mr-2" /> Exportar CSV
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-2" /> Importar Excel
             </Button>
