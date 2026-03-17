@@ -479,8 +479,14 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
+          idempotency_key: string | null
+          ip_address: string | null
+          latency_ms: number | null
           method: string
+          payload_size: number | null
+          rate_limited: boolean
           status_code: number
+          user_agent: string | null
           workspace_id: string
         }
         Insert: {
@@ -488,8 +494,14 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
+          idempotency_key?: string | null
+          ip_address?: string | null
+          latency_ms?: number | null
           method: string
+          payload_size?: number | null
+          rate_limited?: boolean
           status_code: number
+          user_agent?: string | null
           workspace_id: string
         }
         Update: {
@@ -497,8 +509,14 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          idempotency_key?: string | null
+          ip_address?: string | null
+          latency_ms?: number | null
           method?: string
+          payload_size?: number | null
+          rate_limited?: boolean
           status_code?: number
+          user_agent?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -520,6 +538,7 @@ export type Database = {
       }
       api_keys: {
         Row: {
+          allowed_agent_ids: Json | null
           created_at: string
           created_by: string | null
           expires_at: string | null
@@ -530,10 +549,13 @@ export type Database = {
           last_used_at: string | null
           name: string
           permissions: Json
+          rate_limit_executions_per_hour: number
+          rate_limit_messages_per_min: number
           rate_limit_per_hour: number
           workspace_id: string
         }
         Insert: {
+          allowed_agent_ids?: Json | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -544,10 +566,13 @@ export type Database = {
           last_used_at?: string | null
           name: string
           permissions?: Json
+          rate_limit_executions_per_hour?: number
+          rate_limit_messages_per_min?: number
           rate_limit_per_hour?: number
           workspace_id: string
         }
         Update: {
+          allowed_agent_ids?: Json | null
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -558,6 +583,8 @@ export type Database = {
           last_used_at?: string | null
           name?: string
           permissions?: Json
+          rate_limit_executions_per_hour?: number
+          rate_limit_messages_per_min?: number
           rate_limit_per_hour?: number
           workspace_id?: string
         }
@@ -2576,7 +2603,9 @@ export type Database = {
           delivered_at: string | null
           event_type: string
           id: string
+          next_retry_at: string | null
           payload: Json
+          payload_id: string | null
           response_body: string | null
           response_status: number | null
           status: string
@@ -2589,7 +2618,9 @@ export type Database = {
           delivered_at?: string | null
           event_type: string
           id?: string
+          next_retry_at?: string | null
           payload?: Json
+          payload_id?: string | null
           response_body?: string | null
           response_status?: number | null
           status?: string
@@ -2602,7 +2633,9 @@ export type Database = {
           delivered_at?: string | null
           event_type?: string
           id?: string
+          next_retry_at?: string | null
           payload?: Json
+          payload_id?: string | null
           response_body?: string | null
           response_status?: number | null
           status?: string
