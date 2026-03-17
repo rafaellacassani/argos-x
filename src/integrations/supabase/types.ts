@@ -552,6 +552,8 @@ export type Database = {
           rate_limit_executions_per_hour: number
           rate_limit_messages_per_min: number
           rate_limit_per_hour: number
+          revoked_at: string | null
+          scopes: string[]
           workspace_id: string
         }
         Insert: {
@@ -569,6 +571,8 @@ export type Database = {
           rate_limit_executions_per_hour?: number
           rate_limit_messages_per_min?: number
           rate_limit_per_hour?: number
+          revoked_at?: string | null
+          scopes?: string[]
           workspace_id: string
         }
         Update: {
@@ -586,6 +590,8 @@ export type Database = {
           rate_limit_executions_per_hour?: number
           rate_limit_messages_per_min?: number
           rate_limit_per_hour?: number
+          revoked_at?: string | null
+          scopes?: string[]
           workspace_id?: string
         }
         Relationships: [
