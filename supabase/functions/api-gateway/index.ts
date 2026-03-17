@@ -451,6 +451,21 @@ function buildOpenApiSpec(baseUrl: string): object {
           responses: { 200: { description: "Evento de teste enviado" }, 403: { description: "Scope webhooks:write necessário" } },
         },
       },
+      "/v1/clients": {
+        get: {
+          summary: "Listar clientes do workspace",
+          operationId: "listClients",
+          tags: ["Clients"],
+          parameters: [
+            { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 1000, default: 200 } },
+            { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } },
+          ],
+          responses: {
+            200: { description: "Lista de clientes com total" },
+            403: { description: "Scope clients:read necessário" },
+          },
+        },
+      },
     },
   };
 }
