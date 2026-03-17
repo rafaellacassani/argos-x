@@ -10,8 +10,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Upload, Search, Building2 } from "lucide-react";
+import { Plus, Upload, Search, Building2, Download } from "lucide-react";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
+import { toast } from "sonner";
 import { ImportClientsDialog } from "@/components/clients/ImportClientsDialog";
 
 const statusColors: Record<string, string> = {
