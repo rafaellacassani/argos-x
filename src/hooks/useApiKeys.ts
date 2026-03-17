@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-
 import { toast } from 'sonner';
 
 export type PermissionLevel = 'denied' | 'read' | 'write';
@@ -34,7 +33,6 @@ export interface ApiKey {
 }
 
 export function useApiKeys() {
-  
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +43,7 @@ export function useApiKeys() {
       if (!session) return;
 
       const { data, error } = await supabase.functions.invoke('api-keys', {
-        method: 'GET',
+        body: { action: 'list' },
       });
 
       if (error) throw error;
@@ -65,8 +63,7 @@ export function useApiKeys() {
   ): Promise<{ key: ApiKey; raw_key: string } | null> => {
     try {
       const { data, error } = await supabase.functions.invoke('api-keys', {
-        method: 'POST',
-        body: { name, permissions, expires_at: expiresAt || null },
+        body: { action: 'create', name, permissions, expires_at: expiresAt || null },
       });
 
       if (error) throw error;
@@ -84,8 +81,7 @@ export function useApiKeys() {
   const updateKey = useCallback(async (id: string, updates: Partial<Pick<ApiKey, 'name' | 'permissions' | 'is_active' | 'expires_at'>>) => {
     try {
       const { data, error } = await supabase.functions.invoke('api-keys', {
-        method: 'PATCH',
-        body: { id, ...updates },
+        body: { action: 'update', id, ...updates },
       });
 
       if (error) throw error;
@@ -102,9 +98,8 @@ export function useApiKeys() {
 
   const deleteKey = useCallback(async (id: string) => {
     try {
-      const { error } = await supabase.functions.invoke('api-keys', {
-        method: 'DELETE',
-        body: { id },
+      const { data, error } = await supabase.functions.invoke('api-keys', {
+        body: { action: 'delete', id },
       });
 
       if (error) throw error;
