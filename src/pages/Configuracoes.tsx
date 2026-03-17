@@ -103,13 +103,3 @@ export default function Configuracoes() {
     </div>
   );
 }
-
-        <TabsContent value="webhooks">
-          <PermissionGuard permission="canManageWorkspaceSettings">
-            <WebhooksManager />
-          </PermissionGuard>
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}
