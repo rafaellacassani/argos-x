@@ -26,6 +26,7 @@ import {
   Map,
   X,
   Headset,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
