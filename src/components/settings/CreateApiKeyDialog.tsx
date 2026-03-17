@@ -25,6 +25,7 @@ const defaultPermissions: ApiPermissions = {
   tags: 'denied',
   funnels: 'denied',
   webhooks: 'denied',
+  clients: 'denied',
 };
 
 const permissionLabels: Record<PermissionLevel, { label: string; color: string }> = {

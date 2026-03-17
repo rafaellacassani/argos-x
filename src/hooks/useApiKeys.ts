@@ -14,6 +14,7 @@ export const API_RESOURCES = [
   { key: 'tags', label: 'Tags', description: 'Etiquetas de classificação' },
   { key: 'funnels', label: 'Funis', description: 'Funis e etapas de vendas' },
   { key: 'webhooks', label: 'Webhooks', description: 'Notificações de eventos' },
+  { key: 'clients', label: 'Clientes', description: 'Gestão de clientes ECX' },
 ] as const;
 
 export type ApiResourceKey = typeof API_RESOURCES[number]['key'];
@@ -37,6 +38,9 @@ export const AVAILABLE_SCOPES = [
   { key: 'funnels:write', label: 'Funis (escrita)', group: 'Funis' },
   { key: 'webhooks:read', label: 'Webhooks (leitura)', group: 'Webhooks' },
   { key: 'webhooks:write', label: 'Webhooks (escrita)', group: 'Webhooks' },
+  { key: 'clients:read', label: 'Clientes (leitura)', group: 'Clientes' },
+  { key: 'clients:write', label: 'Clientes (escrita)', group: 'Clientes' },
+  { key: 'clients:delete', label: 'Clientes (exclusão)', group: 'Clientes' },
 ] as const;
 
 export interface ApiKey {

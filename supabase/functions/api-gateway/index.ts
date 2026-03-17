@@ -20,7 +20,7 @@ const VALID_SCOPES = [
   "tags:read", "tags:write",
   "funnels:read", "funnels:write",
   "webhooks:read", "webhooks:write",
-  "clients:read",
+  "clients:read", "clients:write", "clients:delete",
 ] as const;
 type Scope = typeof VALID_SCOPES[number];
 
