@@ -10,8 +10,9 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Upload, Search, Building2 } from "lucide-react";
+import { Plus, Upload, Search, Building2, Download } from "lucide-react";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
+import { toast } from "sonner";
 import { ImportClientsDialog } from "@/components/clients/ImportClientsDialog";
 
 const statusColors: Record<string, string> = {
@@ -35,6 +36,36 @@ export default function ClientsPage() {
   const [stageFilter, setStageFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+
+  const exportCSV = () => {
+    if (clients.length === 0) {
+      toast.error("Nenhum cliente para exportar");
+      return;
+    }
+    const headers = [
+      "razao_social","nome_fantasia","cnpj","status","stage","pacote",
+      "valor_negociado","valor_extenso","data_inicio_pagamento",
+      "socio_nome","socio_cpf","socio_email","socio_telefone",
+      "stakeholder_nome","stakeholder_email","financeiro_email",
+      "closer","bdr","pais","endereco","numero","bairro","municipio","estado","cep",
+      "negociacoes_personalizadas","created_at","updated_at"
+    ];
+    const escape = (v: any) => {
+      if (v == null) return "";
+      const s = String(v).replace(/"/g, '""');
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
+    };
+    const rows = clients.map(c => headers.map(h => escape((c as any)[h])).join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clientes_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${clients.length} clientes exportados!`);
+  };
 
   const filtered = useMemo(() => {
     return clients.filter((c) => {
@@ -71,6 +102,9 @@ export default function ClientsPage() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={exportCSV}>
+              <Download className="w-4 h-4 mr-2" /> Exportar CSV
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-2" /> Importar Excel
             </Button>
