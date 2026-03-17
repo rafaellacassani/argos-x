@@ -34,9 +34,22 @@ export function ApiKeysManager() {
 
   useEffect(() => { fetchKeys(); }, [fetchKeys]);
 
+  const deriveScopes = (perms: ApiPermissions): string[] => {
+    const scopes: string[] = [];
+    for (const [resource, level] of Object.entries(perms)) {
+      if (level === 'read') scopes.push(`${resource}:read`);
+      else if (level === 'write') {
+        scopes.push(`${resource}:read`, `${resource}:write`);
+      }
+    }
+    if (perms.agents === 'write') scopes.push('agents:execute');
+    return [...new Set(scopes)];
+  };
+
   const handleCreate = async (name: string, permissions: ApiPermissions, expiresAt?: string) => {
     setCreating(true);
-    const result = await createKey(name, permissions, expiresAt);
+    const scopes = deriveScopes(permissions);
+    const result = await createKey(name, permissions, expiresAt, scopes);
     setCreating(false);
     if (result) {
       setCreateOpen(false);
@@ -52,7 +65,8 @@ export function ApiKeysManager() {
 
   const handleEditPermissions = async () => {
     if (!editKey || !editPermissions) return;
-    await updateKey(editKey.id, { permissions: editPermissions });
+    const scopes = deriveScopes(editPermissions);
+    await updateKey(editKey.id, { permissions: editPermissions, scopes } as any);
     setEditKey(null);
     setEditPermissions(null);
   };
@@ -593,12 +607,15 @@ function verifySignature(secret, body, signature) {
                         <code className="bg-muted px-2 py-1 rounded text-xs font-mono">{key.key_prefix}...****</code>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {summary.read > 0 && (
                             <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/20">{summary.read}R</Badge>
                           )}
                           {summary.write > 0 && (
                             <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20">{summary.write}W</Badge>
+                          )}
+                          {key.scopes && key.scopes.length > 0 && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">{key.scopes.length} scopes</Badge>
                           )}
                           <Button variant="ghost" size="icon" className="h-6 w-6"
                             onClick={() => { setEditKey(key); setEditPermissions({ ...key.permissions }); }}>

@@ -1,46 +1,35 @@
 
 
-## Diagnóstico
+# Plano: Google Meet automático + link nos lembretes da IA
 
-O gateway (`api-gateway`) usa o array `scopes` da tabela `api_keys` para autorizar cada endpoint. Porém:
+## O que será feito
 
-1. **A UI de criação** (`CreateApiKeyDialog`) só configura `permissions` (objeto `{leads: "read", ...}`) e **nunca converte** isso em `scopes` — logo toda key criada pela UI nasce com `scopes = []`.
-2. **A UI de edição** permite alterar `permissions` mas também não toca em `scopes`.
-3. **A key `275869e1...`** está com `scopes: []`, por isso `/v1/leads` e `/v1/agents` retornam 403.
+1. **Gerar link do Google Meet automaticamente** ao criar eventos no Google Calendar
+2. **Salvar o link do Meet** na tabela `calendar_events`
+3. **Incluir o link do Meet nos lembretes** que a agente de IA envia ao cliente
+4. **Adicionar configuração na aba Ferramentas** do agente para ativar/desativar geração de Meet
+5. **Respeitar as permissões do `calendar_config`** (usar os reminders configurados pelo usuário, não hardcoded)
 
-## Plano
+## Detalhes técnicos
 
-### 1. Atualizar scopes da key existente (dados)
+### 1. Migração: adicionar coluna `meet_link` na tabela `calendar_events`
+- Nova coluna `meet_link text nullable`
 
-Usar o insert tool para executar um UPDATE na key `275869e1-d314-435e-bc2d-9a5a68be2eb8` setando:
-```sql
-UPDATE api_keys SET scopes = '["leads:read","agents:read","messages:read","agents:execute"]' WHERE id = '275869e1-...';
-```
+### 2. Edge Function `sync-google-calendar` (push)
+- Ao criar evento, incluir `conferenceData` + `conferenceDataVersion: 1` no payload para o Google Calendar API gerar automaticamente um link do Google Meet
+- Salvar o `hangoutLink` retornado pelo Google na coluna `meet_link`
 
-### 2. Sincronizar permissions → scopes automaticamente (`api-keys` edge function)
+### 3. Edge Function `ai-agent-chat` (gerenciar_calendario)
+- Ao criar evento via IA, adicionar `conferenceData` request na criação do Google Calendar
+- Ler `calendar_config` do agente para usar os reminders configurados (ao invés de hardcoded 3h/30min)
+- Incluir o link do Meet na mensagem de lembrete: "Link da reunião: {meet_link}"
+- Após criar o evento local, tentar push para Google Calendar e capturar o meet_link
+- Adicionar toggle `include_meet_link` no `calendar_config`
 
-Na edge function `api-keys/index.ts`, nas ações **CREATE** e **UPDATE**:
-- Adicionar uma função `permissionsToScopes(permissions)` que converte o objeto `{leads: "read", agents: "write", ...}` em array de scopes (`["leads:read", "agents:read", "agents:write", ...]`).
-- Se o caller não enviar `scopes` explicitamente, derivar do `permissions`.
-- Se enviar ambos, `scopes` explícito tem prioridade.
+### 4. Frontend `ToolsTab.tsx`
+- Adicionar switch "Gerar link do Google Meet" dentro das opções de calendário
+- Salvar como `calendar_config.generate_meet_link: boolean`
 
-### 3. Adicionar edição de scopes na UI
-
-No diálogo de edição de permissões (`ApiKeysManager.tsx`, linhas 657-685):
-- Ao salvar permissões, computar os scopes derivados e enviá-los junto no `updateKey()`.
-- No `handleCreate`, fazer o mesmo: derivar scopes do `permissions` e passar para `createKey()`.
-
-### 4. Exibir scopes na tabela de keys
-
-Na coluna "Permissões", além dos badges `R`/`W`, mostrar os scopes reais como badges menores ou tooltip para transparência.
-
-### Arquivos afetados
-
-| Arquivo | Mudança |
-|---------|---------|
-| Tabela `api_keys` (data) | UPDATE scopes da key existente |
-| `supabase/functions/api-keys/index.ts` | Função `permissionsToScopes`, auto-sync em create/update |
-| `src/hooks/useApiKeys.ts` | Passar scopes derivados em `createKey` e `updateKey` |
-| `src/components/settings/ApiKeysManager.tsx` | Derivar scopes ao salvar edit, exibir scopes |
-| `src/components/settings/CreateApiKeyDialog.tsx` | Derivar scopes do permissions no submit |
+### 5. Pull de eventos (`/pull`)
+- Ao importar eventos do Google, salvar o `hangoutLink` no campo `meet_link`
 

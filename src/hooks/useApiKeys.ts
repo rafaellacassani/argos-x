@@ -100,7 +100,7 @@ export function useApiKeys() {
     }
   }, [fetchKeys]);
 
-  const updateKey = useCallback(async (id: string, updates: Partial<Pick<ApiKey, 'name' | 'permissions' | 'is_active' | 'expires_at'>>) => {
+  const updateKey = useCallback(async (id: string, updates: Partial<Pick<ApiKey, 'name' | 'permissions' | 'is_active' | 'expires_at' | 'scopes'>>) => {
     try {
       const { data, error } = await supabase.functions.invoke('api-keys', {
         body: { action: 'update', id, ...updates },
