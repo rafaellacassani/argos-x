@@ -37,6 +37,36 @@ export default function ClientsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
+  const exportCSV = () => {
+    if (clients.length === 0) {
+      toast.error("Nenhum cliente para exportar");
+      return;
+    }
+    const headers = [
+      "razao_social","nome_fantasia","cnpj","status","stage","pacote",
+      "valor_negociado","valor_extenso","data_inicio_pagamento",
+      "socio_nome","socio_cpf","socio_email","socio_telefone",
+      "stakeholder_nome","stakeholder_email","financeiro_email",
+      "closer","bdr","pais","endereco","numero","bairro","municipio","estado","cep",
+      "negociacoes_personalizadas","created_at","updated_at"
+    ];
+    const escape = (v: any) => {
+      if (v == null) return "";
+      const s = String(v).replace(/"/g, '""');
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
+    };
+    const rows = clients.map(c => headers.map(h => escape((c as any)[h])).join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `clientes_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${clients.length} clientes exportados!`);
+  };
+
   const filtered = useMemo(() => {
     return clients.filter((c) => {
       const matchSearch =
