@@ -821,6 +821,31 @@ Deno.serve(async (req) => {
           .select().single();
         if (error) throw error;
 
+        // Save custom fields if provided
+        const customFields = body.custom_fields as Record<string, string> | undefined;
+        if (customFields && typeof customFields === "object" && Object.keys(customFields).length > 0) {
+          const customKeys = Object.keys(customFields);
+          const { data: fieldDefs } = await supabase
+            .from("lead_custom_field_definitions")
+            .select("id, field_key")
+            .eq("workspace_id", workspaceId)
+            .eq("is_active", true)
+            .in("field_key", customKeys);
+
+          if (fieldDefs && fieldDefs.length > 0) {
+            const rows = fieldDefs.map((def: any) => ({
+              lead_id: data.id,
+              field_definition_id: def.id,
+              workspace_id: workspaceId,
+              value: String(customFields[def.field_key] || ""),
+              updated_at: new Date().toISOString(),
+            }));
+            await supabase
+              .from("lead_custom_field_values")
+              .upsert(rows, { onConflict: "lead_id,field_definition_id" });
+          }
+        }
+
         fireWebhookEvent(supabase, workspaceId, "lead.created", data);
         result = data;
       } else if (req.method === "PATCH") {
