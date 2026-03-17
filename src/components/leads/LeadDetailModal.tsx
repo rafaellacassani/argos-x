@@ -33,6 +33,8 @@ import { LeadSalesTab } from "@/components/chat/LeadSalesTab";
 import { LeadProposalsTab } from "./LeadProposalsTab";
 import { LeadFollowupsTab } from "@/components/chat/LeadFollowupsTab";
 import { LeadStatsTab } from "@/components/chat/LeadStatsTab";
+import { LeadCustomFields } from "./LeadCustomFields";
+import { LeadStatsTab } from "@/components/chat/LeadStatsTab";
 
 interface TeamMember {
   id: string;
