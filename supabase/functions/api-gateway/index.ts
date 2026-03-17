@@ -1,13 +1,63 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// ── CORS ──
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-api-key",
+    "authorization, x-client-info, apikey, content-type, x-api-key, idempotency-key",
 };
 
 type PermissionLevel = "denied" | "read" | "write";
 
+// ── Deno KV for rate limiting ──
+let kv: Deno.Kv;
+async function getKv() {
+  if (!kv) kv = await Deno.openKv();
+  return kv;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  remaining: number;
+  limit: number;
+  resetAt: number;
+}
+
+async function checkRateLimit(
+  key: string,
+  maxRequests: number,
+  windowMs: number
+): Promise<RateLimitResult> {
+  const store = await getKv();
+  const now = Date.now();
+  const windowStart = now - windowMs;
+  const kvKey = ["rate_limit", key];
+
+  // Get current window data
+  const entry = await store.get<{ timestamps: number[] }>(kvKey);
+  let timestamps = entry.value?.timestamps || [];
+
+  // Remove expired timestamps
+  timestamps = timestamps.filter((t) => t > windowStart);
+
+  const allowed = timestamps.length < maxRequests;
+
+  if (allowed) {
+    timestamps.push(now);
+    await store.set(kvKey, { timestamps }, { expireIn: windowMs });
+  }
+
+  const resetAt = timestamps.length > 0 ? timestamps[0] + windowMs : now + windowMs;
+
+  return {
+    allowed,
+    remaining: Math.max(0, maxRequests - timestamps.length),
+    limit: maxRequests,
+    resetAt,
+  };
+}
+
+// ── Crypto helpers ──
 async function hashKey(key: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(key);
@@ -16,72 +66,114 @@ async function hashKey(key: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function hmacSign(secret: string, payload: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function getRequiredPermission(method: string): PermissionLevel {
-  if (method === "GET") return "read";
-  return "write";
-}
-
-function extractResource(pathname: string): string | null {
+// ── URL parsing ──
+function parsePath(pathname: string): { resource: string | null; subpath: string | null; segments: string[] } {
   const parts = pathname.split("/").filter(Boolean);
   const v1Index = parts.indexOf("v1");
-  if (v1Index >= 0 && parts[v1Index + 1]) {
-    return parts[v1Index + 1];
-  }
-  return null;
+  const resource = v1Index >= 0 && parts[v1Index + 1] ? parts[v1Index + 1] : null;
+  const subpath = v1Index >= 0 && parts[v1Index + 2] ? parts[v1Index + 2] : null;
+  const segments = v1Index >= 0 ? parts.slice(v1Index + 1) : [];
+  return { resource, subpath, segments };
 }
 
-function extractSubpath(pathname: string): string | null {
-  const parts = pathname.split("/").filter(Boolean);
-  const v1Index = parts.indexOf("v1");
-  if (v1Index >= 0 && parts[v1Index + 2]) {
-    return parts[v1Index + 2];
-  }
-  return null;
-}
-
-// Parse cursor pagination params from URL
+// ── Pagination ──
 function getPaginationParams(url: URL) {
   const cursor = url.searchParams.get("cursor") || null;
   const limitParam = url.searchParams.get("limit");
-  const limit = Math.min(Math.max(parseInt(limitParam || "50", 10) || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(limitParam || "50", 10) || 50, 1), 200);
   const updatedAfter = url.searchParams.get("updated_after") || null;
-  return { cursor, limit, updatedAfter };
+  const createdAfter = url.searchParams.get("created_after") || null;
+  return { cursor, limit, updatedAfter, createdAfter };
 }
 
-// Phone validation for messages
+// ── Validation ──
 function isValidPhone(phone: string): boolean {
   const cleaned = phone.replace(/\D/g, "");
   return cleaned.length >= 10 && cleaned.length <= 15;
 }
 
-function jsonResponse(body: unknown, status = 200) {
+// ── Response helpers ──
+function jsonResponse(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json", "X-API-Version": "v1" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+      "X-API-Version": "v1",
+      ...extraHeaders,
+    },
   });
 }
+
+function rateLimitResponse(rl: RateLimitResult, scope: string) {
+  const retryAfter = Math.ceil((rl.resetAt - Date.now()) / 1000);
+  return jsonResponse(
+    { error: "Rate limit exceeded", scope, limit: rl.limit, retry_after_seconds: retryAfter },
+    429,
+    {
+      "Retry-After": String(Math.max(1, retryAfter)),
+      "X-RateLimit-Limit": String(rl.limit),
+      "X-RateLimit-Remaining": "0",
+      "X-RateLimit-Reset": String(Math.floor(rl.resetAt / 1000)),
+    }
+  );
+}
+
+// ── Audit log helper ──
+async function logUsage(
+  supabase: any,
+  opts: {
+    api_key_id: string;
+    workspace_id: string;
+    endpoint: string;
+    method: string;
+    status_code: number;
+    ip_address?: string;
+    user_agent?: string;
+    latency_ms?: number;
+    rate_limited?: boolean;
+    idempotency_key?: string;
+    payload_size?: number;
+  }
+) {
+  await supabase.from("api_key_usage_log").insert({
+    api_key_id: opts.api_key_id,
+    workspace_id: opts.workspace_id,
+    endpoint: opts.endpoint,
+    method: opts.method,
+    status_code: opts.status_code,
+    ip_address: opts.ip_address || null,
+    user_agent: opts.user_agent || null,
+    latency_ms: opts.latency_ms || null,
+    rate_limited: opts.rate_limited || false,
+    idempotency_key: opts.idempotency_key || null,
+    payload_size: opts.payload_size || null,
+  });
+}
+
+// ═══════════════════════════════════════════
+// ── MAIN HANDLER ──
+// ═══════════════════════════════════════════
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestStart = Date.now();
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
+  // Extract request metadata for audit
+  const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("cf-connecting-ip") || "unknown";
+  const clientUa = req.headers.get("user-agent") || "unknown";
+  const idempotencyKey = req.headers.get("idempotency-key") || null;
+
   const apiKey = req.headers.get("X-API-Key") || req.headers.get("x-api-key");
 
   if (!apiKey || !apiKey.startsWith("argx_")) {
-    return jsonResponse({ error: "Missing or invalid API key" }, 401);
+    return jsonResponse({ error: "Missing or invalid API key. Use header: X-API-Key: argx_..." }, 401);
   }
 
   try {
@@ -89,7 +181,7 @@ Deno.serve(async (req) => {
 
     const { data: keyRecord, error: keyError } = await supabase
       .from("api_keys")
-      .select("id, workspace_id, permissions, is_active, expires_at, rate_limit_per_hour")
+      .select("id, workspace_id, permissions, is_active, expires_at, rate_limit_per_hour, rate_limit_messages_per_min, rate_limit_executions_per_hour, allowed_agent_ids")
       .eq("key_hash", keyHash)
       .single();
 
@@ -102,107 +194,155 @@ Deno.serve(async (req) => {
     }
 
     if (keyRecord.expires_at && new Date(keyRecord.expires_at) < new Date()) {
-      return jsonResponse({ error: "API key expired" }, 403);
+      return jsonResponse({ error: "API key has expired" }, 403);
     }
 
-    // ── Rate Limiting ──
-    const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-    const { count: usageCount } = await supabase
-      .from("api_key_usage_log")
-      .select("id", { count: "exact", head: true })
-      .eq("api_key_id", keyRecord.id)
-      .gte("created_at", oneHourAgo);
+    // ── GLOBAL RATE LIMIT (Deno KV) ──
+    const globalRl = await checkRateLimit(
+      `global:${keyRecord.id}`,
+      keyRecord.rate_limit_per_hour,
+      3600_000 // 1 hour
+    );
 
-    if ((usageCount || 0) >= keyRecord.rate_limit_per_hour) {
-      const retryAfter = 60; // seconds
-      return new Response(
-        JSON.stringify({ error: "Rate limit exceeded", limit: keyRecord.rate_limit_per_hour, window: "1h" }),
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json",
-            "Retry-After": String(retryAfter),
-            "X-RateLimit-Limit": String(keyRecord.rate_limit_per_hour),
-            "X-RateLimit-Remaining": "0",
-          },
-        }
-      );
+    if (!globalRl.allowed) {
+      await logUsage(supabase, {
+        api_key_id: keyRecord.id,
+        workspace_id: keyRecord.workspace_id,
+        endpoint: req.url,
+        method: req.method,
+        status_code: 429,
+        ip_address: clientIp,
+        user_agent: clientUa,
+        rate_limited: true,
+      });
+      return rateLimitResponse(globalRl, "global");
     }
 
-    // Update last_used_at (fire and forget)
+    // Update last_used_at (fire-and-forget)
     supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRecord.id).then(() => {});
 
     const url = new URL(req.url);
-    const resource = extractResource(url.pathname);
-    const subpath = extractSubpath(url.pathname);
+    const { resource, subpath, segments } = parsePath(url.pathname);
 
+    // ── DOCS (no resource) ──
     if (!resource) {
-      const docs = {
+      return jsonResponse({
         version: "v1",
         base_url: `${supabaseUrl}/functions/v1/api-gateway/v1`,
-        rate_limit: { requests_per_hour: keyRecord.rate_limit_per_hour, remaining: keyRecord.rate_limit_per_hour - (usageCount || 0) },
-        pagination: { params: "?cursor=<uuid>&limit=50&updated_after=<ISO8601>", max_limit: 100 },
+        rate_limits: {
+          global: `${keyRecord.rate_limit_per_hour} req/hour`,
+          messages_write: `${keyRecord.rate_limit_messages_per_min} req/min`,
+          agents_execute: `${keyRecord.rate_limit_executions_per_hour} req/hour`,
+          remaining: globalRl.remaining,
+        },
+        pagination: {
+          params: "?cursor=<opaque_id>&limit=50&updated_after=<ISO8601>&created_after=<ISO8601>",
+          max_limit: 200,
+          default_limit: 50,
+          response_fields: "{ data: { items, has_more, next_cursor, count } }",
+        },
         resources: {
           leads: { read: "GET /leads", write: "POST /leads, PATCH /leads/:id" },
           contacts: { read: "GET /contacts" },
-          messages: { read: "GET /messages", write: "POST /messages (text only, validates phone)" },
-          agents: { read: "GET /agents", write: "POST /agents/:id/execute (rate limited: 60/h)" },
+          messages: { read: "GET /messages", write: "POST /messages (text only, idempotency supported)" },
+          agents: { read: "GET /agents", write: "POST /agents/:id/execute (write = execute)" },
           campaigns: { read: "GET /campaigns" },
           calendar: { read: "GET /calendar", write: "POST /calendar" },
           tags: { read: "GET /tags", write: "POST /tags, POST /tags/assign" },
           funnels: { read: "GET /funnels", write: "PATCH /funnels/move-lead" },
-          webhooks: { read: "GET /webhooks", write: "POST /webhooks, DELETE /webhooks/:id" },
+          webhooks: { read: "GET /webhooks", write: "POST /webhooks, POST /webhooks/test, DELETE /webhooks/:id" },
         },
-      };
-      return jsonResponse(docs);
+        webhook_events: ["lead.created", "message.received", "deal.stage_changed"],
+        idempotency: "Send Idempotency-Key header to prevent duplicate writes",
+      });
     }
 
+    // ── PERMISSION CHECK ──
     const permissions = keyRecord.permissions as Record<string, PermissionLevel>;
     const resourcePermission = permissions[resource] || "denied";
-    const requiredPermission = getRequiredPermission(req.method);
+    const requiredPermission: PermissionLevel = req.method === "GET" ? "read" : "write";
     const hasPermission = resourcePermission === "write" || (resourcePermission === "read" && requiredPermission === "read");
 
-    // Log usage
-    await supabase.from("api_key_usage_log").insert({
-      api_key_id: keyRecord.id,
-      workspace_id: keyRecord.workspace_id,
-      endpoint: `/${resource}${subpath ? `/${subpath}` : ""}`,
-      method: req.method,
-      status_code: hasPermission ? 200 : 403,
-    });
-
     if (!hasPermission) {
-      return jsonResponse({ error: "Insufficient permissions", resource, required: requiredPermission, current: resourcePermission }, 403);
+      const latency = Date.now() - requestStart;
+      await logUsage(supabase, {
+        api_key_id: keyRecord.id,
+        workspace_id: keyRecord.workspace_id,
+        endpoint: `/${resource}${subpath ? `/${subpath}` : ""}`,
+        method: req.method,
+        status_code: 403,
+        ip_address: clientIp,
+        user_agent: clientUa,
+        latency_ms: latency,
+      });
+      return jsonResponse({
+        error: "Insufficient permissions",
+        resource,
+        required: requiredPermission,
+        current: resourcePermission,
+        hint: resource === "agents" && requiredPermission === "write" ? "agents:write includes execute permission" : undefined,
+      }, 403);
     }
 
+    // ── PARSE BODY ──
     const workspaceId = keyRecord.workspace_id;
     let body: Record<string, unknown> = {};
+    let bodyRaw = "";
     if (req.method !== "GET") {
-      try { body = await req.json(); } catch { body = {}; }
+      try {
+        bodyRaw = await req.text();
+        body = JSON.parse(bodyRaw);
+      } catch {
+        body = {};
+      }
+    }
+    const payloadSize = bodyRaw.length;
+
+    const { cursor, limit, updatedAfter, createdAfter } = getPaginationParams(url);
+
+    // ── IDEMPOTENCY CHECK (for write operations) ──
+    if (idempotencyKey && req.method !== "GET") {
+      const { data: existing } = await supabase
+        .from("api_key_usage_log")
+        .select("status_code, created_at")
+        .eq("idempotency_key", idempotencyKey)
+        .eq("api_key_id", keyRecord.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        return jsonResponse({
+          error: "Duplicate request",
+          idempotency_key: idempotencyKey,
+          original_status: existing.status_code,
+          original_at: existing.created_at,
+        }, 409);
+      }
     }
 
-    const { cursor, limit, updatedAfter } = getPaginationParams(url);
-
-    // ── Helper for paginated queries ──
+    // ── PAGINATED QUERY HELPER ──
     async function paginatedQuery(table: string, selectCols: string, orderCol = "created_at") {
       let query = supabase
         .from(table)
         .select(selectCols)
         .eq("workspace_id", workspaceId)
         .order(orderCol, { ascending: false })
-        .limit(limit + 1); // fetch one extra to determine has_more
+        .limit(limit + 1);
 
       if (cursor) {
-        // cursor is the ID of the last item; we need to get its order value
         const { data: cursorRow } = await supabase.from(table).select(`id, ${orderCol}`).eq("id", cursor).single();
-        if (cursorRow) {
+        if (cursorRow && cursorRow[orderCol]) {
           query = query.lt(orderCol, cursorRow[orderCol]);
         }
       }
 
-      if (updatedAfter && table !== "whatsapp_messages") {
-        query = query.gte("updated_at", updatedAfter);
+      if (updatedAfter) {
+        try {
+          query = query.gte("updated_at", updatedAfter);
+        } catch { /* column may not exist */ }
+      }
+      if (createdAfter) {
+        query = query.gte("created_at", createdAfter);
       }
 
       const { data, error } = await query;
@@ -215,10 +355,15 @@ Deno.serve(async (req) => {
       return { items, has_more: hasMore, next_cursor: nextCursor, count: items.length };
     }
 
+    // ═══════════════════════════════════════════
+    // ── RESOURCE HANDLERS ──
+    // ═══════════════════════════════════════════
+
     let result: unknown;
+    let endpointPath = `/${resource}${subpath ? `/${subpath}` : ""}`;
 
     switch (resource) {
-      // ── LEADS ──
+      // ────────── LEADS ──────────
       case "leads": {
         if (req.method === "GET") {
           result = await paginatedQuery(
@@ -226,52 +371,40 @@ Deno.serve(async (req) => {
             "id, name, phone, email, company, source, stage_id, responsible_user, value, status, created_at, updated_at"
           );
         } else if (req.method === "POST") {
-          // Validate required fields
           if (!body.name || !body.phone || !body.stage_id) {
             return jsonResponse({ error: "name, phone, and stage_id are required" }, 400);
           }
           const { data, error } = await supabase
             .from("leads")
             .insert({
-              name: body.name,
-              phone: body.phone,
-              email: body.email || null,
-              company: body.company || null,
-              source: body.source || "api",
-              stage_id: body.stage_id,
-              responsible_user: body.responsible_user || null,
-              value: body.value || 0,
-              workspace_id: workspaceId,
+              name: body.name, phone: body.phone, email: body.email || null,
+              company: body.company || null, source: body.source || "api",
+              stage_id: body.stage_id, responsible_user: body.responsible_user || null,
+              value: body.value || 0, workspace_id: workspaceId,
             })
-            .select()
-            .single();
+            .select().single();
           if (error) throw error;
+          // Fire webhook: lead.created
+          fireWebhookEvent(supabase, workspaceId, "lead.created", data);
           result = data;
         } else if (req.method === "PATCH") {
           if (!subpath) return jsonResponse({ error: "Lead ID required: PATCH /leads/:id" }, 400);
-          // Don't allow changing workspace_id
-          delete body.workspace_id;
-          delete body.id;
+          delete body.workspace_id; delete body.id;
           const { data, error } = await supabase
-            .from("leads")
-            .update(body)
-            .eq("id", subpath)
-            .eq("workspace_id", workspaceId)
-            .select()
-            .single();
+            .from("leads").update(body).eq("id", subpath).eq("workspace_id", workspaceId).select().single();
           if (error) throw error;
           result = data;
         }
         break;
       }
 
-      // ── CONTACTS ──
+      // ────────── CONTACTS ──────────
       case "contacts": {
         result = await paginatedQuery("leads", "id, name, phone, email, company, created_at, updated_at");
         break;
       }
 
-      // ── MESSAGES (with guardrails) ──
+      // ────────── MESSAGES (with guardrails) ──────────
       case "messages": {
         if (req.method === "GET") {
           result = await paginatedQuery(
@@ -280,104 +413,100 @@ Deno.serve(async (req) => {
             "timestamp"
           );
         } else if (req.method === "POST") {
-          // ── GUARDRAILS: messages.write ──
+          // ── RESOURCE RATE LIMIT: messages.write ──
+          const msgRl = await checkRateLimit(
+            `msg_write:${keyRecord.id}`,
+            keyRecord.rate_limit_messages_per_min,
+            60_000 // 1 min
+          );
+          if (!msgRl.allowed) {
+            await logUsage(supabase, {
+              api_key_id: keyRecord.id, workspace_id: workspaceId,
+              endpoint: "/messages", method: "POST", status_code: 429,
+              ip_address: clientIp, user_agent: clientUa, rate_limited: true,
+              payload_size: payloadSize,
+            });
+            return rateLimitResponse(msgRl, "messages.write");
+          }
+
           const phone = body.phone as string;
           const message = body.message as string;
           const instanceName = body.instance_name as string;
 
-          if (!phone || !message) {
-            return jsonResponse({ error: "phone and message are required" }, 400);
+          if (!phone || !message) return jsonResponse({ error: "phone and message are required" }, 400);
+          if (!isValidPhone(phone)) return jsonResponse({ error: "Invalid phone number format" }, 400);
+          if (body.type && body.type !== "text") return jsonResponse({ error: "v1 supports text messages only" }, 400);
+          if (message.length > 4096) return jsonResponse({ error: "Message exceeds 4096 character limit" }, 400);
+
+          // Block bulk sending (no array of recipients)
+          if (Array.isArray(body.phones) || Array.isArray(body.recipients)) {
+            return jsonResponse({ error: "Bulk sending is not allowed via API. Use campaigns." }, 400);
           }
 
-          if (!isValidPhone(phone)) {
-            return jsonResponse({ error: "Invalid phone number format" }, 400);
-          }
-
-          // V1: text only
-          if (body.type && body.type !== "text") {
-            return jsonResponse({ error: "v1 API supports text messages only" }, 400);
-          }
-
-          // Max message length
-          if (message.length > 4096) {
-            return jsonResponse({ error: "Message exceeds 4096 character limit" }, 400);
-          }
-
-          // Check workspace is active
+          // Check workspace status
           const { data: workspace } = await supabase
-            .from("workspaces")
-            .select("id, status")
-            .eq("id", workspaceId)
-            .single();
-
+            .from("workspaces").select("id, status").eq("id", workspaceId).single();
           if (workspace?.status === "blocked" || workspace?.status === "expired") {
-            return jsonResponse({ error: "Workspace is inactive. Cannot send messages." }, 403);
+            return jsonResponse({ error: "Workspace is inactive" }, 403);
           }
 
-          // Rate limit per recipient: max 10 msg/min
-          const oneMinAgo = new Date(Date.now() - 60000).toISOString();
+          // Per-recipient rate limit: 10 msg/min
           const cleanedPhone = phone.replace(/\D/g, "");
-          const { count: recentMsgCount } = await supabase
-            .from("whatsapp_messages")
-            .select("id", { count: "exact", head: true })
-            .eq("workspace_id", workspaceId)
-            .like("remote_jid", `%${cleanedPhone}%`)
-            .eq("from_me", true)
-            .gte("timestamp", oneMinAgo);
-
-          if ((recentMsgCount || 0) >= 10) {
-            return jsonResponse({ error: "Rate limit: max 10 messages per minute per recipient" }, 429);
+          const recipientRl = await checkRateLimit(
+            `msg_recipient:${workspaceId}:${cleanedPhone}`,
+            10,
+            60_000
+          );
+          if (!recipientRl.allowed) {
+            return jsonResponse({ error: "Rate limit: max 10 messages per minute per recipient", phone: cleanedPhone }, 429);
           }
 
-          // Get instance for sending
+          // Get instance
           let sendInstance = instanceName;
           if (!sendInstance) {
             const { data: instances } = await supabase
-              .from("whatsapp_instances")
-              .select("instance_name")
-              .eq("workspace_id", workspaceId)
-              .eq("is_connected", true)
-              .limit(1);
+              .from("whatsapp_instances").select("instance_name")
+              .eq("workspace_id", workspaceId).eq("is_connected", true).limit(1);
             sendInstance = instances?.[0]?.instance_name;
           }
+          if (!sendInstance) return jsonResponse({ error: "No connected WhatsApp instance" }, 400);
 
-          if (!sendInstance) {
-            return jsonResponse({ error: "No connected WhatsApp instance found" }, 400);
-          }
-
-          // Send via Evolution API
           const evolutionUrl = Deno.env.get("EVOLUTION_API_URL");
           const evolutionKey = Deno.env.get("EVOLUTION_API_KEY");
-
-          if (!evolutionUrl || !evolutionKey) {
-            return jsonResponse({ error: "WhatsApp integration not configured" }, 500);
-          }
+          if (!evolutionUrl || !evolutionKey) return jsonResponse({ error: "WhatsApp not configured" }, 500);
 
           const sendResponse = await fetch(`${evolutionUrl}/message/sendText/${sendInstance}`, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": evolutionKey,
-            },
-            body: JSON.stringify({
-              number: cleanedPhone,
-              text: message,
-            }),
+            headers: { "Content-Type": "application/json", "apikey": evolutionKey },
+            body: JSON.stringify({ number: cleanedPhone, text: message }),
           });
+
+          const sendLatency = Date.now() - requestStart;
 
           if (!sendResponse.ok) {
             const errBody = await sendResponse.text();
-            console.error("Evolution API error:", errBody);
+            await logUsage(supabase, {
+              api_key_id: keyRecord.id, workspace_id: workspaceId,
+              endpoint: "/messages", method: "POST", status_code: 502,
+              ip_address: clientIp, user_agent: clientUa, latency_ms: sendLatency,
+              idempotency_key: idempotencyKey || undefined, payload_size: payloadSize,
+            });
             return jsonResponse({ error: "Failed to send message", details: errBody }, 502);
           }
 
           const sendResult = await sendResponse.json();
-          result = { sent: true, message_id: sendResult?.key?.id || null, phone: cleanedPhone };
+
+          // Fire webhook: message.received (outbound)
+          fireWebhookEvent(supabase, workspaceId, "message.received", {
+            direction: "outbound", phone: cleanedPhone, message, source: "api",
+          });
+
+          result = { sent: true, message_id: sendResult?.key?.id || null, phone: cleanedPhone, latency_ms: sendLatency };
         }
         break;
       }
 
-      // ── AGENTS (with guardrails) ──
+      // ────────── AGENTS (with guardrails) ──────────
       case "agents": {
         if (req.method === "GET") {
           const { data } = await supabase
@@ -385,132 +514,131 @@ Deno.serve(async (req) => {
             .select("id, name, description, type, model, is_active, created_at")
             .eq("workspace_id", workspaceId);
           result = { items: data, has_more: false, next_cursor: null, count: data?.length || 0 };
-        } else if (req.method === "POST" && subpath === "execute") {
-          // POST /agents/execute — but we need agent_id from URL: /agents/:id/execute
-          // Re-parse: /v1/agents/:agent_id/execute
-          const parts = url.pathname.split("/").filter(Boolean);
-          const v1Idx = parts.indexOf("v1");
-          const agentId = parts[v1Idx + 2];
-          const action = parts[v1Idx + 3];
+        } else if (req.method === "POST") {
+          // POST /agents/:agent_id/execute
+          const agentId = segments[1]; // agents / <id> / execute
+          const action = segments[2];
 
           if (action !== "execute" || !agentId) {
             return jsonResponse({ error: "Use POST /agents/:agent_id/execute" }, 400);
           }
 
-          // ── GUARDRAIL: agent execute rate limit (60/h) ──
-          const agentRateKey = `agent_execute_${keyRecord.id}`;
-          const { count: agentExecCount } = await supabase
-            .from("api_key_usage_log")
-            .select("id", { count: "exact", head: true })
-            .eq("api_key_id", keyRecord.id)
-            .eq("endpoint", `/agents/${agentId}/execute`)
-            .gte("created_at", oneHourAgo);
+          endpointPath = `/agents/${agentId}/execute`;
 
-          if ((agentExecCount || 0) >= 60) {
-            return jsonResponse({ error: "Agent execution rate limit: 60 per hour", limit: 60 }, 429);
+          // ── RESOURCE RATE LIMIT: agents.execute ──
+          const execRl = await checkRateLimit(
+            `agent_exec:${keyRecord.id}`,
+            keyRecord.rate_limit_executions_per_hour,
+            3600_000
+          );
+          if (!execRl.allowed) {
+            await logUsage(supabase, {
+              api_key_id: keyRecord.id, workspace_id: workspaceId,
+              endpoint: endpointPath, method: "POST", status_code: 429,
+              ip_address: clientIp, user_agent: clientUa, rate_limited: true,
+              payload_size: payloadSize,
+            });
+            return rateLimitResponse(execRl, "agents.execute");
           }
 
-          // Verify agent exists, belongs to workspace, is active
+          // ── ALLOWLIST CHECK ──
+          if (keyRecord.allowed_agent_ids && Array.isArray(keyRecord.allowed_agent_ids)) {
+            if (!keyRecord.allowed_agent_ids.includes(agentId)) {
+              return jsonResponse({
+                error: "Agent not in allowlist for this API key",
+                agent_id: agentId,
+                hint: "Configure allowed_agent_ids on the API key to permit this agent",
+              }, 403);
+            }
+          }
+
+          // Verify agent
           const { data: agent, error: agentErr } = await supabase
             .from("ai_agents")
-            .select("id, name, is_active, system_prompt, model")
-            .eq("id", agentId)
-            .eq("workspace_id", workspaceId)
-            .single();
+            .select("id, name, is_active, model")
+            .eq("id", agentId).eq("workspace_id", workspaceId).single();
 
-          if (agentErr || !agent) {
-            return jsonResponse({ error: "Agent not found" }, 404);
-          }
-
-          if (!agent.is_active) {
-            return jsonResponse({ error: "Agent is disabled" }, 403);
-          }
+          if (agentErr || !agent) return jsonResponse({ error: "Agent not found" }, 404);
+          if (!agent.is_active) return jsonResponse({ error: "Agent is disabled" }, 403);
 
           const inputMessage = body.message as string;
           const leadId = body.lead_id as string | undefined;
 
-          if (!inputMessage) {
-            return jsonResponse({ error: "message is required" }, 400);
-          }
+          if (!inputMessage) return jsonResponse({ error: "message is required" }, 400);
+          if (inputMessage.length > 10000) return jsonResponse({ error: "Message exceeds 10000 character limit" }, 400);
 
-          if (inputMessage.length > 10000) {
-            return jsonResponse({ error: "Message exceeds 10000 character limit" }, 400);
-          }
-
-          // Log the execution start
           const sessionId = `api_${keyRecord.id}_${Date.now()}`;
           const execStart = Date.now();
 
-          // Call the ai-agent-chat function internally
-          const agentResponse = await fetch(`${supabaseUrl}/functions/v1/ai-agent-chat`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${serviceRoleKey}`,
-            },
-            body: JSON.stringify({
-              agent_id: agentId,
-              workspace_id: workspaceId,
-              message: inputMessage,
-              session_id: sessionId,
-              lead_id: leadId || null,
-              source: "api",
-            }),
-          });
+          // ── TIMEOUT: 30s ──
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
-          const latencyMs = Date.now() - execStart;
-
-          if (!agentResponse.ok) {
-            const errText = await agentResponse.text();
-            // Log failed execution
-            await supabase.from("agent_executions").insert({
-              agent_id: agentId,
-              workspace_id: workspaceId,
-              session_id: sessionId,
-              input_message: inputMessage,
-              status: "error",
-              error_message: errText,
-              latency_ms: latencyMs,
-              lead_id: leadId || null,
+          try {
+            const agentResponse = await fetch(`${supabaseUrl}/functions/v1/ai-agent-chat`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceRoleKey}` },
+              body: JSON.stringify({
+                agent_id: agentId, workspace_id: workspaceId,
+                message: inputMessage, session_id: sessionId,
+                lead_id: leadId || null, source: "api",
+              }),
+              signal: controller.signal,
             });
-            return jsonResponse({ error: "Agent execution failed", details: errText }, 502);
+
+            clearTimeout(timeoutId);
+            const execLatency = Date.now() - execStart;
+
+            if (!agentResponse.ok) {
+              const errText = await agentResponse.text();
+              await supabase.from("agent_executions").insert({
+                agent_id: agentId, workspace_id: workspaceId, session_id: sessionId,
+                input_message: inputMessage, status: "error", error_message: errText,
+                latency_ms: execLatency, lead_id: leadId || null,
+              });
+              return jsonResponse({ error: "Agent execution failed", details: errText }, 502);
+            }
+
+            const agentResult = await agentResponse.json();
+            const outputMsg = agentResult?.response || agentResult?.reply || JSON.stringify(agentResult);
+
+            await supabase.from("agent_executions").insert({
+              agent_id: agentId, workspace_id: workspaceId, session_id: sessionId,
+              input_message: inputMessage, output_message: outputMsg,
+              status: "success", latency_ms: execLatency, lead_id: leadId || null,
+            });
+
+            result = {
+              agent_id: agentId, agent_name: agent.name,
+              response: outputMsg, session_id: sessionId,
+              latency_ms: execLatency, input_size: inputMessage.length,
+            };
+          } catch (abortErr) {
+            clearTimeout(timeoutId);
+            const execLatency = Date.now() - execStart;
+
+            if (abortErr.name === "AbortError") {
+              await supabase.from("agent_executions").insert({
+                agent_id: agentId, workspace_id: workspaceId, session_id: sessionId,
+                input_message: inputMessage, status: "timeout",
+                error_message: "Execution exceeded 30s timeout",
+                latency_ms: execLatency, lead_id: leadId || null,
+              });
+              await logUsage(supabase, {
+                api_key_id: keyRecord.id, workspace_id: workspaceId,
+                endpoint: endpointPath, method: "POST", status_code: 504,
+                ip_address: clientIp, user_agent: clientUa, latency_ms: execLatency,
+                payload_size: payloadSize,
+              });
+              return jsonResponse({ error: "Agent execution timed out (30s)", agent_id: agentId }, 504);
+            }
+            throw abortErr;
           }
-
-          const agentResult = await agentResponse.json();
-
-          // Log successful execution
-          await supabase.from("agent_executions").insert({
-            agent_id: agentId,
-            workspace_id: workspaceId,
-            session_id: sessionId,
-            input_message: inputMessage,
-            output_message: agentResult?.response || agentResult?.reply || JSON.stringify(agentResult),
-            status: "success",
-            latency_ms: latencyMs,
-            lead_id: leadId || null,
-          });
-
-          // Update endpoint log with actual path
-          await supabase.from("api_key_usage_log").insert({
-            api_key_id: keyRecord.id,
-            workspace_id: workspaceId,
-            endpoint: `/agents/${agentId}/execute`,
-            method: "POST",
-            status_code: 200,
-          });
-
-          result = {
-            agent_id: agentId,
-            agent_name: agent.name,
-            response: agentResult?.response || agentResult?.reply || agentResult,
-            session_id: sessionId,
-            latency_ms: latencyMs,
-          };
         }
         break;
       }
 
-      // ── CAMPAIGNS ──
+      // ────────── CAMPAIGNS ──────────
       case "campaigns": {
         result = await paginatedQuery(
           "campaigns",
@@ -519,7 +647,7 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── CALENDAR ──
+      // ────────── CALENDAR ──────────
       case "calendar": {
         if (req.method === "GET") {
           result = await paginatedQuery(
@@ -530,59 +658,39 @@ Deno.serve(async (req) => {
           if (!body.title || !body.start_at || !body.end_at) {
             return jsonResponse({ error: "title, start_at, and end_at are required" }, 400);
           }
-          const { data, error } = await supabase
-            .from("calendar_events")
-            .insert({
-              title: body.title,
-              description: body.description || null,
-              start_at: body.start_at,
-              end_at: body.end_at,
-              type: body.type || "meeting",
-              color: body.color || "#3B82F6",
-              location: body.location || null,
-              lead_id: body.lead_id || null,
-              user_id: body.user_id || "00000000-0000-0000-0000-000000000000",
-              workspace_id: workspaceId,
-            })
-            .select()
-            .single();
+          const { data, error } = await supabase.from("calendar_events").insert({
+            title: body.title, description: body.description || null,
+            start_at: body.start_at, end_at: body.end_at,
+            type: body.type || "meeting", color: body.color || "#3B82F6",
+            location: body.location || null, lead_id: body.lead_id || null,
+            user_id: body.user_id || "00000000-0000-0000-0000-000000000000",
+            workspace_id: workspaceId,
+          }).select().single();
           if (error) throw error;
           result = data;
         }
         break;
       }
 
-      // ── TAGS ──
+      // ────────── TAGS ──────────
       case "tags": {
         if (req.method === "GET") {
-          const { data } = await supabase
-            .from("lead_tags")
-            .select("id, name, color, created_at")
-            .eq("workspace_id", workspaceId);
+          const { data } = await supabase.from("lead_tags")
+            .select("id, name, color, created_at").eq("workspace_id", workspaceId);
           result = { items: data, has_more: false, next_cursor: null, count: data?.length || 0 };
         } else if (req.method === "POST") {
-          // POST /tags/assign — assign tag to lead
           if (subpath === "assign") {
-            if (!body.lead_id || !body.tag_id) {
-              return jsonResponse({ error: "lead_id and tag_id are required" }, 400);
-            }
-            const { data, error } = await supabase
-              .from("lead_tag_assignments")
+            if (!body.lead_id || !body.tag_id) return jsonResponse({ error: "lead_id and tag_id required" }, 400);
+            const { data, error } = await supabase.from("lead_tag_assignments")
               .insert({ lead_id: body.lead_id, tag_id: body.tag_id, workspace_id: workspaceId })
-              .select()
-              .single();
+              .select().single();
             if (error) throw error;
             result = data;
           } else {
-            // POST /tags — create tag
-            if (!body.name) {
-              return jsonResponse({ error: "name is required" }, 400);
-            }
-            const { data, error } = await supabase
-              .from("lead_tags")
+            if (!body.name) return jsonResponse({ error: "name is required" }, 400);
+            const { data, error } = await supabase.from("lead_tags")
               .insert({ name: body.name, color: body.color || "#6B7280", workspace_id: workspaceId })
-              .select()
-              .single();
+              .select().single();
             if (error) throw error;
             result = data;
           }
@@ -590,89 +698,100 @@ Deno.serve(async (req) => {
         break;
       }
 
-      // ── FUNNELS ──
+      // ────────── FUNNELS ──────────
       case "funnels": {
         if (req.method === "GET") {
-          const { data } = await supabase
-            .from("funnels")
+          const { data } = await supabase.from("funnels")
             .select("id, name, description, funnel_stages(id, name, color, position)")
             .eq("workspace_id", workspaceId);
           result = { items: data, has_more: false, next_cursor: null, count: data?.length || 0 };
         } else if (req.method === "PATCH" && subpath === "move-lead") {
-          if (!body.lead_id || !body.stage_id) {
-            return jsonResponse({ error: "lead_id and stage_id are required" }, 400);
-          }
-          // Verify stage belongs to workspace
-          const { data: stage } = await supabase
-            .from("funnel_stages")
-            .select("id")
-            .eq("id", body.stage_id)
-            .eq("workspace_id", workspaceId)
-            .single();
-          if (!stage) {
-            return jsonResponse({ error: "Stage not found in workspace" }, 404);
-          }
-          const { data, error } = await supabase
-            .from("leads")
+          if (!body.lead_id || !body.stage_id) return jsonResponse({ error: "lead_id and stage_id required" }, 400);
+          const { data: stage } = await supabase.from("funnel_stages")
+            .select("id").eq("id", body.stage_id).eq("workspace_id", workspaceId).single();
+          if (!stage) return jsonResponse({ error: "Stage not found in workspace" }, 404);
+
+          // Get current stage for webhook
+          const { data: currentLead } = await supabase.from("leads")
+            .select("id, stage_id").eq("id", body.lead_id).eq("workspace_id", workspaceId).single();
+
+          const { data, error } = await supabase.from("leads")
             .update({ stage_id: body.stage_id })
-            .eq("id", body.lead_id)
-            .eq("workspace_id", workspaceId)
-            .select("id, name, stage_id")
-            .single();
+            .eq("id", body.lead_id).eq("workspace_id", workspaceId)
+            .select("id, name, stage_id").single();
           if (error) throw error;
+
+          // Fire webhook: deal.stage_changed
+          fireWebhookEvent(supabase, workspaceId, "deal.stage_changed", {
+            lead_id: body.lead_id,
+            from_stage_id: currentLead?.stage_id,
+            to_stage_id: body.stage_id,
+          });
+
           result = data;
         }
         break;
       }
 
-      // ── WEBHOOKS ──
+      // ────────── WEBHOOKS ──────────
       case "webhooks": {
         if (req.method === "GET") {
-          const { data } = await supabase
-            .from("webhooks")
-            .select("id, url, events, is_active, created_at, updated_at")
+          const { data } = await supabase.from("webhooks")
+            .select("id, url, events, is_active, created_at, updated_at, secret_prefix")
             .eq("workspace_id", workspaceId);
           result = { items: data, has_more: false, next_cursor: null, count: data?.length || 0 };
         } else if (req.method === "POST") {
-          if (!body.url || !body.events) {
-            return jsonResponse({ error: "url and events[] are required" }, 400);
-          }
-          // Validate URL
-          try { new URL(body.url as string); } catch {
-            return jsonResponse({ error: "Invalid webhook URL" }, 400);
-          }
-          // Generate webhook secret
-          const secretRaw = `whsec_${crypto.randomUUID().replace(/-/g, "")}`;
-          const secretH = await hashKey(secretRaw);
+          if (subpath === "test") {
+            // POST /webhooks/test — send test event
+            const webhookId = body.webhook_id as string;
+            if (!webhookId) return jsonResponse({ error: "webhook_id required" }, 400);
 
-          const { data: profile } = await supabase
-            .from("user_profiles")
-            .select("id")
-            .eq("user_id", keyRecord.workspace_id) // placeholder - will use API key creator
-            .limit(1)
-            .maybeSingle();
+            const { data: wh } = await supabase.from("webhooks")
+              .select("id, url, secret_hash, is_active")
+              .eq("id", webhookId).eq("workspace_id", workspaceId).single();
 
-          const { data, error } = await supabase
-            .from("webhooks")
-            .insert({
+            if (!wh) return jsonResponse({ error: "Webhook not found" }, 404);
+
+            const testPayload = {
+              event: "test.ping",
               workspace_id: workspaceId,
-              url: body.url,
-              events: body.events,
-              secret_hash: secretH,
-              secret_prefix: secretRaw.substring(0, 12),
-              created_by: profile?.id || null,
-            })
-            .select("id, url, events, is_active, created_at")
-            .single();
-          if (error) throw error;
-          result = { webhook: data, secret: secretRaw, warning: "Save this secret now. It won't be shown again." };
+              timestamp: new Date().toISOString(),
+              data: { message: "This is a test event from Argos X API" },
+            };
+
+            const deliveryResult = await deliverWebhook(supabase, wh, testPayload, workspaceId);
+            result = deliveryResult;
+          } else {
+            // POST /webhooks — register
+            if (!body.url || !body.events) return jsonResponse({ error: "url and events[] required" }, 400);
+            try { new URL(body.url as string); } catch { return jsonResponse({ error: "Invalid URL" }, 400); }
+
+            const validEvents = ["lead.created", "message.received", "deal.stage_changed"];
+            const events = (body.events as string[]).filter(e => validEvents.includes(e));
+            if (events.length === 0) {
+              return jsonResponse({ error: "No valid events. Available: " + validEvents.join(", ") }, 400);
+            }
+
+            const secretRaw = `whsec_${crypto.randomUUID().replace(/-/g, "")}`;
+            const secretH = await hashKey(secretRaw);
+
+            const { data, error } = await supabase.from("webhooks").insert({
+              workspace_id: workspaceId, url: body.url, events,
+              secret_hash: secretH, secret_prefix: secretRaw.substring(0, 12),
+            }).select("id, url, events, is_active, created_at").single();
+            if (error) throw error;
+
+            result = {
+              webhook: data, secret: secretRaw,
+              warning: "Save this secret now. It will not be shown again.",
+              signature_header: "X-Argos-Signature",
+              verification: `HMAC-SHA256(secret, raw_body) → compare with X-Argos-Signature header value`,
+            };
+          }
         } else if (req.method === "DELETE") {
           if (!subpath) return jsonResponse({ error: "Webhook ID required: DELETE /webhooks/:id" }, 400);
-          const { error } = await supabase
-            .from("webhooks")
-            .delete()
-            .eq("id", subpath)
-            .eq("workspace_id", workspaceId);
+          const { error } = await supabase.from("webhooks")
+            .delete().eq("id", subpath).eq("workspace_id", workspaceId);
           if (error) throw error;
           result = { deleted: true };
         }
@@ -683,9 +802,146 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: `Unknown resource: ${resource}` }, 404);
     }
 
-    return jsonResponse({ data: result });
+    // ── AUDIT LOG ──
+    const latencyMs = Date.now() - requestStart;
+    await logUsage(supabase, {
+      api_key_id: keyRecord.id,
+      workspace_id: workspaceId,
+      endpoint: endpointPath,
+      method: req.method,
+      status_code: 200,
+      ip_address: clientIp,
+      user_agent: clientUa,
+      latency_ms: latencyMs,
+      idempotency_key: idempotencyKey || undefined,
+      payload_size: payloadSize || undefined,
+    });
+
+    return jsonResponse({ data: result }, 200, {
+      "X-RateLimit-Limit": String(keyRecord.rate_limit_per_hour),
+      "X-RateLimit-Remaining": String(globalRl.remaining - 1),
+    });
   } catch (err) {
     console.error("api-gateway error:", err);
     return jsonResponse({ error: err.message }, 500);
   }
 });
+
+// ═══════════════════════════════════════════
+// ── WEBHOOK DELIVERY ──
+// ═══════════════════════════════════════════
+
+async function fireWebhookEvent(supabase: any, workspaceId: string, eventType: string, data: unknown) {
+  try {
+    const { data: webhooks } = await supabase
+      .from("webhooks")
+      .select("id, url, secret_hash, is_active, events")
+      .eq("workspace_id", workspaceId)
+      .eq("is_active", true);
+
+    if (!webhooks?.length) return;
+
+    for (const wh of webhooks) {
+      const events = wh.events as string[];
+      if (!events.includes(eventType)) continue;
+
+      const payload = {
+        event: eventType,
+        workspace_id: workspaceId,
+        timestamp: new Date().toISOString(),
+        data,
+      };
+
+      // Fire-and-forget delivery with retries
+      deliverWebhook(supabase, wh, payload, workspaceId).catch(err => {
+        console.error(`Webhook delivery failed for ${wh.id}:`, err);
+      });
+    }
+  } catch (err) {
+    console.error("fireWebhookEvent error:", err);
+  }
+}
+
+async function deliverWebhook(
+  supabase: any,
+  webhook: { id: string; url: string; secret_hash: string },
+  payload: unknown,
+  workspaceId: string,
+  attempt = 1
+): Promise<{ success: boolean; status_code?: number; attempts: number }> {
+  const maxAttempts = 3;
+  const payloadStr = JSON.stringify(payload);
+  const payloadId = crypto.randomUUID();
+
+  // Compute HMAC signature
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(webhook.secret_hash);
+  const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payloadStr));
+  const signature = "sha256=" + Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+  const timestamp = new Date().toISOString();
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000); // 10s timeout
+
+    const response = await fetch(webhook.url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Argos-Signature": signature,
+        "X-Argos-Event": (payload as any).event || "unknown",
+        "X-Argos-Timestamp": timestamp,
+        "X-Argos-Delivery-Id": payloadId,
+      },
+      body: payloadStr,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const responseBody = await response.text();
+
+    await supabase.from("webhook_deliveries").insert({
+      webhook_id: webhook.id,
+      workspace_id: workspaceId,
+      event_type: (payload as any).event,
+      payload: payload,
+      response_status: response.status,
+      response_body: responseBody.substring(0, 1000),
+      attempt,
+      delivered_at: response.ok ? new Date().toISOString() : null,
+      status: response.ok ? "delivered" : "failed",
+      payload_id: payloadId,
+    });
+
+    if (!response.ok && attempt < maxAttempts) {
+      // Retry with exponential backoff
+      const backoffMs = [1000, 30000, 300000][attempt - 1] || 300000;
+      await new Promise(r => setTimeout(r, backoffMs));
+      return deliverWebhook(supabase, webhook, payload, workspaceId, attempt + 1);
+    }
+
+    return { success: response.ok, status_code: response.status, attempts: attempt };
+  } catch (err) {
+    await supabase.from("webhook_deliveries").insert({
+      webhook_id: webhook.id,
+      workspace_id: workspaceId,
+      event_type: (payload as any).event,
+      payload: payload,
+      response_status: 0,
+      response_body: err.message,
+      attempt,
+      status: "failed",
+      payload_id: payloadId,
+    });
+
+    if (attempt < maxAttempts) {
+      const backoffMs = [1000, 30000, 300000][attempt - 1] || 300000;
+      await new Promise(r => setTimeout(r, backoffMs));
+      return deliverWebhook(supabase, webhook, payload, workspaceId, attempt + 1);
+    }
+
+    return { success: false, attempts: attempt };
+  }
+}
