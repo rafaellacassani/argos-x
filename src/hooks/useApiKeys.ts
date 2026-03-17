@@ -14,6 +14,7 @@ export const API_RESOURCES = [
   { key: 'tags', label: 'Tags', description: 'Etiquetas de classificação' },
   { key: 'funnels', label: 'Funis', description: 'Funis e etapas de vendas' },
   { key: 'webhooks', label: 'Webhooks', description: 'Notificações de eventos' },
+  { key: 'clients', label: 'Clientes', description: 'Gestão de clientes ECX' },
 ] as const;
 
 export type ApiResourceKey = typeof API_RESOURCES[number]['key'];
