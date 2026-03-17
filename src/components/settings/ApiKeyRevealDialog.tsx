@@ -27,7 +27,7 @@ export function ApiKeyRevealDialog({ open, onOpenChange, rawKey, keyName }: ApiK
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl w-[90vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Key className="h-5 w-5 text-primary" />
