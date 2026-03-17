@@ -166,12 +166,50 @@ export function ApiKeysManager() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Paginação (cursor)</p>
+              <code className="bg-muted px-3 py-1.5 rounded text-xs font-mono block">
+                ?cursor=&lt;uuid&gt;&amp;limit=50&amp;updated_after=2026-01-01T00:00:00Z
+              </code>
+              <p className="text-xs text-muted-foreground">Máx 100 itens por página. Resposta inclui next_cursor e has_more.</p>
+            </div>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Rate Limit</p>
+              <code className="bg-muted px-3 py-1.5 rounded text-xs font-mono block">
+                1.000 req/h por chave (configurável) · Agents: 60 exec/h
+              </code>
+              <p className="text-xs text-muted-foreground">Resposta 429 com header Retry-After quando excedido.</p>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <p className="text-sm font-medium">Exemplo de requisição</p>
             <div className="bg-muted rounded-lg p-3 font-mono text-xs overflow-x-auto">
-              <pre className="text-muted-foreground">{`curl -X GET "${baseUrl}/leads" \\
+              <pre className="text-muted-foreground">{`curl -X GET "${baseUrl}/leads?limit=20" \\
   -H "X-API-Key: argx_SuaChaveAqui" \\
   -H "Content-Type: application/json"`}</pre>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Guardrails</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+              <div className="bg-muted/50 rounded p-2 space-y-1">
+                <p className="font-medium">Messages (write)</p>
+                <p className="text-muted-foreground">Apenas texto · Valida telefone · Max 4096 chars · 10 msg/min por destinatário</p>
+              </div>
+              <div className="bg-muted/50 rounded p-2 space-y-1">
+                <p className="font-medium">Agents (execute)</p>
+                <p className="text-muted-foreground">60 exec/h · Agente deve estar ativo · Max 10k chars · Log completo</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Webhooks</p>
+            <div className="bg-muted/50 rounded p-2 text-xs space-y-1">
+              <p className="text-muted-foreground">Registre via <code className="text-primary">POST /webhooks</code> com url + events[]. Secret HMAC-SHA256 no header <code className="text-primary">X-Argos-Signature</code>.</p>
             </div>
           </div>
 
