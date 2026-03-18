@@ -141,7 +141,7 @@ serve(async (req) => {
         }
 
         // Validate phone
-        const cleanPhone = (recipient.phone || "").replace(/\D/g, "");
+        let cleanPhone = (recipient.phone || "").replace(/\D/g, "");
         if (cleanPhone.length < 10) {
           await supabase.from("campaign_recipients").update({
             status: "skipped",
@@ -153,6 +153,10 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }).eq("id", campaign.id);
           continue;
+        }
+        // Normalize Brazilian numbers: add country code 55 if missing
+        if (cleanPhone.length === 10 || cleanPhone.length === 11) {
+          cleanPhone = "55" + cleanPhone;
         }
 
         // Check if this campaign uses a WABA template
