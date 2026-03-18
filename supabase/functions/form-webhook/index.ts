@@ -149,8 +149,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check for existing lead by phone
-    const phone = String(nativeFields.phone).replace(/[^0-9]/g, "");
+    // Normalize Brazilian phone: add country code 55 if missing
+    let phone = String(nativeFields.phone).replace(/[^0-9]/g, "");
+    if ((phone.length === 10 || phone.length === 11) && !phone.startsWith("55")) {
+      phone = "55" + phone;
+    }
     const { data: existingLead } = await supabase
       .from("leads")
       .select("id")

@@ -722,7 +722,7 @@ export function useLeads() {
     try {
       // Normalize phone: digits only
       const rawPhone = leadData.phone || '';
-      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const phoneDigits = normalizeBRPhone(rawPhone);
       const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
 
       // Never auto-create lead with unresolved @lid and no real phone

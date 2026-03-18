@@ -250,9 +250,10 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       if (seenPhones.has(phone)) continue;
       seenPhones.add(phone);
 
+      const normalizedPhone = normalizeBRPhone(phone);
       validRows.push({
         name,
-        phone,
+        phone: normalizedPhone,
         email: mapping.email ? row[mapping.email]?.trim() || undefined : undefined,
         company: mapping.company ? row[mapping.company]?.trim() || undefined : undefined,
         stage_id: firstStageId,

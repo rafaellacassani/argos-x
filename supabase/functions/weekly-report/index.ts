@@ -21,7 +21,10 @@ async function sendWhatsAppMessage(instanceName: string, phone: string, message:
   }
 
   try {
-    const cleanPhone = phone.replace(/\D/g, "");
+    let cleanPhone = phone.replace(/\D/g, "");
+    if ((cleanPhone.length === 10 || cleanPhone.length === 11) && !cleanPhone.startsWith("55")) {
+      cleanPhone = "55" + cleanPhone;
+    }
     
     const response = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
       method: "POST",
