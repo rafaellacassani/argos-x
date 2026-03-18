@@ -176,8 +176,11 @@ serve(async (req) => {
     const leadPhones = new Set(validLeads.map(l => (l.phone || "").replace(/\D/g, "")));
 
     // --- Include all WhatsApp contacts (non-leads) ---
+    // Only include non-lead contacts when NO filters are active (since contacts lack CRM metadata)
     let contactRecipients: { phone: string; name: string }[] = [];
-    if (campaign.include_all_contacts) {
+    const hasActiveFilters = filterTagIds.length > 0 || filterStageIds.length > 0 || filterResponsibleIds.length > 0;
+
+    if (campaign.include_all_contacts && !hasActiveFilters) {
       let contactFrom = 0;
       const uniqueContacts = new Map<string, string>(); // phone -> push_name
 
@@ -197,7 +200,7 @@ serve(async (req) => {
           if (!msg.remote_jid || !msg.remote_jid.endsWith("@s.whatsapp.net")) continue;
           const phone = msg.remote_jid.replace("@s.whatsapp.net", "");
           if (phone.length < 10) continue;
-          if (leadPhones.has(phone)) continue; // already a lead
+          if (leadPhones.has(phone)) continue;
           if (!uniqueContacts.has(phone)) {
             uniqueContacts.set(phone, msg.push_name || "");
           }
@@ -209,6 +212,8 @@ serve(async (req) => {
 
       contactRecipients = Array.from(uniqueContacts.entries()).map(([phone, name]) => ({ phone, name }));
       console.log(`[prepare-campaign] 📱 Found ${contactRecipients.length} non-lead contacts`);
+    } else if (campaign.include_all_contacts && hasActiveFilters) {
+      console.log(`[prepare-campaign] ⚠️ include_all_contacts ignored because filters are active (stages=${filterStageIds.length}, tags=${filterTagIds.length}, responsible=${filterResponsibleIds.length})`);
     }
 
     const skipped = filteredLeads.length - validLeads.length;
