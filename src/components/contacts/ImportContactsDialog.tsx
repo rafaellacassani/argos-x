@@ -32,6 +32,14 @@ type FieldMapping = {
 
 const BATCH_SIZE = 500;
 
+function normalizeBRPhone(phone: string): string {
+  const digits = phone.replace(/[^0-9]/g, '');
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    return '55' + digits;
+  }
+  return digits;
+}
+
 function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
