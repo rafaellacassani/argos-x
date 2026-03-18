@@ -102,6 +102,14 @@ export function useWebhooks() {
         .single();
       if (!member) throw new Error('No workspace found');
 
+      // Get user_profile id
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .single();
+
       const { data: webhook, error: insertErr } = await supabase
         .from('webhooks')
         .insert({
@@ -111,7 +119,7 @@ export function useWebhooks() {
           secret_hash: secretHash,
           secret_prefix: secretPrefix,
           is_active: true,
-          created_by: session.user.id,
+          created_by: profile?.id || null,
         })
         .select('id, url, events, is_active, secret_prefix, created_at, updated_at')
         .single();
