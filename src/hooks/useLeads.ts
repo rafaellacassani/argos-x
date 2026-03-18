@@ -574,7 +574,7 @@ export function useLeads() {
 
     try {
       const rawPhone = leadData.phone || '';
-      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const phoneDigits = normalizeBRPhone(rawPhone);
       const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
       const providedJid = (leadData.whatsapp_jid || '').trim();
       const isWhatsappLead = leadData.source === 'whatsapp' || !!providedJid || !!leadData.instance_name;
