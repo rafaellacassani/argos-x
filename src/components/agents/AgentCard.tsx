@@ -153,7 +153,7 @@ export function AgentCard({
 
       {/* Footer */}
       <div className="flex items-center justify-between pt-4 border-t border-border">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span
             className={`px-2 py-1 rounded-full text-xs font-medium ${
               agent.is_active
@@ -163,6 +163,11 @@ export function AgentCard({
           >
             {agent.is_active ? "Ativo" : "Pausado"}
           </span>
+          {agent.instance_name && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary truncate max-w-[160px]" title={agent.instance_name}>
+              {agent.instance_name}
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
             {agent.model?.split("/")[1] || "gemini"}
           </span>
