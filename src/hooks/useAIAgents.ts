@@ -19,6 +19,7 @@ export interface AIAgent {
   resume_keyword: string;
   message_split_enabled: boolean;
   message_split_length: number;
+  instance_name: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
