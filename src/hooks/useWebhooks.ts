@@ -167,34 +167,31 @@ export function useWebhooks() {
 
   const testWebhook = useCallback(async (id: string) => {
     try {
-      // Get webhook info
-      const { data: wh, error: whErr } = await supabase
-        .from('webhooks')
-        .select('id, url, secret_hash')
-        .eq('id', id)
-        .single();
-      if (whErr || !wh) throw new Error('Webhook not found');
-
       toast.info('Enviando evento de teste...');
       
-      // We invoke a simple edge function or do a direct delivery test
-      // For simplicity, just record that a test was requested
       const { data: member } = await supabase
         .from('workspace_members')
         .select('workspace_id')
         .limit(1)
         .single();
 
-      await supabase.from('webhook_deliveries').insert({
-        webhook_id: id,
-        workspace_id: member?.workspace_id || '',
-        event_type: 'test',
-        payload: { event: 'test', data: { message: 'Test event from Argos X' }, timestamp: new Date().toISOString() },
-        status: 'pending',
-        attempt: 1,
+      if (!member) throw new Error('No workspace found');
+
+      const { error } = await supabase.functions.invoke('fire-webhook', {
+        body: {
+          event_type: 'test',
+          workspace_id: member.workspace_id,
+          data: {
+            message: 'Test event from Argos X',
+            webhook_id: id,
+            timestamp: new Date().toISOString(),
+          },
+        },
       });
 
-      toast.success('Evento de teste enviado');
+      if (error) throw error;
+
+      toast.success('Evento de teste enviado — verifique as entregas');
       await fetchDeliveries(id);
     } catch (err: any) {
       console.error('Error testing webhook:', err);
