@@ -119,7 +119,7 @@ export function useWebhooks() {
           secret_hash: secretHash,
           secret_prefix: secretPrefix,
           is_active: true,
-          created_by: session.user.id,
+          created_by: profile?.id || null,
         })
         .select('id, url, events, is_active, secret_prefix, created_at, updated_at')
         .single();
