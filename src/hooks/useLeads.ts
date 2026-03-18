@@ -5,6 +5,14 @@ import type { BotFlowData } from './useSalesBots';
 import { useWorkspace } from './useWorkspace';
 import { usePlanLimits } from './usePlanLimits';
 
+function normalizeBRPhone(phone: string): string {
+  const digits = phone.replace(/[^0-9]/g, '');
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    return '55' + digits;
+  }
+  return digits;
+}
+
 // Helper function to execute bot flow (standalone to avoid hook rules)
 async function executeBotFlow(botId: string, leadId: string) {
   try {
