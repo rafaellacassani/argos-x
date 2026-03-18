@@ -67,6 +67,16 @@ export default function Leads() {
 
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
+
+  // Keep selectedLead in sync with leads array updates
+  useEffect(() => {
+    if (selectedLead) {
+      const updated = leads.find(l => l.id === selectedLead.id);
+      if (updated && updated !== selectedLead) {
+        setSelectedLead(updated);
+      }
+    }
+  }, [leads, selectedLead]);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogStageId, setCreateDialogStageId] = useState<string | undefined>();
   const [isRefreshing, setIsRefreshing] = useState(false);
