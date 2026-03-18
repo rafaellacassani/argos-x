@@ -915,6 +915,15 @@ export function useLeads() {
       if (error) throw error;
 
       if (oldStageId && oldStageId !== newStageId && workspaceId) {
+        // Get stage names for history + webhook
+        const { data: stagesInfo } = await supabase
+          .from('funnel_stages')
+          .select('id, name, bot_id')
+          .in('id', [oldStageId, newStageId]);
+
+        const fromStage = stagesInfo?.find(s => s.id === oldStageId);
+        const toStage = stagesInfo?.find(s => s.id === newStageId);
+
         await supabase.from('lead_history').insert({
           lead_id: leadId,
           action: 'stage_changed',
@@ -924,21 +933,31 @@ export function useLeads() {
           workspace_id: workspaceId
         });
 
-        const { data: stageData } = await supabase
-          .from('funnel_stages')
-          .select('bot_id')
-          .eq('id', newStageId)
-          .maybeSingle();
+        // Fire webhook for deal.stage_changed
+        supabase.functions.invoke('fire-webhook', {
+          body: {
+            event_type: 'deal.stage_changed',
+            workspace_id: workspaceId,
+            data: {
+              lead_id: leadId,
+              lead_name: currentLead?.name || '',
+              lead_phone: currentLead?.phone || '',
+              from_stage: { id: oldStageId, name: fromStage?.name || '' },
+              to_stage: { id: newStageId, name: toStage?.name || '' },
+              moved_at: new Date().toISOString(),
+            },
+          },
+        }).catch(err => console.error('[webhook] deal.stage_changed fire error:', err));
 
-        if (stageData?.bot_id) {
+        if (toStage?.bot_id) {
           const { data: botData } = await supabase
             .from('salesbots')
             .select('is_active')
-            .eq('id', stageData.bot_id)
+            .eq('id', toStage.bot_id)
             .maybeSingle();
 
           if (botData?.is_active) {
-            executeBotFlow(stageData.bot_id!, leadId);
+            executeBotFlow(toStage.bot_id!, leadId);
           }
         }
       }
