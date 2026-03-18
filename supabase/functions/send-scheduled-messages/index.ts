@@ -54,7 +54,11 @@ Deno.serve(async (req) => {
 
         if (msg.channel_type === "whatsapp") {
           // Send via Evolution API
-          const number = msg.phone_number || msg.remote_jid?.replace(/@s\.whatsapp\.net$/, "");
+          let number = (msg.phone_number || msg.remote_jid?.replace(/@s\.whatsapp\.net$/, "") || "").replace(/\D/g, "");
+          // Normalize Brazilian numbers
+          if ((number.length === 10 || number.length === 11) && !number.startsWith("55")) {
+            number = "55" + number;
+          }
           if (!number || !msg.instance_name) {
             throw new Error("Missing WhatsApp routing info");
           }

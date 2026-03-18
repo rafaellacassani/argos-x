@@ -225,7 +225,7 @@ serve(async (req) => {
       allRecipients.push({
         campaign_id: campaignId,
         lead_id: lead.id,
-        phone: (lead.phone || "").replace(/\D/g, ""),
+        phone: (() => { const d = (lead.phone || "").replace(/\D/g, ""); return (d.length === 10 || d.length === 11) && !d.startsWith("55") ? "55" + d : d; })(),
         personalized_message: replaceShortcodes(campaign.message_text, lead),
         status: "pending",
         position: i,

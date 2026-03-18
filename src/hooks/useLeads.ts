@@ -5,6 +5,14 @@ import type { BotFlowData } from './useSalesBots';
 import { useWorkspace } from './useWorkspace';
 import { usePlanLimits } from './usePlanLimits';
 
+function normalizeBRPhone(phone: string): string {
+  const digits = phone.replace(/[^0-9]/g, '');
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    return '55' + digits;
+  }
+  return digits;
+}
+
 // Helper function to execute bot flow (standalone to avoid hook rules)
 async function executeBotFlow(botId: string, leadId: string) {
   try {
@@ -566,7 +574,7 @@ export function useLeads() {
 
     try {
       const rawPhone = leadData.phone || '';
-      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const phoneDigits = normalizeBRPhone(rawPhone);
       const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
       const providedJid = (leadData.whatsapp_jid || '').trim();
       const isWhatsappLead = leadData.source === 'whatsapp' || !!providedJid || !!leadData.instance_name;
@@ -714,7 +722,7 @@ export function useLeads() {
     try {
       // Normalize phone: digits only
       const rawPhone = leadData.phone || '';
-      const phoneDigits = rawPhone.replace(/[^0-9]/g, '');
+      const phoneDigits = normalizeBRPhone(rawPhone);
       const normalizedPhone = phoneDigits.length >= 10 && phoneDigits.length <= 13 ? phoneDigits : '';
 
       // Never auto-create lead with unresolved @lid and no real phone

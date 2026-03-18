@@ -17,8 +17,11 @@ const DEDUP_HOURS = 2;
 async function sendWhatsApp(instanceName: string, phone: string, text: string): Promise<boolean> {
   if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !phone || !instanceName) return false;
   try {
-    const cleanPhone = phone.replace(/\D/g, "");
+    let cleanPhone = phone.replace(/\D/g, "");
     if (!cleanPhone) return false;
+    if ((cleanPhone.length === 10 || cleanPhone.length === 11) && !cleanPhone.startsWith("55")) {
+      cleanPhone = "55" + cleanPhone;
+    }
     const res = await fetch(`${EVOLUTION_API_URL}/message/sendText/${instanceName}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },

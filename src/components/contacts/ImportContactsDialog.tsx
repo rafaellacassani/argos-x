@@ -32,6 +32,14 @@ type FieldMapping = {
 
 const BATCH_SIZE = 500;
 
+function normalizeBRPhone(phone: string): string {
+  const digits = phone.replace(/[^0-9]/g, '');
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith('55')) {
+    return '55' + digits;
+  }
+  return digits;
+}
+
 function parseCSV(text: string): { headers: string[]; rows: ParsedRow[] } {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length === 0) return { headers: [], rows: [] };
@@ -242,9 +250,10 @@ export default function ImportContactsDialog({ open, onOpenChange, onImportCompl
       if (seenPhones.has(phone)) continue;
       seenPhones.add(phone);
 
+      const normalizedPhone = normalizeBRPhone(phone);
       validRows.push({
         name,
-        phone,
+        phone: normalizedPhone,
         email: mapping.email ? row[mapping.email]?.trim() || undefined : undefined,
         company: mapping.company ? row[mapping.company]?.trim() || undefined : undefined,
         stage_id: firstStageId,
