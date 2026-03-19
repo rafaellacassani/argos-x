@@ -461,40 +461,41 @@ export function MessageBubble({
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.01 }}
+        transition={{ delay: Math.min(index * 0.008, 0.3), duration: 0.15 }}
         className={cn("flex", sent ? "justify-end" : "justify-start")}
       >
         <div
           className={cn(
-            "max-w-[70%] rounded-2xl overflow-hidden",
-            type === "image" || type === "video" ? "px-0 py-0" : "px-4 py-2.5",
+            "max-w-[70%] overflow-hidden relative",
+            type === "image" || type === "video" ? "px-0 py-0" : "px-3 py-1.5",
             sent
-              ? "bg-secondary text-secondary-foreground rounded-br-md"
-              : "bg-muted rounded-bl-md"
+              ? "rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-sm shadow-sm"
+              : "rounded-tl-xl rounded-tr-xl rounded-br-xl rounded-bl-sm shadow-sm",
+            sent
+              ? "bg-[hsl(var(--chat-bubble-sent))] text-[hsl(var(--chat-bubble-sent-foreground))]"
+              : "bg-[hsl(var(--chat-bubble-received))] text-[hsl(var(--chat-bubble-received-foreground))]"
           )}
           style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
         >
           {/* Media content */}
-          <div className={type === "image" || type === "video" ? "" : ""}>
-            {renderMedia()}
-          </div>
+          <div>{renderMedia()}</div>
           
-          {/* Time and read status - inside bubble for media, separate for others */}
+          {/* Time and read status — inside bubble, bottom-right */}
           <div className={cn(
-            "flex items-center gap-1",
-            type === "image" || type === "video" ? "px-4 py-2" : "mt-1",
-            sent ? "justify-end" : "justify-start"
+            "flex items-center gap-1 mt-0.5",
+            type === "image" || type === "video" ? "px-3 pb-1.5" : "",
+            "justify-end"
           )}>
-            <span className={cn("text-[10px]", sent ? "text-secondary-foreground/70" : "text-muted-foreground")}>
+            <span className="text-[10px] text-[hsl(var(--chat-timestamp))]">
               {time}
             </span>
             {sent && (
               read ? (
-                <CheckCheck className="w-3 h-3 text-secondary-foreground/70" />
+                <CheckCheck className="w-3.5 h-3.5 text-[hsl(var(--secondary))]" />
               ) : (
-                <Check className="w-3 h-3 text-secondary-foreground/70" />
+                <Check className="w-3 h-3 text-[hsl(var(--chat-timestamp))]" />
               )
             )}
           </div>

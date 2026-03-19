@@ -2386,24 +2386,24 @@ export default function Chats() {
               <p>Nenhuma conversa encontrada</p>
             </div>
           ) : (
-            <div className="p-2 overflow-x-auto">
-              {filteredChats.map((chat, index) => (
+            <div className="divide-y divide-border/50">
+              {filteredChats.map((chat) => (
                 <div
                   key={chat.id}
                   onClick={() => setSelectedChat(chat)}
                   className={cn(
-                    "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
+                    "flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors",
                     selectedChat?.id === chat.id
-                      ? "bg-secondary/10 border border-secondary/20"
+                      ? "bg-secondary/10"
                       : "hover:bg-muted/50"
                   )}
                 >
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     {chat.profilePicUrl ? (
                       <img 
                         src={chat.profilePicUrl} 
                         alt={chat.name}
-                        className="w-12 h-12 rounded-full object-cover"
+                        className="w-11 h-11 rounded-full object-cover"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
                           (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -2411,40 +2411,41 @@ export default function Chats() {
                       />
                     ) : null}
                     <div className={cn(
-                      "w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold",
+                      "w-11 h-11 rounded-full bg-gradient-to-br from-primary/80 to-secondary/80 flex items-center justify-center text-primary-foreground font-semibold text-sm",
                       chat.profilePicUrl && "hidden"
                     )}>
                       {(chat.name || "?").split(" ").slice(0, 2).map((n) => n[0] || "").join("").toUpperCase() || "?"}
                     </div>
-                    {chat.online && (
-                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
-                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-foreground truncate">{chat.name}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">{chat.time}</span>
                     </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
-                      {/* Show source badge */}
-                      {chat.isMeta && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap flex-shrink-0">
-                          {chat.metaPlatform === "instagram" ? "📸 IG" : chat.metaPlatform === "whatsapp_business" ? "📱 WABA" : "💬 FB"}
-                        </span>
-                      )}
-                      {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap flex-shrink-0 max-w-[100px] truncate" title={chat.instanceLabel}>
-                          {chat.instanceLabel}
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground truncate flex-1">
+                        {chat.lastMessageFromMe && <span className="text-muted-foreground/70">Você: </span>}
+                        {chat.lastMessage || chat.phone}
+                      </p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {chat.isMeta && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap">
+                            {chat.metaPlatform === "instagram" ? "IG" : chat.metaPlatform === "whatsapp_business" ? "WABA" : "FB"}
+                          </span>
+                        )}
+                        {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap max-w-[60px] truncate" title={chat.instanceLabel}>
+                            {chat.instanceLabel}
+                          </span>
+                        )}
+                        {chat.unread > 0 && (
+                          <div className="min-w-[18px] h-[18px] rounded-full bg-[hsl(var(--chat-unread))] flex items-center justify-center">
+                            <span className="text-[10px] text-white font-bold px-1">{chat.unread}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {chat.unread > 0 && (
-                    <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center">
-                      <span className="text-xs text-white font-medium">{chat.unread}</span>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
