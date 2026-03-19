@@ -212,8 +212,32 @@ export default function Cadastro() {
                 <div>
                   <Label htmlFor="phone">WhatsApp</Label>
                   <div className="flex gap-2">
-                    <div className="flex items-center justify-center px-3 rounded-md border border-input bg-muted text-sm text-muted-foreground select-none shrink-0">
-                      +55
+                    <div className="relative" ref={ddiRef}>
+                      <button
+                        type="button"
+                        onClick={() => setDdiOpen(!ddiOpen)}
+                        className="flex items-center gap-1 h-10 px-3 rounded-md border border-input bg-background text-sm hover:bg-muted transition-colors shrink-0"
+                      >
+                        <span className="text-base">{selectedCountry.flag}</span>
+                        <span>+{selectedCountry.code}</span>
+                        <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                      {ddiOpen && (
+                        <div className="absolute top-full left-0 mt-1 w-52 max-h-56 overflow-y-auto rounded-md border border-input bg-background shadow-lg z-50">
+                          {COUNTRY_CODES.map((c) => (
+                            <button
+                              key={c.code}
+                              type="button"
+                              onClick={() => { setSelectedCountry(c); setDdiOpen(false); }}
+                              className={`flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors ${c.code === selectedCountry.code ? "bg-muted font-medium" : ""}`}
+                            >
+                              <span className="text-base">{c.flag}</span>
+                              <span className="flex-1 text-left">{c.name}</span>
+                              <span className="text-muted-foreground">+{c.code}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <Input
                       id="phone"
