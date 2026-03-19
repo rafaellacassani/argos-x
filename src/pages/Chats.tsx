@@ -2140,8 +2140,27 @@ export default function Chats() {
         }
 
         const existingIds = new Set(messages.map(m => m.id));
+        // Build fingerprints from existing messages for fuzzy dedup
+        const existingFingerprints = new Set<string>();
+        for (const m of messages) {
+          const ts = (m as any)._ts;
+          if (ts && m.content) {
+            const rTs = Math.round(ts / 5000) * 5000;
+            existingFingerprints.add(`${m.sent}:${rTs}:${m.content.slice(0, 80)}`);
+            existingFingerprints.add(`${m.sent}:${rTs - 5000}:${m.content.slice(0, 80)}`);
+            existingFingerprints.add(`${m.sent}:${rTs + 5000}:${m.content.slice(0, 80)}`);
+          }
+        }
         const olderMessages: Message[] = dbRows
-          .filter(m => !existingIds.has(m.message_id || '') && !existingIds.has(m.id))
+          .filter(m => {
+            if (existingIds.has(m.message_id || '') || existingIds.has(m.id)) return false;
+            const dbTs = new Date(m.timestamp).getTime();
+            const rTs = Math.round(dbTs / 5000) * 5000;
+            const isSent = m.from_me || m.direction === 'outbound';
+            const content = (m.content || '').slice(0, 80);
+            if (content && existingFingerprints.has(`${isSent}:${rTs}:${content}`)) return false;
+            return true;
+          })
           .map(m => {
             const date = new Date(m.timestamp);
             return {
