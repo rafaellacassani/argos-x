@@ -469,6 +469,19 @@ serve(async (req) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
+        const subMeta = (subscription as any).metadata || {};
+
+        // If it's a lead pack subscription being canceled, deactivate the pack
+        if (subMeta.type === "lead_pack") {
+          await supabaseAdmin
+            .from("lead_packs")
+            .update({ active: false })
+            .eq("stripe_item_id", subscription.id);
+          console.log(`Lead pack subscription ${subscription.id} deactivated`);
+          break;
+        }
+
+        // Normal plan cancellation
         await supabaseAdmin
           .from("workspaces")
           .update({
