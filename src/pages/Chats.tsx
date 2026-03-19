@@ -1361,7 +1361,7 @@ export default function Chats() {
                     unread: conv.unread_count,
                     online: false,
                     phone: conv.sender_id,
-                    lastMessageFromMe: false,
+                    lastMessageFromMe: conv.last_direction === "outbound",
                     isMeta: true,
                     metaPageId: conv.meta_page_id,
                     metaSenderId: conv.sender_id,
