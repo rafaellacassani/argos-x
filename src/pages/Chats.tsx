@@ -2351,26 +2351,33 @@ export default function Chats() {
     return result;
   }, [chats, searchTerm, activeFilters]);
 
-  // Auto-select chat when navigating with ?search= param
-  const searchAutoSelectedRef = useRef(false);
+  // Auto-select the correct chat when navigating with ?search= param
   useEffect(() => {
-    if (searchAutoSelectedRef.current) return;
     const params = new URLSearchParams(window.location.search);
     const searchParam = params.get("search");
-    if (!searchParam || filteredChats.length === 0 || selectedChat) return;
-    
+    if (!searchParam || filteredChats.length === 0) return;
+
     const searchDigits = searchParam.replace(/\D/g, "");
-    const match = filteredChats.find(chat => {
-      const chatDigits = chat.phone.replace(/\D/g, "");
+    const chatMatchesSearch = (chat: Chat) => {
+      const phoneDigits = chat.phone.replace(/\D/g, "");
+      const remoteDigits = cleanPhoneNumber(chat.remoteJid);
+      const remoteAltDigits = chat.remoteJidAlt ? cleanPhoneNumber(chat.remoteJidAlt) : "";
+
       if (searchDigits.length >= 8) {
-        return chatDigits.includes(searchDigits.slice(-8)) || searchDigits.includes(chatDigits.slice(-8));
+        const target = searchDigits.slice(-8);
+        return [phoneDigits, remoteDigits, remoteAltDigits].some(
+          (value) => value.length >= 8 && value.slice(-8) === target
+        );
       }
-      return chatDigits.includes(searchDigits);
-    });
-    
-    if (match) {
+
+      return [phoneDigits, remoteDigits, remoteAltDigits].some((value) => value.includes(searchDigits));
+    };
+
+    if (selectedChat && chatMatchesSearch(selectedChat)) return;
+
+    const match = filteredChats.find(chatMatchesSearch);
+    if (match && selectedChat?.id !== match.id) {
       setSelectedChat(match);
-      searchAutoSelectedRef.current = true;
     }
   }, [filteredChats, selectedChat]);
 
