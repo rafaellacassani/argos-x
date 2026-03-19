@@ -1357,6 +1357,7 @@ export default function Chats() {
           }));
           if (!cancelled) {
             setChats(allChats);
+            setHasMoreChats(hasMoreMetaConvs);
             if (allChats.length > 0 && !selectedChat) setSelectedChat(allChats[0]);
             setLoadingChats(false);
           }
