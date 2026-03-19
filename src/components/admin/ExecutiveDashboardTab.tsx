@@ -527,12 +527,7 @@ export default function ExecutiveDashboardTab() {
                           size="sm"
                           variant="ghost"
                           className="gap-1.5 text-xs"
-                          onClick={() =>
-                            openWhatsApp(
-                              c.phone,
-                              c.name,
-                              "Olá, {nome}! 👋 Bem-vindo(a) ao Argos X! Sou da equipe e gostaria de saber se posso ajudar em algo."
-                            )
+                          onClick={() => openChatWithPhone(c.phone, navigate)}
                           }
                         >
                           <MessageSquare className="w-3 h-3" />
