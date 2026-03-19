@@ -1066,13 +1066,15 @@ serve(async (req) => {
         evoInstancesRes,
         wabaRes,
         executionsRes,
+        profilesRes,
       ] = await Promise.all([
         supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
-        supabaseAdmin.from("workspace_members").select("workspace_id").in("workspace_id", wsIds).not("accepted_at", "is", null),
+        supabaseAdmin.from("workspace_members").select("workspace_id, user_id, role").in("workspace_id", wsIds).not("accepted_at", "is", null),
         supabaseAdmin.from("ai_agents").select("id, name, model, is_active, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_instances").select("instance_name, display_name, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
+        supabaseAdmin.from("user_profiles").select("user_id, full_name, phone, email"),
       ]);
 
       // Count leads per workspace
@@ -1086,10 +1088,21 @@ serve(async (req) => {
         leadCountsMap.set(wsId, count || 0);
       }
 
-      // Count members per workspace
+      // Count members per workspace & find owner (admin) per workspace
       const membersData = membersRes.data || [];
+      const profilesByUserId = new Map<string, any>();
+      for (const p of (profilesRes.data || [])) {
+        profilesByUserId.set(p.user_id, p);
+      }
+      const ownerByWs = new Map<string, any>();
       for (const m of membersData) {
         memberCountsMap.set(m.workspace_id, (memberCountsMap.get(m.workspace_id) || 0) + 1);
+        if (m.role === "admin" && !ownerByWs.has(m.workspace_id)) {
+          const profile = profilesByUserId.get(m.user_id);
+          if (profile) {
+            ownerByWs.set(m.workspace_id, { name: profile.full_name, phone: profile.phone, email: profile.email });
+          }
+        }
       }
 
       // Group agents by workspace
@@ -1207,6 +1220,7 @@ serve(async (req) => {
           ai_used: ws.ai_interactions_used || 0,
           ai_limit: ws.ai_interactions_limit || 0,
           members_count: memberCountsMap.get(ws.id) || 0,
+          owner: ownerByWs.get(ws.id) || null,
           agents,
           instances,
           alerts,

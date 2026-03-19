@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Search, RefreshCw, Loader2, AlertTriangle, CheckCircle2, XCircle,
-  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap
+  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap, MessageCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -29,6 +30,12 @@ interface InstanceHealth {
   status: "connected" | "disconnected" | "error";
 }
 
+interface WorkspaceOwner {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
 interface WorkspaceHealth {
   id: string;
   name: string;
@@ -43,12 +50,14 @@ interface WorkspaceHealth {
   ai_used: number;
   ai_limit: number;
   members_count: number;
+  owner: WorkspaceOwner | null;
   agents: AgentHealth[];
   instances: InstanceHealth[];
   alerts: string[];
 }
 
 export default function WorkspaceHealthTab() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<WorkspaceHealth[]>([]);
@@ -174,8 +183,26 @@ export default function WorkspaceHealthTab() {
                           <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {ws.members_count} usuários</span>
                           <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> {ws.agents.length} agentes</span>
                           <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> {ws.instances.length} instâncias</span>
+                          {ws.owner?.name && (
+                            <span className="flex items-center gap-1">👤 {ws.owner.name}</span>
+                          )}
                         </div>
                       </div>
+                      {ws.owner?.phone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const cleanPhone = ws.owner!.phone!.replace(/\D/g, "");
+                            navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
+                          }}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          Chamar no Chat
+                        </Button>
+                      )}
                       {hasAlerts && (
                         <Badge variant="destructive" className="gap-1">
                           <AlertTriangle className="w-3 h-3" />
