@@ -367,6 +367,7 @@ export default function Chats() {
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const [hasMoreChats, setHasMoreChats] = useState(true);
   const chatListOffsetRef = useRef(1000); // tracks how many messages we've already loaded for chat list
+  const chatListSentinelRef = useRef<HTMLDivElement | null>(null);
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
     // Initialize filters from URL params on mount
     const params = new URLSearchParams(window.location.search);
@@ -1094,12 +1095,13 @@ export default function Chats() {
     try {
       const instanceName = selectedInstance === "all" ? "all" : selectedInstance;
       
+      const BATCH = 200; // fetch 200 msgs ≈ ~30-50 unique chats
       let query = supabase
         .from("whatsapp_messages")
         .select("remote_jid, push_name, content, direction, timestamp, instance_name, from_me, message_id")
         .eq("workspace_id", workspaceId)
         .order("timestamp", { ascending: false })
-        .range(chatListOffsetRef.current, chatListOffsetRef.current + 999);
+        .range(chatListOffsetRef.current, chatListOffsetRef.current + BATCH - 1);
 
       if (instanceName && instanceName !== "all" && !instanceName?.startsWith("meta:")) {
         query = query.eq("instance_name", instanceName);
@@ -1111,7 +1113,7 @@ export default function Chats() {
         return;
       }
 
-      if (msgs.length < 1000) setHasMoreChats(false);
+      if (msgs.length < BATCH) setHasMoreChats(false);
       chatListOffsetRef.current += msgs.length;
 
       // Resolve @lid messages
@@ -1190,7 +1192,24 @@ export default function Chats() {
     }
   }, [workspaceId, selectedInstance, loadingMoreChats]);
 
-  // Helper: deduplicate chats using canonical phone key per instance
+  // IntersectionObserver for infinite scroll on chat list
+  useEffect(() => {
+    const sentinel = chatListSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMoreChats && !loadingMoreChats && !loadingChats) {
+          loadMoreChats();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreChats, loadingMoreChats, loadingChats, loadMoreChats]);
+
+
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
     const jidToKey = new Map<string, string>();
@@ -2556,23 +2575,12 @@ export default function Chats() {
                   </div>
                 </div>
               ))}
-              {/* Load more conversations button */}
+              {/* Infinite scroll sentinel */}
               {hasMoreChats && !selectedInstance?.startsWith("meta:") && (
-                <div className="p-3 flex justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={loadMoreChats}
-                    disabled={loadingMoreChats}
-                    className="text-xs text-muted-foreground hover:text-foreground w-full"
-                  >
-                    {loadingMoreChats ? (
-                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                    ) : (
-                      <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
-                    )}
-                    {loadingMoreChats ? "Carregando..." : "Carregar conversas mais antigas"}
-                  </Button>
+                <div ref={chatListSentinelRef} className="flex items-center justify-center py-3">
+                  {loadingMoreChats && (
+                    <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
+                  )}
                 </div>
               )}
             </div>
