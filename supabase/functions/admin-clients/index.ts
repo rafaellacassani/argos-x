@@ -1066,13 +1066,15 @@ serve(async (req) => {
         evoInstancesRes,
         wabaRes,
         executionsRes,
+        profilesRes,
       ] = await Promise.all([
         supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
-        supabaseAdmin.from("workspace_members").select("workspace_id").in("workspace_id", wsIds).not("accepted_at", "is", null),
+        supabaseAdmin.from("workspace_members").select("workspace_id, user_id, role").in("workspace_id", wsIds).not("accepted_at", "is", null),
         supabaseAdmin.from("ai_agents").select("id, name, model, is_active, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_instances").select("instance_name, display_name, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
+        supabaseAdmin.from("user_profiles").select("user_id, full_name, phone, email"),
       ]);
 
       // Count leads per workspace
