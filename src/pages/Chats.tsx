@@ -1413,7 +1413,7 @@ export default function Chats() {
 
     loadChats();
     return () => { cancelled = true; };
-  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations, dedupChats]);
+  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations, dedupChats, activeFilters]);
 
   // Background: auto-create leads for chats without matching leads (non-blocking)
   useEffect(() => {
