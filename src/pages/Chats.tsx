@@ -1358,7 +1358,7 @@ export default function Chats() {
               // Also fetch Meta conversations in background
               if (metaPages.length > 0) {
                 try {
-                  const metaConvs = await fetchMetaConversations();
+                  const metaConvs = await fetchMetaConversations(undefined, metaDirectionFilter);
                   const metaChats = (metaConvs || []).map((conv) => ({
                     id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
                     remoteJid: conv.sender_id,
