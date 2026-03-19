@@ -364,6 +364,9 @@ export default function Chats() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [loadingMoreChats, setLoadingMoreChats] = useState(false);
+  const [hasMoreChats, setHasMoreChats] = useState(true);
+  const chatListOffsetRef = useRef(1000); // tracks how many messages we've already loaded for chat list
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
     // Initialize filters from URL params on mount
     const params = new URLSearchParams(window.location.search);
