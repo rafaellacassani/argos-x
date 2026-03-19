@@ -1095,12 +1095,13 @@ export default function Chats() {
     try {
       const instanceName = selectedInstance === "all" ? "all" : selectedInstance;
       
+      const BATCH = 200; // fetch 200 msgs ≈ ~30-50 unique chats
       let query = supabase
         .from("whatsapp_messages")
         .select("remote_jid, push_name, content, direction, timestamp, instance_name, from_me, message_id")
         .eq("workspace_id", workspaceId)
         .order("timestamp", { ascending: false })
-        .range(chatListOffsetRef.current, chatListOffsetRef.current + 999);
+        .range(chatListOffsetRef.current, chatListOffsetRef.current + BATCH - 1);
 
       if (instanceName && instanceName !== "all" && !instanceName?.startsWith("meta:")) {
         query = query.eq("instance_name", instanceName);
