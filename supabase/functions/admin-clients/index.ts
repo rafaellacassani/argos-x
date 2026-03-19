@@ -1220,6 +1220,7 @@ serve(async (req) => {
           ai_used: ws.ai_interactions_used || 0,
           ai_limit: ws.ai_interactions_limit || 0,
           members_count: memberCountsMap.get(ws.id) || 0,
+          owner: ownerByWs.get(ws.id) || null,
           agents,
           instances,
           alerts,
