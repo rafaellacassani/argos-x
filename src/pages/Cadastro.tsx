@@ -85,6 +85,18 @@ export default function Cadastro() {
     password: "",
     confirmPassword: "",
   });
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [ddiOpen, setDdiOpen] = useState(false);
+  const ddiRef = useRef<HTMLDivElement>(null);
+
+  // Close DDI dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ddiRef.current && !ddiRef.current.contains(e.target as Node)) setDdiOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: applyPhoneMask(value) }));
