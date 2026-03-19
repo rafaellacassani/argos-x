@@ -246,7 +246,12 @@ export default function FollowupInteligenteTab() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="inboxia-card p-6">
           <div className="flex items-center gap-2 mb-3">
             <Users className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold">{scannedContacts.length} contatos sem resposta encontrados</h3>
+            <h3 className="font-semibold">
+              {scannedContacts.length} contatos encontrados
+              {scannedContacts.length > contactLimit && (
+                <span className="text-muted-foreground font-normal text-sm ml-2">(limitado a {contactLimit})</span>
+              )}
+            </h3>
           </div>
           <ScrollArea className="h-40">
             <div className="space-y-2">
