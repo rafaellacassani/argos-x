@@ -99,8 +99,10 @@ import {
   Music,
   Type,
   Upload,
+  Activity,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
