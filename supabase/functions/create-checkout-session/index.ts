@@ -14,6 +14,20 @@ const PLAN_PRICE_MAP: Record<string, string> = {
   escala: "STRIPE_PRICE_ESCALA",
 };
 
+const PACK_PRICE_MAP: Record<number, string> = {
+  1000: "STRIPE_PRICE_PACK_1000",
+  5000: "STRIPE_PRICE_PACK_5000",
+  20000: "STRIPE_PRICE_PACK_20000",
+  50000: "STRIPE_PRICE_PACK_50000",
+};
+
+const PACK_PRICES: Record<number, number> = {
+  1000: 17,
+  5000: 47,
+  20000: 97,
+  50000: 197,
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -52,7 +66,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { workspaceId, plan, priceId: directPriceId, successUrl, cancelUrl } = body;
+    const { workspaceId, plan, priceId: directPriceId, successUrl, cancelUrl, type, packSize } = body;
 
     if (!workspaceId || !successUrl || !cancelUrl) {
       return new Response(
@@ -61,9 +75,27 @@ serve(async (req) => {
       );
     }
 
-    // Resolve priceId: either from plan name or direct priceId
+    // Resolve priceId based on type
     let priceId = directPriceId;
-    if (!priceId && plan) {
+
+    if (type === "lead_pack") {
+      // Lead pack flow
+      if (!packSize || !PACK_PRICE_MAP[packSize]) {
+        return new Response(
+          JSON.stringify({ error: `packSize inválido: "${packSize}". Use: 1000, 5000, 20000 ou 50000.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const envKey = PACK_PRICE_MAP[packSize];
+      priceId = Deno.env.get(envKey);
+      if (!priceId) {
+        return new Response(
+          JSON.stringify({ error: `Stripe Price ID não configurado para o pacote de ${packSize} leads. Configure o secret ${envKey}.` }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    } else if (!priceId && plan) {
+      // Plan flow
       const envKey = PLAN_PRICE_MAP[plan];
       if (!envKey) {
         return new Response(
@@ -82,7 +114,7 @@ serve(async (req) => {
 
     if (!priceId) {
       return new Response(
-        JSON.stringify({ error: "Informe 'plan' ou 'priceId'." }),
+        JSON.stringify({ error: "Informe 'plan', 'priceId' ou 'type: lead_pack' com 'packSize'." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -128,18 +160,31 @@ serve(async (req) => {
         .eq("id", workspaceId);
     }
 
-    // Create checkout session — no trial here, trial is free without card
+    // Build metadata for checkout session
+    const sessionMetadata: Record<string, string> = { workspace_id: workspaceId };
+    const subscriptionMetadata: Record<string, string> = { workspace_id: workspaceId };
+
+    if (type === "lead_pack") {
+      sessionMetadata.type = "lead_pack";
+      sessionMetadata.pack_size = String(packSize);
+      subscriptionMetadata.type = "lead_pack";
+      subscriptionMetadata.pack_size = String(packSize);
+    } else {
+      subscriptionMetadata.plan = plan || "unknown";
+    }
+
+    // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       subscription_data: {
-        metadata: { workspace_id: workspaceId, plan: plan || "unknown" },
+        metadata: subscriptionMetadata,
       },
       success_url: successUrl + (successUrl.includes("?") ? "&" : "?") + "session_id={CHECKOUT_SESSION_ID}",
       cancel_url: cancelUrl,
-      metadata: { workspace_id: workspaceId },
+      metadata: sessionMetadata,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

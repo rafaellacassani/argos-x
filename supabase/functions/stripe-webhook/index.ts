@@ -350,9 +350,31 @@ serve(async (req) => {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string;
         const subscriptionId = session.subscription as string;
+        const sessionMeta = session.metadata || {};
 
+        // Handle lead pack checkout
+        if (sessionMeta.type === "lead_pack" && sessionMeta.pack_size) {
+          const packSize = parseInt(sessionMeta.pack_size, 10);
+          const workspaceId = sessionMeta.workspace_id;
+
+          if (workspaceId && packSize) {
+            const packPrices: Record<number, number> = { 1000: 17, 5000: 47, 20000: 97, 50000: 197 };
+
+            await supabaseAdmin.from("lead_packs").insert({
+              workspace_id: workspaceId,
+              pack_size: packSize,
+              price_paid: packPrices[packSize] || 0,
+              stripe_item_id: subscriptionId,
+              active: true,
+            });
+
+            console.log(`Lead pack +${packSize} activated for workspace ${workspaceId}`);
+          }
+          break;
+        }
+
+        // Normal plan checkout
         if (customerId && subscriptionId) {
-          // Get subscription to find price ID
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
           const priceId = subscription.items?.data?.[0]?.price?.id || null;
 
@@ -447,6 +469,19 @@ serve(async (req) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         const customerId = subscription.customer as string;
+        const subMeta = (subscription as any).metadata || {};
+
+        // If it's a lead pack subscription being canceled, deactivate the pack
+        if (subMeta.type === "lead_pack") {
+          await supabaseAdmin
+            .from("lead_packs")
+            .update({ active: false })
+            .eq("stripe_item_id", subscription.id);
+          console.log(`Lead pack subscription ${subscription.id} deactivated`);
+          break;
+        }
+
+        // Normal plan cancellation
         await supabaseAdmin
           .from("workspaces")
           .update({

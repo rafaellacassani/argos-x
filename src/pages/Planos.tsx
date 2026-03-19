@@ -69,6 +69,7 @@ export default function Planos() {
   const { planName, currentLeadCount, totalLeadLimit, leadUsagePercent } = usePlanLimits();
   const { workspaceId } = useWorkspace();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPack, setLoadingPack] = useState<number | null>(null);
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
@@ -98,6 +99,38 @@ export default function Planos() {
       });
     } finally {
       setLoadingPlan(null);
+    }
+  };
+
+  const handleBuyPack = async (packSize: number) => {
+    if (!workspaceId) return;
+    setLoadingPack(packSize);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: {
+          workspaceId,
+          type: "lead_pack",
+          packSize,
+          successUrl: window.location.origin + "/planos?pack=success",
+          cancelUrl: window.location.origin + "/planos",
+        },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("Nenhuma URL de checkout retornada.");
+      }
+    } catch (err: any) {
+      console.error("Pack checkout error:", err);
+      toast({
+        title: "Erro ao iniciar checkout do pacote",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPack(null);
     }
   };
 
@@ -203,27 +236,39 @@ export default function Planos() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {LEAD_PACK_DEFINITIONS.map((pack, index) => (
-            <motion.div
-              key={pack.size}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + index * 0.08 }}
-              className="rounded-xl border border-border bg-card p-5 flex flex-col items-center text-center"
-            >
-              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
-                <Package className="w-5 h-5 text-primary" />
-              </div>
-              <h3 className="font-bold text-foreground text-lg">{pack.label}</h3>
-              <p className="text-2xl font-bold text-foreground mt-1">
-                R$ {pack.price}
-                <span className="text-sm font-normal text-muted-foreground">/mês</span>
-              </p>
-              <Button className="mt-4 w-full" variant="outline" disabled>
-                Em breve
-              </Button>
-            </motion.div>
-          ))}
+          {LEAD_PACK_DEFINITIONS.map((pack, index) => {
+            const isPackLoading = loadingPack === pack.size;
+            return (
+              <motion.div
+                key={pack.size}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + index * 0.08 }}
+                className="rounded-xl border border-border bg-card p-5 flex flex-col items-center text-center"
+              >
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                  <Package className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="font-bold text-foreground text-lg">{pack.label}</h3>
+                <p className="text-2xl font-bold text-foreground mt-1">
+                  R$ {pack.price}
+                  <span className="text-sm font-normal text-muted-foreground">/mês</span>
+                </p>
+                <Button
+                  className="mt-4 w-full"
+                  variant="outline"
+                  disabled={isPackLoading || !!loadingPack}
+                  onClick={() => handleBuyPack(pack.size)}
+                >
+                  {isPackLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Redirecionando...</>
+                  ) : (
+                    "Contratar"
+                  )}
+                </Button>
+              </motion.div>
+            );
+          })}
         </div>
       </section>
     </div>
