@@ -1093,6 +1093,44 @@ export default function Chats() {
   // Load more chats (older conversations) - triggered by "Carregar mais" button
   const loadMoreChats = useCallback(async () => {
     if (loadingMoreChats || !workspaceId) return;
+
+    // Meta/WABA pagination — delegate to the hook
+    if (selectedInstance?.startsWith("meta:")) {
+      if (!hasMoreMetaConvs || metaLoading) return;
+      setLoadingMoreChats(true);
+      try {
+        const newConvs = await fetchMoreMetaConversations();
+        if (newConvs.length > 0) {
+          const newChats = newConvs.map((conv) => ({
+            id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
+            remoteJid: conv.sender_id,
+            name: conv.sender_name || conv.sender_id,
+            lastMessage: conv.last_message,
+            time: formatMetaTime(conv.last_timestamp),
+            unread: conv.unread_count,
+            online: false,
+            phone: conv.sender_id,
+            lastMessageFromMe: conv.last_direction === "outbound",
+            isMeta: true,
+            metaPageId: conv.meta_page_id,
+            metaSenderId: conv.sender_id,
+            metaPlatform: conv.platform,
+            instanceLabel: conv.page_name || conv.platform,
+            _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
+          }));
+          setChats((prev) => {
+            const existingKeys = new Set(prev.map((c) => c.id));
+            const added = newChats.filter((c: any) => !existingKeys.has(c.id));
+            return added.length > 0 ? [...prev, ...added] : prev;
+          });
+        }
+        if (!hasMoreMetaConvs) setHasMoreChats(false);
+      } finally {
+        setLoadingMoreChats(false);
+      }
+      return;
+    }
+
     setLoadingMoreChats(true);
     try {
       const instanceName = selectedInstance === "all" ? "all" : selectedInstance;
