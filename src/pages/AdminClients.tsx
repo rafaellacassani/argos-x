@@ -898,6 +898,10 @@ export default function AdminClients() {
             <CalendarClock className="w-4 h-4" />
             Cadência
           </TabsTrigger>
+          <TabsTrigger value="health" className="gap-2">
+            <Activity className="w-4 h-4" />
+            Saúde & Monitoramento
+          </TabsTrigger>
         </TabsList>
 
         {/* ───────── TAB: NOVO CLIENTE ───────── */}
