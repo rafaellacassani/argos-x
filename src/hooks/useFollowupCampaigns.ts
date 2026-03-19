@@ -334,10 +334,35 @@ export function useFollowupCampaigns() {
     toast.info('Follow-up retomado');
   }, []);
 
-  const cancelFollowup = useCallback(() => {
-    canceledRef.current = true;
+  const cancelFollowup = useCallback(async (campaignId?: string) => {
+    const targetCampaignId = campaignId || currentCampaignId;
+
+    if (!targetCampaignId) {
+      toast.error('Nenhuma campanha em execução para cancelar');
+      return;
+    }
+
+    if (targetCampaignId === currentCampaignId) {
+      canceledRef.current = true;
+    }
+
+    const { error } = await supabase
+      .from('followup_campaigns')
+      .update({
+        status: 'canceled',
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq('id', targetCampaignId);
+
+    if (error) {
+      console.error('Cancel followup error:', error);
+      toast.error('Erro ao cancelar follow-up');
+      return;
+    }
+
+    await fetchCampaigns();
     toast.info('Follow-up cancelado');
-  }, []);
+  }, [currentCampaignId, fetchCampaigns]);
 
   const isPaused = useCallback(() => pausedRef.current, []);
 
