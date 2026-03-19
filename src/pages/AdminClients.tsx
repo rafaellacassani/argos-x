@@ -103,6 +103,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
+import ExecutiveDashboardTab from "@/components/admin/ExecutiveDashboardTab";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
