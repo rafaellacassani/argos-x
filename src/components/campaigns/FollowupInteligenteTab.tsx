@@ -246,7 +246,7 @@ export default function FollowupInteligenteTab() {
                 {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                 {paused ? "Retomar" : "Pausar"}
               </Button>
-              <Button size="sm" variant="destructive" onClick={cancelFollowup} className="gap-1.5">
+              <Button size="sm" variant="destructive" onClick={() => void cancelFollowup()} className="gap-1.5">
                 <XCircle className="w-4 h-4" />
                 Cancelar
               </Button>
