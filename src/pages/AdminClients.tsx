@@ -1941,6 +1941,11 @@ export default function AdminClients() {
         <TabsContent value="health">
           <WorkspaceHealthTab />
         </TabsContent>
+
+        {/* ───────── TAB: DASHBOARD EXECUTIVO ───────── */}
+        <TabsContent value="executive">
+          <ExecutiveDashboardTab />
+        </TabsContent>
       </Tabs>
 
       {/* ───────── DETAIL DIALOG ───────── */}
