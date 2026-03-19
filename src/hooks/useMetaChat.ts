@@ -17,6 +17,7 @@ export interface MetaConversation {
   meta_page_id: string;
   last_message: string;
   last_timestamp: string;
+  last_direction: string;
   unread_count: number;
   page_name?: string;
 }
@@ -60,7 +61,7 @@ export function useMetaChat() {
     try {
       let query = supabase
         .from("meta_conversation_summary" as any)
-        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp")
+        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
         .order("timestamp", { ascending: false })
         .limit(100);
 
@@ -81,6 +82,7 @@ export function useMetaChat() {
         meta_page_id: row.meta_page_id,
         last_message: row.content || (row.message_type !== "text" ? `📎 ${row.message_type}` : ""),
         last_timestamp: row.timestamp,
+        last_direction: row.direction || "inbound",
         unread_count: 0,
         page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
       }));
@@ -197,6 +199,7 @@ export function useMetaChat() {
                         ...c,
                         last_message: newMsg.content || `📎 ${newMsg.message_type}`,
                         last_timestamp: newMsg.timestamp,
+                        last_direction: newMsg.direction || "inbound",
                       }
                     : c
                 );
@@ -209,6 +212,7 @@ export function useMetaChat() {
                   meta_page_id: newMsg.meta_page_id,
                   last_message: newMsg.content || `📎 ${newMsg.message_type}`,
                   last_timestamp: newMsg.timestamp,
+                  last_direction: newMsg.direction || "inbound",
                   unread_count: 1,
                 },
                 ...prev,
