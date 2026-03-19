@@ -32,11 +32,16 @@ export interface MetaMessage {
   sender_name: string | null;
 }
 
+const META_PAGE_SIZE = 50;
+
 export function useMetaChat() {
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [conversations, setConversations] = useState<MetaConversation[]>([]);
   const [messages, setMessages] = useState<MetaMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(true);
+  const metaOffsetRef = useRef(0);
+  const lastFetchParamsRef = useRef<{ metaPageId?: string; directionFilter?: "inbound" | "outbound" }>({});
 
   // Fetch active meta pages
   const fetchMetaPages = useCallback(async () => {
@@ -55,48 +60,75 @@ export function useMetaChat() {
     return pages;
   }, []);
 
-  // Fetch conversations using the optimized summary view
-  const fetchConversations = useCallback(async (metaPageId?: string, directionFilter?: "inbound" | "outbound") => {
+  // Build and execute a paginated query against the summary view
+  const queryConversations = useCallback(async (
+    metaPageId?: string,
+    directionFilter?: "inbound" | "outbound",
+    offset = 0,
+  ) => {
+    let query = supabase
+      .from("meta_conversation_summary" as any)
+      .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
+      .order("timestamp", { ascending: false })
+      .range(offset, offset + META_PAGE_SIZE - 1);
+
+    if (metaPageId) query = query.eq("meta_page_id", metaPageId);
+    if (directionFilter) query = query.eq("direction", directionFilter);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("[useMetaChat] Error fetching conversations:", error);
+      return [];
+    }
+
+    return (data || []).map((row: any): MetaConversation => ({
+      sender_id: row.sender_id,
+      sender_name: row.sender_name,
+      platform: row.platform,
+      meta_page_id: row.meta_page_id,
+      last_message: row.content || (row.message_type !== "text" ? `📎 ${row.message_type}` : ""),
+      last_timestamp: row.timestamp,
+      last_direction: row.direction || "inbound",
+      unread_count: 0,
+      page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
+    }));
+  }, [metaPages]);
+
+  // Fetch first page of conversations (resets pagination)
+  const fetchConversations = useCallback(async (
+    metaPageId?: string,
+    directionFilter?: "inbound" | "outbound",
+  ) => {
     setLoading(true);
+    metaOffsetRef.current = 0;
+    lastFetchParamsRef.current = { metaPageId, directionFilter };
+    setHasMoreConversations(true);
     try {
-      let query = supabase
-        .from("meta_conversation_summary" as any)
-        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
-        .order("timestamp", { ascending: false })
-        .limit(5000);
-
-      if (metaPageId) {
-        query = query.eq("meta_page_id", metaPageId);
-      }
-
-      if (directionFilter) {
-        query = query.eq("direction", directionFilter);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        console.error("[useMetaChat] Error fetching conversations:", error);
-        return [];
-      }
-
-      const convList: MetaConversation[] = (data || []).map((row: any) => ({
-        sender_id: row.sender_id,
-        sender_name: row.sender_name,
-        platform: row.platform,
-        meta_page_id: row.meta_page_id,
-        last_message: row.content || (row.message_type !== "text" ? `📎 ${row.message_type}` : ""),
-        last_timestamp: row.timestamp,
-        last_direction: row.direction || "inbound",
-        unread_count: 0,
-        page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
-      }));
-
+      const convList = await queryConversations(metaPageId, directionFilter, 0);
+      metaOffsetRef.current = convList.length;
+      if (convList.length < META_PAGE_SIZE) setHasMoreConversations(false);
       setConversations(convList);
       return convList;
     } finally {
       setLoading(false);
     }
-  }, [metaPages]);
+  }, [queryConversations]);
+
+  // Load next page and append
+  const fetchMoreConversations = useCallback(async () => {
+    if (!hasMoreConversations || loading) return [];
+    setLoading(true);
+    try {
+      const { metaPageId, directionFilter } = lastFetchParamsRef.current;
+      const newConvs = await queryConversations(metaPageId, directionFilter, metaOffsetRef.current);
+      metaOffsetRef.current += newConvs.length;
+      if (newConvs.length < META_PAGE_SIZE) setHasMoreConversations(false);
+      setConversations((prev) => [...prev, ...newConvs]);
+      return newConvs;
+    } finally {
+      setLoading(false);
+    }
+  }, [hasMoreConversations, loading, queryConversations]);
 
   // Fetch messages for a specific conversation (sender_id + meta_page_id)
   const fetchMessages = useCallback(
