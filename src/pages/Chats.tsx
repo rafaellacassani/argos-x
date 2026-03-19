@@ -2582,9 +2582,9 @@ export default function Chats() {
                   </div>
                 </div>
               ))}
-              {/* Infinite scroll sentinel */}
+              {/* Infinite scroll loading indicator */}
               {hasMoreChats && !selectedInstance?.startsWith("meta:") && (
-                <div ref={chatListSentinelRef} className="flex items-center justify-center py-3">
+                <div className="flex items-center justify-center py-3">
                   {loadingMoreChats && (
                     <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
                   )}
