@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import argosLogoDark from "@/assets/argos-logo-dark.png";
+
+const COUNTRY_CODES = [
+  { code: "55", flag: "🇧🇷", name: "Brasil" },
+  { code: "1", flag: "🇺🇸", name: "EUA" },
+  { code: "351", flag: "🇵🇹", name: "Portugal" },
+  { code: "54", flag: "🇦🇷", name: "Argentina" },
+  { code: "56", flag: "🇨🇱", name: "Chile" },
+  { code: "57", flag: "🇨🇴", name: "Colômbia" },
+  { code: "52", flag: "🇲🇽", name: "México" },
+  { code: "598", flag: "🇺🇾", name: "Uruguai" },
+  { code: "595", flag: "🇵🇾", name: "Paraguai" },
+  { code: "34", flag: "🇪🇸", name: "Espanha" },
+  { code: "44", flag: "🇬🇧", name: "Reino Unido" },
+  { code: "49", flag: "🇩🇪", name: "Alemanha" },
+  { code: "33", flag: "🇫🇷", name: "França" },
+  { code: "39", flag: "🇮🇹", name: "Itália" },
+];
 
 // Phone mask helper
 function applyPhoneMask(value: string): string {
