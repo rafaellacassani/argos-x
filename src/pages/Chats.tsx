@@ -367,7 +367,7 @@ export default function Chats() {
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const [hasMoreChats, setHasMoreChats] = useState(true);
   const chatListOffsetRef = useRef(1000); // tracks how many messages we've already loaded for chat list
-  const chatListSentinelRef = useRef<HTMLDivElement | null>(null);
+  const chatListScrollRef = useRef<HTMLDivElement | null>(null);
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
     // Initialize filters from URL params on mount
     const params = new URLSearchParams(window.location.search);
@@ -1192,21 +1192,21 @@ export default function Chats() {
     }
   }, [workspaceId, selectedInstance, loadingMoreChats]);
 
-  // IntersectionObserver for infinite scroll on chat list
+  // Scroll-based infinite loading for chat list (ScrollArea uses custom viewport)
   useEffect(() => {
-    const sentinel = chatListSentinelRef.current;
-    if (!sentinel) return;
+    const scrollEl = chatListScrollRef.current;
+    if (!scrollEl) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasMoreChats && !loadingMoreChats && !loadingChats) {
-          loadMoreChats();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    const handleScroll = () => {
+      if (!hasMoreChats || loadingMoreChats || loadingChats) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        loadMoreChats();
+      }
+    };
+
+    scrollEl.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", handleScroll);
   }, [hasMoreChats, loadingMoreChats, loadingChats, loadMoreChats]);
 
 
@@ -2492,7 +2492,15 @@ export default function Chats() {
         </div>
 
         {/* Chat List */}
-        <ScrollArea className="flex-1 [&>div]:!overflow-x-auto">
+        <div className="flex-1 overflow-hidden" ref={(node) => {
+          if (node) {
+            const viewport = node.querySelector('[data-radix-scroll-area-viewport]');
+            chatListScrollRef.current = viewport as HTMLDivElement;
+          } else {
+            chatListScrollRef.current = null;
+          }
+        }}>
+        <ScrollArea className="h-full [&>div]:!overflow-x-auto">
           {loadingChats ? (
             <div className="flex items-center justify-center p-8">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -2575,9 +2583,9 @@ export default function Chats() {
                   </div>
                 </div>
               ))}
-              {/* Infinite scroll sentinel */}
+              {/* Infinite scroll loading indicator */}
               {hasMoreChats && !selectedInstance?.startsWith("meta:") && (
-                <div ref={chatListSentinelRef} className="flex items-center justify-center py-3">
+                <div className="flex items-center justify-center py-3">
                   {loadingMoreChats && (
                     <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
                   )}
@@ -2586,6 +2594,7 @@ export default function Chats() {
             </div>
           )}
         </ScrollArea>
+        </div>
       </div>
 
       {/* Chat Window */}
