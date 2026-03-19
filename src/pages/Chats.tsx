@@ -2524,29 +2524,36 @@ export default function Chats() {
 
             {/* Messages */}
             <div 
-              className="flex-1 overflow-y-auto p-4 min-h-0 w-full"
+              className="flex-1 overflow-y-auto p-4 min-h-0 w-full chat-pattern scrollbar-thin"
               ref={messagesContainerRef}
               onScroll={handleMessagesScroll}
             >
               {loadingMessages ? (
-                <div className="flex flex-col items-center justify-center h-full w-full">
-                  <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mt-2">Carregando mensagens...</p>
+                <div className="flex flex-col items-center justify-center h-full w-full gap-3">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Carregando mensagens...</p>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Nenhuma mensagem encontrada</p>
+                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Nenhuma mensagem encontrada</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4 max-w-3xl mx-auto">
+                <div className="space-y-1 max-w-3xl mx-auto">
                   {/* Load more indicator */}
                   {loadingOlderMessages && (
-                    <div className="flex items-center justify-center py-2">
-                      <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground ml-2">Carregando anteriores...</span>
+                    <div className="flex items-center justify-center py-3">
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map(i => (
+                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                        ))}
+                      </div>
                     </div>
                   )}
                   {hasMoreMessages && !loadingOlderMessages && (
@@ -2554,40 +2561,60 @@ export default function Chats() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-muted-foreground hover:text-foreground"
+                        className="text-xs text-muted-foreground hover:text-foreground bg-card/80 rounded-full px-4 shadow-sm"
                         onClick={loadOlderMessages}
                       >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Carregar mensagens anteriores
+                        ↑ Carregar anteriores
                       </Button>
                     </div>
                   )}
                   {!hasMoreMessages && messages.length > 30 && (
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 h-px bg-border" />
-                      <span className="text-xs text-muted-foreground bg-card px-2">Início da conversa</span>
-                      <div className="flex-1 h-px bg-border" />
+                    <div className="flex items-center justify-center py-3">
+                      <span className="text-[11px] text-muted-foreground bg-card/90 px-4 py-1 rounded-full shadow-sm">
+                        Início da conversa
+                      </span>
                     </div>
                   )}
 
-                  {messages.map((msg, index) => (
-                    <MessageBubble
-                      key={msg.id}
-                      id={msg.id}
-                      content={msg.content}
-                      time={msg.time}
-                      sent={msg.sent}
-                      read={msg.read}
-                      type={msg.type}
-                      mediaUrl={msg.mediaUrl}
-                      thumbnailBase64={msg.thumbnailBase64}
-                      fileName={msg.fileName}
-                      duration={msg.duration}
-                      localAudioBase64={msg.localAudioBase64}
-                      index={index}
-                      onDownloadMedia={handleDownloadMedia}
-                    />
-                  ))}
+                  {messages.map((msg, index) => {
+                    // Date separator logic
+                    const msgDate = (msg as any)._ts ? new Date((msg as any)._ts) : null;
+                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                    const prevDate = prevMsg && (prevMsg as any)._ts ? new Date((prevMsg as any)._ts) : null;
+                    const showDateSeparator = msgDate && (!prevDate || 
+                      msgDate.toDateString() !== prevDate.toDateString());
+                    
+                    return (
+                      <div key={msg.id}>
+                        {showDateSeparator && msgDate && (
+                          <div className="flex items-center justify-center py-3">
+                            <span className="text-[11px] text-muted-foreground bg-card/90 px-4 py-1 rounded-full shadow-sm font-medium">
+                              {msgDate.toLocaleDateString("pt-BR", { 
+                                day: "2-digit", 
+                                month: "long",
+                                year: msgDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        <MessageBubble
+                          id={msg.id}
+                          content={msg.content}
+                          time={msg.time}
+                          sent={msg.sent}
+                          read={msg.read}
+                          type={msg.type}
+                          mediaUrl={msg.mediaUrl}
+                          thumbnailBase64={msg.thumbnailBase64}
+                          fileName={msg.fileName}
+                          duration={msg.duration}
+                          localAudioBase64={msg.localAudioBase64}
+                          index={index}
+                          onDownloadMedia={handleDownloadMedia}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
