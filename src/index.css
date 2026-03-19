@@ -167,6 +167,31 @@
   }
 }
 
+/* Chat WhatsApp-style tokens */
+:root {
+  --chat-bg: 210 11% 93%;
+  --chat-bubble-sent: 142 70% 87%;
+  --chat-bubble-sent-foreground: 0 0% 13%;
+  --chat-bubble-received: 0 0% 100%;
+  --chat-bubble-received-foreground: 0 0% 13%;
+  --chat-timestamp: 0 0% 50%;
+  --chat-separator: 207 15% 70%;
+  --chat-event: 215 16% 60%;
+  --chat-unread: 142 76% 36%;
+}
+
+.dark {
+  --chat-bg: 222 47% 6%;
+  --chat-bubble-sent: 233 40% 25%;
+  --chat-bubble-sent-foreground: 210 40% 98%;
+  --chat-bubble-received: 222 47% 14%;
+  --chat-bubble-received-foreground: 210 40% 98%;
+  --chat-timestamp: 215 20% 55%;
+  --chat-separator: 215 16% 40%;
+  --chat-event: 215 16% 50%;
+  --chat-unread: 142 76% 36%;
+}
+
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
@@ -189,5 +214,10 @@
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  .chat-pattern {
+    background-color: hsl(var(--chat-bg));
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   }
 }

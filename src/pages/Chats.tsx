@@ -1433,19 +1433,22 @@ export default function Chats() {
     enrichChats();
   }, [chats.length, selectedInstance, fetchProfile]);
 
-  // Load messages when chat is selected (with cache)
+  // Load messages when chat is selected (with cache + instant switch)
   useEffect(() => {
     if (!selectedChat) return;
 
     const chatId = selectedChat.id;
     
-    // Check cache first
+    // ═══ INSTANT SWITCH: Clear previous messages immediately, show cache or skeleton ═══
     const cached = messageCacheRef.current.get(chatId);
     if (cached && cached.length > 0) {
       setMessages(cached);
       setHasMoreMessages(cached.length >= 30);
       setLoadingMessages(false);
-      return;
+      // Still fetch fresh data in background below
+    } else {
+      setMessages([]);              // ← Clears ghost from previous chat IMMEDIATELY
+      setLoadingMessages(true);     // Show skeleton only for uncached chats
     }
 
     // Meta chat - load from meta_conversations
@@ -2239,9 +2242,9 @@ export default function Chats() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-card" data-tour="chat-section">
+    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background" data-tour="chat-section">
       {/* Chat List */}
-      <div className="w-[19rem] border-r border-border flex flex-col">
+      <div className="w-[320px] border-r border-border flex flex-col bg-card">
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
@@ -2383,24 +2386,24 @@ export default function Chats() {
               <p>Nenhuma conversa encontrada</p>
             </div>
           ) : (
-            <div className="p-2 overflow-x-auto">
-              {filteredChats.map((chat, index) => (
+            <div className="divide-y divide-border/50">
+              {filteredChats.map((chat) => (
                 <div
                   key={chat.id}
                   onClick={() => setSelectedChat(chat)}
                   className={cn(
-                    "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all",
+                    "flex items-center gap-3 px-3 py-3 cursor-pointer transition-colors",
                     selectedChat?.id === chat.id
-                      ? "bg-secondary/10 border border-secondary/20"
+                      ? "bg-secondary/10"
                       : "hover:bg-muted/50"
                   )}
                 >
-                  <div className="relative">
+                  <div className="relative flex-shrink-0">
                     {chat.profilePicUrl ? (
                       <img 
                         src={chat.profilePicUrl} 
                         alt={chat.name}
-                        className="w-12 h-12 rounded-full object-cover"
+                        className="w-11 h-11 rounded-full object-cover"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
                           (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
@@ -2408,40 +2411,41 @@ export default function Chats() {
                       />
                     ) : null}
                     <div className={cn(
-                      "w-12 h-12 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-primary-foreground font-semibold",
+                      "w-11 h-11 rounded-full bg-gradient-to-br from-primary/80 to-secondary/80 flex items-center justify-center text-primary-foreground font-semibold text-sm",
                       chat.profilePicUrl && "hidden"
                     )}>
                       {(chat.name || "?").split(" ").slice(0, 2).map((n) => n[0] || "").join("").toUpperCase() || "?"}
                     </div>
-                    {chat.online && (
-                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />
-                    )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-foreground truncate">{chat.name}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0 ml-1">{chat.time}</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">{chat.time}</span>
                     </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <p className="text-sm text-muted-foreground truncate flex-1">{chat.phone}</p>
-                      {/* Show source badge */}
-                      {chat.isMeta && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap flex-shrink-0">
-                          {chat.metaPlatform === "instagram" ? "📸 IG" : chat.metaPlatform === "whatsapp_business" ? "📱 WABA" : "💬 FB"}
-                        </span>
-                      )}
-                      {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap flex-shrink-0 max-w-[100px] truncate" title={chat.instanceLabel}>
-                          {chat.instanceLabel}
-                        </span>
-                      )}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground truncate flex-1">
+                        {chat.lastMessageFromMe && <span className="text-muted-foreground/70">Você: </span>}
+                        {chat.lastMessage || chat.phone}
+                      </p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {chat.isMeta && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap">
+                            {chat.metaPlatform === "instagram" ? "IG" : chat.metaPlatform === "whatsapp_business" ? "WABA" : "FB"}
+                          </span>
+                        )}
+                        {selectedInstance === "all" && !chat.isMeta && chat.instanceLabel && (
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap max-w-[60px] truncate" title={chat.instanceLabel}>
+                            {chat.instanceLabel}
+                          </span>
+                        )}
+                        {chat.unread > 0 && (
+                          <div className="min-w-[18px] h-[18px] rounded-full bg-[hsl(var(--chat-unread))] flex items-center justify-center">
+                            <span className="text-[10px] text-white font-bold px-1">{chat.unread}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {chat.unread > 0 && (
-                    <div className="w-5 h-5 rounded-full bg-secondary flex items-center justify-center">
-                      <span className="text-xs text-white font-medium">{chat.unread}</span>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
@@ -2520,29 +2524,36 @@ export default function Chats() {
 
             {/* Messages */}
             <div 
-              className="flex-1 overflow-y-auto p-4 min-h-0 w-full"
+              className="flex-1 overflow-y-auto p-4 min-h-0 w-full chat-pattern scrollbar-thin"
               ref={messagesContainerRef}
               onScroll={handleMessagesScroll}
             >
               {loadingMessages ? (
-                <div className="flex flex-col items-center justify-center h-full w-full">
-                  <RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mt-2">Carregando mensagens...</p>
+                <div className="flex flex-col items-center justify-center h-full w-full gap-3">
+                  <div className="flex gap-1">
+                    {[0, 1, 2].map(i => (
+                      <div key={i} className="w-2 h-2 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Carregando mensagens...</p>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
                   <div className="text-center">
-                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>Nenhuma mensagem encontrada</p>
+                    <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Nenhuma mensagem encontrada</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4 max-w-3xl mx-auto">
+                <div className="space-y-1 max-w-3xl mx-auto">
                   {/* Load more indicator */}
                   {loadingOlderMessages && (
-                    <div className="flex items-center justify-center py-2">
-                      <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground ml-2">Carregando anteriores...</span>
+                    <div className="flex items-center justify-center py-3">
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map(i => (
+                          <div key={i} className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+                        ))}
+                      </div>
                     </div>
                   )}
                   {hasMoreMessages && !loadingOlderMessages && (
@@ -2550,40 +2561,60 @@ export default function Chats() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-muted-foreground hover:text-foreground"
+                        className="text-xs text-muted-foreground hover:text-foreground bg-card/80 rounded-full px-4 shadow-sm"
                         onClick={loadOlderMessages}
                       >
-                        <RefreshCw className="w-3 h-3 mr-1" />
-                        Carregar mensagens anteriores
+                        ↑ Carregar anteriores
                       </Button>
                     </div>
                   )}
                   {!hasMoreMessages && messages.length > 30 && (
-                    <div className="flex items-center gap-4">
-                      <div className="flex-1 h-px bg-border" />
-                      <span className="text-xs text-muted-foreground bg-card px-2">Início da conversa</span>
-                      <div className="flex-1 h-px bg-border" />
+                    <div className="flex items-center justify-center py-3">
+                      <span className="text-[11px] text-muted-foreground bg-card/90 px-4 py-1 rounded-full shadow-sm">
+                        Início da conversa
+                      </span>
                     </div>
                   )}
 
-                  {messages.map((msg, index) => (
-                    <MessageBubble
-                      key={msg.id}
-                      id={msg.id}
-                      content={msg.content}
-                      time={msg.time}
-                      sent={msg.sent}
-                      read={msg.read}
-                      type={msg.type}
-                      mediaUrl={msg.mediaUrl}
-                      thumbnailBase64={msg.thumbnailBase64}
-                      fileName={msg.fileName}
-                      duration={msg.duration}
-                      localAudioBase64={msg.localAudioBase64}
-                      index={index}
-                      onDownloadMedia={handleDownloadMedia}
-                    />
-                  ))}
+                  {messages.map((msg, index) => {
+                    // Date separator logic
+                    const msgDate = (msg as any)._ts ? new Date((msg as any)._ts) : null;
+                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                    const prevDate = prevMsg && (prevMsg as any)._ts ? new Date((prevMsg as any)._ts) : null;
+                    const showDateSeparator = msgDate && (!prevDate || 
+                      msgDate.toDateString() !== prevDate.toDateString());
+                    
+                    return (
+                      <div key={msg.id}>
+                        {showDateSeparator && msgDate && (
+                          <div className="flex items-center justify-center py-3">
+                            <span className="text-[11px] text-muted-foreground bg-card/90 px-4 py-1 rounded-full shadow-sm font-medium">
+                              {msgDate.toLocaleDateString("pt-BR", { 
+                                day: "2-digit", 
+                                month: "long",
+                                year: msgDate.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        <MessageBubble
+                          id={msg.id}
+                          content={msg.content}
+                          time={msg.time}
+                          sent={msg.sent}
+                          read={msg.read}
+                          type={msg.type}
+                          mediaUrl={msg.mediaUrl}
+                          thumbnailBase64={msg.thumbnailBase64}
+                          fileName={msg.fileName}
+                          duration={msg.duration}
+                          localAudioBase64={msg.localAudioBase64}
+                          index={index}
+                          onDownloadMedia={handleDownloadMedia}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
