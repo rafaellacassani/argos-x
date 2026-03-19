@@ -1192,21 +1192,21 @@ export default function Chats() {
     }
   }, [workspaceId, selectedInstance, loadingMoreChats]);
 
-  // IntersectionObserver for infinite scroll on chat list
+  // Scroll-based infinite loading for chat list (ScrollArea uses custom viewport)
   useEffect(() => {
-    const sentinel = chatListSentinelRef.current;
-    if (!sentinel) return;
+    const scrollEl = chatListScrollRef.current;
+    if (!scrollEl) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting && hasMoreChats && !loadingMoreChats && !loadingChats) {
-          loadMoreChats();
-        }
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    const handleScroll = () => {
+      if (!hasMoreChats || loadingMoreChats || loadingChats) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+      if (scrollHeight - scrollTop - clientHeight < 200) {
+        loadMoreChats();
+      }
+    };
+
+    scrollEl.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollEl.removeEventListener("scroll", handleScroll);
   }, [hasMoreChats, loadingMoreChats, loadingChats, loadMoreChats]);
 
 
