@@ -123,6 +123,7 @@ const openChatWithPhone = (phone: string, navigate: ReturnType<typeof useNavigat
 };
 
 export default function ExecutiveDashboardTab() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
