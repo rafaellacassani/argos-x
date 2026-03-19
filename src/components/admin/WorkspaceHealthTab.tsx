@@ -195,12 +195,13 @@ export default function WorkspaceHealthTab() {
                           className="gap-1.5 text-xs shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
-                            const cleanPhone = ws.owner!.phone!.replace(/\D/g, "");
-                            navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
+                            const digits = ws.owner!.phone!.replace(/\D/g, "");
+                            const finalNumber = digits.startsWith("55") ? digits : `55${digits}`;
+                            window.open(`https://wa.me/${finalNumber}`, "_blank");
                           }}
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
-                          Chamar no Chat
+                          Chamar no WhatsApp
                         </Button>
                       )}
                       {hasAlerts && (
