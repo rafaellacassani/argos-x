@@ -1230,7 +1230,7 @@ export default function Chats() {
     } finally {
       setLoadingMoreChats(false);
     }
-  }, [workspaceId, selectedInstance, loadingMoreChats]);
+  }, [workspaceId, selectedInstance, loadingMoreChats, hasMoreMetaConvs, metaLoading, fetchMoreMetaConversations]);
 
   // Scroll-based infinite loading for chat list (ScrollArea uses custom viewport)
   useEffect(() => {
