@@ -30,6 +30,12 @@ interface InstanceHealth {
   status: "connected" | "disconnected" | "error";
 }
 
+interface WorkspaceOwner {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
 interface WorkspaceHealth {
   id: string;
   name: string;
@@ -44,6 +50,7 @@ interface WorkspaceHealth {
   ai_used: number;
   ai_limit: number;
   members_count: number;
+  owner: WorkspaceOwner | null;
   agents: AgentHealth[];
   instances: InstanceHealth[];
   alerts: string[];
