@@ -329,7 +329,6 @@ export default function ExecutiveDashboardTab() {
                           variant="outline"
                           className="gap-1.5 text-xs"
                           onClick={() => openChatWithPhone(c.phone, navigate)}
-                          }
                         >
                           <TrendingUp className="w-3 h-3" />
                           Oferecer upgrade
