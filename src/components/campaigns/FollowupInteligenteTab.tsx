@@ -15,6 +15,7 @@ import {
   Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,8 @@ export default function FollowupInteligenteTab() {
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
   const [campaignContacts, setCampaignContacts] = useState<any[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [audienceType, setAudienceType] = useState<"no_reply_from_lead" | "no_reply_from_us">("no_reply_from_lead");
+  const [contactLimit, setContactLimit] = useState(50);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -96,13 +99,15 @@ export default function FollowupInteligenteTab() {
   const handleScan = () => {
     const inst = getSelectedInstanceData();
     if (!inst) return;
-    scanContacts(inst.type, inst.instance_name || null, inst.meta_page_id || null);
+    scanContacts(inst.type, inst.instance_name || null, inst.meta_page_id || null, audienceType);
   };
+
+  const effectiveContacts = scannedContacts.slice(0, contactLimit);
 
   const handleStart = () => {
     const inst = getSelectedInstanceData();
     if (!inst || !selectedAgent || !contextPrompt.trim()) return;
-    startFollowup(inst.type, inst.instance_name || null, inst.meta_page_id || null, selectedAgent, contextPrompt, scannedContacts);
+    startFollowup(inst.type, inst.instance_name || null, inst.meta_page_id || null, selectedAgent, contextPrompt, effectiveContacts);
   };
 
   const handlePauseToggle = () => {
@@ -181,6 +186,30 @@ export default function FollowupInteligenteTab() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="space-y-2">
+            <Label>Tipo de público</Label>
+            <Select value={audienceType} onValueChange={(v) => setAudienceType(v as any)} disabled={executing}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no_reply_from_lead">Sem resposta do lead</SelectItem>
+                <SelectItem value="no_reply_from_us">Lead respondeu mas está sem resposta nossa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Limite de contatos nesta execução</Label>
+            <Input
+              type="number"
+              min={1}
+              max={500}
+              value={contactLimit}
+              onChange={(e) => setContactLimit(Math.max(1, parseInt(e.target.value) || 50))}
+              disabled={executing}
+            />
+          </div>
+        </div>
+
         <div className="space-y-2 mb-4">
           <Label>Contexto e objetivo do follow-up</Label>
           <Textarea placeholder="Ex: Convidar para fazer cadastro no Argos X, link: argosx.com.br/cadastro." value={contextPrompt} onChange={(e) => setContextPrompt(e.target.value)} disabled={executing} className="min-h-[100px]" />
@@ -189,12 +218,12 @@ export default function FollowupInteligenteTab() {
         <div className="flex flex-wrap gap-3">
           <Button onClick={handleScan} disabled={!selectedInstance || scanning || executing} variant="outline" className="gap-2">
             {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            Buscar contatos sem resposta
+            Buscar contatos
           </Button>
           {scannedContacts.length > 0 && !executing && (
             <Button onClick={handleStart} disabled={!selectedAgent || !contextPrompt.trim() || executing} className="gap-2">
               <Play className="w-4 h-4" />
-              Iniciar Follow-up ({scannedContacts.length} contatos)
+              Iniciar Follow-up ({effectiveContacts.length} contatos)
             </Button>
           )}
           {executing && (
@@ -217,7 +246,12 @@ export default function FollowupInteligenteTab() {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="inboxia-card p-6">
           <div className="flex items-center gap-2 mb-3">
             <Users className="w-5 h-5 text-primary" />
-            <h3 className="font-semibold">{scannedContacts.length} contatos sem resposta encontrados</h3>
+            <h3 className="font-semibold">
+              {scannedContacts.length} contatos encontrados
+              {scannedContacts.length > contactLimit && (
+                <span className="text-muted-foreground font-normal text-sm ml-2">(limitado a {contactLimit})</span>
+              )}
+            </h3>
           </div>
           <ScrollArea className="h-40">
             <div className="space-y-2">

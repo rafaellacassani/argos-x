@@ -47,7 +47,8 @@ Deno.serve(async (req) => {
     // ACTION: scan - Find unanswered contacts
     // ========================
     if (action === "scan") {
-      const { instance_type, instance_name, meta_page_id, workspace_id } = body;
+      const { instance_type, instance_name, meta_page_id, workspace_id, audience_type } = body;
+      // audience_type: "no_reply_from_lead" (default) or "no_reply_from_us"
 
       if (!workspace_id) {
         return new Response(JSON.stringify({ error: "workspace_id required" }), {
@@ -55,10 +56,11 @@ Deno.serve(async (req) => {
         });
       }
 
+      const lookForNoReplyFromUs = audience_type === "no_reply_from_us";
       let contacts: { phone: string; name: string | null; sender_id?: string; last_message: string }[] = [];
 
       if (instance_type === "waba" && meta_page_id) {
-        // WABA: scan meta_conversations for contacts whose last message is outbound
+        // WABA: scan meta_conversations
         const { data: conversations, error: convError } = await supabase
           .from("meta_conversations")
           .select("sender_id, sender_name, content, direction, timestamp")
@@ -68,7 +70,6 @@ Deno.serve(async (req) => {
 
         if (convError) throw convError;
 
-        // Group by sender_id, find those whose last message is outbound (no inbound reply)
         const senderMap = new Map<string, { name: string | null; lastDirection: string; lastContent: string; lastTimestamp: string }>();
         for (const msg of conversations || []) {
           if (!senderMap.has(msg.sender_id)) {
@@ -84,24 +85,35 @@ Deno.serve(async (req) => {
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
         for (const [senderId, info] of senderMap) {
-          // Only contacts whose last message was outbound (no reply)
-          if (info.lastDirection === "outbound") {
-            // Skip if they replied in last 24h
-            const hasRecentInbound = (conversations || []).some(
-              (m) => m.sender_id === senderId && m.direction === "inbound" && m.timestamp > twentyFourHoursAgo
-            );
-            if (hasRecentInbound) continue;
+          if (lookForNoReplyFromUs) {
+            // Lead responded (last msg is inbound) but we never replied back
+            if (info.lastDirection === "inbound") {
+              contacts.push({
+                phone: senderId,
+                name: info.name,
+                sender_id: senderId,
+                last_message: info.lastContent?.substring(0, 200) || "",
+              });
+            }
+          } else {
+            // Default: last message was outbound (we sent, lead never replied)
+            if (info.lastDirection === "outbound") {
+              const hasRecentInbound = (conversations || []).some(
+                (m) => m.sender_id === senderId && m.direction === "inbound" && m.timestamp > twentyFourHoursAgo
+              );
+              if (hasRecentInbound) continue;
 
-            contacts.push({
-              phone: senderId,
-              name: info.name,
-              sender_id: senderId,
-              last_message: info.lastContent?.substring(0, 200) || "",
-            });
+              contacts.push({
+                phone: senderId,
+                name: info.name,
+                sender_id: senderId,
+                last_message: info.lastContent?.substring(0, 200) || "",
+              });
+            }
           }
         }
       } else if (instance_type === "evolution" && instance_name) {
-        // Evolution: scan whatsapp_messages for contacts whose last message is outbound
+        // Evolution: scan whatsapp_messages
         const { data: messages, error: msgError } = await supabase
           .from("whatsapp_messages")
           .select("remote_jid, push_name, content, direction, timestamp")
@@ -113,7 +125,7 @@ Deno.serve(async (req) => {
 
         const jidMap = new Map<string, { name: string | null; lastDirection: string; lastContent: string; lastTimestamp: string }>();
         for (const msg of messages || []) {
-          if (msg.remote_jid?.endsWith("@g.us")) continue; // Skip groups
+          if (msg.remote_jid?.endsWith("@g.us")) continue;
           if (!jidMap.has(msg.remote_jid)) {
             jidMap.set(msg.remote_jid, {
               name: msg.push_name,
@@ -127,19 +139,33 @@ Deno.serve(async (req) => {
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
         for (const [jid, info] of jidMap) {
-          if (info.lastDirection === "outbound" || info.lastDirection === "sent") {
-            const hasRecentInbound = (messages || []).some(
-              (m) => m.remote_jid === jid && (m.direction === "inbound" || m.direction === "received") && m.timestamp > twentyFourHoursAgo
-            );
-            if (hasRecentInbound) continue;
+          if (lookForNoReplyFromUs) {
+            // Lead responded (last msg is inbound) but we never replied
+            if (info.lastDirection === "inbound" || info.lastDirection === "received") {
+              const phone = jid.replace(/@s\.whatsapp\.net$/, "");
+              contacts.push({
+                phone,
+                name: info.name,
+                sender_id: jid,
+                last_message: info.lastContent?.substring(0, 200) || "",
+              });
+            }
+          } else {
+            // Default: last message was outbound (lead never replied)
+            if (info.lastDirection === "outbound" || info.lastDirection === "sent") {
+              const hasRecentInbound = (messages || []).some(
+                (m) => m.remote_jid === jid && (m.direction === "inbound" || m.direction === "received") && m.timestamp > twentyFourHoursAgo
+              );
+              if (hasRecentInbound) continue;
 
-            const phone = jid.replace(/@s\.whatsapp\.net$/, "");
-            contacts.push({
-              phone,
-              name: info.name,
-              sender_id: jid,
-              last_message: info.lastContent?.substring(0, 200) || "",
-            });
+              const phone = jid.replace(/@s\.whatsapp\.net$/, "");
+              contacts.push({
+                phone,
+                name: info.name,
+                sender_id: jid,
+                last_message: info.lastContent?.substring(0, 200) || "",
+              });
+            }
           }
         }
       } else {
