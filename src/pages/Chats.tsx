@@ -1287,10 +1287,17 @@ export default function Chats() {
       try {
         const isMetaSource = selectedInstance.startsWith("meta:");
         
+        // Compute server-side direction filter for Meta/WABA conversations
+        const metaDirectionFilter = activeFilters?.responseStatus?.includes("unanswered") 
+          ? "inbound" as const
+          : activeFilters?.responseStatus?.includes("answered")
+            ? "outbound" as const
+            : undefined;
+
         if (isMetaSource) {
           // Load Meta conversations only
           const metaPageId = selectedInstance.replace("meta:", "");
-          const convs = await fetchMetaConversations(metaPageId);
+          const convs = await fetchMetaConversations(metaPageId, metaDirectionFilter);
           const allChats = (convs || []).map((conv) => ({
             id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
             remoteJid: conv.sender_id,
@@ -1351,7 +1358,7 @@ export default function Chats() {
               // Also fetch Meta conversations in background
               if (metaPages.length > 0) {
                 try {
-                  const metaConvs = await fetchMetaConversations();
+                  const metaConvs = await fetchMetaConversations(undefined, metaDirectionFilter);
                   const metaChats = (metaConvs || []).map((conv) => ({
                     id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
                     remoteJid: conv.sender_id,
@@ -1406,7 +1413,7 @@ export default function Chats() {
 
     loadChats();
     return () => { cancelled = true; };
-  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations, dedupChats]);
+  }, [selectedInstance, instances, metaPages, transformChatData, fetchMetaConversations, dedupChats, activeFilters]);
 
   // Background: auto-create leads for chats without matching leads (non-blocking)
   useEffect(() => {
@@ -2333,7 +2340,12 @@ export default function Chats() {
       } else if (selectedInstance.startsWith("meta:")) {
         // Meta instance — load from meta_conversations, not Evolution API
         try {
-          const metaConvs = await fetchMetaConversations();
+          const dirFilter = activeFilters?.responseStatus?.includes("unanswered") 
+            ? "inbound" as const
+            : activeFilters?.responseStatus?.includes("answered")
+              ? "outbound" as const
+              : undefined;
+          const metaConvs = await fetchMetaConversations(undefined, dirFilter);
           allChats = (metaConvs || []).map((conv) => ({
             id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
             remoteJid: conv.sender_id,

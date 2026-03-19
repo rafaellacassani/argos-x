@@ -56,17 +56,21 @@ export function useMetaChat() {
   }, []);
 
   // Fetch conversations using the optimized summary view
-  const fetchConversations = useCallback(async (metaPageId?: string) => {
+  const fetchConversations = useCallback(async (metaPageId?: string, directionFilter?: "inbound" | "outbound") => {
     setLoading(true);
     try {
       let query = supabase
         .from("meta_conversation_summary" as any)
         .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
         .order("timestamp", { ascending: false })
-        .limit(100);
+        .limit(5000);
 
       if (metaPageId) {
         query = query.eq("meta_page_id", metaPageId);
+      }
+
+      if (directionFilter) {
+        query = query.eq("direction", directionFilter);
       }
 
       const { data, error } = await query;
