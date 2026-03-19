@@ -1113,7 +1113,7 @@ export default function Chats() {
         return;
       }
 
-      if (msgs.length < 1000) setHasMoreChats(false);
+      if (msgs.length < BATCH) setHasMoreChats(false);
       chatListOffsetRef.current += msgs.length;
 
       // Resolve @lid messages
