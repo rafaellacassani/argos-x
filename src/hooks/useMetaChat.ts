@@ -17,6 +17,7 @@ export interface MetaConversation {
   meta_page_id: string;
   last_message: string;
   last_timestamp: string;
+  last_direction: string;
   unread_count: number;
   page_name?: string;
 }
