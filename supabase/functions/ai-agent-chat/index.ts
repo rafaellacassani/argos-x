@@ -752,10 +752,9 @@ serve(async (req) => {
             return new Response(JSON.stringify({ response: responseContent, chunks: agent.message_split_enabled ? splitMessage(responseContent, agent.message_split_length || 400) : [responseContent] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
           // Ensure model uses gateway-compatible format (must keep prefix)
-          // If model uses unsupported provider (anthropic) or has no prefix, default to openai/gpt-5-mini
           let gatewayModel = modelName;
           if (!gatewayModel.includes("/") || gatewayModel.startsWith("anthropic/")) {
-            gatewayModel = "openai/gpt-5-mini";
+            gatewayModel = "openai/gpt-4o-mini";
           }
           aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
