@@ -69,6 +69,7 @@ export default function Planos() {
   const { planName, currentLeadCount, totalLeadLimit, leadUsagePercent } = usePlanLimits();
   const { workspaceId } = useWorkspace();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPack, setLoadingPack] = useState<number | null>(null);
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
@@ -98,6 +99,38 @@ export default function Planos() {
       });
     } finally {
       setLoadingPlan(null);
+    }
+  };
+
+  const handleBuyPack = async (packSize: number) => {
+    if (!workspaceId) return;
+    setLoadingPack(packSize);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+        body: {
+          workspaceId,
+          type: "lead_pack",
+          packSize,
+          successUrl: window.location.origin + "/planos?pack=success",
+          cancelUrl: window.location.origin + "/planos",
+        },
+      });
+
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("Nenhuma URL de checkout retornada.");
+      }
+    } catch (err: any) {
+      console.error("Pack checkout error:", err);
+      toast({
+        title: "Erro ao iniciar checkout do pacote",
+        description: err.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPack(null);
     }
   };
 
