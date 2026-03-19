@@ -2244,7 +2244,7 @@ export default function Chats() {
   return (
     <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background" data-tour="chat-section">
       {/* Chat List */}
-      <div className="w-[19rem] border-r border-border flex flex-col">
+      <div className="w-[320px] border-r border-border flex flex-col bg-card">
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
