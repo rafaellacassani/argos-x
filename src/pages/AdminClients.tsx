@@ -99,8 +99,10 @@ import {
   Music,
   Type,
   Upload,
+  Activity,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
@@ -895,6 +897,10 @@ export default function AdminClients() {
           <TabsTrigger value="cadence" className="gap-2">
             <CalendarClock className="w-4 h-4" />
             Cadência
+          </TabsTrigger>
+          <TabsTrigger value="health" className="gap-2">
+            <Activity className="w-4 h-4" />
+            Saúde & Monitoramento
           </TabsTrigger>
         </TabsList>
 
@@ -1923,6 +1929,11 @@ export default function AdminClients() {
           ) : (
             <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
           )}
+        </TabsContent>
+
+        {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
+        <TabsContent value="health">
+          <WorkspaceHealthTab />
         </TabsContent>
       </Tabs>
 

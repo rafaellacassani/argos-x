@@ -1037,6 +1037,179 @@ serve(async (req) => {
       });
     }
 
+    // ──────────────────────────────────────
+    // ACTION: HEALTH-MONITORING
+    // ──────────────────────────────────────
+    if (action === "health-monitoring") {
+      const { data: workspaces } = await supabaseAdmin
+        .from("workspaces")
+        .select("id, name, plan_type, plan_name, subscription_status, trial_end, blocked_at, lead_limit, extra_leads, ai_interactions_limit, ai_interactions_used")
+        .order("created_at", { ascending: false });
+
+      if (!workspaces?.length) {
+        return new Response(JSON.stringify({ workspaces: [] }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const now = new Date();
+      const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      // Fetch all data in parallel
+      const wsIds = workspaces.map((w: any) => w.id);
+
+      const [
+        leadsRes,
+        membersRes,
+        agentsRes,
+        evoInstancesRes,
+        wabaRes,
+        executionsRes,
+      ] = await Promise.all([
+        supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
+        supabaseAdmin.from("workspace_members").select("workspace_id").in("workspace_id", wsIds).not("accepted_at", "is", null),
+        supabaseAdmin.from("ai_agents").select("id, name, model, is_active, workspace_id").in("workspace_id", wsIds),
+        supabaseAdmin.from("whatsapp_instances").select("instance_name, display_name, workspace_id").in("workspace_id", wsIds),
+        supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
+        supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
+      ]);
+
+      // Count leads per workspace
+      // We need individual counts, so let's do it differently
+      const leadCountsMap = new Map<string, number>();
+      const memberCountsMap = new Map<string, number>();
+      
+      // Get leads count per workspace
+      for (const wsId of wsIds) {
+        const { count } = await supabaseAdmin.from("leads").select("*", { count: "exact", head: true }).eq("workspace_id", wsId);
+        leadCountsMap.set(wsId, count || 0);
+      }
+
+      // Count members per workspace
+      const membersData = membersRes.data || [];
+      for (const m of membersData) {
+        memberCountsMap.set(m.workspace_id, (memberCountsMap.get(m.workspace_id) || 0) + 1);
+      }
+
+      // Group agents by workspace
+      const agentsByWs = new Map<string, any[]>();
+      for (const a of (agentsRes.data || [])) {
+        const arr = agentsByWs.get(a.workspace_id) || [];
+        arr.push(a);
+        agentsByWs.set(a.workspace_id, arr);
+      }
+
+      // Group executions by agent
+      const execByAgent = new Map<string, number>();
+      const respondedAgents = new Set<string>();
+      for (const e of (executionsRes.data || [])) {
+        execByAgent.set(e.agent_id, (execByAgent.get(e.agent_id) || 0) + 1);
+        if (e.status === "success") respondedAgents.add(e.agent_id);
+      }
+
+      // Check Evolution API connection status
+      const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+      const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+      
+      let evoStatusMap = new Map<string, string>();
+      if (EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+        try {
+          const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+          const res = await fetch(`${apiUrl}/instance/fetchInstances`, {
+            headers: { apikey: EVOLUTION_API_KEY },
+          });
+          if (res.ok) {
+            const instances = await res.json();
+            for (const inst of instances) {
+              const name = inst.instance?.instanceName || inst.instanceName;
+              const state = inst.instance?.state || inst.state || "close";
+              evoStatusMap.set(name, state === "open" ? "connected" : "disconnected");
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to fetch Evolution instances:", e);
+        }
+      }
+
+      // Build response
+      const result = workspaces.map((ws: any) => {
+        const agents = (agentsByWs.get(ws.id) || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          model: a.model || "N/A",
+          is_active: !!a.is_active,
+          interactions_24h: execByAgent.get(a.id) || 0,
+          responded_24h: respondedAgents.has(a.id),
+        }));
+
+        const evoInstances = (evoInstancesRes.data || [])
+          .filter((i: any) => i.workspace_id === ws.id)
+          .map((i: any) => ({
+            instance_name: i.instance_name,
+            display_name: i.display_name,
+            type: "evolution" as const,
+            status: evoStatusMap.get(i.instance_name) || "disconnected",
+          }));
+
+        const wabaInstances = (wabaRes.data || [])
+          .filter((i: any) => i.workspace_id === ws.id)
+          .map((i: any) => ({
+            instance_name: i.id,
+            display_name: i.inbox_name || i.phone_number,
+            type: "waba" as const,
+            status: i.is_active ? (i.status === "active" ? "connected" : "disconnected") : "disconnected",
+          }));
+
+        const instances = [...evoInstances, ...wabaInstances];
+
+        // Build alerts
+        const alerts: string[] = [];
+        const totalLeadLimit = (ws.lead_limit || 0) + (ws.extra_leads || 0);
+        const leadPct = totalLeadLimit > 0 ? ((leadCountsMap.get(ws.id) || 0) / totalLeadLimit) * 100 : 0;
+        const aiPct = (ws.ai_interactions_limit || 0) > 0 ? ((ws.ai_interactions_used || 0) / ws.ai_interactions_limit) * 100 : 0;
+
+        if (leadPct > 90) alerts.push(`Leads ${Math.round(leadPct)}%`);
+        if (aiPct > 90) alerts.push(`IA ${Math.round(aiPct)}%`);
+        
+        for (const inst of instances) {
+          if (inst.status === "disconnected" || inst.status === "error") {
+            alerts.push(`${inst.display_name || inst.instance_name} desconectado`);
+          }
+        }
+
+        for (const agent of agents) {
+          if (agent.is_active && !agent.responded_24h && agent.interactions_24h === 0) {
+            // Check if agent has had no activity - we flag after 48h but use 24h data as proxy
+            alerts.push(`${agent.name} sem atividade`);
+          }
+        }
+
+        return {
+          id: ws.id,
+          name: ws.name,
+          plan_type: ws.plan_type,
+          plan_name: ws.plan_name,
+          subscription_status: ws.subscription_status,
+          trial_end: ws.trial_end,
+          blocked_at: ws.blocked_at,
+          leads_used: leadCountsMap.get(ws.id) || 0,
+          lead_limit: ws.lead_limit || 0,
+          extra_leads: ws.extra_leads || 0,
+          ai_used: ws.ai_interactions_used || 0,
+          ai_limit: ws.ai_interactions_limit || 0,
+          members_count: memberCountsMap.get(ws.id) || 0,
+          agents,
+          instances,
+          alerts,
+        };
+      });
+
+      return new Response(JSON.stringify({ workspaces: result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
