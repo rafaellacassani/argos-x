@@ -2351,6 +2351,29 @@ export default function Chats() {
     return result;
   }, [chats, searchTerm, activeFilters]);
 
+  // Auto-select chat when navigating with ?search= param
+  const searchAutoSelectedRef = useRef(false);
+  useEffect(() => {
+    if (searchAutoSelectedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const searchParam = params.get("search");
+    if (!searchParam || filteredChats.length === 0 || selectedChat) return;
+    
+    const searchDigits = searchParam.replace(/\D/g, "");
+    const match = filteredChats.find(chat => {
+      const chatDigits = chat.phone.replace(/\D/g, "");
+      if (searchDigits.length >= 8) {
+        return chatDigits.includes(searchDigits.slice(-8)) || searchDigits.includes(chatDigits.slice(-8));
+      }
+      return chatDigits.includes(searchDigits);
+    });
+    
+    if (match) {
+      setSelectedChat(match);
+      searchAutoSelectedRef.current = true;
+    }
+  }, [filteredChats, selectedChat]);
+
   const handleRefresh = async () => {
     if (!selectedInstance) return;
     setLoadingChats(true);
