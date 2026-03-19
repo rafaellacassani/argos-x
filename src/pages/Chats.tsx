@@ -1383,9 +1383,10 @@ export default function Chats() {
             _timestamp: new Date(conv.last_timestamp).getTime() / 1000,
           }));
           if (!cancelled) {
+            const hasUrlSearch = new URLSearchParams(window.location.search).has("search");
             setChats(allChats);
             setHasMoreChats(hasMoreMetaConvs);
-            if (allChats.length > 0 && !selectedChat) setSelectedChat(allChats[0]);
+            if (allChats.length > 0 && !selectedChat && !hasUrlSearch) setSelectedChat(allChats[0]);
             setLoadingChats(false);
           }
         } else {
@@ -1394,9 +1395,10 @@ export default function Chats() {
           const initialChats = dedupChats(dbChats);
           
           if (!cancelled) {
+            const hasUrlSearch = new URLSearchParams(window.location.search).has("search");
             setChats(initialChats);
             setChatError(null);
-            if (initialChats.length > 0 && !selectedChat) setSelectedChat(initialChats[0]);
+            if (initialChats.length > 0 && !selectedChat && !hasUrlSearch) setSelectedChat(initialChats[0]);
             setLoadingChats(false); // ← UI visible now! User can interact
           }
 
