@@ -650,10 +650,51 @@ app.post("/", async (c) => {
       return c.json({ received: true, skipped: "group" }, 200, corsHeaders);
     }
 
-    const messageText =
+    // Extract text from all known message types
+    let messageText =
       data.message?.conversation ||
       data.message?.extendedTextMessage?.text ||
       "";
+
+    // Template messages — extract hydrated content
+    if (!messageText && data.message?.templateMessage) {
+      const tpl = data.message.templateMessage;
+      messageText =
+        tpl.hydratedTemplate?.hydratedContentText ||
+        tpl.hydratedFourRowTemplate?.hydratedContentText ||
+        tpl.hydratedTemplate?.hydratedTitleText ||
+        tpl.hydratedFourRowTemplate?.hydratedTitleText ||
+        "";
+      if (!messageText) messageText = "📋 Mensagem de template";
+    }
+
+    // Button reply (user pressed a button on a template/interactive message)
+    if (!messageText && data.message?.buttonsResponseMessage) {
+      messageText = data.message.buttonsResponseMessage.selectedDisplayText || "✅ Resposta de botão";
+    }
+
+    // Template button reply (e.g. quick reply buttons on templates)
+    if (!messageText && data.message?.templateButtonReplyMessage) {
+      messageText = data.message.templateButtonReplyMessage.selectedDisplayText || "✅ Resposta de botão";
+    }
+
+    // List response
+    if (!messageText && data.message?.listResponseMessage) {
+      messageText = data.message.listResponseMessage.title || data.message.listResponseMessage.description || "✅ Resposta de lista";
+    }
+
+    // Interactive message body (buttons sent by business)
+    if (!messageText && data.message?.interactiveMessage?.body?.text) {
+      messageText = data.message.interactiveMessage.body.text;
+      const footer = data.message.interactiveMessage.footer?.text;
+      if (footer) messageText += `\n\n${footer}`;
+    }
+
+    // Interactive response (nativeFlowResponseMessage, etc.)
+    if (!messageText && data.message?.interactiveResponseMessage) {
+      const body = data.message.interactiveResponseMessage.body;
+      messageText = typeof body === "string" ? body : body?.text || "✅ Resposta interativa";
+    }
 
     let mediaType: string | null = null;
     let mediaCaption: string | null = null;

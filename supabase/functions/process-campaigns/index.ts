@@ -261,12 +261,37 @@ serve(async (req) => {
                 .single()
               ).data?.meta_page_id : null;
 
+              // Build the full hydrated template text for display
+              let hydratedContent = bodyComponent?.text || "";
+              if (hydratedContent && bodyParams.length > 0) {
+                const varMatches = hydratedContent.match(/\{\{[^}]+\}\}/g) || [];
+                for (let vi = 0; vi < varMatches.length && vi < bodyParams.length; vi++) {
+                  hydratedContent = hydratedContent.replace(varMatches[vi], bodyParams[vi].text || varMatches[vi]);
+                }
+              }
+
+              // Also include header text if present
+              const headerComponent = (tpl.components as any[]).find((c: any) => c.type === "HEADER" && c.format === "TEXT");
+              const footerComponent = (tpl.components as any[]).find((c: any) => c.type === "FOOTER");
+              const buttonComponents = (tpl.components as any[]).filter((c: any) => c.type === "BUTTONS");
+
+              let fullContent = "";
+              if (headerComponent?.text) fullContent += `*${headerComponent.text}*\n\n`;
+              fullContent += hydratedContent || tpl.template_name;
+              if (footerComponent?.text) fullContent += `\n\n_${footerComponent.text}_`;
+              if (buttonComponents.length > 0) {
+                const buttons = buttonComponents.flatMap((bc: any) => bc.buttons || []);
+                if (buttons.length > 0) {
+                  fullContent += "\n\n" + buttons.map((b: any, idx: number) => `▸ ${b.text || `Botão ${idx + 1}`}`).join("\n");
+                }
+              }
+
               await supabase.from("meta_conversations").insert({
                 workspace_id: campaign.workspace_id,
                 meta_page_id: metaPageId || null,
                 sender_id: cleanPhone,
                 sender_name: leadName,
-                content: `📋 Template: ${tpl.template_name}`,
+                content: fullContent,
                 direction: "outbound",
                 platform: "whatsapp_business",
                 message_type: "template",
