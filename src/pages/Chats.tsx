@@ -1287,10 +1287,17 @@ export default function Chats() {
       try {
         const isMetaSource = selectedInstance.startsWith("meta:");
         
+        // Compute server-side direction filter for Meta/WABA conversations
+        const metaDirectionFilter = activeFilters?.responseStatus?.includes("unanswered") 
+          ? "inbound" as const
+          : activeFilters?.responseStatus?.includes("answered")
+            ? "outbound" as const
+            : undefined;
+
         if (isMetaSource) {
           // Load Meta conversations only
           const metaPageId = selectedInstance.replace("meta:", "");
-          const convs = await fetchMetaConversations(metaPageId);
+          const convs = await fetchMetaConversations(metaPageId, metaDirectionFilter);
           const allChats = (convs || []).map((conv) => ({
             id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
             remoteJid: conv.sender_id,
