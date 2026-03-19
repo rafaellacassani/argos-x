@@ -57,6 +57,7 @@ interface WorkspaceHealth {
 }
 
 export default function WorkspaceHealthTab() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<WorkspaceHealth[]>([]);
