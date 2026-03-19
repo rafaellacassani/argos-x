@@ -283,7 +283,7 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais.`;
       }
 
       const aiData = await aiResponse.json();
-      const generatedMessage = aiData.choices?.[0]?.message?.content?.trim() || "";
+      const generatedMessage = aiData.content?.[0]?.text?.trim() || "";
 
       if (!generatedMessage) {
         return new Response(JSON.stringify({ error: "Empty AI response" }), {
