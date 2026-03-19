@@ -117,11 +117,9 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const openWhatsApp = (phone: string, name: string, message: string) => {
+const openChatWithPhone = (phone: string, navigate: ReturnType<typeof useNavigate>) => {
   const cleanPhone = phone.replace(/\D/g, "");
-  const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-  const text = encodeURIComponent(message.replace("{nome}", name));
-  window.open(`https://wa.me/${fullPhone}?text=${text}`, "_blank");
+  navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
 };
 
 export default function ExecutiveDashboardTab() {
