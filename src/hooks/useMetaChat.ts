@@ -61,7 +61,7 @@ export function useMetaChat() {
     try {
       let query = supabase
         .from("meta_conversation_summary" as any)
-        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp")
+        .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
         .order("timestamp", { ascending: false })
         .limit(100);
 
