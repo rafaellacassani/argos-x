@@ -2310,10 +2310,14 @@ export default function Chats() {
 
   // Apply filters to chats
   const filteredChats = useMemo(() => {
-    let result = chats.filter((chat) =>
-      chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      chat.phone.includes(searchTerm)
-    );
+    const normalizedSearchDigits = normalizeDigits(searchTerm);
+    let result = chats.filter((chat) => {
+      if (!searchTerm) return true;
+      return (
+        chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        chatMatchesPhoneSearch(chat, normalizedSearchDigits)
+      );
+    });
 
     // Apply additional filters if active
     if (activeFilters) {
@@ -2323,7 +2327,7 @@ export default function Chats() {
         result = result.filter(
           (chat) =>
             chat.name.toLowerCase().includes(searchLower) ||
-            chat.phone.includes(activeFilters.leadSearch!)
+            chatMatchesPhoneSearch(chat, activeFilters.leadSearch!)
         );
       }
 
@@ -2377,35 +2381,31 @@ export default function Chats() {
     return result;
   }, [chats, searchTerm, activeFilters]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has("search")) return;
+
+    const nextSearch = params.get("search") || "";
+    setSearchTerm((prev) => (prev === nextSearch ? prev : nextSearch));
+    setSelectedChat((current) => {
+      if (!current || !nextSearch) return current;
+      return chatMatchesPhoneSearch(current, nextSearch) ? current : null;
+    });
+  }, [location.search]);
+
   // Auto-select the correct chat when navigating with ?search= param
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams(location.search);
     const searchParam = params.get("search");
-    if (!searchParam || filteredChats.length === 0) return;
+    if (!searchParam || chats.length === 0) return;
 
-    const searchDigits = searchParam.replace(/\D/g, "");
-    const chatMatchesSearch = (chat: Chat) => {
-      const phoneDigits = chat.phone.replace(/\D/g, "");
-      const remoteDigits = cleanPhoneNumber(chat.remoteJid);
-      const remoteAltDigits = chat.remoteJidAlt ? cleanPhoneNumber(chat.remoteJidAlt) : "";
+    if (selectedChat && chatMatchesPhoneSearch(selectedChat, searchParam)) return;
 
-      if (searchDigits.length >= 8) {
-        const target = searchDigits.slice(-8);
-        return [phoneDigits, remoteDigits, remoteAltDigits].some(
-          (value) => value.length >= 8 && value.slice(-8) === target
-        );
-      }
-
-      return [phoneDigits, remoteDigits, remoteAltDigits].some((value) => value.includes(searchDigits));
-    };
-
-    if (selectedChat && chatMatchesSearch(selectedChat)) return;
-
-    const match = filteredChats.find(chatMatchesSearch);
+    const match = chats.find((chat) => chatMatchesPhoneSearch(chat, searchParam));
     if (match && selectedChat?.id !== match.id) {
       setSelectedChat(match);
     }
-  }, [filteredChats, selectedChat]);
+  }, [location.search, chats, selectedChat]);
 
   const handleRefresh = async () => {
     if (!selectedInstance) return;
