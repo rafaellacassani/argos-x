@@ -236,10 +236,23 @@ export default function FollowupInteligenteTab() {
       {/* Execution progress */}
       {executing && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="inboxia-card p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Loader2 className="w-5 h-5 text-primary animate-spin" />
-            <h3 className="font-semibold">{paused ? "Follow-up pausado" : "Executando Follow-up..."}</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 text-primary animate-spin" />
+              <h3 className="font-semibold">{paused ? "Follow-up pausado" : "Executando Follow-up..."}</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={handlePauseToggle} className="gap-1.5">
+                {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                {paused ? "Retomar" : "Pausar"}
+              </Button>
+              <Button size="sm" variant="destructive" onClick={cancelFollowup} className="gap-1.5">
+                <XCircle className="w-4 h-4" />
+                Cancelar
+              </Button>
+            </div>
           </div>
+
           <div className="mb-4">
             <div className="flex items-center justify-between text-sm mb-2">
               <span className="text-muted-foreground">{sentCount + failedCount} de {totalContacts} processados</span>
