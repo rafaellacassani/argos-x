@@ -252,11 +252,20 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais.`;
         });
       }
 
+      const allowedModels = [
+        "openai/gpt-5-mini", "openai/gpt-5", "openai/gpt-5-nano", "openai/gpt-5.2",
+        "google/gemini-2.5-pro", "google/gemini-2.5-flash", "google/gemini-2.5-flash-lite",
+        "google/gemini-3-flash-preview", "google/gemini-3-pro-image-preview",
+        "google/gemini-3.1-pro-preview", "google/gemini-3.1-flash-image-preview",
+      ];
+      const requestedModel = agent.model || "google/gemini-2.5-flash";
+      const model = allowedModels.includes(requestedModel) ? requestedModel : "google/gemini-2.5-flash";
+
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: agent.model || "google/gemini-2.5-flash",
+          model,
           messages: aiMessages,
           temperature: 0.8,
           max_tokens: 500,
