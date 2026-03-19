@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import argosLogoDark from "@/assets/argos-logo-dark.png";
+
+const COUNTRY_CODES = [
+  { code: "55", flag: "🇧🇷", name: "Brasil" },
+  { code: "1", flag: "🇺🇸", name: "EUA" },
+  { code: "351", flag: "🇵🇹", name: "Portugal" },
+  { code: "54", flag: "🇦🇷", name: "Argentina" },
+  { code: "56", flag: "🇨🇱", name: "Chile" },
+  { code: "57", flag: "🇨🇴", name: "Colômbia" },
+  { code: "52", flag: "🇲🇽", name: "México" },
+  { code: "598", flag: "🇺🇾", name: "Uruguai" },
+  { code: "595", flag: "🇵🇾", name: "Paraguai" },
+  { code: "34", flag: "🇪🇸", name: "Espanha" },
+  { code: "44", flag: "🇬🇧", name: "Reino Unido" },
+  { code: "49", flag: "🇩🇪", name: "Alemanha" },
+  { code: "33", flag: "🇫🇷", name: "França" },
+  { code: "39", flag: "🇮🇹", name: "Itália" },
+];
 
 // Phone mask helper
 function applyPhoneMask(value: string): string {
@@ -68,6 +85,18 @@ export default function Cadastro() {
     password: "",
     confirmPassword: "",
   });
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
+  const [ddiOpen, setDdiOpen] = useState(false);
+  const ddiRef = useRef<HTMLDivElement>(null);
+
+  // Close DDI dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ddiRef.current && !ddiRef.current.contains(e.target as Node)) setDdiOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const handlePhoneChange = (value: string) => {
     setForm((prev) => ({ ...prev, phone: applyPhoneMask(value) }));
@@ -103,10 +132,7 @@ export default function Cadastro() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: form.name,
-            phone: (() => {
-              const digits = form.phone.replace(/\D/g, "");
-              return digits.startsWith("55") ? digits : `55${digits}`;
-            })(),
+            phone: `${selectedCountry.code}${form.phone.replace(/\D/g, "")}`,
             email: form.email,
             companyName: form.companyName,
             password: form.password,
@@ -186,8 +212,32 @@ export default function Cadastro() {
                 <div>
                   <Label htmlFor="phone">WhatsApp</Label>
                   <div className="flex gap-2">
-                    <div className="flex items-center justify-center px-3 rounded-md border border-input bg-muted text-sm text-muted-foreground select-none shrink-0">
-                      +55
+                    <div className="relative" ref={ddiRef}>
+                      <button
+                        type="button"
+                        onClick={() => setDdiOpen(!ddiOpen)}
+                        className="flex items-center gap-1 h-10 px-3 rounded-md border border-input bg-background text-sm hover:bg-muted transition-colors shrink-0"
+                      >
+                        <span className="text-base">{selectedCountry.flag}</span>
+                        <span>+{selectedCountry.code}</span>
+                        <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                      </button>
+                      {ddiOpen && (
+                        <div className="absolute top-full left-0 mt-1 w-52 max-h-56 overflow-y-auto rounded-md border border-input bg-background shadow-lg z-50">
+                          {COUNTRY_CODES.map((c) => (
+                            <button
+                              key={c.code}
+                              type="button"
+                              onClick={() => { setSelectedCountry(c); setDdiOpen(false); }}
+                              className={`flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-muted transition-colors ${c.code === selectedCountry.code ? "bg-muted font-medium" : ""}`}
+                            >
+                              <span className="text-base">{c.flag}</span>
+                              <span className="flex-1 text-left">{c.name}</span>
+                              <span className="text-muted-foreground">+{c.code}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <Input
                       id="phone"
