@@ -1759,8 +1759,32 @@ export default function Chats() {
 
             if (dbRows.length > 0) {
               const apiIds = new Set(apiMessages.map(m => m.id));
+              // Build a content+time fingerprint set from API messages for fuzzy dedup
+              const apiFingerprints = new Set<string>();
+              for (const m of apiMessages) {
+                const ts = (m as any)._ts;
+                if (ts && m.content) {
+                  // Round to nearest 5 seconds to handle slight timestamp differences
+                  const roundedTs = Math.round(ts / 5000) * 5000;
+                  apiFingerprints.add(`${m.sent}:${roundedTs}:${m.content.slice(0, 80)}`);
+                  // Also add ±5s variants for edge cases
+                  apiFingerprints.add(`${m.sent}:${roundedTs - 5000}:${m.content.slice(0, 80)}`);
+                  apiFingerprints.add(`${m.sent}:${roundedTs + 5000}:${m.content.slice(0, 80)}`);
+                }
+              }
+
               const dbOnly: Message[] = dbRows
-                .filter(m => !apiIds.has(m.message_id || '') && !apiIds.has(m.id))
+                .filter(m => {
+                  // Skip if message_id or id matches an API message
+                  if (apiIds.has(m.message_id || '') || apiIds.has(m.id)) return false;
+                  // Skip if content+timestamp fingerprint matches (fuzzy dedup)
+                  const dbTs = new Date(m.timestamp).getTime();
+                  const roundedDbTs = Math.round(dbTs / 5000) * 5000;
+                  const isSent = m.from_me || m.direction === 'outbound';
+                  const content = (m.content || '').slice(0, 80);
+                  if (content && apiFingerprints.has(`${isSent}:${roundedDbTs}:${content}`)) return false;
+                  return true;
+                })
                 .map(m => {
                   const date = new Date(m.timestamp);
                   return {
@@ -2116,8 +2140,27 @@ export default function Chats() {
         }
 
         const existingIds = new Set(messages.map(m => m.id));
+        // Build fingerprints from existing messages for fuzzy dedup
+        const existingFingerprints = new Set<string>();
+        for (const m of messages) {
+          const ts = (m as any)._ts;
+          if (ts && m.content) {
+            const rTs = Math.round(ts / 5000) * 5000;
+            existingFingerprints.add(`${m.sent}:${rTs}:${m.content.slice(0, 80)}`);
+            existingFingerprints.add(`${m.sent}:${rTs - 5000}:${m.content.slice(0, 80)}`);
+            existingFingerprints.add(`${m.sent}:${rTs + 5000}:${m.content.slice(0, 80)}`);
+          }
+        }
         const olderMessages: Message[] = dbRows
-          .filter(m => !existingIds.has(m.message_id || '') && !existingIds.has(m.id))
+          .filter(m => {
+            if (existingIds.has(m.message_id || '') || existingIds.has(m.id)) return false;
+            const dbTs = new Date(m.timestamp).getTime();
+            const rTs = Math.round(dbTs / 5000) * 5000;
+            const isSent = m.from_me || m.direction === 'outbound';
+            const content = (m.content || '').slice(0, 80);
+            if (content && existingFingerprints.has(`${isSent}:${rTs}:${content}`)) return false;
+            return true;
+          })
           .map(m => {
             const date = new Date(m.timestamp);
             return {
