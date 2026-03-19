@@ -1192,7 +1192,24 @@ export default function Chats() {
     }
   }, [workspaceId, selectedInstance, loadingMoreChats]);
 
-  // Helper: deduplicate chats using canonical phone key per instance
+  // IntersectionObserver for infinite scroll on chat list
+  useEffect(() => {
+    const sentinel = chatListSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMoreChats && !loadingMoreChats && !loadingChats) {
+          loadMoreChats();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreChats, loadingMoreChats, loadingChats, loadMoreChats]);
+
+
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
     const jidToKey = new Map<string, string>();
