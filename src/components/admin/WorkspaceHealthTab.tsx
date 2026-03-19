@@ -196,7 +196,8 @@ export default function WorkspaceHealthTab() {
                           onClick={(e) => {
                             e.stopPropagation();
                             const cleanPhone = ws.owner!.phone!.replace(/\D/g, "");
-                            const whatsappUrl = `https://web.whatsapp.com/send?phone=${cleanPhone}`;
+                            const finalPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+                            const whatsappUrl = `https://web.whatsapp.com/send?phone=${finalPhone}`;
                             window.open(whatsappUrl, "_blank", "noopener,noreferrer");
                           }}
                         >

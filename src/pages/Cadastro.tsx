@@ -185,14 +185,20 @@ export default function Cadastro() {
                 </div>
                 <div>
                   <Label htmlFor="phone">WhatsApp</Label>
-                  <Input
-                    id="phone"
-                    value={form.phone}
-                    onChange={(e) => handlePhoneChange(e.target.value)}
-                    placeholder="(11) 99999-9999"
-                    required
-                    maxLength={16}
-                  />
+                  <div className="flex gap-2">
+                    <div className="flex items-center justify-center px-3 rounded-md border border-input bg-muted text-sm text-muted-foreground select-none shrink-0">
+                      +55
+                    </div>
+                    <Input
+                      id="phone"
+                      value={form.phone}
+                      onChange={(e) => handlePhoneChange(e.target.value)}
+                      placeholder="(11) 99999-9999"
+                      required
+                      maxLength={16}
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="email">Email</Label>
