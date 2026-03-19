@@ -1263,6 +1263,8 @@ export default function Chats() {
     const loadChats = async () => {
       setLoadingChats(true);
       setChatError(null);
+      chatListOffsetRef.current = 1000; // Reset pagination offset
+      setHasMoreChats(true);
       try {
         const isMetaSource = selectedInstance.startsWith("meta:");
         
