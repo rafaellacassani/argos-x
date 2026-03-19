@@ -1121,11 +1121,20 @@ serve(async (req) => {
           });
           if (res.ok) {
             const instances = await res.json();
+            console.log("[health] Evolution fetchInstances sample:", JSON.stringify(instances?.[0] || {}).slice(0, 500));
             for (const inst of instances) {
-              const name = inst.instance?.instanceName || inst.instanceName;
-              const state = inst.instance?.state || inst.state || "close";
-              evoStatusMap.set(name, state === "open" ? "connected" : "disconnected");
+              // Evolution API v2 can return different structures
+              const name = inst.instance?.instanceName || inst.instanceName || inst.name;
+              // State can be nested or flat; "open" = connected, anything else = disconnected
+              const state = inst.instance?.status || inst.instance?.state || inst.connectionStatus?.state || inst.state || inst.status || "close";
+              const normalizedState = (typeof state === "string" && state.toLowerCase() === "open") ? "connected" : "disconnected";
+              if (name) {
+                evoStatusMap.set(name, normalizedState);
+              }
             }
+            console.log("[health] evoStatusMap entries:", [...evoStatusMap.entries()]);
+          } else {
+            console.warn("[health] Evolution API returned status:", res.status);
           }
         } catch (e) {
           console.warn("Failed to fetch Evolution instances:", e);
