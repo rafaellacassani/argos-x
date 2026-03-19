@@ -2594,6 +2594,7 @@ export default function Chats() {
             </div>
           )}
         </ScrollArea>
+        </div>
       </div>
 
       {/* Chat Window */}
