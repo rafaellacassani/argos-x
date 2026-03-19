@@ -82,6 +82,29 @@ const cleanPhoneNumber = (phone: string): string => {
     .replace(/[^0-9]/g, "");
 };
 
+const normalizeDigits = (value: string): string => value.replace(/[^0-9]/g, "");
+
+const chatMatchesPhoneSearch = (
+  chat: Pick<Chat, "phone" | "remoteJid" | "remoteJidAlt">,
+  rawSearch: string
+): boolean => {
+  const searchDigits = normalizeDigits(rawSearch);
+  if (!searchDigits) return false;
+
+  const candidates = [chat.phone, chat.remoteJid, chat.remoteJidAlt]
+    .filter(Boolean)
+    .map((value) => cleanPhoneNumber(String(value)))
+    .filter((value) => value.length >= 8);
+
+  return candidates.some((value) => {
+    if (value === searchDigits) return true;
+    if (value.length >= 11 && searchDigits.length >= 11 && value.slice(-11) === searchDigits.slice(-11)) return true;
+    if (value.length >= 10 && searchDigits.length >= 10 && value.slice(-10) === searchDigits.slice(-10)) return true;
+    if (value.length >= 8 && searchDigits.length >= 8 && value.slice(-8) === searchDigits.slice(-8)) return true;
+    return value.includes(searchDigits) || searchDigits.includes(value);
+  });
+};
+
 // Helper to format a cleaned numeric phone string for display
 const formatPhoneDisplay = (digits: string): string => {
   if (!digits || digits.length < 4) return digits;
