@@ -312,25 +312,43 @@ export default function FollowupInteligenteTab() {
           <div className="space-y-3">
             {recentCampaigns.map((c) => (
               <div key={c.id}>
-                <button
-                  onClick={() => handleCampaignClick(c.id)}
-                  className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer text-left"
-                >
-                  <div>
-                    <p className="text-sm font-medium">
-                      {new Date(c.created_at).toLocaleDateString("pt-BR")} — {c.total_contacts} contatos
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[400px]">{c.context_prompt}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm">
-                    <span className="text-success">{c.sent_count} ✓</span>
-                    <span className="text-destructive">{c.failed_count} ✗</span>
-                    <Badge variant="outline">
-                      {c.status === "completed" ? "Concluído" : c.status === "running" ? "Executando" : c.status}
-                    </Badge>
-                    {expandedCampaignId === c.id ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <Eye className="w-4 h-4 text-muted-foreground" />}
-                  </div>
-                </button>
+                <div className="w-full flex items-center gap-2 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                  <button
+                    onClick={() => handleCampaignClick(c.id)}
+                    className="flex-1 flex items-center justify-between cursor-pointer text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-medium">
+                        {new Date(c.created_at).toLocaleDateString("pt-BR")} — {c.total_contacts} contatos
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate max-w-[400px]">{c.context_prompt}</p>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-success">{c.sent_count} ✓</span>
+                      <span className="text-destructive">{c.failed_count} ✗</span>
+                      <Badge variant="outline">
+                        {c.status === "completed" ? "Concluído" : c.status === "running" ? "Executando" : c.status}
+                      </Badge>
+                      {expandedCampaignId === c.id ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <Eye className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                  </button>
+
+                  {c.status === "running" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      className="gap-1.5 shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void cancelFollowup(c.id);
+                      }}
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Cancelar
+                    </Button>
+                  )}
+                </div>
 
                 {expandedCampaignId === c.id && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-2 mx-2">
