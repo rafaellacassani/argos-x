@@ -199,6 +199,7 @@ export function useMetaChat() {
                         ...c,
                         last_message: newMsg.content || `📎 ${newMsg.message_type}`,
                         last_timestamp: newMsg.timestamp,
+                        last_direction: newMsg.direction || "inbound",
                       }
                     : c
                 );
@@ -211,6 +212,7 @@ export function useMetaChat() {
                   meta_page_id: newMsg.meta_page_id,
                   last_message: newMsg.content || `📎 ${newMsg.message_type}`,
                   last_timestamp: newMsg.timestamp,
+                  last_direction: newMsg.direction || "inbound",
                   unread_count: 1,
                 },
                 ...prev,
