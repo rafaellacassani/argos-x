@@ -15,6 +15,7 @@ import {
   Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,8 @@ export default function FollowupInteligenteTab() {
   const [expandedCampaignId, setExpandedCampaignId] = useState<string | null>(null);
   const [campaignContacts, setCampaignContacts] = useState<any[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
+  const [audienceType, setAudienceType] = useState<"no_reply_from_lead" | "no_reply_from_us">("no_reply_from_lead");
+  const [contactLimit, setContactLimit] = useState(50);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -96,13 +99,15 @@ export default function FollowupInteligenteTab() {
   const handleScan = () => {
     const inst = getSelectedInstanceData();
     if (!inst) return;
-    scanContacts(inst.type, inst.instance_name || null, inst.meta_page_id || null);
+    scanContacts(inst.type, inst.instance_name || null, inst.meta_page_id || null, audienceType);
   };
+
+  const effectiveContacts = scannedContacts.slice(0, contactLimit);
 
   const handleStart = () => {
     const inst = getSelectedInstanceData();
     if (!inst || !selectedAgent || !contextPrompt.trim()) return;
-    startFollowup(inst.type, inst.instance_name || null, inst.meta_page_id || null, selectedAgent, contextPrompt, scannedContacts);
+    startFollowup(inst.type, inst.instance_name || null, inst.meta_page_id || null, selectedAgent, contextPrompt, effectiveContacts);
   };
 
   const handlePauseToggle = () => {
