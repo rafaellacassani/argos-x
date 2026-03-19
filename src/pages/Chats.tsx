@@ -2492,7 +2492,14 @@ export default function Chats() {
         </div>
 
         {/* Chat List */}
-        <ScrollArea className="flex-1 [&>div]:!overflow-x-auto">
+        <ScrollArea className="flex-1 [&>div]:!overflow-x-auto" ref={(node) => {
+          if (node) {
+            const viewport = node.querySelector('[data-radix-scroll-area-viewport]');
+            chatListScrollRef.current = viewport as HTMLDivElement;
+          } else {
+            chatListScrollRef.current = null;
+          }
+        }}>
           {loadingChats ? (
             <div className="flex items-center justify-center p-8">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
