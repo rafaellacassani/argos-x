@@ -82,6 +82,7 @@ export function useMetaChat() {
         meta_page_id: row.meta_page_id,
         last_message: row.content || (row.message_type !== "text" ? `📎 ${row.message_type}` : ""),
         last_timestamp: row.timestamp,
+        last_direction: row.direction || "inbound",
         unread_count: 0,
         page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
       }));
