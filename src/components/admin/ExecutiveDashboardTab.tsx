@@ -527,7 +527,6 @@ export default function ExecutiveDashboardTab() {
                           variant="ghost"
                           className="gap-1.5 text-xs"
                           onClick={() => openChatWithPhone(c.phone, navigate)}
-                          }
                         >
                           <MessageSquare className="w-3 h-3" />
                           Contatar
