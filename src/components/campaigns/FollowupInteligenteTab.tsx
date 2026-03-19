@@ -186,6 +186,30 @@ export default function FollowupInteligenteTab() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div className="space-y-2">
+            <Label>Tipo de público</Label>
+            <Select value={audienceType} onValueChange={(v) => setAudienceType(v as any)} disabled={executing}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no_reply_from_lead">Sem resposta do lead</SelectItem>
+                <SelectItem value="no_reply_from_us">Lead respondeu mas está sem resposta nossa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Limite de contatos nesta execução</Label>
+            <Input
+              type="number"
+              min={1}
+              max={500}
+              value={contactLimit}
+              onChange={(e) => setContactLimit(Math.max(1, parseInt(e.target.value) || 50))}
+              disabled={executing}
+            />
+          </div>
+        </div>
+
         <div className="space-y-2 mb-4">
           <Label>Contexto e objetivo do follow-up</Label>
           <Textarea placeholder="Ex: Convidar para fazer cadastro no Argos X, link: argosx.com.br/cadastro." value={contextPrompt} onChange={(e) => setContextPrompt(e.target.value)} disabled={executing} className="min-h-[100px]" />
@@ -194,12 +218,12 @@ export default function FollowupInteligenteTab() {
         <div className="flex flex-wrap gap-3">
           <Button onClick={handleScan} disabled={!selectedInstance || scanning || executing} variant="outline" className="gap-2">
             {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            Buscar contatos sem resposta
+            Buscar contatos
           </Button>
           {scannedContacts.length > 0 && !executing && (
             <Button onClick={handleStart} disabled={!selectedAgent || !contextPrompt.trim() || executing} className="gap-2">
               <Play className="w-4 h-4" />
-              Iniciar Follow-up ({scannedContacts.length} contatos)
+              Iniciar Follow-up ({effectiveContacts.length} contatos)
             </Button>
           )}
           {executing && (

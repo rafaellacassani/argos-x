@@ -91,6 +91,7 @@ export function useFollowupCampaigns() {
     instanceType: string,
     instanceName: string | null,
     metaPageId: string | null,
+    audienceType: string = "no_reply_from_lead",
   ) => {
     if (!workspaceId) return;
     setScanning(true);
@@ -103,6 +104,7 @@ export function useFollowupCampaigns() {
           instance_name: instanceName,
           meta_page_id: metaPageId,
           workspace_id: workspaceId,
+          audience_type: audienceType,
         },
       });
       if (error) throw error;
