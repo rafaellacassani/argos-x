@@ -1,52 +1,44 @@
 
 
-## Plano: Ativar cobrança dos pacotes de leads adicionais
+## Diagnóstico: Filtro "Sem resposta" em conversas WABA
 
-### Situação atual
-- A tabela `lead_packs` já existe no banco com campos `stripe_item_id`, `pack_size`, `price_paid`, `active`, `workspace_id`
-- O hook `usePlanLimits` já soma os `lead_packs` ativos ao limite de leads
-- Os botões na página `/planos` estão com "Em breve" (disabled)
-- Faltam: os **Stripe Price IDs** dos pacotes e o **fluxo de checkout**
+### O que encontrei
 
-### O que será feito
+**Os filtros estão funcionando corretamente no código.** O problema é de dados e volume:
 
-**1. Criar 4 secrets para os preços dos pacotes no Stripe**
-- `STRIPE_PRICE_PACK_1000` → +1.000 leads (R$17/mês)
-- `STRIPE_PRICE_PACK_5000` → +5.000 leads (R$47/mês)
-- `STRIPE_PRICE_PACK_20000` → +20.000 leads (R$97/mês)
-- `STRIPE_PRICE_PACK_50000` → +50.000 leads (R$197/mês)
+1. **Limite de 100 conversas**: A consulta ao banco carrega apenas as 100 conversas mais recentes (`LIMIT 100`). Das ~6.109 conversas WABA, só 100 são exibidas.
 
-Você precisará criar esses 4 produtos/preços recorrentes no Stripe Dashboard e me passar os IDs.
+2. **Das 100 carregadas, 97 são outbound (campanha) e apenas 3 são inbound** (respostas de leads). Ao clicar "Sem resposta", a lista passa de 100 para 3 conversas — se você não percebeu a mudança, pode parecer que não funcionou.
 
-**2. Atualizar a Edge Function `create-checkout-session`**
-- Adicionar suporte a `type: "lead_pack"` no body
-- Mapear os `pack_size` para os respectivos Stripe Price IDs
-- Criar sessão de checkout como subscription add-on vinculada ao mesmo `stripe_customer_id` do workspace
+3. **265 respostas existem no banco** — pessoas responderam sim, mas estão "escondidas" porque o limite de 100 prioriza as mais recentes (que são os envios da campanha).
 
-**3. Atualizar o `stripe-webhook`**
-- No evento `checkout.session.completed`, detectar quando é um pacote de leads (via metadata `type: "lead_pack"`)
-- Inserir registro na tabela `lead_packs` com `pack_size`, `price_paid`, `stripe_item_id`, `workspace_id`, `active: true`
-- No evento `customer.subscription.deleted`, desativar (`active = false`) os lead_packs associados
+### O que será corrigido
 
-**4. Atualizar a página `/planos`**
-- Remover o `disabled` dos botões de pacote
-- Adicionar `handleBuyPack(packSize)` que chama `create-checkout-session` com `type: "lead_pack"` e `packSize`
-- Loading state individual por pacote
+**1. Remover o limite fixo de 100 para WABA e carregar todas as conversas**
+- Ou aumentar o limite para 5000+ para cobrir o volume das campanhas
 
-### Pré-requisito do seu lado
-Antes de implementar, preciso que você crie os 4 preços recorrentes (subscription) no Stripe Dashboard e me passe os Price IDs (`price_xxx`). Posso prosseguir com o código e pedir os secrets depois.
+**2. Adicionar paginação inteligente no summary view**
+- Ao ativar o filtro "Sem resposta", buscar do banco apenas conversas com `direction = 'inbound'` (server-side filter), em vez de filtrar client-side nos 100 carregados
+
+**3. Feedback visual claro**
+- Mostrar contagem de resultados: ex. "3 conversas sem resposta"
+- Se o filtro reduzir a lista dramaticamente, garantir que o empty state fique visível
 
 ### Detalhes técnicos
 
 ```text
-Fluxo:
-  Botão "Contratar" → create-checkout-session (type=lead_pack, packSize=1000)
-       → Stripe Checkout → stripe-webhook (checkout.session.completed)
-       → INSERT lead_packs → usePlanLimits recalcula limite
+Problema atual:
+  meta_conversation_summary → LIMIT 100 → 97 outbound + 3 inbound
+  Filtro "sem resposta" client-side → mostra só 3
+
+Solução:
+  1. useMetaChat.fetchConversations() → remover .limit(100) ou aumentar
+  2. Adicionar parâmetro de filtro server-side para direction
+  3. fetchConversations(metaPageId, { directionFilter: 'inbound' })
+     → .eq('direction', 'inbound') quando filtro ativo
 ```
 
-Arquivos modificados:
-- `supabase/functions/create-checkout-session/index.ts`
-- `supabase/functions/stripe-webhook/index.ts`
-- `src/pages/Planos.tsx`
+**Arquivos a modificar:**
+- `src/hooks/useMetaChat.ts` — aumentar limite, adicionar filtro server-side por direction
+- `src/pages/Chats.tsx` — passar filtro de direction ao carregar conversas WABA, adicionar contagem visual
 
