@@ -342,7 +342,7 @@ function buildOpenApiSpec(baseUrl: string): object {
                     description: { type: "string" },
                     type: { type: "string", default: "sdr" },
                     system_prompt: { type: "string" },
-                    model: { type: "string", default: "google/gemini-3-flash-preview" },
+                    model: { type: "string", default: "openai/gpt-5-mini" },
                   },
                 },
               },
