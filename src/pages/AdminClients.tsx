@@ -100,6 +100,7 @@ import {
   Type,
   Upload,
   Activity,
+  BarChart3,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
