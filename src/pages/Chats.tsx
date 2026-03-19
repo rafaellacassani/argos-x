@@ -353,7 +353,10 @@ const getMediaType = (file: File): "image" | "video" | "document" => {
 
 export default function Chats() {
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("search") || "";
+  });
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);

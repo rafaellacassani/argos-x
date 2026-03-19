@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -116,14 +117,13 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const openWhatsApp = (phone: string, name: string, message: string) => {
+const openChatWithPhone = (phone: string, navigate: ReturnType<typeof useNavigate>) => {
   const cleanPhone = phone.replace(/\D/g, "");
-  const fullPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-  const text = encodeURIComponent(message.replace("{nome}", name));
-  window.open(`https://wa.me/${fullPhone}?text=${text}`, "_blank");
+  navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
 };
 
 export default function ExecutiveDashboardTab() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
@@ -286,13 +286,7 @@ export default function ExecutiveDashboardTab() {
                         size="sm"
                         variant="outline"
                         className="gap-1.5 text-xs"
-                        onClick={() =>
-                          openWhatsApp(
-                            t.phone,
-                            t.name,
-                            "Olá, {nome}! 👋 Vi que seu trial no Argos X está prestes a expirar. Posso ajudar com alguma dúvida sobre os planos?"
-                          )
-                        }
+                        onClick={() => openChatWithPhone(t.phone, navigate)}
                       >
                         <MessageSquare className="w-3 h-3" />
                         WhatsApp
@@ -334,13 +328,7 @@ export default function ExecutiveDashboardTab() {
                           size="sm"
                           variant="outline"
                           className="gap-1.5 text-xs"
-                          onClick={() =>
-                            openWhatsApp(
-                              c.phone,
-                              c.name,
-                              "Olá, {nome}! 🚀 Notei que seu workspace está quase no limite do plano. Que tal um upgrade para desbloquear mais funcionalidades?"
-                            )
-                          }
+                          onClick={() => openChatWithPhone(c.phone, navigate)}
                         >
                           <TrendingUp className="w-3 h-3" />
                           Oferecer upgrade
@@ -538,13 +526,7 @@ export default function ExecutiveDashboardTab() {
                           size="sm"
                           variant="ghost"
                           className="gap-1.5 text-xs"
-                          onClick={() =>
-                            openWhatsApp(
-                              c.phone,
-                              c.name,
-                              "Olá, {nome}! 👋 Bem-vindo(a) ao Argos X! Sou da equipe e gostaria de saber se posso ajudar em algo."
-                            )
-                          }
+                          onClick={() => openChatWithPhone(c.phone, navigate)}
                         >
                           <MessageSquare className="w-3 h-3" />
                           Contatar
