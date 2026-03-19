@@ -252,14 +252,8 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais.`;
         });
       }
 
-      const allowedModels = [
-        "openai/gpt-5-mini", "openai/gpt-5", "openai/gpt-5-nano", "openai/gpt-5.2",
-        "google/gemini-2.5-pro", "google/gemini-2.5-flash", "google/gemini-2.5-flash-lite",
-        "google/gemini-3-flash-preview", "google/gemini-3-pro-image-preview",
-        "google/gemini-3.1-pro-preview", "google/gemini-3.1-flash-image-preview",
-      ];
-      const requestedModel = agent.model || "google/gemini-2.5-flash";
-      const model = allowedModels.includes(requestedModel) ? requestedModel : "google/gemini-2.5-flash";
+      // Strip provider prefixes (anthropic/, openai/, google/) from model name
+      let model = (agent.model || "claude-3-5-sonnet-20241022").replace(/^(anthropic|openai|google)\//, "");
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
