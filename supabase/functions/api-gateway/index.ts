@@ -342,7 +342,7 @@ function buildOpenApiSpec(baseUrl: string): object {
                     description: { type: "string" },
                     type: { type: "string", default: "sdr" },
                     system_prompt: { type: "string" },
-                    model: { type: "string", default: "google/gemini-3-flash-preview" },
+                    model: { type: "string", default: "openai/gpt-5-mini" },
                   },
                 },
               },
@@ -990,7 +990,7 @@ Deno.serve(async (req) => {
             description: body.description || null,
             type: body.type || "sdr",
             system_prompt: body.system_prompt,
-            model: body.model || "google/gemini-3-flash-preview",
+            model: body.model || "openai/gpt-5-mini",
             workspace_id: workspaceId,
           })
           .select("id, name, description, type, model, is_active, created_at")
