@@ -507,6 +507,21 @@ async function processWhatsAppBusinessEvent(entry: any) {
 
       if (msg.type === "text") {
         content = msg.text?.body || "";
+      } else if (msg.type === "button") {
+        // User pressed a quick reply button on a template
+        content = msg.button?.text || "✅ Resposta de botão";
+        messageType = "text";
+      } else if (msg.type === "interactive") {
+        // User replied to an interactive message (list, buttons, etc.)
+        const interactive = msg.interactive;
+        if (interactive?.type === "button_reply") {
+          content = interactive.button_reply?.title || "✅ Resposta de botão";
+        } else if (interactive?.type === "list_reply") {
+          content = interactive.list_reply?.title || interactive.list_reply?.description || "✅ Resposta de lista";
+        } else {
+          content = interactive?.body?.text || "✅ Resposta interativa";
+        }
+        messageType = "text";
       } else if (["image", "video", "audio", "document", "sticker"].includes(msg.type)) {
         const mediaObj = msg[msg.type];
         if (mediaObj?.id) {
