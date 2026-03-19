@@ -1433,19 +1433,22 @@ export default function Chats() {
     enrichChats();
   }, [chats.length, selectedInstance, fetchProfile]);
 
-  // Load messages when chat is selected (with cache)
+  // Load messages when chat is selected (with cache + instant switch)
   useEffect(() => {
     if (!selectedChat) return;
 
     const chatId = selectedChat.id;
     
-    // Check cache first
+    // ═══ INSTANT SWITCH: Clear previous messages immediately, show cache or skeleton ═══
     const cached = messageCacheRef.current.get(chatId);
     if (cached && cached.length > 0) {
       setMessages(cached);
       setHasMoreMessages(cached.length >= 30);
       setLoadingMessages(false);
-      return;
+      // Still fetch fresh data in background below
+    } else {
+      setMessages([]);              // ← Clears ghost from previous chat IMMEDIATELY
+      setLoadingMessages(true);     // Show skeleton only for uncached chats
     }
 
     // Meta chat - load from meta_conversations
