@@ -751,8 +751,12 @@ serve(async (req) => {
             await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, status: "fallback_no_key", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
             return new Response(JSON.stringify({ response: responseContent, chunks: agent.message_split_enabled ? splitMessage(responseContent, agent.message_split_length || 400) : [responseContent] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
-          // Strip provider prefix for gateway compatibility
-          const gatewayModel = modelName.replace(/^(anthropic|openai|google)\//, "");
+          // Ensure model uses gateway-compatible format (must keep prefix)
+          // If model uses unsupported provider (anthropic) or has no prefix, default to openai/gpt-5-mini
+          let gatewayModel = modelName;
+          if (!gatewayModel.includes("/") || gatewayModel.startsWith("anthropic/")) {
+            gatewayModel = "openai/gpt-5-mini";
+          }
           aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
