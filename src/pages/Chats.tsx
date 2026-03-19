@@ -2340,7 +2340,12 @@ export default function Chats() {
       } else if (selectedInstance.startsWith("meta:")) {
         // Meta instance — load from meta_conversations, not Evolution API
         try {
-          const metaConvs = await fetchMetaConversations();
+          const dirFilter = activeFilters?.responseStatus?.includes("unanswered") 
+            ? "inbound" as const
+            : activeFilters?.responseStatus?.includes("answered")
+              ? "outbound" as const
+              : undefined;
+          const metaConvs = await fetchMetaConversations(undefined, dirFilter);
           allChats = (metaConvs || []).map((conv) => ({
             id: `meta:${conv.meta_page_id}:${conv.sender_id}`,
             remoteJid: conv.sender_id,
