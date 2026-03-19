@@ -1123,10 +1123,9 @@ serve(async (req) => {
             const instances = await res.json();
             console.log("[health] Evolution fetchInstances sample:", JSON.stringify(instances?.[0] || {}).slice(0, 500));
             for (const inst of instances) {
-              // Evolution API v2 can return different structures
-              const name = inst.instance?.instanceName || inst.instanceName || inst.name;
-              // State can be nested or flat; "open" = connected, anything else = disconnected
-              const state = inst.instance?.status || inst.instance?.state || inst.connectionStatus?.state || inst.state || inst.status || "close";
+              // Evolution API v2: { name: "xxx", connectionStatus: "open"|"close"|"connecting" }
+              const name = inst.name || inst.instance?.instanceName || inst.instanceName;
+              const state = inst.connectionStatus || inst.instance?.state || inst.state || "close";
               const normalizedState = (typeof state === "string" && state.toLowerCase() === "open") ? "connected" : "disconnected";
               if (name) {
                 evoStatusMap.set(name, normalizedState);
