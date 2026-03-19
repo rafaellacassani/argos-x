@@ -328,12 +328,7 @@ export default function ExecutiveDashboardTab() {
                           size="sm"
                           variant="outline"
                           className="gap-1.5 text-xs"
-                          onClick={() =>
-                            openWhatsApp(
-                              c.phone,
-                              c.name,
-                              "Olá, {nome}! 🚀 Notei que seu workspace está quase no limite do plano. Que tal um upgrade para desbloquear mais funcionalidades?"
-                            )
+                          onClick={() => openChatWithPhone(c.phone, navigate)}
                           }
                         >
                           <TrendingUp className="w-3 h-3" />
