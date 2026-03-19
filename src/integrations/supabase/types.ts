@@ -1266,6 +1266,142 @@ export type Database = {
           },
         ]
       }
+      followup_campaign_contacts: {
+        Row: {
+          campaign_id: string
+          contact_name: string | null
+          contact_phone: string
+          created_at: string
+          id: string
+          last_message_preview: string | null
+          message_sent: string | null
+          sender_id: string | null
+          sent_at: string | null
+          skip_reason: string | null
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          campaign_id: string
+          contact_name?: string | null
+          contact_phone: string
+          created_at?: string
+          id?: string
+          last_message_preview?: string | null
+          message_sent?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          workspace_id: string
+        }
+        Update: {
+          campaign_id?: string
+          contact_name?: string | null
+          contact_phone?: string
+          created_at?: string
+          id?: string
+          last_message_preview?: string | null
+          message_sent?: string | null
+          sender_id?: string | null
+          sent_at?: string | null
+          skip_reason?: string | null
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_campaign_contacts_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "followup_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "followup_campaign_contacts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      followup_campaigns: {
+        Row: {
+          agent_id: string
+          context_prompt: string
+          created_at: string
+          created_by: string | null
+          failed_count: number
+          id: string
+          instance_name: string | null
+          instance_type: string
+          meta_page_id: string | null
+          sent_count: number
+          skipped_count: number
+          status: string
+          total_contacts: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          agent_id: string
+          context_prompt: string
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number
+          id?: string
+          instance_name?: string | null
+          instance_type?: string
+          meta_page_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          status?: string
+          total_contacts?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string
+          context_prompt?: string
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number
+          id?: string
+          instance_name?: string | null
+          instance_type?: string
+          meta_page_id?: string | null
+          sent_count?: number
+          skipped_count?: number
+          status?: string
+          total_contacts?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "followup_campaigns_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "followup_campaigns_meta_page_id_fkey"
+            columns: ["meta_page_id"]
+            isOneToOne: false
+            referencedRelation: "meta_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "followup_campaigns_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funnel_stages: {
         Row: {
           bot_id: string | null
