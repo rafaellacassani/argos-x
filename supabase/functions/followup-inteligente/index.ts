@@ -246,24 +246,29 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais.`;
         { role: "user", content: "[GERAR MENSAGEM DE FOLLOW-UP AGORA]" },
       ];
 
-      if (!lovableApiKey) {
-        return new Response(JSON.stringify({ error: "AI API key not configured" }), {
+      if (!anthropicApiKey) {
+        return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Ensure model uses gateway-compatible format (must have provider prefix)
-      let model = agent.model || "openai/gpt-4o-mini";
-      if (!model.includes("/") || model.startsWith("anthropic/")) {
-        model = "openai/gpt-4o-mini";
-      }
+      // Call Anthropic API directly (bypass Lovable Gateway)
+      const anthropicMessages = aiMessages
+        .filter(m => m.role !== "system")
+        .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+      const systemText = aiMessages.find(m => m.role === "system")?.content || "";
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+        headers: {
+          "x-api-key": anthropicApiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          model,
-          messages: aiMessages,
+          model: "claude-haiku-4-5-20251001",
+          system: systemText,
+          messages: anthropicMessages,
           temperature: 0.8,
           max_tokens: 500,
         }),
