@@ -254,31 +254,62 @@ export function useFollowupCampaigns() {
           setExecutionLog((prev) => [...prev, logEntry]);
 
         } catch (err: any) {
-          failedCount++;
-          console.error(`[followup] Failed for ${contact.phone}:`, err.message);
+          const errorMsg = err.message || 'Unknown error';
+          const isSendError = errorMsg.includes('Send failed') || errorMsg.includes('Evolution API') || errorMsg.includes('Graph API');
+          
+          if (isSendError) {
+            failedCount++;
+            console.error(`[followup] Failed for ${contact.phone}:`, errorMsg);
 
-          await supabase
-            .from('followup_campaign_contacts')
-            .update({
+            await supabase
+              .from('followup_campaign_contacts')
+              .update({
+                status: 'failed',
+                skip_reason: errorMsg.substring(0, 500),
+              } as any)
+              .eq('campaign_id', campaignId)
+              .eq('contact_phone', contact.phone);
+
+            const logEntry: FollowupContactResult = {
+              id: `${i}`,
+              campaign_id: campaignId,
+              contact_phone: contact.phone,
+              contact_name: contact.name,
+              sender_id: contact.sender_id || null,
+              last_message_preview: contact.last_message,
+              message_sent: null,
               status: 'failed',
-              skip_reason: err.message?.substring(0, 500),
-            } as any)
-            .eq('campaign_id', campaignId)
-            .eq('contact_phone', contact.phone);
+              skip_reason: errorMsg,
+              sent_at: null,
+            };
+            setExecutionLog((prev) => [...prev, logEntry]);
+          } else {
+            skippedCount++;
+            console.warn(`[followup] Skipped ${contact.phone}:`, errorMsg);
 
-          const logEntry: FollowupContactResult = {
-            id: `${i}`,
-            campaign_id: campaignId,
-            contact_phone: contact.phone,
-            contact_name: contact.name,
-            sender_id: contact.sender_id || null,
-            last_message_preview: contact.last_message,
-            message_sent: null,
-            status: 'failed',
-            skip_reason: err.message,
-            sent_at: null,
-          };
-          setExecutionLog((prev) => [...prev, logEntry]);
+            await supabase
+              .from('followup_campaign_contacts')
+              .update({
+                status: 'skipped',
+                skip_reason: errorMsg.substring(0, 500),
+              } as any)
+              .eq('campaign_id', campaignId)
+              .eq('contact_phone', contact.phone);
+
+            const logEntry: FollowupContactResult = {
+              id: `${i}`,
+              campaign_id: campaignId,
+              contact_phone: contact.phone,
+              contact_name: contact.name,
+              sender_id: contact.sender_id || null,
+              last_message_preview: contact.last_message,
+              message_sent: null,
+              status: 'skipped',
+              skip_reason: errorMsg,
+              sent_at: null,
+            };
+            setExecutionLog((prev) => [...prev, logEntry]);
+          }
         }
 
         // Update campaign counters
