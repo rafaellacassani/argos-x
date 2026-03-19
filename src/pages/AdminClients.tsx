@@ -100,9 +100,11 @@ import {
   Type,
   Upload,
   Activity,
+  BarChart3,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
+import ExecutiveDashboardTab from "@/components/admin/ExecutiveDashboardTab";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
@@ -901,6 +903,10 @@ export default function AdminClients() {
           <TabsTrigger value="health" className="gap-2">
             <Activity className="w-4 h-4" />
             Saúde & Monitoramento
+          </TabsTrigger>
+          <TabsTrigger value="executive" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Dashboard Executivo
           </TabsTrigger>
         </TabsList>
 
@@ -1934,6 +1940,11 @@ export default function AdminClients() {
         {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
         <TabsContent value="health">
           <WorkspaceHealthTab />
+        </TabsContent>
+
+        {/* ───────── TAB: DASHBOARD EXECUTIVO ───────── */}
+        <TabsContent value="executive">
+          <ExecutiveDashboardTab />
         </TabsContent>
       </Tabs>
 
