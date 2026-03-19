@@ -2556,6 +2556,25 @@ export default function Chats() {
                   </div>
                 </div>
               ))}
+              {/* Load more conversations button */}
+              {hasMoreChats && !selectedInstance?.startsWith("meta:") && (
+                <div className="p-3 flex justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={loadMoreChats}
+                    disabled={loadingMoreChats}
+                    className="text-xs text-muted-foreground hover:text-foreground w-full"
+                  >
+                    {loadingMoreChats ? (
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <MessageCircle className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    {loadingMoreChats ? "Carregando..." : "Carregar conversas mais antigas"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </ScrollArea>
