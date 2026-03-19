@@ -1218,6 +1218,129 @@ serve(async (req) => {
       });
     }
 
+    // ──────────────────────────────────────
+    // ACTION: EXECUTIVE-DASHBOARD
+    // ──────────────────────────────────────
+    if (action === "executive-dashboard") {
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
+
+      // Fetch all workspaces
+      const { data: allWorkspaces } = await supabaseAdmin
+        .from("workspaces")
+        .select("id, name, plan_type, plan_name, subscription_status, trial_end, blocked_at, created_at, created_by, lead_limit, extra_leads, ai_interactions_limit, ai_interactions_used, stripe_customer_id, stripe_subscription_id");
+
+      const workspaces = allWorkspaces || [];
+
+      // Fetch owner profiles
+      const creatorIds = [...new Set(workspaces.map(w => w.created_by).filter(Boolean))];
+      const { data: profiles } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, user_id, full_name, email, phone, personal_whatsapp")
+        .in("user_id", creatorIds.length > 0 ? creatorIds : ["__none__"]);
+      const profileMap = new Map((profiles || []).map(p => [p.user_id, p]));
+
+      // Lead counts per workspace
+      const { data: leadCounts } = await supabaseAdmin
+        .from("leads")
+        .select("workspace_id")
+        .eq("status", "active");
+      const leadCountMap = new Map<string, number>();
+      (leadCounts || []).forEach(l => {
+        leadCountMap.set(l.workspace_id, (leadCountMap.get(l.workspace_id) || 0) + 1);
+      });
+
+      // Classify
+      const paidPlans = ["essencial", "negocio", "escala"];
+      const planPrices: Record<string, number> = { essencial: 47.90, negocio: 97.90, escala: 197.90, gratuito: 0 };
+      const activeClients = workspaces.filter(w => paidPlans.includes(w.plan_type || "") && w.subscription_status === "active" && !w.blocked_at);
+      const trialsActive = workspaces.filter(w => w.subscription_status === "trialing" && w.trial_end && new Date(w.trial_end) > now);
+      const currentMRR = activeClients.reduce((sum, w) => sum + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+
+      // Churn this month
+      const churnedThisMonth = workspaces.filter(w => {
+        if (!w.blocked_at) return false;
+        const blocked = new Date(w.blocked_at);
+        return blocked.getMonth() === currentMonth && blocked.getFullYear() === currentYear;
+      });
+      const churnValue = churnedThisMonth.reduce((sum, w) => sum + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+
+      // Trials expiring in 7 days
+      const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const trialsExpiring = trialsActive.filter(w => {
+        const end = new Date(w.trial_end!);
+        return end <= sevenDays && end > now;
+      }).map(w => {
+        const profile = profileMap.get(w.created_by);
+        const daysLeft = Math.ceil((new Date(w.trial_end!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        return { id: w.id, name: w.name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", days_left: daysLeft, trial_end: w.trial_end };
+      });
+
+      // Clients at plan limit (>90%)
+      const atLimit = activeClients.filter(w => {
+        const leadsUsed = leadCountMap.get(w.id) || 0;
+        const totalLeadLimit = (w.lead_limit || 0) + (w.extra_leads || 0);
+        const aiUsed = w.ai_interactions_used || 0;
+        const aiLimit = w.ai_interactions_limit || 0;
+        return (totalLeadLimit > 0 && leadsUsed / totalLeadLimit > 0.9) || (aiLimit > 0 && aiUsed / aiLimit > 0.9);
+      }).map(w => {
+        const profile = profileMap.get(w.created_by);
+        const leadsUsed = leadCountMap.get(w.id) || 0;
+        const totalLeadLimit = (w.lead_limit || 0) + (w.extra_leads || 0);
+        return { id: w.id, name: w.name, plan: w.plan_type, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", leads_used: leadsUsed, lead_limit: totalLeadLimit, ai_used: w.ai_interactions_used || 0, ai_limit: w.ai_interactions_limit || 0 };
+      });
+
+      // MRR history (last 6 months)
+      const mrrHistory: { month: string; mrr: number; clients: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const m = new Date(currentYear, currentMonth - i, 1);
+        const label = `${String(m.getMonth() + 1).padStart(2, "0")}/${m.getFullYear()}`;
+        if (i === 0) {
+          mrrHistory.push({ month: label, mrr: currentMRR, clients: activeClients.length });
+        } else {
+          const monthEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0);
+          const activeBefore = workspaces.filter(w => {
+            const created = new Date(w.created_at);
+            return created <= monthEnd && paidPlans.includes(w.plan_type || "") && (!w.blocked_at || new Date(w.blocked_at) > monthEnd);
+          });
+          const mrr = activeBefore.reduce((s, w) => s + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+          mrrHistory.push({ month: label, mrr, clients: activeBefore.length });
+        }
+      }
+
+      // Plan distribution
+      const planDistribution = Object.entries(planPrices).map(([plan, price]) => {
+        const count = activeClients.filter(w => w.plan_type === plan).length;
+        return { plan, count, mrr: count * price };
+      }).filter(p => p.count > 0 || p.plan !== "gratuito");
+
+      // Funnel
+      const signupsThisMonth = workspaces.filter(w => new Date(w.created_at) >= new Date(monthStart));
+      const trialsThisMonth = signupsThisMonth.filter(w => w.subscription_status === "trialing" || w.subscription_status === "active");
+      const convertedThisMonth = signupsThisMonth.filter(w => paidPlans.includes(w.plan_type || "") && w.subscription_status === "active");
+
+      // New clients this month
+      const newClientsThisMonth = signupsThisMonth.map(w => {
+        const profile = profileMap.get(w.created_by);
+        return { id: w.id, name: w.name, created_at: w.created_at, plan: w.plan_type, status: w.subscription_status, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "" };
+      });
+
+      const prevMRR = mrrHistory.length >= 2 ? mrrHistory[mrrHistory.length - 2].mrr : 0;
+      const mrrVariation = prevMRR > 0 ? ((currentMRR - prevMRR) / prevMRR) * 100 : 0;
+
+      return new Response(JSON.stringify({
+        current_mrr: currentMRR, mrr_variation: mrrVariation,
+        active_clients: activeClients.length, active_trials: trialsActive.length,
+        churn_count: churnedThisMonth.length, churn_value: churnValue,
+        trials_expiring: trialsExpiring, at_limit: atLimit,
+        mrr_history: mrrHistory, plan_distribution: planDistribution,
+        funnel: { signups: signupsThisMonth.length, trials: trialsThisMonth.length, converted: convertedThisMonth.length, conversion_rate: signupsThisMonth.length > 0 ? (convertedThisMonth.length / signupsThisMonth.length) * 100 : 0 },
+        new_clients: newClientsThisMonth,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
