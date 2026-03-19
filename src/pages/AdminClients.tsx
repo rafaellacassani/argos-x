@@ -904,6 +904,10 @@ export default function AdminClients() {
             <Activity className="w-4 h-4" />
             Saúde & Monitoramento
           </TabsTrigger>
+          <TabsTrigger value="executive" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Dashboard Executivo
+          </TabsTrigger>
         </TabsList>
 
         {/* ───────── TAB: NOVO CLIENTE ───────── */}
