@@ -1088,10 +1088,21 @@ serve(async (req) => {
         leadCountsMap.set(wsId, count || 0);
       }
 
-      // Count members per workspace
+      // Count members per workspace & find owner (admin) per workspace
       const membersData = membersRes.data || [];
+      const profilesByUserId = new Map<string, any>();
+      for (const p of (profilesRes.data || [])) {
+        profilesByUserId.set(p.user_id, p);
+      }
+      const ownerByWs = new Map<string, any>();
       for (const m of membersData) {
         memberCountsMap.set(m.workspace_id, (memberCountsMap.get(m.workspace_id) || 0) + 1);
+        if (m.role === "admin" && !ownerByWs.has(m.workspace_id)) {
+          const profile = profilesByUserId.get(m.user_id);
+          if (profile) {
+            ownerByWs.set(m.workspace_id, { name: profile.full_name, phone: profile.phone, email: profile.email });
+          }
+        }
       }
 
       // Group agents by workspace
