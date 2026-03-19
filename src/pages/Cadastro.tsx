@@ -103,7 +103,10 @@ export default function Cadastro() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: form.name,
-            phone: form.phone.replace(/\D/g, ""),
+            phone: (() => {
+              const digits = form.phone.replace(/\D/g, "");
+              return digits.startsWith("55") ? digits : `55${digits}`;
+            })(),
             email: form.email,
             companyName: form.companyName,
             password: form.password,
