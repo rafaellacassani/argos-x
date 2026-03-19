@@ -1,164 +1,52 @@
 
 
-# Plano: Redesign completo do Chat — estilo Kommo/WhatsApp Web
+## Plano: Ativar cobrança dos pacotes de leads adicionais
 
-## Problema atual
+### Situação atual
+- A tabela `lead_packs` já existe no banco com campos `stripe_item_id`, `pack_size`, `price_paid`, `active`, `workspace_id`
+- O hook `usePlanLimits` já soma os `lead_packs` ativos ao limite de leads
+- Os botões na página `/planos` estão com "Em breve" (disabled)
+- Faltam: os **Stripe Price IDs** dos pacotes e o **fluxo de checkout**
 
-O arquivo `Chats.tsx` tem **2693 linhas** em um único componente monolítico. Cada troca de conversa dispara múltiplas queries (Evolution API + DB merge + webhook_message_log), causando delay visível. O estado anterior fica na tela por segundos antes da nova conversa carregar. Visualmente, falta polish: sem separadores de data, sem eventos inline, layout não parece um mensageiro profissional.
+### O que será feito
 
-## O que será feito
+**1. Criar 4 secrets para os preços dos pacotes no Stripe**
+- `STRIPE_PRICE_PACK_1000` → +1.000 leads (R$17/mês)
+- `STRIPE_PRICE_PACK_5000` → +5.000 leads (R$47/mês)
+- `STRIPE_PRICE_PACK_20000` → +20.000 leads (R$97/mês)
+- `STRIPE_PRICE_PACK_50000` → +50.000 leads (R$197/mês)
 
-### 1. Troca instantânea de conversa (Performance crítica)
-- **Mostrar mensagens do cache imediatamente** ao clicar — sem spinner se já existem mensagens cached
-- Limpar mensagens da conversa anterior **antes** de iniciar fetch da nova (elimina o "fantasma" da conversa anterior)
-- Carregar DB em background sem bloquear UI
-- Mover o merge API+DB para um efeito assíncrono que atualiza silenciosamente
+Você precisará criar esses 4 produtos/preços recorrentes no Stripe Dashboard e me passar os IDs.
 
-### 2. Refatoração em componentes menores
-Quebrar o monolito em:
-- `ChatListSidebar.tsx` — lista de conversas, busca, filtros, seletor de instância
-- `ChatConversation.tsx` — header + mensagens + input
-- `ChatMessageList.tsx` — renderização das bolhas com virtualização
-- `useChatMessages.ts` — hook dedicado para load/cache/realtime de mensagens
-- `useChatList.ts` — hook dedicado para load/dedup/enrich de conversas
+**2. Atualizar a Edge Function `create-checkout-session`**
+- Adicionar suporte a `type: "lead_pack"` no body
+- Mapear os `pack_size` para os respectivos Stripe Price IDs
+- Criar sessão de checkout como subscription add-on vinculada ao mesmo `stripe_customer_id` do workspace
 
-### 3. Visual estilo Kommo / WhatsApp Web
-Baseado nas screenshots de referência:
+**3. Atualizar o `stripe-webhook`**
+- No evento `checkout.session.completed`, detectar quando é um pacote de leads (via metadata `type: "lead_pack"`)
+- Inserir registro na tabela `lead_packs` com `pack_size`, `price_paid`, `stripe_item_id`, `workspace_id`, `active: true`
+- No evento `customer.subscription.deleted`, desativar (`active = false`) os lead_packs associados
 
-- **Lista de conversas**: avatar circular com fallback de iniciais colorido, nome em bold, preview da mensagem em cinza, timestamp alinhado à direita, badge de não-lido verde
-- **Bolhas de mensagem**: fundo verde claro (enviadas) e branco (recebidas) com sombra sutil, cantos arredondados assimétricos (como WhatsApp), timestamp dentro da bolha no canto inferior direito
-- **Separadores de data**: linha horizontal com pill central "15/03/2026" entre grupos de mensagens de dias diferentes
-- **Eventos inline**: eventos do sistema (moveu de etapa, bot executou, campo alterado) aparecem como texto cinza centralizado entre as mensagens — igual Kommo mostra "Robot Movido para: ECX USA > new leads"
-- **Header da conversa**: avatar + nome + telefone + ações (agendar, ligar, favoritar)
-- **Input**: barra inferior com emoji, anexo, gravação de áudio — mais compacta e limpa
-- **Ações rápidas**: botões "Fechar conversa" e "Colocar em espera" na barra inferior, como no Kommo
+**4. Atualizar a página `/planos`**
+- Remover o `disabled` dos botões de pacote
+- Adicionar `handleBuyPack(packSize)` que chama `create-checkout-session` com `type: "lead_pack"` e `packSize`
+- Loading state individual por pacote
 
-### 4. Histórico inline com eventos do lead
-- Buscar `lead_history` do lead vinculado à conversa
-- Renderizar eventos entre as mensagens na timeline cronológica
-- Tipos de evento: mudança de etapa, bot executou ação, campo alterado, tag adicionada
-- Estilo: texto cinza pequeno centralizado com ícone, clicável para expandir detalhes
+### Pré-requisito do seu lado
+Antes de implementar, preciso que você crie os 4 preços recorrentes (subscription) no Stripe Dashboard e me passe os Price IDs (`price_xxx`). Posso prosseguir com o código e pedir os secrets depois.
 
-### 5. Scroll infinito melhorado
-- Auto-load ao scroll para cima (já existe mas com bugs de posição)
-- Corrigir preservação de scroll position usando `scrollHeightDiff`
-- Mostrar skeleton placeholders durante carregamento (não spinner)
-- Botão "Carregar mais" como fallback
-
-### 6. Painel do Lead integrado (estilo Kommo)
-- Já existe `LeadSidePanel` — melhorar o visual
-- Mostrar funil + etapa com progresso visual (como Kommo: "ECX USA - Já é cliente (247 days)")
-- Tabs: Principal, Estatísticas, Mídia, Stripe
-- Campos editáveis inline (empresa, telefone, email)
-- Abertura suave com animação lateral
-
-## Detalhes técnicos
-
-### Arquitetura de cache para troca instantânea
+### Detalhes técnicos
 
 ```text
-┌─────────────┐    click     ┌──────────────────┐
-│  Chat List   │───────────▶│  setSelectedChat  │
-└─────────────┘             └────────┬─────────┘
-                                     │
-                          ┌──────────▼──────────┐
-                          │  Cache hit?          │
-                          │  YES → show cached   │
-                          │  NO  → show skeleton │
-                          └──────────┬──────────┘
-                                     │ (async)
-                          ┌──────────▼──────────┐
-                          │  DB query (fast)     │
-                          │  → update messages   │
-                          └──────────┬──────────┘
-                                     │ (async)
-                          ┌──────────▼──────────┐
-                          │  API merge (slow)    │
-                          │  → silent update     │
-                          └─────────────────────┘
+Fluxo:
+  Botão "Contratar" → create-checkout-session (type=lead_pack, packSize=1000)
+       → Stripe Checkout → stripe-webhook (checkout.session.completed)
+       → INSERT lead_packs → usePlanLimits recalcula limite
 ```
 
-### Mudança crítica no `useEffect` de mensagens
-```typescript
-// ANTES: mostra loadingMessages=true por 2-5 segundos
-// DEPOIS:
-useEffect(() => {
-  if (!selectedChat) return;
-  
-  // 1. Limpa conversa anterior IMEDIATAMENTE
-  const cached = messageCache.get(selectedChat.id);
-  if (cached) {
-    setMessages(cached);        // Instantâneo
-    setLoadingMessages(false);
-  } else {
-    setMessages([]);             // Limpa fantasma
-    setLoadingMessages(true);    // Skeleton só quando não tem cache
-  }
-  
-  // 2. Fetch DB em background
-  loadFromDB(selectedChat).then(msgs => {
-    setMessages(msgs);
-    setLoadingMessages(false);
-  });
-}, [selectedChat?.id]);
-```
-
-### Separadores de data nas mensagens
-```typescript
-// Agrupar mensagens por dia e inserir separadores
-const messagesWithDates = useMemo(() => {
-  const result = [];
-  let lastDate = '';
-  for (const msg of messages) {
-    const msgDate = formatDateLabel(msg._ts);
-    if (msgDate !== lastDate) {
-      result.push({ type: 'date-separator', date: msgDate });
-      lastDate = msgDate;
-    }
-    result.push({ type: 'message', ...msg });
-  }
-  return result;
-}, [messages]);
-```
-
-### Eventos inline do lead_history
-```typescript
-// Buscar eventos e mesclar na timeline
-const { data: events } = await supabase
-  .from('lead_history')
-  .select('*')
-  .eq('lead_id', leadId)
-  .order('created_at', { ascending: true });
-
-// Merge com mensagens por timestamp
-const timeline = [...messages, ...events.map(e => ({
-  type: 'event',
-  content: formatEventLabel(e),
-  _ts: new Date(e.created_at).getTime()
-}))].sort((a, b) => a._ts - b._ts);
-```
-
-### Arquivos a criar/modificar
-
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/Chats.tsx` | Refatorar — extrair componentes, corrigir troca de conversa |
-| `src/components/chat/ChatListSidebar.tsx` | **Novo** — lista de conversas extraída |
-| `src/components/chat/ChatConversation.tsx` | **Novo** — área de mensagens extraída |
-| `src/components/chat/ChatMessageList.tsx` | **Novo** — renderização com separadores de data e eventos |
-| `src/components/chat/ChatEventBubble.tsx` | **Novo** — evento inline no estilo Kommo |
-| `src/hooks/useChatMessages.ts` | **Novo** — hook de mensagens com cache |
-| `src/hooks/useChatList.ts` | **Novo** — hook de lista de conversas |
-| `src/components/chat/MessageBubble.tsx` | Atualizar visual (cores WhatsApp, timestamp dentro da bolha) |
-| `src/components/chat/ChatInput.tsx` | Ajustar layout + ações rápidas |
-| `src/components/chat/LeadSidePanel.tsx` | Melhorar visual |
-
-### Ordem de execução
-1. Corrigir troca instantânea (limpar fantasma + usar cache) — impacto imediato
-2. Redesign visual das bolhas e lista de conversas
-3. Adicionar separadores de data
-4. Extrair componentes (refatoração)
-5. Eventos inline do lead_history
-6. Ações rápidas (fechar conversa, espera)
-7. Polish final do painel do lead
+Arquivos modificados:
+- `supabase/functions/create-checkout-session/index.ts`
+- `supabase/functions/stripe-webhook/index.ts`
+- `src/pages/Planos.tsx`
 
