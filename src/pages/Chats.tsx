@@ -1087,6 +1087,109 @@ export default function Chats() {
     }
   }, [workspaceId]);
 
+  // Load more chats (older conversations) - triggered by "Carregar mais" button
+  const loadMoreChats = useCallback(async () => {
+    if (loadingMoreChats || !workspaceId) return;
+    setLoadingMoreChats(true);
+    try {
+      const instanceName = selectedInstance === "all" ? "all" : selectedInstance;
+      
+      let query = supabase
+        .from("whatsapp_messages")
+        .select("remote_jid, push_name, content, direction, timestamp, instance_name, from_me, message_id")
+        .eq("workspace_id", workspaceId)
+        .order("timestamp", { ascending: false })
+        .range(chatListOffsetRef.current, chatListOffsetRef.current + 999);
+
+      if (instanceName && instanceName !== "all" && !instanceName?.startsWith("meta:")) {
+        query = query.eq("instance_name", instanceName);
+      }
+
+      const { data: msgs, error } = await query;
+      if (error || !msgs || msgs.length === 0) {
+        setHasMoreChats(false);
+        return;
+      }
+
+      if (msgs.length < 1000) setHasMoreChats(false);
+      chatListOffsetRef.current += msgs.length;
+
+      // Resolve @lid messages
+      const lidMessageIds = msgs
+        .filter((msg) => msg.remote_jid?.endsWith("@lid") && msg.message_id)
+        .map((msg) => msg.message_id as string)
+        .slice(0, 1000);
+
+      const sessionByMessageId = new Map<string, string>();
+      if (lidMessageIds.length > 0) {
+        const { data: logRows } = await supabase
+          .from("webhook_message_log")
+          .select("message_id, session_id")
+          .eq("workspace_id", workspaceId)
+          .in("message_id", lidMessageIds);
+        for (const row of logRows || []) {
+          if (row.message_id && row.session_id) sessionByMessageId.set(row.message_id, row.session_id);
+        }
+      }
+
+      const currentLeads = leadsRef.current;
+      const leadByJid = new Map<string, typeof currentLeads[number]>();
+      const leadByPhone10 = new Map<string, typeof currentLeads[number]>();
+      for (const lead of currentLeads) {
+        if (lead.whatsapp_jid) leadByJid.set(lead.whatsapp_jid, lead);
+        const ld = (lead.phone || "").replace(/[^0-9]/g, "");
+        if (ld.length >= 10) leadByPhone10.set(ld.slice(-10), lead);
+      }
+
+      const chatMap = new Map<string, any>();
+      for (const msg of msgs) {
+        if (!msg.remote_jid || msg.remote_jid.endsWith("@g.us")) continue;
+        const mappedSessionJid = msg.message_id ? sessionByMessageId.get(msg.message_id) : undefined;
+        let matchedLead = leadByJid.get(msg.remote_jid);
+        if (!matchedLead && mappedSessionJid) matchedLead = leadByJid.get(mappedSessionJid);
+        const msgDigits = cleanPhoneNumber(msg.remote_jid);
+        if (!matchedLead && msgDigits.length >= 10 && msgDigits.length <= 13) {
+          matchedLead = leadByPhone10.get(msgDigits.slice(-10));
+        }
+
+        const inst = msg.instance_name || "unknown";
+        const key = `${inst}:${msgDigits.slice(-10) || msg.remote_jid}`;
+        
+        if (!chatMap.has(key)) {
+          const displayName = matchedLead?.name || msg.push_name || formatPhoneFromJid(msg.remote_jid) || msg.remote_jid;
+          const phone = matchedLead?.phone || formatPhoneFromJid(msg.remote_jid);
+          chatMap.set(key, {
+            id: `${inst}:${msg.remote_jid}`,
+            remoteJid: msg.remote_jid,
+            name: displayName,
+            lastMessage: msg.content || "",
+            time: formatTime(new Date(msg.timestamp).getTime() / 1000),
+            unread: 0,
+            online: false,
+            phone,
+            lastMessageFromMe: msg.from_me || msg.direction === "outbound",
+            instanceName: inst,
+            _timestamp: new Date(msg.timestamp).getTime() / 1000,
+          });
+        }
+      }
+
+      const newChats = Array.from(chatMap.values());
+
+      setChats(prev => {
+        const existingKeys = new Set(prev.map(c => c.id));
+        const added = newChats.filter((c: any) => !existingKeys.has(c.id));
+        if (added.length === 0) return prev;
+        return [...prev, ...added].sort((a: any, b: any) => ((b as any)._timestamp || 0) - ((a as any)._timestamp || 0));
+      });
+
+    } catch (err) {
+      console.error("[Chats] Error loading more chats:", err);
+    } finally {
+      setLoadingMoreChats(false);
+    }
+  }, [workspaceId, selectedInstance, loadingMoreChats]);
+
   // Helper: deduplicate chats using canonical phone key per instance
   const dedupChats = useCallback((chatList: (Chat & { _timestamp?: number })[]) => {
     const deduped = new Map<string, (Chat & { _timestamp?: number })>();
