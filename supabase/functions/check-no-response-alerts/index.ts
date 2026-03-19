@@ -841,7 +841,7 @@ Deno.serve(async (req) => {
               method: "POST",
               headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
               body: JSON.stringify({
-                model: (agent.model || "openai/gpt-4o-mini").replace(/^(anthropic|openai|google)\//, ""),
+                model: (() => { const m = agent.model || "openai/gpt-5-mini"; return (!m.includes("/") || m.startsWith("anthropic/")) ? "openai/gpt-5-mini" : m; })(),
                 messages: [{ role: "user", content: followupPrompt }],
                 temperature: 0.9,
                 max_tokens: 200,

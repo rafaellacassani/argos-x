@@ -252,8 +252,13 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais.`;
         });
       }
 
-      // Strip provider prefixes (anthropic/, openai/, google/) from model name
-      let model = (agent.model || "claude-3-5-sonnet-20241022").replace(/^(anthropic|openai|google)\//, "");
+      // Ensure model uses gateway-compatible format (must have provider prefix)
+      // The Lovable gateway only supports openai/* and google/* models
+      let model = agent.model || "openai/gpt-5-mini";
+      // If model has no prefix or uses unsupported provider (anthropic), default to openai/gpt-5-mini
+      if (!model.includes("/") || model.startsWith("anthropic/")) {
+        model = "openai/gpt-5-mini";
+      }
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
