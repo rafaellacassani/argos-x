@@ -322,16 +322,21 @@ export function useEvolutionAPI() {
         // Don't block deletion
       }
 
-      // 1. Deletar na Evolution API
+      // 1. Deletar na Evolution API (404 = já não existe, ok)
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/delete/${instanceName}`, {
         method: "DELETE",
       });
 
       if (fnError) {
-        throw new Error(fnError.message);
+        // Check if it's a 404 (instance already gone on Evolution side)
+        const is404 = fnError.message?.includes('non-2xx') || fnError.message?.includes('404');
+        if (!is404) {
+          throw new Error(fnError.message);
+        }
+        console.warn(`[useEvolutionAPI] Instance "${instanceName}" not found on Evolution API, proceeding with local cleanup`);
       }
 
-      if (data?.error) {
+      if (data?.error && !data?.error?.includes?.('not exist') && !data?.error?.includes?.('Not Found')) {
         throw new Error(data.error);
       }
 
