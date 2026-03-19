@@ -1930,6 +1930,11 @@ export default function AdminClients() {
             <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
           )}
         </TabsContent>
+
+        {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
+        <TabsContent value="health">
+          <WorkspaceHealthTab />
+        </TabsContent>
       </Tabs>
 
       {/* ───────── DETAIL DIALOG ───────── */}
