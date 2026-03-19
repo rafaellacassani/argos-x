@@ -183,6 +183,9 @@ export default function WorkspaceHealthTab() {
                           <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {ws.members_count} usuários</span>
                           <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> {ws.agents.length} agentes</span>
                           <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> {ws.instances.length} instâncias</span>
+                          {ws.owner?.name && (
+                            <span className="flex items-center gap-1">👤 {ws.owner.name}</span>
+                          )}
                         </div>
                       </div>
                       {hasAlerts && (
