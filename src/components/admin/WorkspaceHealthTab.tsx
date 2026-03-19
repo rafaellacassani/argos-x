@@ -188,6 +188,21 @@ export default function WorkspaceHealthTab() {
                           )}
                         </div>
                       </div>
+                      {ws.owner?.phone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-xs shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const cleanPhone = ws.owner!.phone!.replace(/\D/g, "");
+                            navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
+                          }}
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          Chamar no Chat
+                        </Button>
+                      )}
                       {hasAlerts && (
                         <Badge variant="destructive" className="gap-1">
                           <AlertTriangle className="w-3 h-3" />
