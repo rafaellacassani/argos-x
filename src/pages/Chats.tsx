@@ -496,6 +496,69 @@ export default function Chats() {
   // Edit state
   const [editingMessage, setEditingMessage] = useState<{ id: string; messageId: string; content: string } | null>(null);
 
+  // === Message action handlers ===
+  const handleReply = useCallback((msg: { id: string; content: string; sent: boolean; type: string }) => {
+    setReplyingTo(msg);
+  }, []);
+
+  const handleCancelReply = useCallback(() => {
+    setReplyingTo(null);
+  }, []);
+
+  const handleDeleteForMe = useCallback(async (msgId: string) => {
+    // Remove from local state
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    // Remove from DB
+    await supabase.from("whatsapp_messages").delete().eq("message_id", msgId);
+    toast({ title: "Mensagem apagada" });
+  }, []);
+
+  const handleDeleteForEveryone = useCallback(async (msgId: string, messageId: string) => {
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    const remoteJid = selectedChat.remoteJid;
+    const success = await evolutionDeleteMessage(targetInstance, messageId, remoteJid, true);
+    if (success) {
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+      await supabase.from("whatsapp_messages").delete().eq("message_id", messageId);
+      toast({ title: "Mensagem apagada para todos" });
+    } else {
+      toast({ title: "Erro ao apagar mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, evolutionDeleteMessage]);
+
+  const handleEdit = useCallback(async (msgId: string, messageId: string, currentContent: string) => {
+    const newText = prompt("Editar mensagem:", currentContent);
+    if (!newText || newText === currentContent) return;
+    
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    const success = await evolutionEditMessage(targetInstance, messageId, selectedChat.remoteJid, true, newText);
+    if (success) {
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: newText } : m));
+      await supabase.from("whatsapp_messages").update({ content: newText }).eq("message_id", messageId);
+      toast({ title: "Mensagem editada" });
+    } else {
+      toast({ title: "Erro ao editar mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, evolutionEditMessage]);
+
+  const handleReact = useCallback(async (msgId: string, messageId: string, reaction: string) => {
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    // Find if fromMe
+    const msg = messages.find(m => m.id === msgId);
+    const fromMe = msg?.fromMe ?? true;
+    
+    const success = await evolutionReactToMessage(targetInstance, messageId, selectedChat.remoteJid, fromMe, reaction);
+    if (!success) {
+      toast({ title: "Erro ao reagir à mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, messages, evolutionReactToMessage]);
+
   // Handler for downloading media
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
     // Use chat's instance if in "all" mode, otherwise use selectedInstance
