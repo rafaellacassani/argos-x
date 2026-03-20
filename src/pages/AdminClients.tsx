@@ -387,6 +387,7 @@ export default function AdminClients() {
       message_type: "text",
       content: "",
       audio_url: null,
+      subject: null,
       position: dayMsgs.length,
       is_active: true,
     }]);
