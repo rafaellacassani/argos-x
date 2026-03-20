@@ -310,10 +310,15 @@ serve(async (req) => {
             : null;
 
           if (emailMsgs && emailMsgs.length > 0) {
-            // Use first email message content as body
-            const emailContent = replaceVars(emailMsgs[0].content || "", vars);
+            // Use first email message content as body, with per-message subject
+            const emailMsg = emailMsgs[0];
+            const emailContent = replaceVars(emailMsg.content || "", vars);
+            const emailSubject = replaceVars(
+              emailMsg.subject || config.email_subject || "Argos X — Reative sua conta",
+              vars
+            );
             const htmlEmail = buildHtmlEmail(
-              config.email_subject || "Argos X — Reative sua conta",
+              emailSubject,
               `<div style="color:#475569;font-size:15px;line-height:1.6;white-space:pre-line">${emailContent}</div>`
             );
 
@@ -326,7 +331,7 @@ serve(async (req) => {
               body: JSON.stringify({
                 from: "Argos X <noreply@argosx.com.br>",
                 to: [ownerEmail],
-                subject: config.email_subject,
+                subject: emailSubject,
                 html: htmlEmail,
               }),
             });
