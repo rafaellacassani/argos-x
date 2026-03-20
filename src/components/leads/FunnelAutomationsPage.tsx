@@ -80,6 +80,7 @@ export function FunnelAutomationsPage({
   teamMembers,
   funnelName,
 }: FunnelAutomationsPageProps) {
+  const navigate = useNavigate();
   const {
     fetchAutomations, createAutomation, updateAutomation,
     deleteAutomation, toggleAutomation, executeStageAutomations,
@@ -91,6 +92,7 @@ export function FunnelAutomationsPage({
   const [executionResults, setExecutionResults] = useState<Array<{ name: string; status: 'success' | 'error' | 'skipped' | 'duplicate'; reason?: string }> | null>(null);
 
   const [allAutomations, setAllAutomations] = useState<Record<string, StageAutomation[]>>({});
+  const [stageChangeBots, setStageChangeBots] = useState<Record<string, Array<{ id: string; name: string; is_active: boolean; delay_minutes: number }>>>({});
   const [loadingStages, setLoadingStages] = useState(false);
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
@@ -114,8 +116,48 @@ export function FunnelAutomationsPage({
       })
     );
     setAllAutomations(result);
+
+    // Also fetch SalesBots with trigger_type = 'stage_change' for this funnel
+    if (workspaceId) {
+      const { data: scBots } = await supabase
+        .from('salesbots')
+        .select('id, name, is_active, trigger_config')
+        .eq('workspace_id', workspaceId)
+        .eq('trigger_type', 'stage_change');
+
+      const botsByStage: Record<string, Array<{ id: string; name: string; is_active: boolean; delay_minutes: number }>> = {};
+      if (scBots) {
+        for (const bot of scBots) {
+          const tc = (bot.trigger_config || {}) as Record<string, any>;
+          const stageId = tc.stage_id as string;
+          // Match bots to stages in this funnel
+          if (stageId && stages.some(s => s.id === stageId)) {
+            if (!botsByStage[stageId]) botsByStage[stageId] = [];
+            botsByStage[stageId].push({
+              id: bot.id,
+              name: bot.name,
+              is_active: bot.is_active ?? false,
+              delay_minutes: (tc.delay_minutes as number) || 0,
+            });
+          } else if (!stageId) {
+            // Bot targets any stage in any funnel — show on all stages
+            for (const stage of stages) {
+              if (!botsByStage[stage.id]) botsByStage[stage.id] = [];
+              botsByStage[stage.id].push({
+                id: bot.id,
+                name: bot.name,
+                is_active: bot.is_active ?? false,
+                delay_minutes: (tc.delay_minutes as number) || 0,
+              });
+            }
+          }
+        }
+      }
+      setStageChangeBots(botsByStage);
+    }
+
     setLoadingStages(false);
-  }, [stages, fetchAutomations]);
+  }, [stages, fetchAutomations, workspaceId]);
 
   const fetchInstances = async () => {
     if (!workspaceId) return;
