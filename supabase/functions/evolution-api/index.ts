@@ -503,4 +503,53 @@ app.get("/find-webhook/:instanceName", async (c) => {
   }
 });
 
+// Delete message for everyone (Evolution API)
+app.delete("/delete-message/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { id, remoteJid, fromMe } = await c.req.json();
+    if (!id || !remoteJid) return c.json({ error: "id and remoteJid are required" }, 400, corsHeaders);
+    const result = await evolutionRequest(`/chat/deleteMessageForEveryone/${instanceName}`, "DELETE", { id, remoteJid, fromMe: fromMe ?? true });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to delete message" }, 500, corsHeaders);
+  }
+});
+
+// Edit message (Evolution API)
+app.post("/edit-message/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { messageId, remoteJid, fromMe, text } = await c.req.json();
+    if (!messageId || !remoteJid || !text) return c.json({ error: "messageId, remoteJid, and text are required" }, 400, corsHeaders);
+    const result = await evolutionRequest(`/chat/updateMessage/${instanceName}`, "POST", {
+      number: remoteJid,
+      key: { id: messageId, remoteJid, fromMe: fromMe ?? true },
+      text,
+    });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to edit message" }, 500, corsHeaders);
+  }
+});
+
+// React to message (Evolution API)
+app.post("/react-message/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { messageId, remoteJid, fromMe, reaction } = await c.req.json();
+    if (!messageId || !remoteJid || reaction === undefined) return c.json({ error: "messageId, remoteJid, and reaction are required" }, 400, corsHeaders);
+    const result = await evolutionRequest(`/message/sendReaction/${instanceName}`, "POST", {
+      key: { id: messageId, remoteJid, fromMe: fromMe ?? true },
+      reaction,
+    });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to react to message" }, 500, corsHeaders);
+  }
+});
+
 Deno.serve(app.fetch);

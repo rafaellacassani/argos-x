@@ -675,6 +675,49 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const deleteMessage = useCallback(async (instanceName: string, messageId: string, remoteJid: string, fromMe: boolean): Promise<boolean> => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/delete-message/${instanceName}`, {
+        method: "DELETE",
+        body: { id: messageId, remoteJid, fromMe },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      return true;
+    } catch (err) {
+      console.error("[useEvolutionAPI] deleteMessage error:", err);
+      return false;
+    }
+  }, []);
+
+  const editMessage = useCallback(async (instanceName: string, messageId: string, remoteJid: string, fromMe: boolean, text: string): Promise<boolean> => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/edit-message/${instanceName}`, {
+        body: { messageId, remoteJid, fromMe, text },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      return true;
+    } catch (err) {
+      console.error("[useEvolutionAPI] editMessage error:", err);
+      return false;
+    }
+  }, []);
+
+  const reactToMessage = useCallback(async (instanceName: string, messageId: string, remoteJid: string, fromMe: boolean, reaction: string): Promise<boolean> => {
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/react-message/${instanceName}`, {
+        body: { messageId, remoteJid, fromMe, reaction },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      return true;
+    } catch (err) {
+      console.error("[useEvolutionAPI] reactToMessage error:", err);
+      return false;
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -693,5 +736,8 @@ export function useEvolutionAPI() {
     sendAudio,
     fetchProfile,
     fetchProfilesBatch,
+    deleteMessage,
+    editMessage,
+    reactToMessage,
   };
 }
