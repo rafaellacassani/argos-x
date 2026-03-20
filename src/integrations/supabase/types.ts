@@ -1557,6 +1557,42 @@ export type Database = {
           },
         ]
       }
+      lead_attribution: {
+        Row: {
+          created_at: string
+          fbclid: string | null
+          id: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          fbclid?: string | null
+          id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          fbclid?: string | null
+          id?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          workspace_id?: string
+        }
+        Relationships: []
+      }
       lead_custom_field_definitions: {
         Row: {
           created_at: string | null
