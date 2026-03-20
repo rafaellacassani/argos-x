@@ -69,7 +69,17 @@ interface Message {
   thumbnailBase64?: string;
   fileName?: string;
   duration?: number;
-  localAudioBase64?: string; // For locally sent audio that can play immediately
+  localAudioBase64?: string;
+  messageId?: string; // Evolution API message key id
+  fromMe?: boolean;
+  timestamp?: number; // Unix timestamp
+}
+
+interface ReplyingTo {
+  id: string;
+  content: string;
+  sent: boolean;
+  type: string;
 }
 
 // Helper to clean phone string: remove JID suffixes and non-digit chars
