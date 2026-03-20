@@ -641,6 +641,71 @@ app.post("/", async (c) => {
     console.log("[whatsapp-webhook] 📨 MSG details:", { instanceName, remoteJid, fromMe, msgId: msgId.substring(0, 20) });
 
     if (fromMe) {
+      // --- Pause/Resume code detection for AI agents ---
+      const fromMeText = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
+      if (fromMeText.trim()) {
+        try {
+          // Find workspace for this instance
+          const { data: instRow } = await supabase
+            .from("whatsapp_instances")
+            .select("workspace_id")
+            .eq("instance_name", instanceName)
+            .maybeSingle();
+
+          if (instRow?.workspace_id) {
+            // Find active agents that match this instance (or all instances)
+            const { data: agents } = await supabase
+              .from("ai_agents")
+              .select("id, pause_code, resume_keyword, instance_name")
+              .eq("workspace_id", instRow.workspace_id)
+              .eq("is_active", true);
+
+            if (agents && agents.length > 0) {
+              const trimmedText = fromMeText.trim();
+              // Find agent matching this instance (or with no instance filter)
+              const matchingAgent = agents.find(a =>
+                !a.instance_name || a.instance_name === instanceName
+              );
+
+              if (matchingAgent) {
+                const contactJid = remoteJid;
+
+                if (matchingAgent.pause_code && trimmedText === matchingAgent.pause_code.trim()) {
+                  console.log("[whatsapp-webhook] ⏸️ Pause code detected for agent", matchingAgent.id, "contact:", contactJid);
+                  // Set is_paused on matching memory
+                  await supabase
+                    .from("agent_memories")
+                    .update({ is_paused: true })
+                    .eq("agent_id", matchingAgent.id)
+                    .eq("session_id", contactJid);
+
+                  // Cancel pending follow-ups
+                  await supabase
+                    .from("agent_followup_queue")
+                    .update({ status: "canceled", canceled_reason: "pause_code" })
+                    .eq("agent_id", matchingAgent.id)
+                    .eq("session_id", contactJid)
+                    .eq("status", "pending");
+
+                  console.log("[whatsapp-webhook] ✅ Agent paused for contact:", contactJid);
+                } else if (matchingAgent.resume_keyword && trimmedText === matchingAgent.resume_keyword.trim()) {
+                  console.log("[whatsapp-webhook] ▶️ Resume keyword detected for agent", matchingAgent.id, "contact:", contactJid);
+                  await supabase
+                    .from("agent_memories")
+                    .update({ is_paused: false })
+                    .eq("agent_id", matchingAgent.id)
+                    .eq("session_id", contactJid);
+
+                  console.log("[whatsapp-webhook] ✅ Agent resumed for contact:", contactJid);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error("[whatsapp-webhook] Error checking pause/resume code:", e);
+        }
+      }
+      // --- End pause/resume ---
       console.log("[whatsapp-webhook] ⏭️ Skipped: fromMe=true for", instanceName, "jid:", remoteJid);
       return c.json({ received: true, skipped: "fromMe" }, 200, corsHeaders);
     }
