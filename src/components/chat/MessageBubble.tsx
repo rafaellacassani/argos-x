@@ -488,14 +488,14 @@ export function MessageBubble({
     }
   };
 
-  // Check if message is within 1 hour (WhatsApp delete/edit window)
+  // Check if message is within 48 hours (WhatsApp delete/edit window)
   const isWithinEditWindow = () => {
     if (!timestamp) return true; // if no timestamp, allow
     const now = Math.floor(Date.now() / 1000);
-    return now - timestamp < 3600; // 1 hour
+    return now - timestamp < 172800; // 48 hours
   };
 
-  const canDeleteForEveryone = sent && messageId && !isMeta && isWithinEditWindow();
+  const canDeleteForEveryone = sent && messageId && isWithinEditWindow();
   const canEdit = sent && type === "text" && messageId && !isMeta && isWithinEditWindow();
   const canReact = messageId && !isMeta;
 

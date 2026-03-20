@@ -3025,7 +3025,7 @@ export default function Chats() {
                           onDownloadMedia={handleDownloadMedia}
                           onReply={handleReply}
                           onDeleteForMe={handleDeleteForMe}
-                          onDeleteForEveryone={!selectedChat?.isMeta ? handleDeleteForEveryone : undefined}
+                          onDeleteForEveryone={handleDeleteForEveryone}
                           onEdit={!selectedChat?.isMeta ? handleEdit : undefined}
                           onReact={!selectedChat?.isMeta ? handleReact : undefined}
                         />
