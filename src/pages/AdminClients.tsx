@@ -218,6 +218,8 @@ export default function AdminClients() {
   } | null>(null);
   const [cadenceLoading, setCadenceLoading] = useState(false);
   const [cadenceSaving, setCadenceSaving] = useState(false);
+  const normalizeCadenceDays = (days: number[] | null | undefined) =>
+    [...new Set((days || []).filter((day): day is number => typeof day === "number"))].sort((a, b) => a - b);
   const [reactivationLog, setReactivationLog] = useState<any[]>([]);
   const [evolutionInstances, setEvolutionInstances] = useState<{ instance_name: string; display_name: string | null; instance_type: string; workspace_id: string }[]>([]);
 
@@ -286,18 +288,23 @@ export default function AdminClients() {
       ]);
 
       if (configRes.data) {
-        setCadenceConfig({
-          ...configRes.data,
-          cadence_days: Array.isArray(configRes.data.cadence_days) ? configRes.data.cadence_days as number[] : [-2, -1, 0, 3, 7],
-          welcome_message_template: (configRes.data as any).welcome_message_template || null,
-        });
-
         // Fetch cadence messages
         const { data: msgs } = await supabase
           .from("cadence_messages")
           .select("*")
           .eq("config_id", configRes.data.id)
           .order("position", { ascending: true });
+
+        const persistedDays = Array.isArray(configRes.data.cadence_days)
+          ? (configRes.data.cadence_days as number[])
+          : [-2, -1, 0, 3, 7];
+        const messageDays = (msgs || []).map((message) => message.cadence_day);
+
+        setCadenceConfig({
+          ...configRes.data,
+          cadence_days: normalizeCadenceDays([...persistedDays, ...messageDays]),
+          welcome_message_template: (configRes.data as any).welcome_message_template || null,
+        });
         setCadenceMessages((msgs || []) as CadenceMessage[]);
       }
       setReactivationLog(logsRes.data || []);
@@ -341,6 +348,9 @@ export default function AdminClients() {
     if (!cadenceConfig) return;
     setCadenceMessagesSaving(true);
     try {
+      const messageDays = normalizeCadenceDays(cadenceMessages.map((message) => message.cadence_day));
+      const syncedCadenceDays = normalizeCadenceDays([...cadenceConfig.cadence_days, ...messageDays]);
+
       // Delete all existing messages for this config
       await supabase
         .from("cadence_messages")
@@ -363,6 +373,18 @@ export default function AdminClients() {
         const { error } = await supabase.from("cadence_messages").insert(toInsert);
         if (error) throw error;
       }
+
+      const { error: configError } = await supabase
+        .from("reactivation_cadence_config")
+        .update({ cadence_days: syncedCadenceDays } as any)
+        .eq("id", cadenceConfig.id);
+
+      if (configError) throw configError;
+
+      setCadenceConfig({
+        ...cadenceConfig,
+        cadence_days: syncedCadenceDays,
+      });
 
       toast({ title: "Mensagens salvas!", description: "Mensagens de cadência atualizadas com sucesso." });
       // Refresh
