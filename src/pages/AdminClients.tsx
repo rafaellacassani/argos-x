@@ -355,6 +355,7 @@ export default function AdminClients() {
           message_type: m.message_type,
           content: m.content,
           audio_url: m.audio_url,
+          subject: m.subject,
           position: idx,
           is_active: m.is_active,
         }));
