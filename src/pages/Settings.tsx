@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
