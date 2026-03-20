@@ -105,6 +105,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
 import ExecutiveDashboardTab from "@/components/admin/ExecutiveDashboardTab";
+import CadenceMetricsPanel from "@/components/admin/CadenceMetricsPanel";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
@@ -1887,6 +1888,10 @@ export default function AdminClients() {
                   </Button>
                 </CardContent>
               </Card>
+
+
+              {/* ── Métricas de Conversão da Cadência ── */}
+              <CadenceMetricsPanel />
 
               {/* Recent reactivation log */}
               <Card className="max-w-2xl">
