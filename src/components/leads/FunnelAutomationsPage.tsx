@@ -320,6 +320,8 @@ export function FunnelAutomationsPage({
             <div className="flex gap-4 p-6 min-h-full">
               {stages.map(stage => {
                 const autos = allAutomations[stage.id] || [];
+                const scBots = stageChangeBots[stage.id] || [];
+                const totalActive = autos.filter(a => a.is_active).length + scBots.filter(b => b.is_active).length;
                 return (
                   <div key={stage.id} className="flex flex-col min-w-[280px] max-w-[300px] shrink-0">
                     {/* Stage header */}
@@ -330,18 +332,55 @@ export function FunnelAutomationsPage({
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
                       <h3 className="font-semibold text-sm text-foreground truncate">{stage.name}</h3>
                       <Badge variant="secondary" className="text-xs ml-auto">
-                        {autos.filter(a => a.is_active).length}
+                        {totalActive}
                       </Badge>
                     </div>
 
                     {/* Automations list */}
                     <div className="flex-1 border border-t-0 rounded-b-lg p-2 space-y-2 min-h-[200px]"
                       style={{ borderColor: `${stage.color}30` }}>
-                      {autos.length === 0 && (
+                      {autos.length === 0 && scBots.length === 0 && (
                         <p className="text-xs text-muted-foreground text-center py-6">
                           Nenhuma automação
                         </p>
                       )}
+
+                      {/* Stage-change SalesBots (from SalesBot Builder) */}
+                      {scBots.map(bot => (
+                        <div
+                          key={`scbot-${bot.id}`}
+                          className={`rounded-lg border p-3 space-y-2 transition-colors cursor-pointer ${
+                            bot.is_active
+                              ? 'bg-chart-4/10 border-chart-4/30 hover:bg-chart-4/15'
+                              : 'bg-card hover:bg-muted/30 opacity-60'
+                          }`}
+                          onClick={() => {
+                            onOpenChange(false);
+                            navigate(`/salesbots/builder/${bot.id}`);
+                          }}
+                        >
+                          <div className="flex items-start gap-2">
+                            <Bot className="h-4 w-4 text-chart-4 shrink-0 mt-0.5" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] text-muted-foreground leading-tight">
+                                {bot.delay_minutes > 0
+                                  ? `Ao entrar (após ${bot.delay_minutes >= 1440 ? `${bot.delay_minutes / 1440}d` : bot.delay_minutes >= 60 ? `${bot.delay_minutes / 60}h` : `${bot.delay_minutes}min`})`
+                                  : 'Ao entrar na etapa'}
+                              </p>
+                              <p className="text-sm font-medium leading-tight truncate">
+                                SalesBot: {bot.name}
+                              </p>
+                            </div>
+                            <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0 mt-1" />
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              SalesBot
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+
                       {autos.map(auto => (
                         <div
                           key={auto.id}
