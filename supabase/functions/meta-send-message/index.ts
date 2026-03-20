@@ -31,7 +31,45 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { metaPageId, recipientId, message, messageType = "text", mediaUrl } = await req.json();
+    const body = await req.json();
+    const { action } = body;
+
+    // --- DELETE MESSAGE ---
+    if (action === "delete") {
+      const { metaPageId, messageId } = body;
+      if (!metaPageId || !messageId) {
+        return new Response(JSON.stringify({ error: "metaPageId and messageId are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const { data: page, error: pageError } = await supabase
+        .from("meta_pages")
+        .select("id, page_id, page_access_token, platform, instagram_account_id, workspace_id")
+        .eq("id", metaPageId)
+        .eq("is_active", true)
+        .single();
+
+      if (pageError || !page) {
+        return new Response(JSON.stringify({ error: "Meta page not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // Use Graph API to delete the message
+      const deleteUrl = `https://graph.facebook.com/v21.0/${messageId}`;
+      const deleteRes = await fetch(deleteUrl, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${page.page_access_token}` },
+      });
+
+      const deleteData = await deleteRes.json();
+      if (!deleteRes.ok) {
+        console.error("[meta-send-message] Delete error:", deleteData);
+        return new Response(JSON.stringify({ error: "Failed to delete message", details: deleteData }), { status: deleteRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // --- SEND MESSAGE ---
+    const { metaPageId, recipientId, message, messageType = "text", mediaUrl } = body;
 
     // --- INPUT VALIDATION ---
     if (!metaPageId || !recipientId || !message) {

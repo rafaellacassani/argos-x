@@ -514,8 +514,31 @@ export default function Chats() {
   }, []);
 
   const handleDeleteForEveryone = useCallback(async (msgId: string, messageId: string) => {
-    const targetInstance = selectedChat?.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    if (!selectedChat) return;
+
+    if (selectedChat.isMeta) {
+      // Meta: delete via meta-send-message edge function
+      try {
+        const { data, error } = await supabase.functions.invoke("meta-send-message", {
+          body: { action: "delete", metaPageId: selectedChat.metaPageId, messageId },
+        });
+        if (error || data?.error) {
+          console.error("[Chats] Meta delete error:", error || data?.error);
+          toast({ title: "Erro ao apagar mensagem", variant: "destructive" });
+          return;
+        }
+        setMessages(prev => prev.filter(m => m.id !== msgId));
+        await supabase.from("meta_conversations").delete().eq("id", msgId);
+        toast({ title: "Mensagem apagada para todos" });
+      } catch (err) {
+        console.error("[Chats] Meta delete error:", err);
+        toast({ title: "Erro ao apagar mensagem", variant: "destructive" });
+      }
+      return;
+    }
+
+    const targetInstance = selectedChat.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all") return;
     
     const remoteJid = selectedChat.remoteJid;
     const success = await evolutionDeleteMessage(targetInstance, messageId, remoteJid, true);
@@ -3002,7 +3025,7 @@ export default function Chats() {
                           onDownloadMedia={handleDownloadMedia}
                           onReply={handleReply}
                           onDeleteForMe={handleDeleteForMe}
-                          onDeleteForEveryone={!selectedChat?.isMeta ? handleDeleteForEveryone : undefined}
+                          onDeleteForEveryone={handleDeleteForEveryone}
                           onEdit={!selectedChat?.isMeta ? handleEdit : undefined}
                           onReact={!selectedChat?.isMeta ? handleReact : undefined}
                         />
