@@ -1,66 +1,30 @@
 
 
-## Plan: Add WhatsApp Web-style Message Actions to Chat
+## Fix: "Apagar para todos" not showing in Chat
 
-### What changes
+### Root Cause
 
-1. **Add context menu to MessageBubble** — Right-click or long-press on any message shows a dropdown with WhatsApp Web actions:
-   - Responder (Reply) — quotes the message in the input
-   - Reagir (React) — emoji reaction picker
-   - Copiar (Copy) — copies text to clipboard
-   - Apagar para mim (Delete for me) — removes from local DB
-   - Apagar para todos (Delete for everyone) — calls Evolution API to delete remotely + removes from local DB
-   - Editar (Edit) — only for sent text messages, calls Evolution API to update
-   - Encaminhar (Forward) — opens chat picker to forward message
-   - Selecionar mensagens (Select messages) — multi-select mode for bulk delete
+Two issues prevent "Apagar para todos" from appearing:
 
-2. **Add new Evolution API proxy routes** in `supabase/functions/evolution-api/index.ts`:
-   - `DELETE /delete-message/:instanceName` → proxies to `DELETE /chat/deleteMessageForEveryone/:instance` with `{ id, remoteJid, fromMe }`
-   - `POST /edit-message/:instanceName` → proxies to `POST /chat/updateMessage/:instance` with `{ key: { id, remoteJid, fromMe }, text }`
-   - `POST /react-message/:instanceName` → proxies to `POST /message/sendReaction/:instance` with `{ key: { id, remoteJid, fromMe }, reaction }`
+1. **1-hour time window too restrictive** — The current code only shows the option for messages sent within the last hour. WhatsApp actually extended this window to ~48 hours. Messages older than 1 hour won't show the option at all.
 
-3. **Add new methods to `useEvolutionAPI.ts`**:
-   - `deleteMessage(instanceName, messageId, remoteJid, fromMe)` 
-   - `editMessage(instanceName, messageId, remoteJid, text)`
-   - `reactToMessage(instanceName, messageId, remoteJid, fromMe, reaction)`
+2. **WABA/Meta instances completely blocked** — The code passes `onDeleteForEveryone={undefined}` for Meta instances, so the option never appears for WABA connections.
 
-4. **Update MessageBubble component**:
-   - Add `ContextMenu` (from Radix, already in project) wrapping each bubble
-   - New props: `onReply`, `onDelete`, `onDeleteForEveryone`, `onEdit`, `onReact`, `onForward`, `onSelect`, `remoteJid`, `fromMe`, `isMeta`
-   - Show "Apagar para todos" only for sent messages within ~1h (WhatsApp limit)
-   - Show "Editar" only for sent text messages
+### Changes (minimal, only this fix)
 
-5. **Update Chats.tsx**:
-   - Add multi-select state (`selectionMode`, `selectedMessageIds`)
-   - Add reply quote state (`replyingTo: Message | null`)
-   - Wire all message action handlers
-   - Add bottom toolbar when in selection mode (like WhatsApp: "X selecionadas | Apagar | Cancelar")
-   - Pass `instanceName` and `remoteJid` to MessageBubble
+**File: `src/components/chat/MessageBubble.tsx`**
+- Change the edit/delete window from 1 hour (3600s) to 48 hours (172800s) to match WhatsApp's current policy
+- Allow "Apagar para todos" for all instance types (remove `!isMeta` restriction from `canDeleteForEveryone`)
 
-6. **Update ChatInput**:
-   - Add `replyingTo` prop to show quoted message preview above input
-   - Add `onCancelReply` prop
+**File: `src/pages/Chats.tsx`**
+- Pass `handleDeleteForEveryone` for Meta instances too (remove the `!selectedChat?.isMeta ?` conditional)
+- In `handleDeleteForEveryone`, add Meta support: for Meta instances, call the Meta Graph API delete endpoint; for Evolution instances, use existing logic
 
-7. **WABA/Meta support**:
-   - For Meta instances, only enable Copy and Reply (Meta Graph API doesn't support delete/edit/react the same way)
-   - Show appropriate actions based on `isMeta` flag
+**File: `supabase/functions/meta-send-message/index.ts`** (if needed)
+- Add a delete message route using Meta Graph API: `DELETE /{message-id}` (Meta supports deleting business-sent messages)
 
-### Files to modify
-
-- `supabase/functions/evolution-api/index.ts` — add 3 new proxy routes
-- `src/hooks/useEvolutionAPI.ts` — add deleteMessage, editMessage, reactToMessage methods
-- `src/components/chat/MessageBubble.tsx` — wrap in ContextMenu, add action callbacks
-- `src/pages/Chats.tsx` — wire handlers, add selection mode, reply state
-- `src/components/chat/ChatInput.tsx` — add reply quote preview
-
-### Technical details
-
-- Evolution API endpoints:
-  - `DELETE /chat/deleteMessageForEveryone/{instance}` body: `{ id: messageId, remoteJid, fromMe: true/false }`
-  - `POST /chat/updateMessage/{instance}` body: `{ text: newText, key: { id, remoteJid, fromMe } }`
-  - `POST /message/sendReaction/{instance}` body: `{ key: { remoteJid, fromMe, id }, reaction: "👍" }`
-- Local delete: remove from `whatsapp_messages` table + remove from messages state
-- Remote delete: call Evolution API + local delete
-- Copy: `navigator.clipboard.writeText(content)`
-- ContextMenu from `@radix-ui/react-context-menu` already in the project
+### Summary
+- Extend time window from 1h → 48h
+- Enable "Apagar para todos" for both WhatsApp and WABA instances
+- No other features or files touched
 
