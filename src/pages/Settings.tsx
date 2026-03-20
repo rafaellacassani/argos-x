@@ -38,6 +38,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
