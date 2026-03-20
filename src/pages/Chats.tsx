@@ -485,8 +485,16 @@ export default function Chats() {
     sendAudio,
     fetchProfile,
     fetchProfilesBatch,
+    deleteMessage: evolutionDeleteMessage,
+    editMessage: evolutionEditMessage,
+    reactToMessage: evolutionReactToMessage,
     loading: apiLoading 
   } = useEvolutionAPI();
+
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<ReplyingTo | null>(null);
+  // Edit state
+  const [editingMessage, setEditingMessage] = useState<{ id: string; messageId: string; content: string } | null>(null);
 
   // Handler for downloading media
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
