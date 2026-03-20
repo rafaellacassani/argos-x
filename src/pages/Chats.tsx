@@ -2048,6 +2048,9 @@ export default function Chats() {
                 sent: msg.from_me || msg.direction === 'outbound',
                 read: true,
                 type: (msg.message_type || 'text') as Message["type"],
+                messageId: msg.message_id || undefined,
+                fromMe: msg.from_me || msg.direction === 'outbound',
+                timestamp: Math.floor(date.getTime() / 1000),
               };
             });
             setMessages(transformedMessages);
