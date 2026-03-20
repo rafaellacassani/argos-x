@@ -522,7 +522,7 @@ serve(async (req) => {
       userAgent,
     }).catch((e) => console.warn("Meta CAPI error:", e));
 
-    // 10. Get pixel ID for browser-side tracking
+    // 11. Get pixel ID for browser-side tracking
     let pixelId: string | null = null;
     try {
       const { data: internalWs } = await supabaseAdmin
