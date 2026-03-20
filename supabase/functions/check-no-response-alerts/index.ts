@@ -123,7 +123,7 @@ async function resumeFlowFromNode(
   const nodes = flowData.nodes || [];
   const edges = flowData.edges || [];
 
-  let currentNode = nodes.find((n: any) => n.id === startNodeId);
+  let currentNode = startNodeId === 'start' ? findStartNode(nodes, edges) : nodes.find((n: any) => n.id === startNodeId);
   let executed = 0;
   const maxNodes = 50;
 
