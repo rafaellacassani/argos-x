@@ -2993,7 +2993,18 @@ export default function Chats() {
                           duration={msg.duration}
                           localAudioBase64={msg.localAudioBase64}
                           index={index}
+                          instanceName={selectedChat?.instanceName || selectedInstance || undefined}
+                          messageId={msg.messageId}
+                          remoteJid={selectedChat?.remoteJid}
+                          fromMe={msg.fromMe}
+                          isMeta={selectedChat?.isMeta}
+                          timestamp={msg.timestamp}
                           onDownloadMedia={handleDownloadMedia}
+                          onReply={handleReply}
+                          onDeleteForMe={handleDeleteForMe}
+                          onDeleteForEveryone={!selectedChat?.isMeta ? handleDeleteForEveryone : undefined}
+                          onEdit={!selectedChat?.isMeta ? handleEdit : undefined}
+                          onReact={!selectedChat?.isMeta ? handleReact : undefined}
                         />
                       </div>
                     );
