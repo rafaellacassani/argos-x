@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { motion } from "framer-motion";
+import { CadenceStatsCard } from "@/components/dashboard/CadenceStatsCard";
 import {
   MessageCircle,
   Users,
@@ -371,6 +372,9 @@ export default function Dashboard() {
           )}
         </motion.div>
       </div>
+
+      {/* Cadence Stats - Admin only */}
+      {isAdminOrManager && <CadenceStatsCard />}
     </div>
   );
 }
