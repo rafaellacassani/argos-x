@@ -13,7 +13,7 @@ import {
   Mail,
   BarChart3,
   Megaphone,
-  FileText,
+  
   Plug,
   Settings,
   ChevronLeft,
