@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Home,
-  LayoutDashboard,
+  
   Users,
   MessageCircle,
   Bot,
@@ -48,19 +48,17 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
-  { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
   { icon: Home, label: "Início", path: "/" },
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-  { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
+  { icon: Users, label: "Funil de Vendas", path: "/leads" },
+  { icon: Contact, label: "Contatos", path: "/contacts" },
+  { icon: Calendar, label: "Calendário", path: "/calendar" },
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
-  { icon: Calendar, label: "Calendário", path: "/calendar" },
-  { icon: Contact, label: "Contatos", path: "/contacts" },
+  { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
+  { icon: Plug, label: "Conexões", path: "/settings" },
   { icon: Mail, label: "Email", path: "/email" },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
-  { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
-  
   { icon: Crown, label: "Planos", path: "/planos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
@@ -175,15 +173,17 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
-    ...(isSuperAdmin ? [
-      { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
-      { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
-      { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
-      { icon: Headset, label: "Suporte", path: "/suporte" } as MenuItem,
-      { icon: Building2, label: "Clientes ECX", path: "/clients" } as MenuItem,
-    ] : []),
+    // Available for all admins
+    { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
     ...(permissions.isAdmin ? [
+      { icon: Headset, label: "Suporte", path: "/suporte" } as MenuItem,
       { icon: Map, label: "Tour Guiado", path: "/tour-guiado" } as MenuItem,
+    ] : []),
+    // Super admin only
+    ...(isSuperAdmin ? [
+      { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
+      { icon: Building2, label: "Clientes ECX", path: "/clients" } as MenuItem,
+      { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
     ] : []),
   ];
 
