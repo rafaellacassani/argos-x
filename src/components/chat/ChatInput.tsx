@@ -16,12 +16,21 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import EmojiPicker from "./EmojiPicker";
 
+interface ReplyingTo {
+  id: string;
+  content: string;
+  sent: boolean;
+  type: string;
+}
+
 interface ChatInputProps {
   onSendMessage: (text: string) => Promise<boolean>;
   onSendMedia: (file: File, caption?: string) => Promise<boolean>;
   onSendAudio: (audioBlob: Blob) => Promise<boolean>;
   disabled?: boolean;
   placeholder?: string;
+  replyingTo?: ReplyingTo | null;
+  onCancelReply?: () => void;
 }
 
 export function ChatInput({
@@ -30,6 +39,8 @@ export function ChatInput({
   onSendAudio,
   disabled = false,
   placeholder: customPlaceholder,
+  replyingTo,
+  onCancelReply,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
