@@ -3019,6 +3019,8 @@ export default function Chats() {
               onSendMedia={handleSendMedia}
               onSendAudio={handleSendAudio}
               disabled={apiLoading}
+              replyingTo={replyingTo}
+              onCancelReply={handleCancelReply}
               placeholder={
                 selectedChat?.isMeta
                   ? selectedChat.metaPlatform === "instagram"
