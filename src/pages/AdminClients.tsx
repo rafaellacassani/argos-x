@@ -1889,6 +1889,10 @@ export default function AdminClients() {
                 </CardContent>
               </Card>
 
+
+              {/* ── Métricas de Conversão da Cadência ── */}
+              <CadenceMetricsPanel />
+
               {/* Recent reactivation log */}
               <Card className="max-w-2xl">
                 <CardHeader>
