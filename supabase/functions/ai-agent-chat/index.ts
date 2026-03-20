@@ -680,8 +680,8 @@ serve(async (req) => {
 
         const rawModelName = agent.model || "openai/gpt-4o-mini";
         const deprecatedModelMap: Record<string, string> = {
-          "anthropic/claude-3-haiku-20240307": "openai/gpt-4o-mini",
-          "claude-3-haiku-20240307": "openai/gpt-4o-mini",
+          "anthropic/claude-3-haiku-20240307": "anthropic/claude-haiku-4-5-20251001",
+          "claude-3-haiku-20240307": "anthropic/claude-haiku-4-5-20251001",
         };
         const modelName = deprecatedModelMap[rawModelName] ?? rawModelName;
         const provider = modelName.split("/")[0]; // "openai", "anthropic", or "google"
