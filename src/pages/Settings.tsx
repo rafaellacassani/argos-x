@@ -25,6 +25,12 @@ import {
   Unplug,
   Wrench,
   BarChart3,
+  FileText,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Cloud,
 } from "lucide-react";
 import { MetaPixelSettings } from "@/components/settings/MetaPixelSettings";
 import { Button } from "@/components/ui/button";
