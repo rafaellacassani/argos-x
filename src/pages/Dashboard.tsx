@@ -372,6 +372,9 @@ export default function Dashboard() {
           )}
         </motion.div>
       </div>
+
+      {/* Cadence Stats - Admin only */}
+      {isAdminOrManager && <CadenceStatsCard />}
     </div>
   );
 }
