@@ -538,10 +538,10 @@ export default function Settings() {
                 <motion.div
                   key={integration.id}
                   initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: isPlanLocked ? 0.5 : 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                   className={`inboxia-card p-5 relative ${
-                    isPlanLocked ? "opacity-50 cursor-not-allowed" : !integration.available ? "opacity-60" : ""
+                    isPlanLocked ? "cursor-not-allowed" : !integration.available ? "opacity-60" : ""
                   }`}
                 >
                   {isPlanLocked && (
