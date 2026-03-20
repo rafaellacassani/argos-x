@@ -173,15 +173,17 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
-    ...(isSuperAdmin ? [
-      { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
-      { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
-      { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
-      { icon: Headset, label: "Suporte", path: "/suporte" } as MenuItem,
-      { icon: Building2, label: "Clientes ECX", path: "/clients" } as MenuItem,
-    ] : []),
+    // Available for all admins
+    { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
     ...(permissions.isAdmin ? [
+      { icon: Headset, label: "Suporte", path: "/suporte" } as MenuItem,
       { icon: Map, label: "Tour Guiado", path: "/tour-guiado" } as MenuItem,
+    ] : []),
+    // Super admin only
+    ...(isSuperAdmin ? [
+      { icon: Shield, label: "Admin Clientes", path: "/admin/clients" } as MenuItem,
+      { icon: Building2, label: "Clientes ECX", path: "/clients" } as MenuItem,
+      { icon: BookOpen, label: "Doc Agente IA", path: "/agent-training" } as MenuItem,
     ] : []),
   ];
 
