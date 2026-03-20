@@ -269,8 +269,9 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // For timer conditions: verify lead hasn't responded since started_at
-          if (item.condition_type === "timer") {
+          // For timer conditions (from wait nodes): verify lead hasn't responded since started_at
+          // Skip this check for stage_change_trigger items (they're not waiting for a response)
+          if (item.condition_type === "timer" && item.wait_node_id !== "stage_change_trigger") {
             const { data: inboundMsgs } = await supabase
               .from("whatsapp_messages")
               .select("id")
