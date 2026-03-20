@@ -48,6 +48,7 @@ interface MenuItem {
 }
 
 const menuItems: MenuItem[] = [
+  { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
   { icon: Home, label: "Início", path: "/" },
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
@@ -60,7 +61,6 @@ const menuItems: MenuItem[] = [
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: FileText, label: "Templates WA", path: "/templates", requiredPermission: 'canManageCampaigns' },
-  { icon: Plug, label: "Integrações", path: "/settings", highlight: true },
   { icon: Crown, label: "Planos", path: "/planos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
 ];
