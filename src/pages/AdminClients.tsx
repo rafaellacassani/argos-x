@@ -229,6 +229,7 @@ export default function AdminClients() {
     message_type: string;
     content: string | null;
     audio_url: string | null;
+    subject: string | null;
     position: number;
     is_active: boolean;
   }
