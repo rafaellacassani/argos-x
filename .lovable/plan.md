@@ -1,44 +1,32 @@
 
 
-## Diagnóstico: Filtro "Sem resposta" em conversas WABA
+## Plan: Upgrade Bot Settings from Side Sheet to Dialog + Add Delay Option
 
-### O que encontrei
+### What changes
 
-**Os filtros estão funcionando corretamente no código.** O problema é de dados e volume:
+1. **Replace `Sheet` with `Dialog` (centered popup)**
+   - In `SalesBotBuilder.tsx`, swap the `Sheet`/`SheetContent`/`SheetTrigger` for `Dialog`/`DialogContent`/`DialogTrigger`
+   - The settings will appear as a centered modal popup instead of a right-side panel
+   - More responsive across desktop and mobile
 
-1. **Limite de 100 conversas**: A consulta ao banco carrega apenas as 100 conversas mais recentes (`LIMIT 100`). Das ~6.109 conversas WABA, só 100 são exibidas.
+2. **Add a "Save" button inside the dialog**
+   - Place a footer with "Cancelar" and "Salvar configurações" buttons
+   - On save: persist trigger settings, close dialog, mark `hasChanges = true`
 
-2. **Das 100 carregadas, 97 são outbound (campanha) e apenas 3 são inbound** (respostas de leads). Ao clicar "Sem resposta", a lista passa de 100 para 3 conversas — se você não percebeu a mudança, pode parecer que não funcionou.
+3. **Add execution delay option for `stage_change` trigger**
+   - New field in `triggerConfig`: `delay_minutes` (number, default `0`)
+   - UI: Radio/toggle for "Imediatamente" vs "Após um tempo"
+   - When "Após um tempo" is selected, show number input + unit selector (minutos / horas / dias)
+   - The value is stored as minutes in `triggerConfig.delay_minutes`
+   - This delay will be respected by the execution engine (already supports `trigger_delay_minutes` pattern from stage automations)
 
-3. **265 respostas existem no banco** — pessoas responderam sim, mas estão "escondidas" porque o limite de 100 prioriza as mais recentes (que são os envios da campanha).
+### Files to modify
 
-### O que será corrigido
+- **`src/pages/SalesBotBuilder.tsx`**: Replace Sheet with Dialog, add save button, add delay UI for stage_change trigger
 
-**1. Remover o limite fixo de 100 para WABA e carregar todas as conversas**
-- Ou aumentar o limite para 5000+ para cobrir o volume das campanhas
+### Technical details
 
-**2. Adicionar paginação inteligente no summary view**
-- Ao ativar o filtro "Sem resposta", buscar do banco apenas conversas com `direction = 'inbound'` (server-side filter), em vez de filtrar client-side nos 100 carregados
-
-**3. Feedback visual claro**
-- Mostrar contagem de resultados: ex. "3 conversas sem resposta"
-- Se o filtro reduzir a lista dramaticamente, garantir que o empty state fique visível
-
-### Detalhes técnicos
-
-```text
-Problema atual:
-  meta_conversation_summary → LIMIT 100 → 97 outbound + 3 inbound
-  Filtro "sem resposta" client-side → mostra só 3
-
-Solução:
-  1. useMetaChat.fetchConversations() → remover .limit(100) ou aumentar
-  2. Adicionar parâmetro de filtro server-side para direction
-  3. fetchConversations(metaPageId, { directionFilter: 'inbound' })
-     → .eq('direction', 'inbound') quando filtro ativo
-```
-
-**Arquivos a modificar:**
-- `src/hooks/useMetaChat.ts` — aumentar limite, adicionar filtro server-side por direction
-- `src/pages/Chats.tsx` — passar filtro de direction ao carregar conversas WABA, adicionar contagem visual
+- Reuse existing `Dialog`/`DialogContent` components already in the project
+- Delay unit conversion: hours × 60, days × 1440 → stored as minutes
+- The `triggerConfig.delay_minutes` field follows the same pattern as `trigger_delay_minutes` in funnel automations, so the execution engine can read it directly
 
