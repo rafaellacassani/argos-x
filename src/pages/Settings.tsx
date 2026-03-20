@@ -982,39 +982,6 @@ export default function Settings() {
             </div>
           )}
 
-          {/* WABA Cloud API Section */}
-          <Separator className="my-6" />
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-display font-semibold text-lg">WhatsApp API Oficial (Cloud)</h3>
-              <p className="text-muted-foreground text-sm">Conexões via API oficial da Meta</p>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Nova Conexão
-            </Button>
-          </div>
-
-          {cloudConnections.length === 0 ? (
-            <div className="inboxia-card p-8 text-center">
-              <Phone className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
-              <p className="text-muted-foreground text-sm">
-                Nenhuma conexão via API oficial. Conecte na aba Integrações.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {cloudConnections.map((conn: any, index: number) => (
-                <WABAConnectionCard
-                  key={conn.id}
-                  conn={conn}
-                  index={index}
-                  workspaceId={workspaceId}
-                  onRefresh={fetchCloudConnections}
-                />
-              ))}
-            </div>
-          )}
-
           {/* Tips */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1040,6 +1007,166 @@ export default function Settings() {
               </li>
             </ul>
           </motion.div>
+        </TabsContent>
+
+        {/* WhatsApp API Cloud Tab */}
+        <TabsContent value="cloud-api" className="space-y-6">
+          {/* WABA Connections */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display font-semibold text-lg">WhatsApp API Oficial (Cloud)</h2>
+              <p className="text-muted-foreground text-sm">Conexões via API oficial da Meta</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Nova Conexão
+            </Button>
+          </div>
+
+          {cloudConnections.length === 0 ? (
+            <div className="inboxia-card p-8 text-center">
+              <Phone className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-muted-foreground text-sm">
+                Nenhuma conexão via API oficial configurada.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {cloudConnections.map((conn: any, index: number) => (
+                <WABAConnectionCard
+                  key={conn.id}
+                  conn={conn}
+                  index={index}
+                  workspaceId={workspaceId}
+                  onRefresh={fetchCloudConnections}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Templates Section */}
+          <Separator className="my-6" />
+          <div>
+            <h2 className="font-display font-semibold text-lg">Templates WhatsApp</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Templates de mensagem do WhatsApp Cloud API (Meta). Gerencie no Meta Business e sincronize aqui.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Select value={selectedTemplateConnection} onValueChange={setSelectedTemplateConnection}>
+              <SelectTrigger className="w-[300px]">
+                <SelectValue placeholder="Selecione a conexão Cloud API" />
+              </SelectTrigger>
+              <SelectContent>
+                {cloudConnections.map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.inbox_name} ({c.phone_number})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              onClick={() => selectedTemplateConnection && syncTemplates(selectedTemplateConnection)}
+              disabled={!selectedTemplateConnection || syncing}
+              variant="outline"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Sincronizando..." : "Sincronizar"}
+            </Button>
+          </div>
+
+          {selectedTemplateConnection && templates.length > 0 && (
+            <div className="flex gap-3">
+              <Badge variant="outline" className="text-success">{templates.filter(t => t.status === "APPROVED").length} aprovados</Badge>
+              <Badge variant="outline" className="text-yellow-600">{templates.filter(t => t.status === "PENDING").length} pendentes</Badge>
+              {templates.filter(t => t.status === "REJECTED").length > 0 && (
+                <Badge variant="outline" className="text-destructive">{templates.filter(t => t.status === "REJECTED").length} rejeitados</Badge>
+              )}
+            </div>
+          )}
+
+          {templatesLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Carregando templates...</div>
+          ) : !selectedTemplateConnection ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Selecione uma conexão Cloud API para ver os templates</p>
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+              <p>Nenhum template encontrado</p>
+              <p className="text-sm mt-1">Clique em "Sincronizar" para importar do Meta Business</p>
+            </div>
+          ) : (
+            <div className="grid gap-3">
+              {templates.map(tpl => {
+                const bodyComponent = tpl.components.find((c: any) => c.type === "BODY");
+                const headerComponent = tpl.components.find((c: any) => c.type === "HEADER");
+                const footerComponent = tpl.components.find((c: any) => c.type === "FOOTER");
+                const buttonsComponent = tpl.components.find((c: any) => c.type === "BUTTONS");
+
+                const getStatusBadge = (status: string) => {
+                  switch (status) {
+                    case "APPROVED":
+                      return <Badge className="bg-success/15 text-success border-success/30"><CheckCircle className="w-3 h-3 mr-1" />Aprovado</Badge>;
+                    case "REJECTED":
+                      return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Rejeitado</Badge>;
+                    case "PENDING":
+                      return <Badge variant="secondary"><Clock className="w-3 h-3 mr-1" />Pendente</Badge>;
+                    default:
+                      return <Badge variant="outline"><AlertTriangle className="w-3 h-3 mr-1" />{status}</Badge>;
+                  }
+                };
+
+                const getCategoryLabel = (category: string) => {
+                  const map: Record<string, string> = { MARKETING: "Marketing", UTILITY: "Utilidade", AUTHENTICATION: "Autenticação" };
+                  return map[category] || category;
+                };
+
+                return (
+                  <Card
+                    key={tpl.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setExpandedTemplate(expandedTemplate === tpl.id ? null : tpl.id)}
+                  >
+                    <CardHeader className="py-3 px-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <CardTitle className="text-sm font-medium">{tpl.template_name}</CardTitle>
+                          <Badge variant="outline" className="text-xs">{tpl.language}</Badge>
+                          <Badge variant="secondary" className="text-xs">{getCategoryLabel(tpl.category)}</Badge>
+                        </div>
+                        {getStatusBadge(tpl.status)}
+                      </div>
+                    </CardHeader>
+                    {expandedTemplate === tpl.id && (
+                      <CardContent className="pt-0 pb-4 px-4">
+                        <div className="max-w-xs bg-[#dcf8c6] rounded-lg p-3 text-sm text-[#111] space-y-1 border">
+                          {headerComponent?.text && <p className="font-bold text-xs">{headerComponent.text}</p>}
+                          {bodyComponent?.text && <p className="whitespace-pre-wrap">{bodyComponent.text}</p>}
+                          {footerComponent?.text && <p className="text-[11px] text-gray-500">{footerComponent.text}</p>}
+                          {buttonsComponent?.buttons && (
+                            <div className="pt-1 space-y-1 border-t mt-1">
+                              {buttonsComponent.buttons.map((btn: any, i: number) => (
+                                <div key={i} className="text-center text-xs text-blue-600 font-medium py-1 border rounded bg-white/50">
+                                  {btn.text}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          Última sincronização: {new Date(tpl.synced_at).toLocaleString("pt-BR")}
+                        </p>
+                      </CardContent>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         {/* Meta Pixel Tab */}
