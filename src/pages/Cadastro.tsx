@@ -45,6 +45,17 @@ export default function Cadastro() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixelReady, setPixelReady] = useState(false);
 
+  // Capture UTM/fbclid params from URL into localStorage
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const keys = ['fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+    const attribution: Record<string, string> = {};
+    keys.forEach(k => { const v = params.get(k); if (v) attribution[k] = v; });
+    if (Object.keys(attribution).length > 0) {
+      localStorage.setItem('lead_attribution', JSON.stringify(attribution));
+    }
+  }, []);
+
   // Pre-load Meta Pixel on page mount
   useEffect(() => {
     const w = window as any;
@@ -56,7 +67,6 @@ export default function Cadastro() {
       n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
     }
 
-    // Check if script already loaded
     const existing = document.querySelector('script[src*="fbevents.js"]');
     if (existing) {
       w.fbq("init", PIXEL_ID);
