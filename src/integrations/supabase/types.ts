@@ -678,6 +678,7 @@ export type Database = {
           is_active: boolean
           message_type: string
           position: number
+          subject: string | null
         }
         Insert: {
           audio_url?: string | null
@@ -690,6 +691,7 @@ export type Database = {
           is_active?: boolean
           message_type?: string
           position?: number
+          subject?: string | null
         }
         Update: {
           audio_url?: string | null
@@ -702,6 +704,7 @@ export type Database = {
           is_active?: boolean
           message_type?: string
           position?: number
+          subject?: string | null
         }
         Relationships: [
           {
