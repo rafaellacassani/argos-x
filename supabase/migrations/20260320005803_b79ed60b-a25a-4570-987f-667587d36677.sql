@@ -1,0 +1,1 @@
+ALTER TABLE public.cadence_messages ADD COLUMN subject text DEFAULT NULL;

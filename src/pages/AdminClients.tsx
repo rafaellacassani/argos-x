@@ -229,6 +229,7 @@ export default function AdminClients() {
     message_type: string;
     content: string | null;
     audio_url: string | null;
+    subject: string | null;
     position: number;
     is_active: boolean;
   }
@@ -354,6 +355,7 @@ export default function AdminClients() {
           message_type: m.message_type,
           content: m.content,
           audio_url: m.audio_url,
+          subject: m.subject,
           position: idx,
           is_active: m.is_active,
         }));
@@ -386,6 +388,7 @@ export default function AdminClients() {
       message_type: "text",
       content: "",
       audio_url: null,
+      subject: null,
       position: dayMsgs.length,
       is_active: true,
     }]);
@@ -1787,6 +1790,17 @@ export default function AdminClients() {
                                     </Button>
                                   </div>
                                 </div>
+
+                                {msg.channel === "email" && msg.message_type === "text" && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assunto do e-mail</Label>
+                                    <Input
+                                      value={msg.subject || ""}
+                                      onChange={(e) => updateCadenceMessage(msg._idx, { subject: e.target.value })}
+                                      placeholder="Ex: {nome}, seu trial acaba em breve!"
+                                    />
+                                  </div>
+                                )}
 
                                 {msg.message_type === "text" ? (
                                   <div className="space-y-1">
