@@ -1791,6 +1791,17 @@ export default function AdminClients() {
                                   </div>
                                 </div>
 
+                                {msg.channel === "email" && msg.message_type === "text" && (
+                                  <div className="space-y-1">
+                                    <Label className="text-xs text-muted-foreground">Assunto do e-mail</Label>
+                                    <Input
+                                      value={msg.subject || ""}
+                                      onChange={(e) => updateCadenceMessage(msg._idx, { subject: e.target.value })}
+                                      placeholder="Ex: {nome}, seu trial acaba em breve!"
+                                    />
+                                  </div>
+                                )}
+
                                 {msg.message_type === "text" ? (
                                   <div className="space-y-1">
                                     <Textarea
