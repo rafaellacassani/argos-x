@@ -14,13 +14,13 @@ interface Props {
 
 const models = [
   { id: "openai/gpt-5-mini", label: "⭐ GPT-5 Mini (Recomendado)" },
+  { id: "openai/gpt-4o-mini", label: "GPT-4o Mini (Estável)" },
   { id: "openai/gpt-5-nano", label: "GPT-5 Nano (Econômico)" },
   { id: "openai/gpt-5", label: "GPT-5 (Avançado)" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Alternativa rápida)" },
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Alternativa premium)" },
   { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Anthropic)" },
   { id: "anthropic/claude-3-opus-20240229", label: "Claude 3 Opus (Anthropic Premium)" },
-  { id: "anthropic/claude-3-haiku-20240307", label: "Claude 3 Haiku (Anthropic Econômico)" },
 ];
 
 export function AdvancedTab({ formData, updateField }: Props) {
