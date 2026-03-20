@@ -640,6 +640,8 @@ app.post("/", async (c) => {
 
     console.log("[whatsapp-webhook] 📨 MSG details:", { instanceName, remoteJid, fromMe, msgId: msgId.substring(0, 20) });
 
+    const supabase = getSupabase();
+
     if (fromMe) {
       // --- Pause/Resume code detection for AI agents ---
       const fromMeText = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
@@ -830,8 +832,6 @@ app.post("/", async (c) => {
     const canonicalSessionJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
 
     console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
-
-    const supabase = getSupabase();
 
     // ============ CHECK SALESBOT WAIT QUEUE FOR INBOUND MESSAGE ============
     try {
