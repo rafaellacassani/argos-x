@@ -248,6 +248,19 @@ export default function Settings() {
     fetchCloudConnections();
   }, [workspaceId]);
 
+  // Auto-select template connection when cloud connections load
+  useEffect(() => {
+    if (cloudConnections.length === 1 && !selectedTemplateConnection) {
+      setSelectedTemplateConnection(cloudConnections[0].id);
+    }
+  }, [cloudConnections]);
+
+  useEffect(() => {
+    if (selectedTemplateConnection) {
+      fetchTemplates(selectedTemplateConnection);
+    }
+  }, [selectedTemplateConnection, fetchTemplates]);
+
   // Guard against concurrent fetches
   const fetchingRef = useRef(false);
 
