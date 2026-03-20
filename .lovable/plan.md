@@ -1,30 +1,28 @@
 
 
-## Fix: "Apagar para todos" not showing in Chat
+## Fix: Pause/Resume codes not working for AI Agents
 
 ### Root Cause
 
-Two issues prevent "Apagar para todos" from appearing:
+When a seller types the pause code (e.g. "002") in WhatsApp, the message has `fromMe=true`. The webhook on line 643 **skips all `fromMe` messages immediately**, so the pause code never reaches the `ai-agent-chat` function where the pause/resume logic lives (lines 507-523).
 
-1. **1-hour time window too restrictive** — The current code only shows the option for messages sent within the last hour. WhatsApp actually extended this window to ~48 hours. Messages older than 1 hour won't show the option at all.
+### Solution
 
-2. **WABA/Meta instances completely blocked** — The code passes `onDeleteForEveryone={undefined}` for Meta instances, so the option never appears for WABA connections.
+In `supabase/functions/whatsapp-webhook/index.ts`, **before** the `fromMe` skip (line 643), add a block that:
 
-### Changes (minimal, only this fix)
+1. Extracts the message text from `fromMe` messages
+2. Looks up workspace by instance name
+3. Finds the active AI agent for that workspace/instance
+4. Checks if the message matches the agent's `pause_code` or `resume_keyword`
+5. If it matches `pause_code` → set `is_paused = true` on the matching `agent_memories` row and cancel pending follow-ups
+6. If it matches `resume_keyword` → set `is_paused = false` on the matching `agent_memories` row
+7. Then continue with the normal `fromMe` skip (don't process it as an inbound message)
 
-**File: `src/components/chat/MessageBubble.tsx`**
-- Change the edit/delete window from 1 hour (3600s) to 48 hours (172800s) to match WhatsApp's current policy
-- Allow "Apagar para todos" for all instance types (remove `!isMeta` restriction from `canDeleteForEveryone`)
+### File changed
 
-**File: `src/pages/Chats.tsx`**
-- Pass `handleDeleteForEveryone` for Meta instances too (remove the `!selectedChat?.isMeta ?` conditional)
-- In `handleDeleteForEveryone`, add Meta support: for Meta instances, call the Meta Graph API delete endpoint; for Evolution instances, use existing logic
+**`supabase/functions/whatsapp-webhook/index.ts`** — Add ~50 lines between the current line 642 and 643, wrapping the pause/resume check inside the `if (fromMe)` block before `return`.
 
-**File: `supabase/functions/meta-send-message/index.ts`** (if needed)
-- Add a delete message route using Meta Graph API: `DELETE /{message-id}` (Meta supports deleting business-sent messages)
+### What is NOT touched
 
-### Summary
-- Extend time window from 1h → 48h
-- Enable "Apagar para todos" for both WhatsApp and WABA instances
-- No other features or files touched
+Everything else. No frontend changes. No other edge functions. No database changes.
 
