@@ -123,7 +123,7 @@ async function resumeFlowFromNode(
   const nodes = flowData.nodes || [];
   const edges = flowData.edges || [];
 
-  let currentNode = nodes.find((n: any) => n.id === startNodeId);
+  let currentNode = startNodeId === 'start' ? findStartNode(nodes, edges) : nodes.find((n: any) => n.id === startNodeId);
   let executed = 0;
   const maxNodes = 50;
 
@@ -269,8 +269,9 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // For timer conditions: verify lead hasn't responded since started_at
-          if (item.condition_type === "timer") {
+          // For timer conditions (from wait nodes): verify lead hasn't responded since started_at
+          // Skip this check for stage_change_trigger items (they're not waiting for a response)
+          if (item.condition_type === "timer" && item.wait_node_id !== "stage_change_trigger") {
             const { data: inboundMsgs } = await supabase
               .from("whatsapp_messages")
               .select("id")
@@ -301,10 +302,9 @@ Deno.serve(async (req) => {
           const { data: lead } = await supabase.from("leads").select("*").eq("id", item.lead_id).single();
           if (lead) {
             const instanceName = lead.instance_name || "";
-            if (instanceName) {
-              await resumeFlowFromNode(supabase, item.bot_id, lead, item.target_node_id, instanceName, item.workspace_id);
-              console.log(`[salesbot-wait] ✅ Resumed flow for lead ${lead.name} via ${item.condition_type}`);
-            }
+            // For stage_change triggers, the instance may be on the bot node itself, so allow execution even without lead instance
+            await resumeFlowFromNode(supabase, item.bot_id, lead, item.target_node_id, instanceName, item.workspace_id);
+            console.log(`[salesbot-wait] ✅ Resumed flow for lead ${lead.name} via ${item.condition_type} (wait_node: ${item.wait_node_id})`);
           }
 
           waitQueueProcessed++;
