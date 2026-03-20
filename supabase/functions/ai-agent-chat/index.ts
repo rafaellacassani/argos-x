@@ -678,15 +678,23 @@ serve(async (req) => {
           }
         }
 
-        console.log(`[ai-agent-chat] 🧠 Calling AI model: ${agent.model}, messages: ${aiMessages.length}, tools: ${tools.length}`);
-
-        const modelName = agent.model || "openai/gpt-4o-mini";
+        const rawModelName = agent.model || "openai/gpt-4o-mini";
+        const deprecatedModelMap: Record<string, string> = {
+          "anthropic/claude-3-haiku-20240307": "openai/gpt-4o-mini",
+          "claude-3-haiku-20240307": "openai/gpt-4o-mini",
+        };
+        const modelName = deprecatedModelMap[rawModelName] ?? rawModelName;
         const provider = modelName.split("/")[0]; // "openai", "anthropic", or "google"
+
+        if (modelName !== rawModelName) {
+          console.warn(`[ai-agent-chat] ⚠️ Deprecated model remapped: ${rawModelName} -> ${modelName}`);
+        }
+
+        console.log(`[ai-agent-chat] 🧠 Calling AI model: ${modelName} (saved: ${rawModelName}), messages: ${aiMessages.length}, tools: ${tools.length}`);
 
         let aiResponse: Response;
 
         if (provider === "openai" && openaiApiKey) {
-          // --- Direct OpenAI API call ---
           const openaiModel = modelName.replace("openai/", "");
           console.log(`[ai-agent-chat] 🔑 Using OpenAI API directly: ${openaiModel}`);
           aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -702,11 +710,9 @@ serve(async (req) => {
             }),
           });
         } else if (provider === "anthropic" && anthropicApiKey) {
-          // --- Direct Anthropic API call ---
           const anthropicModel = modelName.replace("anthropic/", "");
           console.log(`[ai-agent-chat] 🔑 Using Anthropic API directly: ${anthropicModel}`);
-          
-          // Anthropic has different format: system goes in a separate field
+
           const systemMsg = aiMessages.find((m: any) => m.role === "system")?.content || "";
           const nonSystemMessages = aiMessages
             .filter((m: any) => m.role !== "system")
@@ -715,7 +721,6 @@ serve(async (req) => {
               content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
             }));
 
-          // Build Anthropic tools format
           const anthropicTools = tools.length > 0 ? tools.map((t: any) => ({
             name: t.function.name,
             description: t.function.description,
@@ -739,7 +744,6 @@ serve(async (req) => {
             }),
           });
         } else {
-          // --- Lovable Gateway fallback (Google/Gemini or when no provider key) ---
           console.log(`[ai-agent-chat] 🌐 Using Lovable Gateway: ${modelName}`);
           if (!lovableApiKey) {
             console.error(`[ai-agent-chat] ❌ No API key for provider "${provider}" and no LOVABLE_API_KEY fallback`);
@@ -751,7 +755,7 @@ serve(async (req) => {
             await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, status: "fallback_no_key", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
             return new Response(JSON.stringify({ response: responseContent, chunks: agent.message_split_enabled ? splitMessage(responseContent, agent.message_split_length || 400) : [responseContent] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
-          // Ensure model uses gateway-compatible format (must keep prefix)
+
           let gatewayModel = modelName;
           if (!gatewayModel.includes("/") || gatewayModel.startsWith("anthropic/")) {
             gatewayModel = "openai/gpt-4o-mini";
@@ -777,10 +781,10 @@ serve(async (req) => {
           const gatewayBody = await aiResponse.text().catch(() => "");
           console.error(`[ai-agent-chat] ❌ AI ${provider} error: ${aiResponse.status} ${gatewayBody}`);
 
-          if (aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
+          if (aiResponse.status === 404 || aiResponse.status === 402 || aiResponse.status === 429 || aiResponse.status >= 500) {
             responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
             usedFallback = true;
-            console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status}`);
+            console.warn(`[ai-agent-chat] ⚠️ Fallback response activated for status ${aiResponse.status} using model ${rawModelName}`);
           } else {
             throw new Error(`AI Gateway error: ${aiResponse.status}`);
           }
