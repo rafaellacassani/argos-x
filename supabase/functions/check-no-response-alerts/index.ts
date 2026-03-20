@@ -301,10 +301,9 @@ Deno.serve(async (req) => {
           const { data: lead } = await supabase.from("leads").select("*").eq("id", item.lead_id).single();
           if (lead) {
             const instanceName = lead.instance_name || "";
-            if (instanceName) {
-              await resumeFlowFromNode(supabase, item.bot_id, lead, item.target_node_id, instanceName, item.workspace_id);
-              console.log(`[salesbot-wait] ✅ Resumed flow for lead ${lead.name} via ${item.condition_type}`);
-            }
+            // For stage_change triggers, the instance may be on the bot node itself, so allow execution even without lead instance
+            await resumeFlowFromNode(supabase, item.bot_id, lead, item.target_node_id, instanceName, item.workspace_id);
+            console.log(`[salesbot-wait] ✅ Resumed flow for lead ${lead.name} via ${item.condition_type} (wait_node: ${item.wait_node_id})`);
           }
 
           waitQueueProcessed++;
