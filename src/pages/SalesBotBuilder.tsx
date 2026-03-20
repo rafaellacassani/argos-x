@@ -169,6 +169,23 @@ export default function SalesBotBuilder() {
     }
   };
 
+  const syncFunnelStageBotId = async (botId: string) => {
+    if (triggerType !== 'stage_change') return;
+    const stageId = triggerConfig.stage_id as string;
+    // Clear any previous funnel_stages that pointed to this bot
+    await supabase
+      .from('funnel_stages')
+      .update({ bot_id: null })
+      .eq('bot_id', botId);
+    // Set the new stage's bot_id if a specific stage was selected
+    if (stageId) {
+      await supabase
+        .from('funnel_stages')
+        .update({ bot_id: botId })
+        .eq('id', stageId);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -178,10 +195,14 @@ export default function SalesBotBuilder() {
       };
       if (isEditing) {
         await updateBot(id!, botData);
+        await syncFunnelStageBotId(id!);
       } else {
         if (templateName) botData.template_name = templateName;
         const newBot = await createBot(botData);
-        if (newBot) navigate(`/salesbots/builder/${newBot.id}`, { replace: true });
+        if (newBot) {
+          await syncFunnelStageBotId(newBot.id);
+          navigate(`/salesbots/builder/${newBot.id}`, { replace: true });
+        }
       }
       setHasChanges(false);
     } finally { setIsSaving(false); }

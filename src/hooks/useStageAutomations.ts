@@ -401,14 +401,36 @@ export function useStageAutomations() {
                 const matchesStage = !tc.stage_id || tc.stage_id === stageId;
 
                 if (matchesFunnel && matchesStage) {
-                  console.log(`[StageAutomation] Triggering stage_change SalesBot ${bot.id} for lead ${leadId} entering stage ${stageId}`);
-                  try {
-                    const flowResult = await executeFlow(bot.id, leadId);
-                    if (!flowResult.success) {
-                      result.errors.push(...flowResult.errors);
+                  const delayMinutes = (tc.delay_minutes as number) || 0;
+
+                  if (delayMinutes > 0) {
+                    // Schedule delayed execution via salesbot_wait_queue
+                    console.log(`[StageAutomation] Scheduling stage_change SalesBot ${bot.id} for lead ${leadId} with ${delayMinutes}min delay`);
+                    const executeAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString();
+                    const sessionId = `stage_change_${bot.id}_${leadId}_${Date.now()}`;
+                    const startNodeId = 'start';
+                    await supabase.from('salesbot_wait_queue').insert({
+                      workspace_id: lead.workspace_id,
+                      bot_id: bot.id,
+                      lead_id: leadId,
+                      wait_node_id: 'stage_change_delay',
+                      target_node_id: startNodeId,
+                      condition_id: 'delay',
+                      condition_type: 'timer',
+                      execute_at: executeAt,
+                      session_id: sessionId,
+                      status: 'pending',
+                    });
+                  } else {
+                    console.log(`[StageAutomation] Triggering stage_change SalesBot ${bot.id} for lead ${leadId} entering stage ${stageId}`);
+                    try {
+                      const flowResult = await executeFlow(bot.id, leadId);
+                      if (!flowResult.success) {
+                        result.errors.push(...flowResult.errors);
+                      }
+                    } catch (botErr) {
+                      console.error(`[StageAutomation] stage_change SalesBot execution error:`, botErr);
                     }
-                  } catch (botErr) {
-                    console.error(`[StageAutomation] stage_change SalesBot execution error:`, botErr);
                   }
                 }
               }
