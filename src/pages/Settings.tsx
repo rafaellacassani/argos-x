@@ -542,7 +542,8 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
-          <TabsTrigger value="cloud-api">
+          <TabsTrigger value="cloud-api" disabled={planLimits.planName !== "escala"} className={planLimits.planName !== "escala" ? "opacity-50" : ""}>
+            {planLimits.planName !== "escala" && <Lock className="w-3 h-3 mr-1" />}
             <Cloud className="w-4 h-4 mr-1" />
             WhatsApp API Cloud
           </TabsTrigger>
