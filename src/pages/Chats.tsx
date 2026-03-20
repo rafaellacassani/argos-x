@@ -69,7 +69,17 @@ interface Message {
   thumbnailBase64?: string;
   fileName?: string;
   duration?: number;
-  localAudioBase64?: string; // For locally sent audio that can play immediately
+  localAudioBase64?: string;
+  messageId?: string; // Evolution API message key id
+  fromMe?: boolean;
+  timestamp?: number; // Unix timestamp
+}
+
+interface ReplyingTo {
+  id: string;
+  content: string;
+  sent: boolean;
+  type: string;
 }
 
 // Helper to clean phone string: remove JID suffixes and non-digit chars
@@ -475,8 +485,79 @@ export default function Chats() {
     sendAudio,
     fetchProfile,
     fetchProfilesBatch,
+    deleteMessage: evolutionDeleteMessage,
+    editMessage: evolutionEditMessage,
+    reactToMessage: evolutionReactToMessage,
     loading: apiLoading 
   } = useEvolutionAPI();
+
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<ReplyingTo | null>(null);
+  // Edit state
+  const [editingMessage, setEditingMessage] = useState<{ id: string; messageId: string; content: string } | null>(null);
+
+  // === Message action handlers ===
+  const handleReply = useCallback((msg: { id: string; content: string; sent: boolean; type: string }) => {
+    setReplyingTo(msg);
+  }, []);
+
+  const handleCancelReply = useCallback(() => {
+    setReplyingTo(null);
+  }, []);
+
+  const handleDeleteForMe = useCallback(async (msgId: string) => {
+    // Remove from local state
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    // Remove from DB
+    await supabase.from("whatsapp_messages").delete().eq("message_id", msgId);
+    toast({ title: "Mensagem apagada" });
+  }, []);
+
+  const handleDeleteForEveryone = useCallback(async (msgId: string, messageId: string) => {
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    const remoteJid = selectedChat.remoteJid;
+    const success = await evolutionDeleteMessage(targetInstance, messageId, remoteJid, true);
+    if (success) {
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+      await supabase.from("whatsapp_messages").delete().eq("message_id", messageId);
+      toast({ title: "Mensagem apagada para todos" });
+    } else {
+      toast({ title: "Erro ao apagar mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, evolutionDeleteMessage]);
+
+  const handleEdit = useCallback(async (msgId: string, messageId: string, currentContent: string) => {
+    const newText = prompt("Editar mensagem:", currentContent);
+    if (!newText || newText === currentContent) return;
+    
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    const success = await evolutionEditMessage(targetInstance, messageId, selectedChat.remoteJid, true, newText);
+    if (success) {
+      setMessages(prev => prev.map(m => m.id === msgId ? { ...m, content: newText } : m));
+      await supabase.from("whatsapp_messages").update({ content: newText }).eq("message_id", messageId);
+      toast({ title: "Mensagem editada" });
+    } else {
+      toast({ title: "Erro ao editar mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, evolutionEditMessage]);
+
+  const handleReact = useCallback(async (msgId: string, messageId: string, reaction: string) => {
+    const targetInstance = selectedChat?.instanceName || selectedInstance;
+    if (!targetInstance || targetInstance === "all" || !selectedChat) return;
+    
+    // Find if fromMe
+    const msg = messages.find(m => m.id === msgId);
+    const fromMe = msg?.fromMe ?? true;
+    
+    const success = await evolutionReactToMessage(targetInstance, messageId, selectedChat.remoteJid, fromMe, reaction);
+    if (!success) {
+      toast({ title: "Erro ao reagir à mensagem", variant: "destructive" });
+    }
+  }, [selectedChat, selectedInstance, messages, evolutionReactToMessage]);
 
   // Handler for downloading media
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
@@ -2030,6 +2111,9 @@ export default function Chats() {
                 sent: msg.from_me || msg.direction === 'outbound',
                 read: true,
                 type: (msg.message_type || 'text') as Message["type"],
+                messageId: msg.message_id || undefined,
+                fromMe: msg.from_me || msg.direction === 'outbound',
+                timestamp: Math.floor(date.getTime() / 1000),
               };
             });
             setMessages(transformedMessages);
@@ -2909,7 +2993,18 @@ export default function Chats() {
                           duration={msg.duration}
                           localAudioBase64={msg.localAudioBase64}
                           index={index}
+                          instanceName={selectedChat?.instanceName || selectedInstance || undefined}
+                          messageId={msg.messageId}
+                          remoteJid={selectedChat?.remoteJid}
+                          fromMe={msg.fromMe}
+                          isMeta={selectedChat?.isMeta}
+                          timestamp={msg.timestamp}
                           onDownloadMedia={handleDownloadMedia}
+                          onReply={handleReply}
+                          onDeleteForMe={handleDeleteForMe}
+                          onDeleteForEveryone={!selectedChat?.isMeta ? handleDeleteForEveryone : undefined}
+                          onEdit={!selectedChat?.isMeta ? handleEdit : undefined}
+                          onReact={!selectedChat?.isMeta ? handleReact : undefined}
                         />
                       </div>
                     );
@@ -2924,6 +3019,8 @@ export default function Chats() {
               onSendMedia={handleSendMedia}
               onSendAudio={handleSendAudio}
               disabled={apiLoading}
+              replyingTo={replyingTo}
+              onCancelReply={handleCancelReply}
               placeholder={
                 selectedChat?.isMeta
                   ? selectedChat.metaPlatform === "instagram"

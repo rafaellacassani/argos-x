@@ -16,12 +16,21 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import EmojiPicker from "./EmojiPicker";
 
+interface ReplyingTo {
+  id: string;
+  content: string;
+  sent: boolean;
+  type: string;
+}
+
 interface ChatInputProps {
   onSendMessage: (text: string) => Promise<boolean>;
   onSendMedia: (file: File, caption?: string) => Promise<boolean>;
   onSendAudio: (audioBlob: Blob) => Promise<boolean>;
   disabled?: boolean;
   placeholder?: string;
+  replyingTo?: ReplyingTo | null;
+  onCancelReply?: () => void;
 }
 
 export function ChatInput({
@@ -30,6 +39,8 @@ export function ChatInput({
   onSendAudio,
   disabled = false,
   placeholder: customPlaceholder,
+  replyingTo,
+  onCancelReply,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -233,6 +244,34 @@ export function ChatInput({
 
   return (
     <div className="p-4 border-t border-border bg-card">
+      {/* Reply Preview */}
+      <AnimatePresence>
+        {replyingTo && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="mb-3 p-2 bg-muted/50 rounded-lg flex items-center gap-3 max-w-3xl mx-auto border-l-4 border-secondary"
+          >
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-secondary">
+                {replyingTo.sent ? "Você" : "Contato"}
+              </p>
+              <p className="text-sm text-muted-foreground truncate">
+                {replyingTo.type !== "text" ? `📎 ${replyingTo.type === "image" ? "Imagem" : replyingTo.type === "audio" ? "Áudio" : replyingTo.type === "video" ? "Vídeo" : "Documento"}` : replyingTo.content}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={onCancelReply}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* File Preview */}
       <AnimatePresence>
         {selectedFile && (
