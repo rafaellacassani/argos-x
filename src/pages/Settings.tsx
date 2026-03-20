@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
@@ -529,161 +530,209 @@ export default function Settings() {
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {integrations.map((integration, index) => (
-              <motion.div
-                key={integration.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`inboxia-card p-5 ${
-                  !integration.available && "opacity-60"
-                }`}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-                    {integration.icon}
-                  </div>
-                  {integration.connected ? (
-                    <Badge
-                      variant="outline"
-                      className="bg-success/10 text-success border-success/20"
-                    >
-                      {integration.connectedCount} conectado
-                      {(integration.connectedCount || 0) > 1 ? "s" : ""}
-                    </Badge>
-                  ) : integration.available ? (
-                    <Badge variant="outline">Disponível</Badge>
-                  ) : (
-                    <Badge
-                      variant="outline"
-                      className="bg-muted text-muted-foreground"
-                    >
-                      Em breve
-                    </Badge>
+            {integrations.map((integration, index) => {
+              const isEscala = planLimits.planName === "escala";
+              const isPlanLocked = !isEscala && integration.id !== "whatsapp-business";
+
+              const cardContent = (
+                <motion.div
+                  key={integration.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={`inboxia-card p-5 relative ${
+                    isPlanLocked ? "opacity-50 cursor-not-allowed" : !integration.available ? "opacity-60" : ""
+                  }`}
+                >
+                  {isPlanLocked && (
+                    <div className="absolute top-3 right-3 z-10">
+                      <Lock className="w-5 h-5 text-muted-foreground" />
+                    </div>
                   )}
-                </div>
-                <h3 className="font-semibold text-lg mb-1">{integration.name}</h3>
-                <p className="text-sm text-muted-foreground mb-2">
-                  {integration.description}
-                </p>
-                {integration.phoneNumber && (
-                  <p className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
-                    <Phone className="w-4 h-4 text-success" />
-                    {integration.phoneNumber}
+
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                      {integration.icon}
+                    </div>
+                    {!isPlanLocked && (
+                      integration.connected ? (
+                        <Badge
+                          variant="outline"
+                          className="bg-success/10 text-success border-success/20"
+                        >
+                          {integration.connectedCount} conectado
+                          {(integration.connectedCount || 0) > 1 ? "s" : ""}
+                        </Badge>
+                      ) : integration.available ? (
+                        <Badge variant="outline">Disponível</Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="bg-muted text-muted-foreground"
+                        >
+                          Em breve
+                        </Badge>
+                      )
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-lg mb-1">{integration.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {integration.description}
                   </p>
-                )}
-                {/* Show connected Meta pages */}
-                {integration.metaPages && integration.metaPages.length > 0 && (
-                  <div className="mb-4 space-y-1">
-                    {integration.metaPages.slice(0, 2).map((page) => (
-                      <p key={page.id} className="text-sm font-medium text-foreground flex items-center gap-2">
-                        {integration.id === "instagram" ? (
-                          <>
-                            <Instagram className="w-4 h-4 text-pink-500" />
-                            @{page.instagram_username || page.page_name}
-                          </>
-                        ) : (
-                          <>
-                            <Facebook className="w-4 h-4 text-blue-600" />
-                            {page.page_name}
-                          </>
-                        )}
-                      </p>
-                    ))}
-                    {integration.metaPages.length > 2 && (
-                      <p className="text-xs text-muted-foreground">
-                        +{integration.metaPages.length - 2} mais
-                      </p>
-                    )}
-                  </div>
-                )}
-                {/* Show cloud API connections */}
-                {integration.id === "whatsapp-api" && cloudConnections.length > 0 && (
-                  <div className="mb-4 space-y-1">
-                    {cloudConnections.filter(c => c.status === "active").slice(0, 2).map((conn: any) => (
-                      <p key={conn.id} className="text-sm font-medium text-foreground flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-success" />
-                        {conn.inbox_name} · {conn.phone_number}
-                      </p>
-                    ))}
-                    {cloudConnections.filter(c => c.status === "active").length > 2 && (
-                      <p className="text-xs text-muted-foreground">
-                        +{cloudConnections.filter(c => c.status === "active").length - 2} mais
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!integration.phoneNumber && !integration.metaPages?.length && integration.id !== "whatsapp-api" && <div className="mb-2" />}
-                {integration.id === "whatsapp-api" && cloudConnections.length === 0 && !integration.phoneNumber && <div className="mb-2" />}
-                {integration.available ? (
-                  (() => {
-                    const isWhatsApp = integration.id === "whatsapp-business" || integration.id === "whatsapp-api";
-                    const isLocked = isSeller && !isWhatsApp;
-                    return (
+
+                  {isPlanLocked ? (
+                    <>
+                      <div className="mb-2" />
                       <Button
                         className="w-full"
-                        variant={integration.connected ? "outline" : "default"}
-                        disabled={isLocked || ((integration.id === "instagram" || integration.id === "facebook") && connectingMeta)}
-                        onClick={() => {
-                          if (isLocked) return;
-                          if (integration.id === "whatsapp-business") {
-                            if (!planLimits.canAddWhatsapp(instances.length)) {
-                              toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
-                              navigate("/planos");
-                              return;
-                            }
-                            setShowConnectionModal(true);
-                          } else if (integration.id === "whatsapp-api") {
-                            setShowCloudAPIModal(true);
-                          } else if (integration.id === "instagram" || integration.id === "facebook") {
-                            handleConnectMeta();
-                          } else if (integration.id === "google-calendar") {
-                            if (integration.connected) {
-                              pullFromGoogle();
-                            } else {
-                              connectGoogle();
-                            }
-                          }
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate("/planos");
                         }}
                       >
-                        {isLocked ? (
-                          <>
-                            <Lock className="w-4 h-4 mr-2" />
-                            Somente Admin
-                          </>
-                        ) : (integration.id === "instagram" || integration.id === "facebook") && connectingMeta ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Conectando...
-                          </>
-                        ) : integration.connected ? (
-                          integration.id === "google-calendar" ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 mr-2" />
-                              Sincronizar agora
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="w-4 h-4 mr-2" />
-                              Adicionar Conexão
-                            </>
-                          )
-                        ) : (
-                          <>
-                            <Link2 className="w-4 h-4 mr-2" />
-                            Conectar
-                          </>
-                        )}
+                        <Lock className="w-4 h-4 mr-2" />
+                        Plano Escala
                       </Button>
-                    );
-                  })()
-                ) : (
-                  <Button className="w-full" variant="outline" disabled>
-                    Em breve
-                  </Button>
-                )}
-              </motion.div>
-            ))}
+                    </>
+                  ) : (
+                    <>
+                      {integration.phoneNumber && (
+                        <p className="text-sm font-medium text-foreground mb-4 flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-success" />
+                          {integration.phoneNumber}
+                        </p>
+                      )}
+                      {integration.metaPages && integration.metaPages.length > 0 && (
+                        <div className="mb-4 space-y-1">
+                          {integration.metaPages.slice(0, 2).map((page) => (
+                            <p key={page.id} className="text-sm font-medium text-foreground flex items-center gap-2">
+                              {integration.id === "instagram" ? (
+                                <>
+                                  <Instagram className="w-4 h-4 text-pink-500" />
+                                  @{page.instagram_username || page.page_name}
+                                </>
+                              ) : (
+                                <>
+                                  <Facebook className="w-4 h-4 text-blue-600" />
+                                  {page.page_name}
+                                </>
+                              )}
+                            </p>
+                          ))}
+                          {integration.metaPages.length > 2 && (
+                            <p className="text-xs text-muted-foreground">
+                              +{integration.metaPages.length - 2} mais
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {integration.id === "whatsapp-api" && cloudConnections.length > 0 && (
+                        <div className="mb-4 space-y-1">
+                          {cloudConnections.filter(c => c.status === "active").slice(0, 2).map((conn: any) => (
+                            <p key={conn.id} className="text-sm font-medium text-foreground flex items-center gap-2">
+                              <Phone className="w-4 h-4 text-success" />
+                              {conn.inbox_name} · {conn.phone_number}
+                            </p>
+                          ))}
+                          {cloudConnections.filter(c => c.status === "active").length > 2 && (
+                            <p className="text-xs text-muted-foreground">
+                              +{cloudConnections.filter(c => c.status === "active").length - 2} mais
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {!integration.phoneNumber && !integration.metaPages?.length && integration.id !== "whatsapp-api" && <div className="mb-2" />}
+                      {integration.id === "whatsapp-api" && cloudConnections.length === 0 && !integration.phoneNumber && <div className="mb-2" />}
+                      {integration.available ? (
+                        (() => {
+                          const isWhatsApp = integration.id === "whatsapp-business" || integration.id === "whatsapp-api";
+                          const isLocked = isSeller && !isWhatsApp;
+                          return (
+                            <Button
+                              className="w-full"
+                              variant={integration.connected ? "outline" : "default"}
+                              disabled={isLocked || ((integration.id === "instagram" || integration.id === "facebook") && connectingMeta)}
+                              onClick={() => {
+                                if (isLocked) return;
+                                if (integration.id === "whatsapp-business") {
+                                  if (!planLimits.canAddWhatsapp(instances.length)) {
+                                    toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                                    navigate("/planos");
+                                    return;
+                                  }
+                                  setShowConnectionModal(true);
+                                } else if (integration.id === "whatsapp-api") {
+                                  setShowCloudAPIModal(true);
+                                } else if (integration.id === "instagram" || integration.id === "facebook") {
+                                  handleConnectMeta();
+                                } else if (integration.id === "google-calendar") {
+                                  if (integration.connected) {
+                                    pullFromGoogle();
+                                  } else {
+                                    connectGoogle();
+                                  }
+                                }
+                              }}
+                            >
+                              {isLocked ? (
+                                <>
+                                  <Lock className="w-4 h-4 mr-2" />
+                                  Somente Admin
+                                </>
+                              ) : (integration.id === "instagram" || integration.id === "facebook") && connectingMeta ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Conectando...
+                                </>
+                              ) : integration.connected ? (
+                                integration.id === "google-calendar" ? (
+                                  <>
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Sincronizar agora
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Adicionar Conexão
+                                  </>
+                                )
+                              ) : (
+                                <>
+                                  <Link2 className="w-4 h-4 mr-2" />
+                                  Conectar
+                                </>
+                              )}
+                            </Button>
+                          );
+                        })()
+                      ) : (
+                        <Button className="w-full" variant="outline" disabled>
+                          Em breve
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              );
+
+              if (isPlanLocked) {
+                return (
+                  <TooltipProvider key={integration.id}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        {cardContent}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Disponível a partir do plano Escala</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              }
+
+              return cardContent;
+            })}
           </div>
         </TabsContent>
 
