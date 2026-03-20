@@ -1,32 +1,66 @@
 
 
-## Plan: Upgrade Bot Settings from Side Sheet to Dialog + Add Delay Option
+## Plan: Add WhatsApp Web-style Message Actions to Chat
 
 ### What changes
 
-1. **Replace `Sheet` with `Dialog` (centered popup)**
-   - In `SalesBotBuilder.tsx`, swap the `Sheet`/`SheetContent`/`SheetTrigger` for `Dialog`/`DialogContent`/`DialogTrigger`
-   - The settings will appear as a centered modal popup instead of a right-side panel
-   - More responsive across desktop and mobile
+1. **Add context menu to MessageBubble** — Right-click or long-press on any message shows a dropdown with WhatsApp Web actions:
+   - Responder (Reply) — quotes the message in the input
+   - Reagir (React) — emoji reaction picker
+   - Copiar (Copy) — copies text to clipboard
+   - Apagar para mim (Delete for me) — removes from local DB
+   - Apagar para todos (Delete for everyone) — calls Evolution API to delete remotely + removes from local DB
+   - Editar (Edit) — only for sent text messages, calls Evolution API to update
+   - Encaminhar (Forward) — opens chat picker to forward message
+   - Selecionar mensagens (Select messages) — multi-select mode for bulk delete
 
-2. **Add a "Save" button inside the dialog**
-   - Place a footer with "Cancelar" and "Salvar configurações" buttons
-   - On save: persist trigger settings, close dialog, mark `hasChanges = true`
+2. **Add new Evolution API proxy routes** in `supabase/functions/evolution-api/index.ts`:
+   - `DELETE /delete-message/:instanceName` → proxies to `DELETE /chat/deleteMessageForEveryone/:instance` with `{ id, remoteJid, fromMe }`
+   - `POST /edit-message/:instanceName` → proxies to `POST /chat/updateMessage/:instance` with `{ key: { id, remoteJid, fromMe }, text }`
+   - `POST /react-message/:instanceName` → proxies to `POST /message/sendReaction/:instance` with `{ key: { id, remoteJid, fromMe }, reaction }`
 
-3. **Add execution delay option for `stage_change` trigger**
-   - New field in `triggerConfig`: `delay_minutes` (number, default `0`)
-   - UI: Radio/toggle for "Imediatamente" vs "Após um tempo"
-   - When "Após um tempo" is selected, show number input + unit selector (minutos / horas / dias)
-   - The value is stored as minutes in `triggerConfig.delay_minutes`
-   - This delay will be respected by the execution engine (already supports `trigger_delay_minutes` pattern from stage automations)
+3. **Add new methods to `useEvolutionAPI.ts`**:
+   - `deleteMessage(instanceName, messageId, remoteJid, fromMe)` 
+   - `editMessage(instanceName, messageId, remoteJid, text)`
+   - `reactToMessage(instanceName, messageId, remoteJid, fromMe, reaction)`
+
+4. **Update MessageBubble component**:
+   - Add `ContextMenu` (from Radix, already in project) wrapping each bubble
+   - New props: `onReply`, `onDelete`, `onDeleteForEveryone`, `onEdit`, `onReact`, `onForward`, `onSelect`, `remoteJid`, `fromMe`, `isMeta`
+   - Show "Apagar para todos" only for sent messages within ~1h (WhatsApp limit)
+   - Show "Editar" only for sent text messages
+
+5. **Update Chats.tsx**:
+   - Add multi-select state (`selectionMode`, `selectedMessageIds`)
+   - Add reply quote state (`replyingTo: Message | null`)
+   - Wire all message action handlers
+   - Add bottom toolbar when in selection mode (like WhatsApp: "X selecionadas | Apagar | Cancelar")
+   - Pass `instanceName` and `remoteJid` to MessageBubble
+
+6. **Update ChatInput**:
+   - Add `replyingTo` prop to show quoted message preview above input
+   - Add `onCancelReply` prop
+
+7. **WABA/Meta support**:
+   - For Meta instances, only enable Copy and Reply (Meta Graph API doesn't support delete/edit/react the same way)
+   - Show appropriate actions based on `isMeta` flag
 
 ### Files to modify
 
-- **`src/pages/SalesBotBuilder.tsx`**: Replace Sheet with Dialog, add save button, add delay UI for stage_change trigger
+- `supabase/functions/evolution-api/index.ts` — add 3 new proxy routes
+- `src/hooks/useEvolutionAPI.ts` — add deleteMessage, editMessage, reactToMessage methods
+- `src/components/chat/MessageBubble.tsx` — wrap in ContextMenu, add action callbacks
+- `src/pages/Chats.tsx` — wire handlers, add selection mode, reply state
+- `src/components/chat/ChatInput.tsx` — add reply quote preview
 
 ### Technical details
 
-- Reuse existing `Dialog`/`DialogContent` components already in the project
-- Delay unit conversion: hours × 60, days × 1440 → stored as minutes
-- The `triggerConfig.delay_minutes` field follows the same pattern as `trigger_delay_minutes` in funnel automations, so the execution engine can read it directly
+- Evolution API endpoints:
+  - `DELETE /chat/deleteMessageForEveryone/{instance}` body: `{ id: messageId, remoteJid, fromMe: true/false }`
+  - `POST /chat/updateMessage/{instance}` body: `{ text: newText, key: { id, remoteJid, fromMe } }`
+  - `POST /message/sendReaction/{instance}` body: `{ key: { remoteJid, fromMe, id }, reaction: "👍" }`
+- Local delete: remove from `whatsapp_messages` table + remove from messages state
+- Remote delete: call Evolution API + local delete
+- Copy: `navigator.clipboard.writeText(content)`
+- ContextMenu from `@radix-ui/react-context-menu` already in the project
 
