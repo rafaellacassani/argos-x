@@ -1,11 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Loader2, X, Mic } from "lucide-react";
+import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Loader2, X, Mic, Reply, Smile, Copy, Trash2, Pencil, Forward, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
-interface MessageBubbleProps {
+export interface MessageBubbleProps {
   id: string;
   content: string;
   time: string;
@@ -16,10 +23,21 @@ interface MessageBubbleProps {
   thumbnailBase64?: string;
   fileName?: string;
   duration?: number;
-  localAudioBase64?: string; // For locally sent audio that can play immediately
+  localAudioBase64?: string;
   index: number;
   instanceName?: string;
+  messageId?: string; // Evolution API message key id
+  remoteJid?: string;
+  fromMe?: boolean;
+  isMeta?: boolean;
+  timestamp?: number; // Unix timestamp for checking if within edit/delete window
   onDownloadMedia?: (messageId: string, convertToMp4?: boolean) => Promise<{ base64?: string; mimetype?: string } | null>;
+  onReply?: (message: { id: string; content: string; sent: boolean; type: string }) => void;
+  onCopy?: (content: string) => void;
+  onDeleteForMe?: (id: string) => void;
+  onDeleteForEveryone?: (id: string, messageId: string) => void;
+  onEdit?: (id: string, messageId: string, currentContent: string) => void;
+  onReact?: (id: string, messageId: string, reaction: string) => void;
 }
 
 // Helper to detect and render links in text
