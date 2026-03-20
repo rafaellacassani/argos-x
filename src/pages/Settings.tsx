@@ -542,6 +542,10 @@ export default function Settings() {
         <TabsList className="mb-6">
           <TabsTrigger value="integrations">Integrações</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+          <TabsTrigger value="cloud-api">
+            <Cloud className="w-4 h-4 mr-1" />
+            WhatsApp API Cloud
+          </TabsTrigger>
           <TabsTrigger value="meta-pixel">
             <BarChart3 className="w-4 h-4 mr-1" />
             Meta Pixel
