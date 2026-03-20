@@ -89,7 +89,19 @@ export function MessageBubble({
   duration,
   localAudioBase64,
   index,
+  instanceName,
+  messageId,
+  remoteJid,
+  fromMe,
+  isMeta,
+  timestamp,
   onDownloadMedia,
+  onReply,
+  onCopy,
+  onDeleteForMe,
+  onDeleteForEveryone,
+  onEdit,
+  onReact,
 }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
