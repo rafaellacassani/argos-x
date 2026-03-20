@@ -19,6 +19,7 @@ const models = [
   { id: "openai/gpt-5", label: "GPT-5 (Avançado)" },
   { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Alternativa rápida)" },
   { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Alternativa premium)" },
+  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Anthropic Econômico)" },
   { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Anthropic)" },
   { id: "anthropic/claude-3-opus-20240229", label: "Claude 3 Opus (Anthropic Premium)" },
 ];
