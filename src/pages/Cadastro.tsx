@@ -134,6 +134,10 @@ export default function Cadastro() {
       // Gerar event_id para deduplicação browser/server
       const eventId = `cr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
+      // Recover attribution data from localStorage
+      const storedAttribution = JSON.parse(localStorage.getItem('lead_attribution') || '{}');
+      const hasAttribution = Object.keys(storedAttribution).length > 0;
+
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
         `https://${projectId}.supabase.co/functions/v1/public-signup`,
@@ -148,6 +152,7 @@ export default function Cadastro() {
             password: form.password,
             eventId,
             sourceUrl: PRODUCTION_URL,
+            ...(hasAttribution ? { attribution: storedAttribution } : {}),
           }),
         }
       );

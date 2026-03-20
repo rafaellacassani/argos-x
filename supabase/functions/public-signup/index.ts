@@ -493,7 +493,25 @@ serve(async (req) => {
       (e) => console.warn("Internal lead creation error:", e)
     );
 
-    // 9. Send Meta Conversions API event (fire-and-forget)
+    // 9. Save UTM/fbclid attribution data (fire-and-forget)
+    const attribution = body.attribution;
+    if (attribution && typeof attribution === 'object' && Object.keys(attribution).length > 0) {
+      const allowedKeys = ['fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
+      const safeAttribution: Record<string, string> = {};
+      for (const k of allowedKeys) {
+        if (typeof attribution[k] === 'string' && attribution[k].length <= 500) {
+          safeAttribution[k] = attribution[k];
+        }
+      }
+      if (Object.keys(safeAttribution).length > 0) {
+        supabaseAdmin.from('lead_attribution').insert({
+          workspace_id: workspace.id,
+          ...safeAttribution,
+        }).then(() => {}).catch((e: any) => console.warn('Attribution save error:', e));
+      }
+    }
+
+    // 10. Send Meta Conversions API event (fire-and-forget)
     const metaEventId = eventId || `cr_server_${Date.now()}`;
     sendMetaConversionEvent(supabaseAdmin, {
       email,
