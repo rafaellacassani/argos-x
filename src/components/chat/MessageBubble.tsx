@@ -488,49 +488,134 @@ export function MessageBubble({
     }
   };
 
+  // Check if message is within 1 hour (WhatsApp delete/edit window)
+  const isWithinEditWindow = () => {
+    if (!timestamp) return true; // if no timestamp, allow
+    const now = Math.floor(Date.now() / 1000);
+    return now - timestamp < 3600; // 1 hour
+  };
+
+  const canDeleteForEveryone = sent && messageId && !isMeta && isWithinEditWindow();
+  const canEdit = sent && type === "text" && messageId && !isMeta && isWithinEditWindow();
+  const canReact = messageId && !isMeta;
+
+  const quickReactions = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: Math.min(index * 0.008, 0.3), duration: 0.15 }}
-        className={cn("flex", sent ? "justify-end" : "justify-start")}
-      >
-        <div
-          className={cn(
-            "max-w-[70%] overflow-hidden relative",
-            type === "image" || type === "video" ? "px-0 py-0" : "px-3 py-1.5",
-            sent
-              ? "rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-sm shadow-sm"
-              : "rounded-tl-xl rounded-tr-xl rounded-br-xl rounded-bl-sm shadow-sm",
-            sent
-              ? "bg-[hsl(var(--chat-bubble-sent))] text-[hsl(var(--chat-bubble-sent-foreground))]"
-              : "bg-[hsl(var(--chat-bubble-received))] text-[hsl(var(--chat-bubble-received-foreground))]"
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: Math.min(index * 0.008, 0.3), duration: 0.15 }}
+            className={cn("flex", sent ? "justify-end" : "justify-start")}
+          >
+            <div
+              className={cn(
+                "max-w-[70%] overflow-hidden relative group",
+                type === "image" || type === "video" ? "px-0 py-0" : "px-3 py-1.5",
+                sent
+                  ? "rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-sm shadow-sm"
+                  : "rounded-tl-xl rounded-tr-xl rounded-br-xl rounded-bl-sm shadow-sm",
+                sent
+                  ? "bg-[hsl(var(--chat-bubble-sent))] text-[hsl(var(--chat-bubble-sent-foreground))]"
+                  : "bg-[hsl(var(--chat-bubble-received))] text-[hsl(var(--chat-bubble-received-foreground))]"
+              )}
+              style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
+            >
+              {/* Media content */}
+              <div>{renderMedia()}</div>
+              
+              {/* Time and read status — inside bubble, bottom-right */}
+              <div className={cn(
+                "flex items-center gap-1 mt-0.5",
+                type === "image" || type === "video" ? "px-3 pb-1.5" : "",
+                "justify-end"
+              )}>
+                <span className="text-[10px] text-[hsl(var(--chat-timestamp))]">
+                  {time}
+                </span>
+                {sent && (
+                  read ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-[hsl(var(--secondary))]" />
+                  ) : (
+                    <Check className="w-3 h-3 text-[hsl(var(--chat-timestamp))]" />
+                  )
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </ContextMenuTrigger>
+
+        <ContextMenuContent className="w-56">
+          {/* Quick reactions row */}
+          {canReact && onReact && (
+            <>
+              <div className="flex items-center justify-around px-2 py-1.5">
+                {quickReactions.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => onReact(id, messageId!, emoji)}
+                    className="text-lg hover:scale-125 transition-transform active:scale-95 p-1 rounded-md hover:bg-accent"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+              <ContextMenuSeparator />
+            </>
           )}
-          style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
-        >
-          {/* Media content */}
-          <div>{renderMedia()}</div>
-          
-          {/* Time and read status — inside bubble, bottom-right */}
-          <div className={cn(
-            "flex items-center gap-1 mt-0.5",
-            type === "image" || type === "video" ? "px-3 pb-1.5" : "",
-            "justify-end"
-          )}>
-            <span className="text-[10px] text-[hsl(var(--chat-timestamp))]">
-              {time}
-            </span>
-            {sent && (
-              read ? (
-                <CheckCheck className="w-3.5 h-3.5 text-[hsl(var(--secondary))]" />
-              ) : (
-                <Check className="w-3 h-3 text-[hsl(var(--chat-timestamp))]" />
-              )
-            )}
-          </div>
-        </div>
-      </motion.div>
+
+          {/* Reply */}
+          {onReply && (
+            <ContextMenuItem onClick={() => onReply({ id, content, sent, type })}>
+              <Reply className="w-4 h-4 mr-2" />
+              Responder
+            </ContextMenuItem>
+          )}
+
+          {/* Copy */}
+          {type === "text" && content && (
+            <ContextMenuItem onClick={() => {
+              navigator.clipboard.writeText(content);
+              onCopy?.(content);
+            }}>
+              <Copy className="w-4 h-4 mr-2" />
+              Copiar
+            </ContextMenuItem>
+          )}
+
+          {/* Edit */}
+          {canEdit && onEdit && (
+            <ContextMenuItem onClick={() => onEdit(id, messageId!, content)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Editar
+            </ContextMenuItem>
+          )}
+
+          <ContextMenuSeparator />
+
+          {/* Delete for me */}
+          {onDeleteForMe && (
+            <ContextMenuItem onClick={() => onDeleteForMe(id)}>
+              <Trash2 className="w-4 h-4 mr-2" />
+              Apagar para mim
+            </ContextMenuItem>
+          )}
+
+          {/* Delete for everyone */}
+          {canDeleteForEveryone && onDeleteForEveryone && (
+            <ContextMenuItem 
+              onClick={() => onDeleteForEveryone(id, messageId!)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Apagar para todos
+            </ContextMenuItem>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
 
       {/* Media Modal */}
       <Dialog open={showMediaModal} onOpenChange={setShowMediaModal}>
