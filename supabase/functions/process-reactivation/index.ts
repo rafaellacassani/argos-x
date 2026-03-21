@@ -180,6 +180,21 @@ serve(async (req) => {
       const matchingDay = cadenceDays.find((d) => d === daysFromExpiry);
       if (matchingDay === undefined) continue;
 
+      // Skip if the user already has ANOTHER workspace with an active paid plan
+      const { data: otherActiveWs } = await supabaseAdmin
+        .from("workspaces")
+        .select("id")
+        .eq("created_by", ws.created_by)
+        .in("plan_type", ["active"])
+        .neq("id", ws.id)
+        .limit(1);
+
+      if (otherActiveWs && otherActiveWs.length > 0) {
+        console.log(`Skipping cadence for workspace ${ws.id} — user has active workspace ${otherActiveWs[0].id}`);
+        skippedCount++;
+        continue;
+      }
+
       // Check if already sent
       const { data: existing } = await supabaseAdmin
         .from("reactivation_log")

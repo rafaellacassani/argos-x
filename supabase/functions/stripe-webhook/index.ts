@@ -111,14 +111,14 @@ async function createWorkspaceForCustomer(
   subscriptionId: string,
   priceId: string | null
 ) {
-  // Check if workspace already exists for this customer
-  const { data: existingWs } = await supabaseAdmin
+  // Check if workspace already exists for this Stripe customer
+  const { data: existingWsByStripe } = await supabaseAdmin
     .from("workspaces")
     .select("id")
     .eq("stripe_customer_id", stripeCustomerId)
     .maybeSingle();
 
-  if (existingWs) {
+  if (existingWsByStripe) {
     console.log("Workspace already exists for customer:", stripeCustomerId);
     return;
   }
@@ -172,7 +172,41 @@ async function createWorkspaceForCustomer(
     userId = newUser.user.id;
   }
 
-  // 2. Upsert user_profiles
+  // 2. Check if user already has a workspace (e.g. from trial signup) — upgrade it instead of creating new one
+  const { data: existingUserWs } = await supabaseAdmin
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingUserWs) {
+    console.log("User already has workspace, upgrading:", existingUserWs.workspace_id);
+    await supabaseAdmin
+      .from("workspaces")
+      .update({
+        stripe_customer_id: stripeCustomerId,
+        stripe_subscription_id: subscriptionId,
+        stripe_price_id: priceId,
+        plan_name: planConfig.plan_name,
+        plan_type: "active",
+        subscription_status: "active",
+        lead_limit: planConfig.lead_limit,
+        whatsapp_limit: planConfig.whatsapp_limit,
+        user_limit: planConfig.user_limit,
+        ai_interactions_limit: planConfig.ai_interactions_limit,
+        blocked_at: null,
+        trial_end: null,
+      })
+      .eq("id", existingUserWs.workspace_id);
+
+    // Move internal CRM lead
+    await moveInternalLead(supabaseAdmin, email, STAGE_ACTIVE, TAG_ACTIVE, planConfig.plan_name);
+    console.log("Existing workspace upgraded for customer:", stripeCustomerId, "workspace:", existingUserWs.workspace_id);
+    return;
+  }
+
+  // 3. Upsert user_profiles
   await supabaseAdmin.from("user_profiles").upsert(
     { user_id: userId, full_name: fullName, email, phone: (customer as any).phone || null },
     { onConflict: "user_id" }
