@@ -111,14 +111,14 @@ async function createWorkspaceForCustomer(
   subscriptionId: string,
   priceId: string | null
 ) {
-  // Check if workspace already exists for this customer
-  const { data: existingWs } = await supabaseAdmin
+  // Check if workspace already exists for this Stripe customer
+  const { data: existingWsByStripe } = await supabaseAdmin
     .from("workspaces")
     .select("id")
     .eq("stripe_customer_id", stripeCustomerId)
     .maybeSingle();
 
-  if (existingWs) {
+  if (existingWsByStripe) {
     console.log("Workspace already exists for customer:", stripeCustomerId);
     return;
   }
