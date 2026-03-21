@@ -52,6 +52,7 @@ const menuItems: MenuItem[] = [
   { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
+  { icon: LayoutDashboard, label: "Painel de Dados", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
   { icon: Calendar, label: "Calendário", path: "/calendar" },
