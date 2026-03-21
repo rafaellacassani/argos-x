@@ -27,6 +27,7 @@ interface AgentDetailDialogProps {
 }
 
 const tabs = [
+  { id: "connection", label: "Conexão", icon: Plug },
   { id: "personality", label: "Personalidade", icon: Bot },
   { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen },
   { id: "attachments", label: "Anexos & Site", icon: Paperclip },
