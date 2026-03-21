@@ -249,6 +249,9 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
+            {activeTab === "connection" && agent && (
+              <ConnectionTab formData={formData} updateField={updateField} />
+            )}
             {activeTab === "personality" && (
               <PersonalityTab formData={formData} updateField={updateField} generatePrompt={generateSystemPrompt} />
             )}
