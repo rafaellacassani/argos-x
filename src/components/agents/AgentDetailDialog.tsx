@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
-import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText } from "lucide-react";
+import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
 import { KnowledgeTab } from "./tabs/KnowledgeTab";
@@ -17,6 +17,7 @@ import { FollowupTab } from "./tabs/FollowupTab";
 import { AdvancedTab } from "./tabs/AdvancedTab";
 import { AttachmentsTab } from "./tabs/AttachmentsTab";
 import { StyleTab } from "./tabs/StyleTab";
+import { ConnectionTab } from "./tabs/ConnectionTab";
 
 interface AgentDetailDialogProps {
   agent: AIAgent | null;
@@ -26,6 +27,7 @@ interface AgentDetailDialogProps {
 }
 
 const tabs = [
+  { id: "connection", label: "Conexão", icon: Plug },
   { id: "personality", label: "Personalidade", icon: Bot },
   { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen },
   { id: "attachments", label: "Anexos & Site", icon: Paperclip },
@@ -247,6 +249,9 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
+            {activeTab === "connection" && agent && (
+              <ConnectionTab formData={formData} updateField={updateField} />
+            )}
             {activeTab === "personality" && (
               <PersonalityTab formData={formData} updateField={updateField} generatePrompt={generateSystemPrompt} />
             )}
