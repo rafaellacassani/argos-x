@@ -5,7 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
-import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText } from "lucide-react";
+import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
 import { KnowledgeTab } from "./tabs/KnowledgeTab";
