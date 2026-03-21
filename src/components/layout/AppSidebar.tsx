@@ -49,6 +49,7 @@ interface MenuItem {
 
 const menuItems: MenuItem[] = [
   { icon: Home, label: "Início", path: "/" },
+  { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
@@ -56,7 +57,6 @@ const menuItems: MenuItem[] = [
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
-  { icon: Plug, label: "Conexões", path: "/settings" },
   { icon: Mail, label: "Email", path: "/email" },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Crown, label: "Planos", path: "/planos" },
@@ -91,7 +91,7 @@ function SidebarNavContent({
                 : isActive
                   ? "bg-sidebar-accent text-white"
                   : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
-              item.highlight && !isActive && !isLocked && "bg-sidebar-primary/20 border border-sidebar-primary/30"
+              item.highlight && !isActive && !isLocked && "bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/40"
             )}
           >
             {isActive && !isLocked && (
