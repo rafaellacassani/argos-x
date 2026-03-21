@@ -35,7 +35,7 @@ export function ConnectionTab({ formData, updateField }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm font-semibold">Instância WhatsApp</Label>
+        <Label className="text-sm font-semibold">Escolha o número de WhatsApp que irá responder</Label>
         <Select value={formData.instance_name || ""} onValueChange={(v) => updateField("instance_name", v === "__all__" ? "" : v)}>
           <SelectTrigger><SelectValue placeholder="Todas as instâncias" /></SelectTrigger>
           <SelectContent>
