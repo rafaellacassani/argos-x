@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Home,
-  
+  LayoutDashboard,
   Users,
   MessageCircle,
   Bot,
