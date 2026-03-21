@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Home,
-  
+  LayoutDashboard,
   Users,
   MessageCircle,
   Bot,
@@ -52,6 +52,7 @@ const menuItems: MenuItem[] = [
   { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
   { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
+  { icon: LayoutDashboard, label: "Painel de Dados", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
   { icon: Calendar, label: "Calendário", path: "/calendar" },
