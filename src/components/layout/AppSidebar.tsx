@@ -91,7 +91,7 @@ function SidebarNavContent({
                 : isActive
                   ? "bg-sidebar-accent text-white"
                   : "text-white/80 hover:bg-sidebar-accent/50 hover:text-white",
-              item.highlight && !isActive && !isLocked && "bg-sidebar-primary/20 border border-sidebar-primary/30"
+              item.highlight && !isActive && !isLocked && "bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/40"
             )}
           >
             {isActive && !isLocked && (
