@@ -50,11 +50,11 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { icon: Home, label: "Início", path: "/" },
   { icon: Plug, label: "Conexões", path: "/settings", highlight: true },
+  { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: MessageCircle, label: "Chats", path: "/chats" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
   { icon: Calendar, label: "Calendário", path: "/calendar" },
-  { icon: Bot, label: "Agentes de IA", path: "/ai-agents" },
   { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
   { icon: Mail, label: "Email", path: "/email" },
