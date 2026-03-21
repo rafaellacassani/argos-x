@@ -17,6 +17,7 @@ import { FollowupTab } from "./tabs/FollowupTab";
 import { AdvancedTab } from "./tabs/AdvancedTab";
 import { AttachmentsTab } from "./tabs/AttachmentsTab";
 import { StyleTab } from "./tabs/StyleTab";
+import { ConnectionTab } from "./tabs/ConnectionTab";
 
 interface AgentDetailDialogProps {
   agent: AIAgent | null;
