@@ -141,7 +141,7 @@ export default function Auth() {
             </Button>
           </form>
 
-          <div className="mt-4 text-center space-y-1">
+          <div className="mt-4 text-center space-y-2">
             {mode === "forgot" ? (
               <button
                 type="button"
@@ -151,13 +151,23 @@ export default function Auth() {
                 Voltar para o login
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setMode(mode === "login" ? "signup" : "login")}
-                className="text-sm text-primary hover:underline"
-              >
-                {mode === "login" ? "Não tem conta? Cadastre-se" : "Já tem conta? Entre"}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMode("forgot")}
+                  className="text-sm text-muted-foreground hover:text-primary hover:underline"
+                >
+                  Esqueci minha senha
+                </button>
+                <div>
+                  <a
+                    href="/cadastro"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Não tem conta? Cadastre-se
+                  </a>
+                </div>
+              </>
             )}
           </div>
         </div>
