@@ -1066,6 +1066,7 @@ serve(async (req) => {
         evoInstancesRes,
         wabaRes,
         executionsRes,
+        allTokensRes,
         profilesRes,
       ] = await Promise.all([
         supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
@@ -1074,6 +1075,7 @@ serve(async (req) => {
         supabaseAdmin.from("whatsapp_instances").select("instance_name, display_name, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
+        supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds),
         supabaseAdmin.from("user_profiles").select("user_id, full_name, phone, email"),
       ]);
 
@@ -1113,13 +1115,35 @@ serve(async (req) => {
         agentsByWs.set(a.workspace_id, arr);
       }
 
-      // Group executions by agent
+      // Group executions by agent (24h)
       const execByAgent = new Map<string, number>();
       const respondedAgents = new Set<string>();
       for (const e of (executionsRes.data || [])) {
         execByAgent.set(e.agent_id, (execByAgent.get(e.agent_id) || 0) + 1);
         if (e.status === "success") respondedAgents.add(e.agent_id);
       }
+
+      // Total tokens by agent (all time)
+      const tokensByAgent = new Map<string, number>();
+      const tokensByWs = new Map<string, number>();
+      for (const e of (allTokensRes.data || [])) {
+        const t = e.tokens_used || 0;
+        tokensByAgent.set(e.agent_id, (tokensByAgent.get(e.agent_id) || 0) + t);
+        tokensByWs.set(e.workspace_id, (tokensByWs.get(e.workspace_id) || 0) + t);
+      }
+
+      // Cost estimation: USD per 1K tokens by model family, then convert to BRL
+      const USD_TO_BRL = 5.50;
+      const costPer1kTokens = (model: string): number => {
+        const m = (model || "").toLowerCase();
+        if (m.includes("gpt-4o-mini") || m.includes("gpt-5-mini") || m.includes("gpt-5-nano")) return 0.0003;
+        if (m.includes("gpt-4o") || m.includes("gpt-5") || m.includes("gpt-4")) return 0.005;
+        if (m.includes("gemini") && m.includes("flash")) return 0.0001;
+        if (m.includes("gemini") && m.includes("pro")) return 0.001;
+        if (m.includes("claude") && m.includes("haiku")) return 0.0003;
+        if (m.includes("claude")) return 0.003;
+        return 0.0004; // default fallback
+      };
 
       // Check Evolution API connection status
       const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
@@ -1155,14 +1179,25 @@ serve(async (req) => {
 
       // Build response
       const result = workspaces.map((ws: any) => {
-        const agents = (agentsByWs.get(ws.id) || []).map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          model: a.model || "N/A",
-          is_active: !!a.is_active,
-          interactions_24h: execByAgent.get(a.id) || 0,
-          responded_24h: respondedAgents.has(a.id),
-        }));
+        const agents = (agentsByWs.get(ws.id) || []).map((a: any) => {
+          const agentTokens = tokensByAgent.get(a.id) || 0;
+          const agentCostUsd = (agentTokens / 1000) * costPer1kTokens(a.model || "");
+          const agentCostBrl = agentCostUsd * USD_TO_BRL;
+          return {
+            id: a.id,
+            name: a.name,
+            model: a.model || "N/A",
+            is_active: !!a.is_active,
+            interactions_24h: execByAgent.get(a.id) || 0,
+            responded_24h: respondedAgents.has(a.id),
+            tokens_total: agentTokens,
+            cost_brl: Math.round(agentCostBrl * 100) / 100,
+          };
+        });
+
+        // Workspace-level token totals
+        const wsTokensTotal = tokensByWs.get(ws.id) || 0;
+        const wsCostBrl = agents.reduce((sum: number, a: any) => sum + a.cost_brl, 0);
 
         const evoInstances = (evoInstancesRes.data || [])
           .filter((i: any) => i.workspace_id === ws.id)
@@ -1224,6 +1259,8 @@ serve(async (req) => {
           agents,
           instances,
           alerts,
+          tokens_total: wsTokensTotal,
+          cost_estimate_brl: Math.round(wsCostBrl * 100) / 100,
         };
       });
 

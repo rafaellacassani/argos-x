@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Search, RefreshCw, Loader2, AlertTriangle, CheckCircle2, XCircle,
-  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap, MessageCircle
+  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap, MessageCircle, Coins
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -21,6 +21,8 @@ interface AgentHealth {
   is_active: boolean;
   interactions_24h: number;
   responded_24h: boolean;
+  tokens_total: number;
+  cost_brl: number;
 }
 
 interface InstanceHealth {
@@ -54,6 +56,8 @@ interface WorkspaceHealth {
   agents: AgentHealth[];
   instances: InstanceHealth[];
   alerts: string[];
+  tokens_total: number;
+  cost_estimate_brl: number;
 }
 
 export default function WorkspaceHealthTab() {
@@ -183,6 +187,7 @@ export default function WorkspaceHealthTab() {
                           <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {ws.members_count} usuários</span>
                           <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> {ws.agents.length} agentes</span>
                           <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> {ws.instances.length} instâncias</span>
+                          <span className="flex items-center gap-1"><Coins className="w-3 h-3" /> {ws.tokens_total?.toLocaleString("pt-BR") || 0} tokens · R$ {ws.cost_estimate_brl?.toFixed(2) || "0.00"}</span>
                           {ws.owner?.name && (
                             <span className="flex items-center gap-1">👤 {ws.owner.name}</span>
                           )}
@@ -271,6 +276,9 @@ export default function WorkspaceHealthTab() {
                               </Badge>
                               <span className="text-xs text-muted-foreground whitespace-nowrap">
                                 <Zap className="w-3 h-3 inline mr-0.5" />{agent.interactions_24h} (24h)
+                              </span>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap" title={`${agent.tokens_total?.toLocaleString("pt-BR") || 0} tokens consumidos`}>
+                                <Coins className="w-3 h-3 inline mr-0.5" />{agent.tokens_total?.toLocaleString("pt-BR") || 0} tkn · R$ {agent.cost_brl?.toFixed(2) || "0.00"}
                               </span>
                               {agent.is_active && (
                                 agent.responded_24h ? (
