@@ -277,6 +277,9 @@ export default function WorkspaceHealthTab() {
                               <span className="text-xs text-muted-foreground whitespace-nowrap">
                                 <Zap className="w-3 h-3 inline mr-0.5" />{agent.interactions_24h} (24h)
                               </span>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap" title={`${agent.tokens_total?.toLocaleString("pt-BR") || 0} tokens consumidos`}>
+                                <Coins className="w-3 h-3 inline mr-0.5" />{agent.tokens_total?.toLocaleString("pt-BR") || 0} tkn · R$ {agent.cost_brl?.toFixed(2) || "0.00"}
+                              </span>
                               {agent.is_active && (
                                 agent.responded_24h ? (
                                   <Badge variant="outline" className="text-xs text-emerald-600 border-emerald-300 gap-1">
