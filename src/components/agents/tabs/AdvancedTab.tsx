@@ -5,26 +5,31 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
+import { useWorkspace } from "@/hooks/useWorkspace";
 
 interface Props {
   formData: Record<string, any>;
   updateField: (key: string, value: any) => void;
 }
 
-const models = [
-  { id: "openai/gpt-5-mini", label: "⭐ GPT-5 Mini (Recomendado)" },
-  { id: "openai/gpt-4o-mini", label: "GPT-4o Mini (Estável)" },
-  { id: "openai/gpt-5-nano", label: "GPT-5 Nano (Econômico)" },
-  { id: "openai/gpt-5", label: "GPT-5 (Avançado)" },
-  { id: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Alternativa rápida)" },
-  { id: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Alternativa premium)" },
-  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Anthropic Econômico)" },
-  { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Anthropic)" },
-  { id: "anthropic/claude-3-opus-20240229", label: "Claude 3 Opus (Anthropic Premium)" },
+const baseModels = [
+  { id: "openai/gpt-4o-mini", label: "⭐ GPT-4o Mini (Recomendado)", minPlan: null },
+  { id: "openai/gpt-5-mini", label: "GPT-5 Mini (Avançado)", minPlan: null },
+  { id: "openai/gpt-5-nano", label: "GPT-5 Nano (Econômico)", minPlan: null },
+  { id: "openai/gpt-5", label: "GPT-5 (Premium)", minPlan: null },
+  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Plano Escala)", minPlan: "escala" },
+  { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Plano Escala)", minPlan: "escala" },
 ];
 
 export function AdvancedTab({ formData, updateField }: Props) {
+  const { workspace } = useWorkspace();
+  const planType = workspace?.plan_type || "gratuito";
+  const isEscala = planType === "escala";
+
+  const availableModels = baseModels.filter(m => !m.minPlan || isEscala);
+  const lockedModels = baseModels.filter(m => m.minPlan && !isEscala);
+
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
@@ -34,11 +39,16 @@ export function AdvancedTab({ formData, updateField }: Props) {
 
       <div className="space-y-2">
         <Label>Modelo de IA</Label>
-        <Select value={formData.model || "openai/gpt-5-mini"} onValueChange={(v) => updateField("model", v)}>
+        <Select value={formData.model || "openai/gpt-4o-mini"} onValueChange={(v) => updateField("model", v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            {models.map((m) => (
+            {availableModels.map((m) => (
               <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
+            ))}
+            {lockedModels.map((m) => (
+              <SelectItem key={m.id} value={m.id} disabled className="opacity-50">
+                <span className="flex items-center gap-1.5"><Lock className="w-3 h-3" />{m.label}</span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
