@@ -455,8 +455,8 @@ app.post("/setup-webhook/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || SUPABASE_URL;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || SUPABASE_ANON_KEY;
-    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?apikey=${encodeURIComponent(supabaseAnonKey)}`;
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") || EVOLUTION_API_KEY;
+    const webhookUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?apikey=${encodeURIComponent(evolutionApiKey!)}`;
     console.log("[evolution-api] Setting webhook for", instanceName, "→", webhookUrl);
     
     const webhookBody = {
