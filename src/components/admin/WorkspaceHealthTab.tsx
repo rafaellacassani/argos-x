@@ -187,6 +187,7 @@ export default function WorkspaceHealthTab() {
                           <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {ws.members_count} usuários</span>
                           <span className="flex items-center gap-1"><Bot className="w-3 h-3" /> {ws.agents.length} agentes</span>
                           <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> {ws.instances.length} instâncias</span>
+                          <span className="flex items-center gap-1"><Coins className="w-3 h-3" /> {ws.tokens_total?.toLocaleString("pt-BR") || 0} tokens · R$ {ws.cost_estimate_brl?.toFixed(2) || "0.00"}</span>
                           {ws.owner?.name && (
                             <span className="flex items-center gap-1">👤 {ws.owner.name}</span>
                           )}
