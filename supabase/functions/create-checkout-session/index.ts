@@ -176,7 +176,7 @@ serve(async (req) => {
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
-      payment_method_types: ["card", "boleto"],
+      payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       subscription_data: {
