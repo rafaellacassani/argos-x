@@ -63,17 +63,6 @@ export default function Auth() {
         if (error) {
           toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
         }
-      } else {
-        const parsed = signupSchema.parse({ email, password, fullName });
-        const { error } = await signUp(parsed.email, parsed.password, parsed.fullName);
-        if (error) {
-          const msg = error.message.includes("already registered")
-            ? "Este email já está cadastrado. Tente fazer login."
-            : error.message;
-          toast({ title: "Erro ao cadastrar", description: msg, variant: "destructive" });
-        } else {
-          toast({ title: "Cadastro realizado!", description: "Verifique seu email para confirmar a conta." });
-        }
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
