@@ -202,16 +202,10 @@ export function ConnectionModal({
           
           // Only save to DB if creating new instance (not reconnecting)
           if (!instanceToReconnect) {
-            const sanitizedName = instanceName
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, "-")
-              .replace(/-+/g, "-")
-              .replace(/^-|-$/g, "");
-            
+            // Use the Evolution API instance name (name param = uniqueName passed to startPolling)
             const { data: { user } } = await supabase.auth.getUser();
             await supabase.from('whatsapp_instances').upsert({
-              instance_name: sanitizedName,
+              instance_name: name,
               display_name: instanceName.trim(),
               workspace_id: workspaceId!,
               created_by: user?.id,
@@ -220,10 +214,10 @@ export function ConnectionModal({
             
             // Auto-setup webhook for this instance
             try {
-              await supabase.functions.invoke(`evolution-api/setup-webhook/${sanitizedName}`, {
+              await supabase.functions.invoke(`evolution-api/setup-webhook/${name}`, {
                 method: "POST",
               });
-              console.log("[ConnectionModal] Webhook configured for", sanitizedName);
+              console.log("[ConnectionModal] Webhook configured for", name);
               toast({
                 title: "Webhook configurado ✓",
                 description: "Automações serão disparadas automaticamente.",
@@ -240,7 +234,7 @@ export function ConnectionModal({
               description: "Importando mensagens do WhatsApp para o banco local.",
             });
             supabase.functions.invoke('sync-whatsapp-messages', {
-              body: { instanceName: instanceToReconnect || instanceName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, ""), workspaceId },
+              body: { instanceName: instanceToReconnect || name, workspaceId },
             }).then((res) => {
               if (res.data && !res.error) {
                 console.log("[ConnectionModal] Sync complete:", res.data);
