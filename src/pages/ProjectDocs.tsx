@@ -110,7 +110,7 @@ export default function ProjectDocs() {
                 <tr><td className="border border-gray-300 px-3 py-2">Autenticação</td><td className="border border-gray-300 px-3 py-2">Auth nativo com JWT</td></tr>
                 <tr><td className="border border-gray-300 px-3 py-2">WhatsApp</td><td className="border border-gray-300 px-3 py-2">Evolution API (QR Code) + API Oficial</td></tr>
                 <tr><td className="border border-gray-300 px-3 py-2">Meta (FB/IG)</td><td className="border border-gray-300 px-3 py-2">Graph API + Webhooks</td></tr>
-                <tr><td className="border border-gray-300 px-3 py-2">IA</td><td className="border border-gray-300 px-3 py-2">Gemini, GPT-5 (multi-modelo)</td></tr>
+                <tr><td className="border border-gray-300 px-3 py-2">IA</td><td className="border border-gray-300 px-3 py-2">GPT-4o Mini, GPT-5, Claude (multi-modelo)</td></tr>
               </tbody>
             </table>
           </Section>
