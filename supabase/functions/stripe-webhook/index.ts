@@ -225,7 +225,7 @@ async function createWorkspaceForCustomer(
   const { data: workspace, error: wsError } = await supabaseAdmin
     .from("workspaces")
     .insert({
-      name: fullName,
+      name: companyName,
       slug: `${slug}-${Date.now()}`,
       created_by: userId,
       plan_name: planConfig.plan_name,
