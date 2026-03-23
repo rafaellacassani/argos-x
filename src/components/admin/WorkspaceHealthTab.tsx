@@ -56,6 +56,8 @@ interface WorkspaceHealth {
   agents: AgentHealth[];
   instances: InstanceHealth[];
   alerts: string[];
+  tokens_total: number;
+  cost_estimate_brl: number;
 }
 
 export default function WorkspaceHealthTab() {
