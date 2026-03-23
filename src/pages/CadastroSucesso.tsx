@@ -1,6 +1,5 @@
-import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, ArrowRight, LogIn } from "lucide-react";
+import { CheckCircle2, ArrowRight, LogIn, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSearchParams } from "react-router-dom";
@@ -9,9 +8,6 @@ import argosLogoDark from "@/assets/argos-logo-dark.png";
 export default function CadastroSucesso() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "";
-
-  // Fallback removido — evento CompleteRegistration agora é enviado via CAPI server-side
-  // e via browser pixel na página de cadastro com deduplicação por event_id
 
   return (
     <div className="min-h-screen bg-white">
@@ -36,11 +32,23 @@ export default function CadastroSucesso() {
 
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                  Conta criada com sucesso! 🎉
+                  Conta ativada com sucesso! 🎉
                 </h1>
                 <p className="text-gray-500 text-sm">
-                  Seu período de teste de 7 dias já começou.
+                  Seu teste grátis de 7 dias já está ativo.
                 </p>
+              </div>
+
+              <div className="bg-blue-50 rounded-lg p-4 flex items-start gap-3 text-left">
+                <Clock className="w-5 h-5 text-[#1a1a6e] mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">
+                    Sem cobrança por 7 dias
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Você pode cancelar a qualquer momento antes do período de teste terminar.
+                  </p>
+                </div>
               </div>
 
               <div className="bg-gray-50 rounded-lg p-4 flex items-start gap-3 text-left">
@@ -50,7 +58,7 @@ export default function CadastroSucesso() {
                     Tudo pronto!
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Você já pode fazer login com <strong>{email}</strong> e a senha que acabou de criar.
+                    Faça login com <strong>{email}</strong> e a senha que você criou.
                   </p>
                 </div>
               </div>
