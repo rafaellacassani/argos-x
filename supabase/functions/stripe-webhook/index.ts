@@ -341,6 +341,11 @@ async function createWorkspaceForCustomer(
     console.warn("Could not send welcome email:", e);
   }
 
+  // Send WhatsApp welcome if we have a phone number
+  if (signupPhone) {
+    sendWelcomeWhatsApp(signupPhone, fullName).catch((e) => console.warn("Welcome WA error:", e));
+  }
+
   console.log("Workspace created successfully for customer:", stripeCustomerId, "workspace:", workspace.id);
 }
 
