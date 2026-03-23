@@ -116,6 +116,18 @@ export default function WorkspaceHealthTab() {
       const aiPct = ws.ai_limit > 0 ? (ws.ai_used / ws.ai_limit) * 100 : 0;
       if (leadPct <= 90 && aiPct <= 90) return false;
     }
+    if (filter === "with-agents" && ws.agents.length === 0) return false;
+    if (filter === "with-active-agents" && !ws.agents.some(a => a.is_active)) return false;
+    if (filter === "no-agents" && ws.agents.length > 0) return false;
+    if (filter === "with-instances" && !ws.instances.some(i => i.status === "connected")) return false;
+    if (filter === "no-instances" && ws.instances.length > 0) return false;
+    if (filter === "disconnected-instances" && !ws.instances.some(i => i.status !== "connected")) return false;
+    if (filter === "high-tokens" && (ws.tokens_total || 0) < 10000) return false;
+    if (filter === "blocked" && !ws.blocked_at) return false;
+    if (filter === "inactive") {
+      const hasActivity = ws.agents.some(a => a.interactions_24h > 0);
+      if (hasActivity || ws.agents.length === 0) return false;
+    }
     return true;
   });
 
