@@ -272,21 +272,17 @@ export function ConnectionModal({
   };
 
   const handleRefreshQR = async () => {
-    const sanitizedName = instanceName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
+    // For reconnect, use the instance name directly; for new, use the unique name
+    const targetName = instanceToReconnect || buildUniqueInstanceName(instanceName);
 
     setStep("creating");
 
     try {
-      const qrResult = await getQRCode(sanitizedName);
+      const qrResult = await getQRCode(targetName);
       if (qrResult?.base64) {
         setQrCodeBase64(qrResult.base64);
         setStep("qrcode");
-        startPolling(sanitizedName);
+        startPolling(targetName);
       } else {
         throw new Error("Não foi possível obter o QR Code");
       }
