@@ -169,7 +169,7 @@ export function AgentCard({
             </span>
           )}
           <span className="text-xs text-muted-foreground">
-            {agent.model?.split("/")[1] || "gemini"}
+            {agent.model?.split("/")[1] || "gpt-4o-mini"}
           </span>
         </div>
         <div className="flex items-center gap-2">

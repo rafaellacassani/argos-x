@@ -110,7 +110,7 @@ export default function ProjectDocs() {
                 <tr><td className="border border-gray-300 px-3 py-2">Autenticação</td><td className="border border-gray-300 px-3 py-2">Auth nativo com JWT</td></tr>
                 <tr><td className="border border-gray-300 px-3 py-2">WhatsApp</td><td className="border border-gray-300 px-3 py-2">Evolution API (QR Code) + API Oficial</td></tr>
                 <tr><td className="border border-gray-300 px-3 py-2">Meta (FB/IG)</td><td className="border border-gray-300 px-3 py-2">Graph API + Webhooks</td></tr>
-                <tr><td className="border border-gray-300 px-3 py-2">IA</td><td className="border border-gray-300 px-3 py-2">Gemini, GPT-5 (multi-modelo)</td></tr>
+                <tr><td className="border border-gray-300 px-3 py-2">IA</td><td className="border border-gray-300 px-3 py-2">GPT-4o Mini, GPT-5, Claude (multi-modelo)</td></tr>
               </tbody>
             </table>
           </Section>
@@ -404,7 +404,7 @@ export default function ProjectDocs() {
 
             <h3 className="text-lg font-semibold mt-6 mb-2">Configurações do Agente</h3>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li><strong>Modelo de IA</strong> — Gemini 3 Flash, Gemini 2.5, GPT-5, GPT-5 Mini, etc.</li>
+              <li><strong>Modelo de IA</strong> — GPT-4o Mini (padrão), GPT-5, GPT-5 Mini, Claude Haiku/Sonnet (Escala)</li>
               <li><strong>Prompt de Sistema</strong> — Instrução principal que define personalidade e comportamento</li>
               <li><strong>Temperatura</strong> — Controle de criatividade (0.0 = preciso, 1.0 = criativo)</li>
               <li><strong>Max Tokens</strong> — Limite de tamanho de resposta</li>
