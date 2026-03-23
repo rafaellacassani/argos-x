@@ -21,6 +21,8 @@ interface AgentHealth {
   is_active: boolean;
   interactions_24h: number;
   responded_24h: boolean;
+  tokens_total: number;
+  cost_brl: number;
 }
 
 interface InstanceHealth {
