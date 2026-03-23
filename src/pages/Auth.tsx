@@ -83,7 +83,7 @@ export default function Auth() {
         <div className="text-center mb-8">
           <img src={argosLogoLight} alt="Argos X" className="h-24 mx-auto mb-2" />
           <p className="text-muted-foreground mt-2">
-            {mode === "login" ? "Entre na sua conta" : mode === "signup" ? "Crie sua conta" : "Recupere sua senha"}
+            {mode === "login" ? "Entre na sua conta" : "Recupere sua senha"}
           </p>
         </div>
 
