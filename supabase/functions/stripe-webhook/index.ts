@@ -136,7 +136,10 @@ async function createWorkspaceForCustomer(
   const customer = await stripe.customers.retrieve(stripeCustomerId) as Stripe.Customer;
 
   const email = customer.email;
+  const customerMeta = (customer as any).metadata || {};
+  const companyName = customerMeta.company_name || customer.name || customer.email || "Cliente";
   const fullName = customer.name || customer.email || "Cliente";
+  const signupPhone = customerMeta.signup_phone || (customer as any).phone || null;
 
   if (!email) {
     console.error("Customer has no email, cannot create workspace:", stripeCustomerId);
