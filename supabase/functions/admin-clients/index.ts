@@ -1115,13 +1115,35 @@ serve(async (req) => {
         agentsByWs.set(a.workspace_id, arr);
       }
 
-      // Group executions by agent
+      // Group executions by agent (24h)
       const execByAgent = new Map<string, number>();
       const respondedAgents = new Set<string>();
       for (const e of (executionsRes.data || [])) {
         execByAgent.set(e.agent_id, (execByAgent.get(e.agent_id) || 0) + 1);
         if (e.status === "success") respondedAgents.add(e.agent_id);
       }
+
+      // Total tokens by agent (all time)
+      const tokensByAgent = new Map<string, number>();
+      const tokensByWs = new Map<string, number>();
+      for (const e of (allTokensRes.data || [])) {
+        const t = e.tokens_used || 0;
+        tokensByAgent.set(e.agent_id, (tokensByAgent.get(e.agent_id) || 0) + t);
+        tokensByWs.set(e.workspace_id, (tokensByWs.get(e.workspace_id) || 0) + t);
+      }
+
+      // Cost estimation: USD per 1K tokens by model family, then convert to BRL
+      const USD_TO_BRL = 5.50;
+      const costPer1kTokens = (model: string): number => {
+        const m = (model || "").toLowerCase();
+        if (m.includes("gpt-4o-mini") || m.includes("gpt-5-mini") || m.includes("gpt-5-nano")) return 0.0003;
+        if (m.includes("gpt-4o") || m.includes("gpt-5") || m.includes("gpt-4")) return 0.005;
+        if (m.includes("gemini") && m.includes("flash")) return 0.0001;
+        if (m.includes("gemini") && m.includes("pro")) return 0.001;
+        if (m.includes("claude") && m.includes("haiku")) return 0.0003;
+        if (m.includes("claude")) return 0.003;
+        return 0.0004; // default fallback
+      };
 
       // Check Evolution API connection status
       const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
