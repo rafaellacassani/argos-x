@@ -158,9 +158,18 @@ export default function WorkspaceHealthTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
-            <SelectItem value="alerts">Com alertas</SelectItem>
-            <SelectItem value="trial-expiring">Trial expirando (7d)</SelectItem>
-            <SelectItem value="critical">Consumo crítico</SelectItem>
+            <SelectItem value="alerts">⚠️ Com alertas</SelectItem>
+            <SelectItem value="critical">🔴 Consumo crítico (&gt;90%)</SelectItem>
+            <SelectItem value="high-tokens">🔥 Tokens alto (&gt;10k)</SelectItem>
+            <SelectItem value="trial-expiring">⏰ Trial expirando (7d)</SelectItem>
+            <SelectItem value="blocked">🚫 Bloqueados</SelectItem>
+            <SelectItem value="with-agents">🤖 Com agente criado</SelectItem>
+            <SelectItem value="with-active-agents">✅ Com agente ativo</SelectItem>
+            <SelectItem value="no-agents">❌ Sem agentes</SelectItem>
+            <SelectItem value="with-instances">📱 Com instância conectada</SelectItem>
+            <SelectItem value="no-instances">📵 Sem instância</SelectItem>
+            <SelectItem value="disconnected-instances">⛔ Instância desconectada</SelectItem>
+            <SelectItem value="inactive">💤 Inativos (sem execuções)</SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" onClick={fetchHealth} className="gap-1.5">
