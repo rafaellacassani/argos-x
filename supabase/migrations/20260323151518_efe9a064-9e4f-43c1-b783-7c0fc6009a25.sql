@@ -1,0 +1,1 @@
+UPDATE public.ai_agents SET model = 'openai/gpt-4o-mini' WHERE model LIKE 'google/%';
