@@ -95,6 +95,19 @@ export function ConnectionModal({
     }
   }, [open]);
 
+  // Generate a unique Evolution API instance name scoped to the workspace
+  const buildUniqueInstanceName = (displayName: string) => {
+    const sanitized = displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    // Use first 8 chars of workspace ID to avoid collisions across workspaces
+    const wsPrefix = workspaceId ? workspaceId.substring(0, 8) : "default";
+    return `${wsPrefix}-${sanitized}`;
+  };
+
   const handleCreateConnection = async () => {
     if (!instanceName.trim()) {
       toast({
@@ -105,7 +118,6 @@ export function ConnectionModal({
       return;
     }
 
-    // Sanitize instance name (remove spaces, special chars)
     const sanitizedName = instanceName
       .trim()
       .toLowerCase()
@@ -122,10 +134,13 @@ export function ConnectionModal({
       return;
     }
 
+    // Use workspace-scoped unique name for Evolution API
+    const uniqueName = buildUniqueInstanceName(instanceName);
+
     setStep("creating");
 
     try {
-      const result = await createInstance(sanitizedName);
+      const result = await createInstance(uniqueName);
 
       if (!result) {
         throw new Error(error || "Erro ao criar conexão");
@@ -135,22 +150,25 @@ export function ConnectionModal({
       if (result.qrcode?.base64) {
         setQrCodeBase64(result.qrcode.base64);
         setStep("qrcode");
-        startPolling(sanitizedName);
+        startPolling(uniqueName);
       } else {
         // Need to fetch QR code separately
-        const qrResult = await getQRCode(sanitizedName);
+        const qrResult = await getQRCode(uniqueName);
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
           setStep("qrcode");
-          startPolling(sanitizedName);
+          startPolling(uniqueName);
         } else {
           throw new Error("Não foi possível obter o QR Code");
         }
       }
     } catch (err) {
       console.error("Error creating connection:", err);
+      const errMsg = err instanceof Error ? err.message : "Erro ao criar conexão";
       setErrorMessage(
-        err instanceof Error ? err.message : "Erro ao criar conexão"
+        errMsg.includes("Forbidden")
+          ? "Nome de conexão já existe. Tente outro nome."
+          : errMsg
       );
       setStep("error");
     }
@@ -184,16 +202,10 @@ export function ConnectionModal({
           
           // Only save to DB if creating new instance (not reconnecting)
           if (!instanceToReconnect) {
-            const sanitizedName = instanceName
-              .trim()
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, "-")
-              .replace(/-+/g, "-")
-              .replace(/^-|-$/g, "");
-            
+            // Use the Evolution API instance name (name param = uniqueName passed to startPolling)
             const { data: { user } } = await supabase.auth.getUser();
             await supabase.from('whatsapp_instances').upsert({
-              instance_name: sanitizedName,
+              instance_name: name,
               display_name: instanceName.trim(),
               workspace_id: workspaceId!,
               created_by: user?.id,
@@ -202,10 +214,10 @@ export function ConnectionModal({
             
             // Auto-setup webhook for this instance
             try {
-              await supabase.functions.invoke(`evolution-api/setup-webhook/${sanitizedName}`, {
+              await supabase.functions.invoke(`evolution-api/setup-webhook/${name}`, {
                 method: "POST",
               });
-              console.log("[ConnectionModal] Webhook configured for", sanitizedName);
+              console.log("[ConnectionModal] Webhook configured for", name);
               toast({
                 title: "Webhook configurado ✓",
                 description: "Automações serão disparadas automaticamente.",
@@ -222,7 +234,7 @@ export function ConnectionModal({
               description: "Importando mensagens do WhatsApp para o banco local.",
             });
             supabase.functions.invoke('sync-whatsapp-messages', {
-              body: { instanceName: instanceToReconnect || instanceName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, ""), workspaceId },
+              body: { instanceName: instanceToReconnect || name, workspaceId },
             }).then((res) => {
               if (res.data && !res.error) {
                 console.log("[ConnectionModal] Sync complete:", res.data);
@@ -260,21 +272,17 @@ export function ConnectionModal({
   };
 
   const handleRefreshQR = async () => {
-    const sanitizedName = instanceName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
+    // For reconnect, use the instance name directly; for new, use the unique name
+    const targetName = instanceToReconnect || buildUniqueInstanceName(instanceName);
 
     setStep("creating");
 
     try {
-      const qrResult = await getQRCode(sanitizedName);
+      const qrResult = await getQRCode(targetName);
       if (qrResult?.base64) {
         setQrCodeBase64(qrResult.base64);
         setStep("qrcode");
-        startPolling(sanitizedName);
+        startPolling(targetName);
       } else {
         throw new Error("Não foi possível obter o QR Code");
       }
