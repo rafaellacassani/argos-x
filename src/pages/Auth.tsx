@@ -19,7 +19,7 @@ const signupSchema = loginSchema.extend({
   fullName: z.string().trim().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
 });
 
-type AuthMode = "login" | "signup" | "forgot";
+type AuthMode = "login" | "forgot";
 
 export default function Auth() {
   const { user, loading, signIn, signUp, resetPassword } = useAuth();
@@ -63,17 +63,6 @@ export default function Auth() {
         if (error) {
           toast({ title: "Erro ao entrar", description: error.message, variant: "destructive" });
         }
-      } else {
-        const parsed = signupSchema.parse({ email, password, fullName });
-        const { error } = await signUp(parsed.email, parsed.password, parsed.fullName);
-        if (error) {
-          const msg = error.message.includes("already registered")
-            ? "Este email já está cadastrado. Tente fazer login."
-            : error.message;
-          toast({ title: "Erro ao cadastrar", description: msg, variant: "destructive" });
-        } else {
-          toast({ title: "Cadastro realizado!", description: "Verifique seu email para confirmar a conta." });
-        }
       }
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -94,30 +83,12 @@ export default function Auth() {
         <div className="text-center mb-8">
           <img src={argosLogoLight} alt="Argos X" className="h-24 mx-auto mb-2" />
           <p className="text-muted-foreground mt-2">
-            {mode === "login" ? "Entre na sua conta" : mode === "signup" ? "Crie sua conta" : "Recupere sua senha"}
+            {mode === "login" ? "Entre na sua conta" : "Recupere sua senha"}
           </p>
         </div>
 
         <div className="inboxia-card p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Nome completo</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="Seu nome"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10"
-                    maxLength={100}
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -166,11 +137,11 @@ export default function Auth() {
 
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {mode === "login" ? "Entrar" : mode === "signup" ? "Cadastrar" : "Enviar link de recuperação"}
+              {mode === "login" ? "Entrar" : "Enviar link de recuperação"}
             </Button>
           </form>
 
-          <div className="mt-4 text-center space-y-1">
+          <div className="mt-4 text-center space-y-2">
             {mode === "forgot" ? (
               <button
                 type="button"
@@ -180,13 +151,12 @@ export default function Auth() {
                 Voltar para o login
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => setMode(mode === "login" ? "signup" : "login")}
+              <a
+                href="/cadastro"
                 className="text-sm text-primary hover:underline"
               >
-                {mode === "login" ? "Não tem conta? Cadastre-se" : "Já tem conta? Entre"}
-              </button>
+                Não tem conta? Cadastre-se
+              </a>
             )}
           </div>
         </div>
