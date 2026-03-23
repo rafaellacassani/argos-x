@@ -105,6 +105,47 @@ function getPlanConfig(priceId: string, env: Record<string, string | undefined>)
   return { plan_name: "essencial", lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };
 }
 
+async function sendWelcomeWhatsApp(phone: string, name: string) {
+  const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+  const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY) return;
+
+  const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  const { data: config } = await supabaseAdmin
+    .from("reactivation_cadence_config")
+    .select("id, whatsapp_instance_name, welcome_message_template")
+    .limit(1)
+    .single();
+
+  if (!config?.whatsapp_instance_name) return;
+
+  let cleanPhone = phone.replace(/\D/g, "");
+  if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+  const defaultMessage = `Olá, ${name}! 👋\n\nBem-vindo ao *Argos X*! 🚀\n\nSua conta foi ativada com sucesso. Você tem *7 dias de teste grátis*.\n\nAcesse agora e comece a usar:\n👉 https://argosx.com.br/auth\n\nQualquer dúvida, é só responder aqui! 😊`;
+
+  const message = config.welcome_message_template
+    ? config.welcome_message_template.replace(/\{nome\}/g, name)
+    : defaultMessage;
+
+  try {
+    await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+      body: JSON.stringify({ number: cleanPhone, text: message }),
+    });
+  } catch (e) {
+    console.warn("Welcome WhatsApp failed:", e);
+  }
+}
+
 async function createWorkspaceForCustomer(
   supabaseAdmin: any,
   stripeCustomerId: string,
