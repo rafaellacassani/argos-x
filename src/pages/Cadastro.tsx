@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown } from "lucide-react";
+import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown, Lock, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ const COUNTRY_CODES = [
   { code: "39", flag: "🇮🇹", name: "Itália" },
 ];
 
-// Phone mask helper
 function applyPhoneMask(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 11);
   if (digits.length <= 2) return `(${digits}`;
@@ -37,6 +36,12 @@ function applyPhoneMask(value: string): string {
 const PIXEL_ID = "1294031842786070";
 const PRODUCTION_URL = "https://argosx.com.br/cadastro";
 
+const PLANS = [
+  { id: "essencial", name: "Essencial", price: "R$ 47,90", priceNum: "47,90" },
+  { id: "negocio", name: "Negócio", price: "R$ 97,90", priceNum: "97,90" },
+  { id: "escala", name: "Escala", price: "R$ 197,90", priceNum: "197,90" },
+];
+
 export default function Cadastro() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -44,8 +49,8 @@ export default function Cadastro() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixelReady, setPixelReady] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState("essencial");
 
-  // Capture UTM/fbclid params from URL into localStorage
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const keys = ['fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'];
@@ -54,9 +59,13 @@ export default function Cadastro() {
     if (Object.keys(attribution).length > 0) {
       localStorage.setItem('lead_attribution', JSON.stringify(attribution));
     }
+    // Pre-select plan from URL if provided
+    const planParam = params.get('plan');
+    if (planParam && PLANS.some(p => p.id === planParam)) {
+      setSelectedPlan(planParam);
+    }
   }, []);
 
-  // Pre-load Meta Pixel on page mount
   useEffect(() => {
     const w = window as any;
     if (!w.fbq) {
@@ -78,9 +87,7 @@ export default function Cadastro() {
     const script = document.createElement("script");
     script.async = true;
     script.src = "https://connect.facebook.net/en_US/fbevents.js";
-    script.onload = () => {
-      setPixelReady(true);
-    };
+    script.onload = () => { setPixelReady(true); };
     document.head.appendChild(script);
 
     w.fbq("init", PIXEL_ID);
@@ -99,7 +106,6 @@ export default function Cadastro() {
   const [ddiOpen, setDdiOpen] = useState(false);
   const ddiRef = useRef<HTMLDivElement>(null);
 
-  // Close DDI dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ddiRef.current && !ddiRef.current.contains(e.target as Node)) setDdiOpen(false);
@@ -131,16 +137,13 @@ export default function Cadastro() {
 
     setLoading(true);
     try {
-      // Gerar event_id para deduplicação browser/server
       const eventId = `cr_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-
-      // Recover attribution data from localStorage
       const storedAttribution = JSON.parse(localStorage.getItem('lead_attribution') || '{}');
       const hasAttribution = Object.keys(storedAttribution).length > 0;
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/public-signup`,
+        `https://${projectId}.supabase.co/functions/v1/signup-checkout`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -150,6 +153,7 @@ export default function Cadastro() {
             email: form.email,
             companyName: form.companyName,
             password: form.password,
+            plan: selectedPlan,
             eventId,
             sourceUrl: PRODUCTION_URL,
             ...(hasAttribution ? { attribution: storedAttribution } : {}),
@@ -159,29 +163,32 @@ export default function Cadastro() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Erro ao criar conta");
+        throw new Error(data.error || "Erro ao processar cadastro");
       }
 
-      // Disparar evento CompleteRegistration via Pixel já carregado
+      // Fire Meta pixel
       const w = window as any;
       if (w.fbq) {
-        w.fbq("track", "CompleteRegistration", {
-          content_name: "Argos X Trial",
+        w.fbq("track", "InitiateCheckout", {
+          content_name: `Argos X - ${selectedPlan}`,
           currency: "BRL",
-          value: 0,
         }, { eventID: eventId });
       }
 
-      // Aguardar beacon HTTP ser enviado antes de navegar
-      await new Promise((r) => setTimeout(r, pixelReady ? 800 : 1500));
-
-      navigate(`/cadastro/sucesso?email=${encodeURIComponent(form.email)}`);
+      // Redirect to Stripe Checkout
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("URL de checkout não retornada");
+      }
     } catch (err: any) {
       toast({ title: err.message || "Erro ao criar conta", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
+
+  const currentPlan = PLANS.find(p => p.id === selectedPlan)!;
 
   return (
     <div className="min-h-screen bg-white">
@@ -206,7 +213,7 @@ export default function Cadastro() {
               Comece grátis por 7 dias
             </h1>
             <p className="text-gray-500">
-              Sem cartão de crédito. Teste tudo sem compromisso.
+              Cartão necessário para ativar. Você só é cobrado após 7 dias. Cancele quando quiser.
             </p>
           </div>
 
@@ -332,6 +339,38 @@ export default function Cadastro() {
                     </button>
                   </div>
                 </div>
+
+                {/* Plan Selector */}
+                <div className="space-y-2">
+                  <Label>Escolha seu plano</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {PLANS.map((plan) => (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setSelectedPlan(plan.id)}
+                        className={`relative flex flex-col items-center p-3 rounded-lg border-2 transition-all text-center ${
+                          selectedPlan === plan.id
+                            ? "border-[#1a1a6e] bg-[#1a1a6e]/5 shadow-sm"
+                            : "border-gray-200 hover:border-gray-300 bg-white"
+                        }`}
+                      >
+                        {selectedPlan === plan.id && (
+                          <div className="absolute -top-2 -right-2 w-5 h-5 bg-[#1a1a6e] rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                        <span className={`text-sm font-semibold ${selectedPlan === plan.id ? "text-[#1a1a6e]" : "text-gray-700"}`}>
+                          {plan.name}
+                        </span>
+                        <span className={`text-xs mt-1 ${selectedPlan === plan.id ? "text-[#1a1a6e]/80" : "text-gray-500"}`}>
+                          {plan.price}/mês
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <Button
                   type="submit"
                   disabled={loading}
@@ -341,18 +380,23 @@ export default function Cadastro() {
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <>
-                      Começar meu teste grátis
+                      Ativar meu teste grátis
                       <ArrowRight className="w-5 h-5 ml-2" />
                     </>
                   )}
                 </Button>
+
+                <p className="text-center text-xs text-gray-500 flex items-center justify-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5" />
+                  Seus dados estão seguros. Cobrança apenas após 7 dias.
+                </p>
               </form>
             </CardContent>
           </Card>
 
           <div className="text-center mt-6 space-y-2">
             <p className="text-sm text-gray-500">
-              ✅ 7 dias grátis com acesso completo — sem cartão de crédito
+              ✅ 7 dias grátis — depois {currentPlan.price}/mês
             </p>
             <p className="text-xs text-gray-400">
               Ao continuar, você concorda com nossos{" "}
