@@ -1259,6 +1259,8 @@ serve(async (req) => {
           agents,
           instances,
           alerts,
+          tokens_total: wsTokensTotal,
+          cost_estimate_brl: Math.round(wsCostBrl * 100) / 100,
         };
       });
 
