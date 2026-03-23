@@ -1179,14 +1179,25 @@ serve(async (req) => {
 
       // Build response
       const result = workspaces.map((ws: any) => {
-        const agents = (agentsByWs.get(ws.id) || []).map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          model: a.model || "N/A",
-          is_active: !!a.is_active,
-          interactions_24h: execByAgent.get(a.id) || 0,
-          responded_24h: respondedAgents.has(a.id),
-        }));
+        const agents = (agentsByWs.get(ws.id) || []).map((a: any) => {
+          const agentTokens = tokensByAgent.get(a.id) || 0;
+          const agentCostUsd = (agentTokens / 1000) * costPer1kTokens(a.model || "");
+          const agentCostBrl = agentCostUsd * USD_TO_BRL;
+          return {
+            id: a.id,
+            name: a.name,
+            model: a.model || "N/A",
+            is_active: !!a.is_active,
+            interactions_24h: execByAgent.get(a.id) || 0,
+            responded_24h: respondedAgents.has(a.id),
+            tokens_total: agentTokens,
+            cost_brl: Math.round(agentCostBrl * 100) / 100,
+          };
+        });
+
+        // Workspace-level token totals
+        const wsTokensTotal = tokensByWs.get(ws.id) || 0;
+        const wsCostBrl = agents.reduce((sum: number, a: any) => sum + a.cost_brl, 0);
 
         const evoInstances = (evoInstancesRes.data || [])
           .filter((i: any) => i.workspace_id === ws.id)
