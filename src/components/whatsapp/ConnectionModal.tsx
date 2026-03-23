@@ -95,6 +95,19 @@ export function ConnectionModal({
     }
   }, [open]);
 
+  // Generate a unique Evolution API instance name scoped to the workspace
+  const buildUniqueInstanceName = (displayName: string) => {
+    const sanitized = displayName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    // Use first 8 chars of workspace ID to avoid collisions across workspaces
+    const wsPrefix = workspaceId ? workspaceId.substring(0, 8) : "default";
+    return `${wsPrefix}-${sanitized}`;
+  };
+
   const handleCreateConnection = async () => {
     if (!instanceName.trim()) {
       toast({
@@ -105,7 +118,6 @@ export function ConnectionModal({
       return;
     }
 
-    // Sanitize instance name (remove spaces, special chars)
     const sanitizedName = instanceName
       .trim()
       .toLowerCase()
@@ -122,10 +134,13 @@ export function ConnectionModal({
       return;
     }
 
+    // Use workspace-scoped unique name for Evolution API
+    const uniqueName = buildUniqueInstanceName(instanceName);
+
     setStep("creating");
 
     try {
-      const result = await createInstance(sanitizedName);
+      const result = await createInstance(uniqueName);
 
       if (!result) {
         throw new Error(error || "Erro ao criar conexão");
@@ -135,22 +150,25 @@ export function ConnectionModal({
       if (result.qrcode?.base64) {
         setQrCodeBase64(result.qrcode.base64);
         setStep("qrcode");
-        startPolling(sanitizedName);
+        startPolling(uniqueName);
       } else {
         // Need to fetch QR code separately
-        const qrResult = await getQRCode(sanitizedName);
+        const qrResult = await getQRCode(uniqueName);
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
           setStep("qrcode");
-          startPolling(sanitizedName);
+          startPolling(uniqueName);
         } else {
           throw new Error("Não foi possível obter o QR Code");
         }
       }
     } catch (err) {
       console.error("Error creating connection:", err);
+      const errMsg = err instanceof Error ? err.message : "Erro ao criar conexão";
       setErrorMessage(
-        err instanceof Error ? err.message : "Erro ao criar conexão"
+        errMsg.includes("Forbidden")
+          ? "Nome de conexão já existe. Tente outro nome."
+          : errMsg
       );
       setStep("error");
     }
