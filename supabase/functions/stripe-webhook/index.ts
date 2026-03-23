@@ -216,7 +216,7 @@ async function createWorkspaceForCustomer(
   );
 
   // 3. Create workspace
-  const slug = fullName
+  const slug = companyName
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
     .replace(/-+/g, "-")
