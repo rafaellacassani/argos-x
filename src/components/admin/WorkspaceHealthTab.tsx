@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Search, RefreshCw, Loader2, AlertTriangle, CheckCircle2, XCircle,
-  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap, MessageCircle
+  Bot, MessageSquare, Wifi, WifiOff, Activity, Users, Zap, MessageCircle, Coins
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
