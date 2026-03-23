@@ -19,7 +19,7 @@ const signupSchema = loginSchema.extend({
   fullName: z.string().trim().min(2, "Nome deve ter pelo menos 2 caracteres").max(100),
 });
 
-type AuthMode = "login" | "signup" | "forgot";
+type AuthMode = "login" | "forgot";
 
 export default function Auth() {
   const { user, loading, signIn, signUp, resetPassword } = useAuth();
