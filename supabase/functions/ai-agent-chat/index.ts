@@ -694,8 +694,12 @@ serve(async (req) => {
 
         let aiResponse: Response;
 
-        if (provider === "openai" && openaiApiKey) {
-          const openaiModel = modelName.replace("openai/", "");
+        // Models that only exist on the Lovable gateway (not direct OpenAI/Anthropic)
+        const GATEWAY_ONLY_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.2", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"];
+        const openaiModel = modelName.replace("openai/", "");
+        const isGatewayOnly = GATEWAY_ONLY_MODELS.some(m => openaiModel === m || openaiModel.startsWith(m + "-"));
+
+        if (provider === "openai" && openaiApiKey && !isGatewayOnly) {
           console.log(`[ai-agent-chat] 🔑 Using OpenAI API directly: ${openaiModel}`);
           aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
