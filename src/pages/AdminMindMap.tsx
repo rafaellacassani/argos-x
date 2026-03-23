@@ -171,7 +171,7 @@ const PROJECT_MAP: MindMapNode = {
         { id: "ai-list", label: "Lista de Agentes", description: "Grid de cards com nome, modelo, status, execuções" },
         { id: "ai-create", label: "CreateAgentDialog", description: "Dialog para criar agente: nome, tipo, modelo, prompt, tools" },
         { id: "ai-card", label: "AgentCard", description: "Card com toggle ativo/inativo, stats, ações" },
-        { id: "ai-models", label: "Modelos", description: "GPT-4o-mini, GPT-4o, Claude 3.5, Gemini, etc" },
+        { id: "ai-models", label: "Modelos", description: "GPT-4o-mini, GPT-5, GPT-5 Mini, Claude (Escala)" },
         { id: "ai-prompt", label: "System Prompt", description: "Prompt personalizado do agente" },
         { id: "ai-tools", label: "Tools", description: "search_leads, move_lead, send_message, schedule_message" },
         { id: "ai-trigger", label: "Trigger Config", description: "Configuração de quando o agente é acionado" },

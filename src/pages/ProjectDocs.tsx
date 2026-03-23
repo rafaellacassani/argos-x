@@ -404,7 +404,7 @@ export default function ProjectDocs() {
 
             <h3 className="text-lg font-semibold mt-6 mb-2">Configurações do Agente</h3>
             <ul className="list-disc list-inside ml-4 space-y-1">
-              <li><strong>Modelo de IA</strong> — Gemini 3 Flash, Gemini 2.5, GPT-5, GPT-5 Mini, etc.</li>
+              <li><strong>Modelo de IA</strong> — GPT-4o Mini (padrão), GPT-5, GPT-5 Mini, Claude Haiku/Sonnet (Escala)</li>
               <li><strong>Prompt de Sistema</strong> — Instrução principal que define personalidade e comportamento</li>
               <li><strong>Temperatura</strong> — Controle de criatividade (0.0 = preciso, 1.0 = criativo)</li>
               <li><strong>Max Tokens</strong> — Limite de tamanho de resposta</li>
