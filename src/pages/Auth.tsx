@@ -137,7 +137,7 @@ export default function Auth() {
 
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {mode === "login" ? "Entrar" : mode === "signup" ? "Cadastrar" : "Enviar link de recuperação"}
+              {mode === "login" ? "Entrar" : "Enviar link de recuperação"}
             </Button>
           </form>
 
