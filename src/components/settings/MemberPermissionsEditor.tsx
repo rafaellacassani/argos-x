@@ -92,6 +92,7 @@ export function MemberPermissionsEditor({
         setCanEditLeads(true);
         setCanDeleteLeads(false);
         setCanCreateInstances(false);
+        setCanExportData(false);
       }
 
       setLoading(false);
