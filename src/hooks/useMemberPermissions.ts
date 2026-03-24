@@ -43,6 +43,7 @@ const DEFAULT_PERMISSIONS: Omit<MemberPermissions, "id" | "workspace_id" | "user
   can_edit_leads: true,
   can_delete_leads: false,
   can_create_instances: false,
+  can_export_data: false,
 };
 
 export function useMemberPermissions() {
