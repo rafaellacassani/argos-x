@@ -93,6 +93,9 @@ export function QualificationTab({ formData, updateField }: Props) {
           <p className="text-xs text-muted-foreground">Antes de responder livremente, a agente coleta dados importantes.</p>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground -mt-3">
+        Quando ativado, a IA faz perguntas específicas no início de cada conversa antes de responder livremente. Configure os campos abaixo antes de ativar.
+      </p>
 
       {enabled && (
         <div className="space-y-4">
