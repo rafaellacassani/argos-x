@@ -53,7 +53,7 @@ export function MemberPermissionsEditor({
   const [canEditLeads, setCanEditLeads] = useState(true);
   const [canDeleteLeads, setCanDeleteLeads] = useState(false);
   const [canCreateInstances, setCanCreateInstances] = useState(false);
-
+  const [canExportData, setCanExportData] = useState(false);
   // Load data
   useEffect(() => {
     if (!userId || !workspaceId) return;
