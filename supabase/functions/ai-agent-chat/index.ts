@@ -1128,11 +1128,21 @@ serve(async (req) => {
         });
       }
 
-      const summaryData = {
+      const summaryData: Record<string, any> = {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
         consecutive_fallbacks: newConsecutiveFallbacks,
       };
+
+      // --- TRAINER MODE: wrap response in proposal ---
+      let finalResponse = responseContent;
+      let finalStatus = "success";
+      if (isTrainer) {
+        summaryData.pending_trainer_proposal = responseContent;
+        finalResponse = `🎓 *Modo Treinamento*\n\nVocê enviou:\n_"${messageText}"_\n\n💡 *Resposta sugerida pela IA:*\n\n${responseContent}\n\n---\nResponda *✅* para aprovar\nOu envie sua versão corrigida`;
+        finalStatus = "trainer_proposal";
+        console.log(`[ai-agent-chat] 🎓 Trainer proposal generated (${responseContent.length} chars)`);
+      }
 
       // Update memory with messages and release lock
       await supabase.from("agent_memories").update({
@@ -1145,15 +1155,15 @@ serve(async (req) => {
       }).eq("id", memory.id);
       lockAcquired = false; // Mark as released
 
-      let responseChunks = [responseContent];
-      if (agent.message_split_enabled && responseContent.length > (agent.message_split_length || 400)) {
-        responseChunks = splitMessage(responseContent, agent.message_split_length || 400);
+      let responseChunks = [finalResponse];
+      if (!isTrainer && agent.message_split_enabled && finalResponse.length > (agent.message_split_length || 400)) {
+        responseChunks = splitMessage(finalResponse, agent.message_split_length || 400);
       }
 
       // ============ TYPING INDICATOR + HUMANIZED DELAY ============
       if (_internal_webhook && phone_number && reqInstanceName && evolutionApiKey && evolutionApiUrl) {
         try {
-          const words = responseContent.split(' ').length;
+          const words = finalResponse.split(' ').length;
           const typingDelay = Math.min(Math.max(words * 100, 1000), 4000);
 
           // Send "composing" presence
@@ -1173,11 +1183,11 @@ serve(async (req) => {
       const latencyMs = Date.now() - startTime;
       const tokensUsed = 0;
 
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: finalResponse, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: finalStatus, workspace_id: agent.workspace_id });
 
-      console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
+      console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${finalResponse.length} chars, ${responseChunks.length} chunks, trainer=${isTrainer})`);
 
-      return new Response(JSON.stringify({ response: responseContent, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ response: finalResponse, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     } finally {
       // ============ ALWAYS RELEASE LOCK ============
