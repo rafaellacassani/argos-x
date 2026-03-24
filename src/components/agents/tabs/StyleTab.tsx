@@ -142,7 +142,7 @@ export function StyleTab({ agentId, formData, updateField }: Props) {
       <div>
         <h3 className="font-display font-semibold text-lg text-foreground mb-1">Seu Estilo de Atendimento</h3>
         <p className="text-sm text-muted-foreground">
-          Importe prints de suas conversas para que a IA aprenda como você fala com seus clientes.
+          Envie até 6 prints de conversas reais suas com clientes pelo WhatsApp. Quanto mais exemplos você enviar, mais a IA vai aprender a falar do seu jeito — com o seu tom, suas expressões e a sua forma de atender.
         </p>
       </div>
 
@@ -213,7 +213,7 @@ export function StyleTab({ agentId, formData, updateField }: Props) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-2">
-              Nenhum print enviado ainda. Esta funcionalidade é opcional.
+              Nenhum print enviado ainda. Esta etapa é opcional, mas faz grande diferença na naturalidade das respostas da IA.
             </p>
           )}
 
