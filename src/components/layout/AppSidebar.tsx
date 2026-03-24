@@ -256,7 +256,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
       </div>
       {workspaceBlock(!collapsed)}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
-        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} />
+        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} canAccessPage={canAccessPage} />
       </nav>
       <div className="p-3 border-t border-sidebar-border">
         <button
