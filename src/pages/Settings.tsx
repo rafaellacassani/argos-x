@@ -688,6 +688,10 @@ export default function Settings() {
                               onClick={() => {
                                 if (isLocked) return;
                                 if (integration.id === "whatsapp-business") {
+                                  if (!canCreateInstances) {
+                                    toast({ title: "Você não tem permissão para criar conexões WhatsApp." });
+                                    return;
+                                  }
                                   if (!planLimits.canAddWhatsapp(instances.length)) {
                                     toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
                                     navigate("/planos");
