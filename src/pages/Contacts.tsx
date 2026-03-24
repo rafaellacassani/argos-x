@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
@@ -77,6 +78,7 @@ const formatContactPhone = (phone: string): string => {
 
 export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
+  const { canExportData } = useMemberPermissions();
   const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
   const { tags: allTags, addTagToLead, removeTagFromLead, createTag, fetchTags } = useLeads();
   const { workspaceId } = useWorkspace();
@@ -332,10 +334,12 @@ export default function Contacts() {
             <Upload className="w-4 h-4" />
             Importar
           </Button>
-          <Button variant="outline" className="gap-2">
-            <Download className="w-4 h-4" />
-            Exportar
-          </Button>
+          {canExportData && (
+            <Button variant="outline" className="gap-2">
+              <Download className="w-4 h-4" />
+              Exportar
+            </Button>
+          )}
           <Button className="gap-2">
             <Plus className="w-4 h-4" />
             Novo Contato

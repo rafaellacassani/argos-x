@@ -53,7 +53,7 @@ export function MemberPermissionsEditor({
   const [canEditLeads, setCanEditLeads] = useState(true);
   const [canDeleteLeads, setCanDeleteLeads] = useState(false);
   const [canCreateInstances, setCanCreateInstances] = useState(false);
-
+  const [canExportData, setCanExportData] = useState(false);
   // Load data
   useEffect(() => {
     if (!userId || !workspaceId) return;
@@ -81,6 +81,7 @@ export function MemberPermissionsEditor({
         setCanEditLeads(perms.can_edit_leads);
         setCanDeleteLeads(perms.can_delete_leads);
         setCanCreateInstances(perms.can_create_instances);
+        setCanExportData(perms.can_export_data);
       } else {
         // Defaults
         setAllPages(true);
@@ -91,6 +92,7 @@ export function MemberPermissionsEditor({
         setCanEditLeads(true);
         setCanDeleteLeads(false);
         setCanCreateInstances(false);
+        setCanExportData(false);
       }
 
       setLoading(false);
@@ -109,6 +111,7 @@ export function MemberPermissionsEditor({
       can_edit_leads: canEditLeads,
       can_delete_leads: canDeleteLeads,
       can_create_instances: canCreateInstances,
+      can_export_data: canExportData,
       ...overrides,
     });
     setSaving(false);
@@ -302,6 +305,20 @@ export function MemberPermissionsEditor({
             onCheckedChange={(v) => {
               setCanCreateInstances(v);
               save({ can_create_instances: v });
+            }}
+          />
+        </div>
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">Exportar dados</Label>
+            <p className="text-xs text-muted-foreground">Pode exportar CSV, contatos e relatórios</p>
+          </div>
+          <Switch
+            checked={canExportData}
+            onCheckedChange={(v) => {
+              setCanExportData(v);
+              save({ can_export_data: v });
             }}
           />
         </div>

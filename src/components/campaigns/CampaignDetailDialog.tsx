@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +41,7 @@ const recipientStatusConfig: Record<string, { label: string; color: string }> = 
 
 export default function CampaignDetailDialog({ open, onOpenChange, campaign }: Props) {
   const { fetchRecipients, retryCampaign, updateCampaign } = useCampaigns();
+  const { canExportData } = useMemberPermissions();
   const { listInstances } = useEvolutionAPI();
   const { workspaceId } = useWorkspace();
   const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
@@ -682,9 +684,11 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                   <SelectItem value="skipped">Ignorados</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={exportCSV}>
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
+              {canExportData && (
+                <Button variant="outline" size="sm" onClick={exportCSV}>
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+              )}
             </div>
 
             {loading ? (

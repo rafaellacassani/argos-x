@@ -13,6 +13,7 @@ export interface MemberPermissions {
   can_edit_leads: boolean;
   can_delete_leads: boolean;
   can_create_instances: boolean;
+  can_export_data: boolean;
 }
 
 const ALL_PAGES = [
@@ -42,6 +43,7 @@ const DEFAULT_PERMISSIONS: Omit<MemberPermissions, "id" | "workspace_id" | "user
   can_edit_leads: true,
   can_delete_leads: false,
   can_create_instances: false,
+  can_export_data: false,
 };
 
 export function useMemberPermissions() {
@@ -109,6 +111,7 @@ export function useMemberPermissions() {
   const canEditLeads = isAdmin || !permissions || permissions.can_edit_leads;
   const canDeleteLeads = isAdmin || (permissions?.can_delete_leads ?? false);
   const canCreateInstances = isAdmin || (permissions?.can_create_instances ?? false);
+  const canExportData = isAdmin || (permissions?.can_export_data ?? false);
 
   // Admin functions to manage other users' permissions
   const fetchUserPermissions = useCallback(
@@ -163,6 +166,7 @@ export function useMemberPermissions() {
     canEditLeads,
     canDeleteLeads,
     canCreateInstances,
+    canExportData,
     fetchUserPermissions,
     saveUserPermissions,
     ALL_PAGES,

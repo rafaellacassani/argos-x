@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Helmet } from "react-helmet-async";
 import { useClients, Client } from "@/hooks/useClients";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ const stageColors: Record<string, string> = {
 
 export default function ClientsPage() {
   const { clients, isLoading } = useClients();
+  const { canExportData } = useMemberPermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
@@ -102,9 +104,11 @@ export default function ClientsPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportCSV}>
-              <Download className="w-4 h-4 mr-2" /> Exportar CSV
-            </Button>
+            {canExportData && (
+              <Button variant="outline" onClick={exportCSV}>
+                <Download className="w-4 h-4 mr-2" /> Exportar CSV
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <Upload className="w-4 h-4 mr-2" /> Importar Excel
             </Button>

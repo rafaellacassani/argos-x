@@ -1,0 +1,1 @@
+ALTER TABLE public.member_permissions ADD COLUMN can_export_data boolean NOT NULL DEFAULT false;
