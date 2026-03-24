@@ -32,6 +32,7 @@ const stageColors: Record<string, string> = {
 
 export default function ClientsPage() {
   const { clients, isLoading } = useClients();
+  const { canExportData } = useMemberPermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
