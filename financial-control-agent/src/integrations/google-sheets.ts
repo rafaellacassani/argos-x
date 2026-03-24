@@ -78,10 +78,18 @@ export async function listSheets(spreadsheetId: string): Promise<string[]> {
   return (res.data.sheets ?? []).map((s) => s.properties?.title ?? "");
 }
 
+export function resolveSheetId(alias: string): string {
+  if (alias === "personal" || alias === "familia" || alias === "família")
+    return process.env.GOOGLE_SHEET_ID ?? process.env.GOOGLE_SHEET_ID_PERSONAL!;
+  if (alias === "clients" || alias === "empresa")
+    return process.env.GOOGLE_SHEET_ID ?? process.env.GOOGLE_SHEET_ID_CLIENTS!;
+  return alias;
+}
+
 export async function getUpcomingPersonalPayments(daysAhead = 7): Promise<SheetRow[]> {
-  const rows = await readSheet(
-    process.env.GOOGLE_SHEET_ID_PERSONAL!,
-    "Pagamentos!A:Z"
+  const sheetId = process.env.GOOGLE_SHEET_ID ?? process.env.GOOGLE_SHEET_ID_PERSONAL!;
+  const rows = await readSheet(sheetId, "Família!A:Z").catch(() =>
+    readSheet(sheetId, "Pagamentos!A:Z")
   );
 
   const today = new Date();

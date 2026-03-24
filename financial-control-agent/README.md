@@ -43,15 +43,27 @@ Edite `.env` com suas credenciais (veja detalhes abaixo).
 2. Crie um projeto ou selecione um existente
 3. Ative a **Google Sheets API** e a **Google Drive API**
 4. Crie uma **Service Account** e baixe a chave JSON
-5. Compartilhe suas planilhas com o e-mail da Service Account
-6. Preencha `GOOGLE_SERVICE_ACCOUNT_EMAIL` e `GOOGLE_PRIVATE_KEY` no `.env`
+5. Compartilhe a planilha com o e-mail da Service Account (botão "Compartilhar")
+6. Preencha `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` e `GOOGLE_SHEET_ID` no `.env`
 
-**Formato esperado da aba de pagamentos pessoais:**
+**Estrutura de planilha (uma planilha, duas abas):**
 
-| Descrição | Valor | Vencimento | Status |
-|---|---|---|---|
-| Internet | 150,00 | 15/01/2025 | Pendente |
-| Aluguel | 2000,00 | 05/01/2025 | Pago |
+**Aba: Família** — despesas e contas pessoais/familiares
+
+| Descrição | Valor | Vencimento | Status | Categoria |
+|---|---|---|---|---|
+| Internet | 150,00 | 15/01/2025 | Pendente | Casa |
+| Aluguel | 2000,00 | 05/01/2025 | Pago | Casa |
+| Mercado | 800,00 | 20/01/2025 | Pendente | Alimentação |
+
+**Aba: Empresa** — despesas operacionais da empresa
+
+| Descrição | Valor | Vencimento | Status | Categoria | Fornecedor |
+|---|---|---|---|---|---|
+| Servidor AWS | 350,00 | 10/01/2025 | Pago | Infra | Amazon |
+| Contador | 500,00 | 05/01/2025 | Pendente | Administrativo | Escritório XYZ |
+
+> **Atenção:** clientes ECX (cobranças) ficam no **Conta Azul**. Clientes MKt Boost e Argos X ficam no **Stripe**. A planilha é para controle interno de despesas e receitas, não substitui esses sistemas.
 
 ### 4. Configure o Stripe
 

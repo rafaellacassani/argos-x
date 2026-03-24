@@ -5,6 +5,7 @@ import {
   updateCell,
   listSheets,
   getUpcomingPersonalPayments,
+  resolveSheetId,
 } from "../../integrations/google-sheets.js";
 
 export const sheetsTools: Anthropic.Tool[] = [
@@ -32,7 +33,7 @@ export const sheetsTools: Anthropic.Tool[] = [
         spreadsheet_id: {
           type: "string",
           description:
-            "ID da planilha. Use 'personal' para a planilha pessoal ou 'clients' para a de clientes, ou um ID completo.",
+            "ID da planilha. Use 'familia' para a seção familiar/pessoal, 'empresa' para a seção empresarial, ou um ID completo do Google Sheets.",
         },
         range: {
           type: "string",
@@ -60,6 +61,19 @@ export const sheetsTools: Anthropic.Tool[] = [
     },
   },
   {
+    name: "sheets_update_cell",
+    description: "Atualiza uma célula específica na planilha (ex: marcar pagamento como Pago).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        spreadsheet_id: { type: "string" },
+        range: { type: "string", description: "Célula exata, ex: Família!E5" },
+        value: { type: "string", description: "Novo valor, ex: Pago" },
+      },
+      required: ["spreadsheet_id", "range", "value"],
+    },
+  },
+  {
     name: "sheets_list_sheets",
     description: "Lista as abas disponíveis em uma planilha.",
     input_schema: {
@@ -73,9 +87,7 @@ export const sheetsTools: Anthropic.Tool[] = [
 ];
 
 function resolveSpreadsheetId(id: string): string {
-  if (id === "personal") return process.env.GOOGLE_SHEET_ID_PERSONAL!;
-  if (id === "clients") return process.env.GOOGLE_SHEET_ID_CLIENTS!;
-  return id;
+  return resolveSheetId(id);
 }
 
 export async function handleSheetsTool(
@@ -106,6 +118,12 @@ export async function handleSheetsTool(
       const id = resolveSpreadsheetId(input.spreadsheet_id as string);
       await appendRow(id, input.range as string, input.values as string[]);
       return "Linha adicionada com sucesso.";
+    }
+
+    case "sheets_update_cell": {
+      const id = resolveSpreadsheetId(input.spreadsheet_id as string);
+      await updateCell(id, input.range as string, input.value as string);
+      return `Célula ${input.range} atualizada para "${input.value}".`;
     }
 
     case "sheets_list_sheets": {
