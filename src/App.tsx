@@ -116,25 +116,25 @@ const App = () => (
                         <Suspense fallback={<PageLoader />}>
                           <Routes>
                             <Route path="/" element={<Index />} />
-                            <Route path="/dashboard" element={<Dashboard />} />
-                            <Route path="/leads" element={<Leads />} />
-                            <Route path="/chats" element={<Chats />} />
-                            <Route path="/ai-agents" element={<AIAgents />} />
-                            <Route path="/salesbots" element={<PermissionGuard permission="canManageSalesBots"><SalesBots /></PermissionGuard>} />
-                            <Route path="/salesbots/builder" element={<PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard>} />
-                            <Route path="/salesbots/builder/:id" element={<PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard>} />
-                            <Route path="/calendar" element={<CalendarPage />} />
-                            <Route path="/contacts" element={<Contacts />} />
-                            <Route path="/email" element={<Email />} />
-                            <Route path="/statistics" element={<Statistics />} />
-                            <Route path="/campaigns" element={<PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard>} />
-                            <Route path="/templates" element={<PermissionGuard permission="canManageCampaigns"><WhatsAppTemplates /></PermissionGuard>} />
-                            <Route path="/settings" element={<Settings />} />
-                            <Route path="/configuracoes" element={<Configuracoes />} />
-                            <Route path="/planos" element={<Planos />} />
+                            <Route path="/dashboard" element={<PageAccessGuard path="/dashboard"><Dashboard /></PageAccessGuard>} />
+                            <Route path="/leads" element={<PageAccessGuard path="/leads"><Leads /></PageAccessGuard>} />
+                            <Route path="/chats" element={<PageAccessGuard path="/chats"><Chats /></PageAccessGuard>} />
+                            <Route path="/ai-agents" element={<PageAccessGuard path="/ai-agents"><AIAgents /></PageAccessGuard>} />
+                            <Route path="/salesbots" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBots /></PermissionGuard></PageAccessGuard>} />
+                            <Route path="/salesbots/builder" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard></PageAccessGuard>} />
+                            <Route path="/salesbots/builder/:id" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard></PageAccessGuard>} />
+                            <Route path="/calendar" element={<PageAccessGuard path="/calendar"><CalendarPage /></PageAccessGuard>} />
+                            <Route path="/contacts" element={<PageAccessGuard path="/contacts"><Contacts /></PageAccessGuard>} />
+                            <Route path="/email" element={<PageAccessGuard path="/email"><Email /></PageAccessGuard>} />
+                            <Route path="/statistics" element={<PageAccessGuard path="/statistics"><Statistics /></PageAccessGuard>} />
+                            <Route path="/campaigns" element={<PageAccessGuard path="/campaigns"><PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard></PageAccessGuard>} />
+                            <Route path="/templates" element={<PageAccessGuard path="/campaigns"><PermissionGuard permission="canManageCampaigns"><WhatsAppTemplates /></PermissionGuard></PageAccessGuard>} />
+                            <Route path="/settings" element={<PageAccessGuard path="/settings"><Settings /></PageAccessGuard>} />
+                            <Route path="/configuracoes" element={<PageAccessGuard path="/configuracoes"><Configuracoes /></PageAccessGuard>} />
+                            <Route path="/planos" element={<PageAccessGuard path="/planos"><Planos /></PageAccessGuard>} />
                             <Route path="/admin/clients" element={<AdminClients />} />
                             <Route path="/perfil" element={<ProfileSettings />} />
-                            <Route path="/treinamento" element={<Treinamento />} />
+                            <Route path="/treinamento" element={<PageAccessGuard path="/treinamento"><Treinamento /></PageAccessGuard>} />
                             <Route path="/agent-training" element={<AgentTrainingDoc />} />
                             <Route path="/tour-guiado" element={<TourGuiado />} />
                             <Route path="/suporte" element={<SupportAdmin />} />
