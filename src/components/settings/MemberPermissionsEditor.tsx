@@ -81,6 +81,7 @@ export function MemberPermissionsEditor({
         setCanEditLeads(perms.can_edit_leads);
         setCanDeleteLeads(perms.can_delete_leads);
         setCanCreateInstances(perms.can_create_instances);
+        setCanExportData(perms.can_export_data);
       } else {
         // Defaults
         setAllPages(true);
