@@ -466,6 +466,7 @@ serve(async (req) => {
     }
 
     // ============ MAIN PROCESSING (wrapped in try/finally to always release lock) ============
+    let tokensFromApi = 0;
     try {
       // --- respond_to check ---
       if (agent.respond_to === "new_leads" && lead_id) {
