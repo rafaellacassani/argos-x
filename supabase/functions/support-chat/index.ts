@@ -147,14 +147,20 @@ serve(async (req) => {
     }
 
     // Stream AI response
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const useOpenAIDirect = !!OPENAI_API_KEY;
+    const aiUrl = useOpenAIDirect 
+      ? "https://api.openai.com/v1/chat/completions"
+      : "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const aiModel = useOpenAIDirect ? "gpt-4o-mini" : "openai/gpt-5-nano";
+
+    const response = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${useOpenAIDirect ? OPENAI_API_KEY : LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5-nano",
+        model: aiModel,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           ...messages,
