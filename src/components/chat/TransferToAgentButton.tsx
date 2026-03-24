@@ -20,7 +20,7 @@ interface TransferToAgentButtonProps {
   chatPhone?: string;
 }
 
-export function TransferToAgentButton({ leadId, currentAgentId }: TransferToAgentButtonProps) {
+export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: TransferToAgentButtonProps) {
   const { workspace } = useWorkspace();
   const [transferring, setTransferring] = useState(false);
 
