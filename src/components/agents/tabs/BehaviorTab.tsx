@@ -123,6 +123,9 @@ export function BehaviorTab({ formData, updateField }: Props) {
             <Input value={formData.resume_keyword || ""} onChange={(e) => updateField("resume_keyword", e.target.value)} placeholder="Atendimento finalizado" />
           </div>
         </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          Para pausar a IA e assumir o atendimento manualmente, digite o código de pausa diretamente na conversa do WhatsApp. Para a IA voltar a responder, digite o código de retorno.
+        </p>
       </div>
     </div>
   );
