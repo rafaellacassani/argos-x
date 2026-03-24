@@ -33,6 +33,7 @@ import { LeadStats } from '@/components/leads/LeadStats';
 import { LeadFilters, LeadFiltersData, DEFAULT_FILTERS, countActiveFilters, getDateRange } from '@/components/leads/LeadFilters';
 import { LeadFilterChips } from '@/components/leads/LeadFilterChips';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useMemberPermissions } from '@/hooks/useMemberPermissions';
 import { useTeam } from '@/hooks/useTeam';
 
 const SESSION_KEY = 'leads-filters';
