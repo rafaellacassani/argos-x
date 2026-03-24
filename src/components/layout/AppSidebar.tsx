@@ -228,7 +228,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
           </div>
           {workspaceBlock(true)}
           <nav className="flex-1 py-4 px-3 overflow-y-auto">
-            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} onNavigate={() => onMobileOpenChange?.(false)} />
+            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} onNavigate={() => onMobileOpenChange?.(false)} />
           </nav>
         </SheetContent>
       </Sheet>
