@@ -55,7 +55,8 @@ function saveSessionFilters(filters: LeadFiltersData) {
 
 export default function Leads() {
   const navigate = useNavigate();
-  const { role, userProfileId, isSeller, canDeleteLeads, isAdminOrManager } = useUserRole();
+  const { role, userProfileId, isSeller, isAdminOrManager } = useUserRole();
+  const { canCreateLeads, canEditLeads, canDeleteLeads } = useMemberPermissions();
   const {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
