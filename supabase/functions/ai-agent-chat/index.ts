@@ -51,6 +51,25 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Trainer phone normalization ---
+function normalizePhone(phone: string): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length >= 12) {
+    return digits.substring(2);
+  }
+  return digits;
+}
+
+function isTrainerPhone(senderPhone: string, trainerPhone: string): boolean {
+  if (!senderPhone || !trainerPhone) return false;
+  const normalizedSender = normalizePhone(senderPhone);
+  const normalizedTrainer = normalizePhone(trainerPhone);
+  if (!normalizedSender || !normalizedTrainer) return false;
+  return normalizedSender === normalizedTrainer ||
+    normalizedSender.endsWith(normalizedTrainer) ||
+    normalizedTrainer.endsWith(normalizedSender);
+}
+
 function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any, memoryMessages?: ChatMessage[]): string {
   const text = (userMessage || "").trim().toLowerCase();
   const agentName = agent?.name || "IA";
@@ -520,6 +539,48 @@ serve(async (req) => {
         await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
         console.log("[ai-agent-chat] ⏸️ Paused by code");
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // --- TRAINER MODE DETECTION ---
+      const isTrainer = !!(phone_number && agent.trainer_phone && isTrainerPhone(phone_number, agent.trainer_phone));
+      if (isTrainer) {
+        console.log(`[ai-agent-chat] 🎓 Trainer detected: ${phone_number} matches trainer_phone ${agent.trainer_phone}`);
+        
+        // Check if trainer is approving a previous proposal
+        const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+        const pendingProposal = existingSummary.pending_trainer_proposal;
+        
+        if (pendingProposal && (messageText.trim() === "✅" || messageText.trim().toLowerCase() === "ok" || messageText.trim() === "👍")) {
+          console.log("[ai-agent-chat] ✅ Trainer approved proposal");
+          // Clear pending proposal
+          existingSummary.pending_trainer_proposal = null;
+          await supabase.from("agent_memories").update({
+            summary: JSON.stringify(existingSummary),
+            is_processing: false,
+            processing_started_at: null,
+          }).eq("id", memory.id);
+          lockAcquired = false;
+          
+          const approvalMsg = "✅ Resposta aprovada! Essa é a resposta que a IA daria ao lead:\n\n" + pendingProposal;
+          await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText, output_message: approvalMsg, status: "trainer_approved", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+          return new Response(JSON.stringify({ response: approvalMsg, chunks: [approvalMsg] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        
+        if (pendingProposal && messageText.trim().length > 3 && messageText.trim() !== "✅") {
+          // Trainer sent a correction/override
+          console.log("[ai-agent-chat] ✏️ Trainer sent correction");
+          existingSummary.pending_trainer_proposal = null;
+          await supabase.from("agent_memories").update({
+            summary: JSON.stringify(existingSummary),
+            is_processing: false,
+            processing_started_at: null,
+          }).eq("id", memory.id);
+          lockAcquired = false;
+          
+          const correctionMsg = "✏️ Correção registrada! Sua versão:\n\n" + messageText + "\n\n(A IA vai aprender com esse feedback)";
+          await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText, output_message: correctionMsg, status: "trainer_corrected", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+          return new Response(JSON.stringify({ response: correctionMsg, chunks: [correctionMsg] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
 
       // --- REJECTION DETECTION (works even without AI credits) ---
@@ -1067,11 +1128,21 @@ serve(async (req) => {
         });
       }
 
-      const summaryData = {
+      const summaryData: Record<string, any> = {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
         consecutive_fallbacks: newConsecutiveFallbacks,
       };
+
+      // --- TRAINER MODE: wrap response in proposal ---
+      let finalResponse = responseContent;
+      let finalStatus = "success";
+      if (isTrainer) {
+        summaryData.pending_trainer_proposal = responseContent;
+        finalResponse = `🎓 *Modo Treinamento*\n\nVocê enviou:\n_"${messageText}"_\n\n💡 *Resposta sugerida pela IA:*\n\n${responseContent}\n\n---\nResponda *✅* para aprovar\nOu envie sua versão corrigida`;
+        finalStatus = "trainer_proposal";
+        console.log(`[ai-agent-chat] 🎓 Trainer proposal generated (${responseContent.length} chars)`);
+      }
 
       // Update memory with messages and release lock
       await supabase.from("agent_memories").update({
@@ -1084,15 +1155,15 @@ serve(async (req) => {
       }).eq("id", memory.id);
       lockAcquired = false; // Mark as released
 
-      let responseChunks = [responseContent];
-      if (agent.message_split_enabled && responseContent.length > (agent.message_split_length || 400)) {
-        responseChunks = splitMessage(responseContent, agent.message_split_length || 400);
+      let responseChunks = [finalResponse];
+      if (!isTrainer && agent.message_split_enabled && finalResponse.length > (agent.message_split_length || 400)) {
+        responseChunks = splitMessage(finalResponse, agent.message_split_length || 400);
       }
 
       // ============ TYPING INDICATOR + HUMANIZED DELAY ============
       if (_internal_webhook && phone_number && reqInstanceName && evolutionApiKey && evolutionApiUrl) {
         try {
-          const words = responseContent.split(' ').length;
+          const words = finalResponse.split(' ').length;
           const typingDelay = Math.min(Math.max(words * 100, 1000), 4000);
 
           // Send "composing" presence
@@ -1112,11 +1183,11 @@ serve(async (req) => {
       const latencyMs = Date.now() - startTime;
       const tokensUsed = 0;
 
-      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: responseContent, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: "success", workspace_id: agent.workspace_id });
+      await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: finalResponse, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: finalStatus, workspace_id: agent.workspace_id });
 
-      console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${responseContent.length} chars, ${responseChunks.length} chunks)`);
+      console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${finalResponse.length} chars, ${responseChunks.length} chunks, trainer=${isTrainer})`);
 
-      return new Response(JSON.stringify({ response: responseContent, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ response: finalResponse, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     } finally {
       // ============ ALWAYS RELEASE LOCK ============
