@@ -334,10 +334,12 @@ export default function Contacts() {
             <Upload className="w-4 h-4" />
             Importar
           </Button>
-          <Button variant="outline" className="gap-2">
-            <Download className="w-4 h-4" />
-            Exportar
-          </Button>
+          {canExportData && (
+            <Button variant="outline" className="gap-2">
+              <Download className="w-4 h-4" />
+              Exportar
+            </Button>
+          )}
           <Button className="gap-2">
             <Plus className="w-4 h-4" />
             Novo Contato
