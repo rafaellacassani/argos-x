@@ -2063,6 +2063,56 @@ export type Database = {
           },
         ]
       }
+      member_permissions: {
+        Row: {
+          allowed_instance_ids: string[] | null
+          allowed_pages: string[] | null
+          can_create_instances: boolean
+          can_create_leads: boolean
+          can_delete_leads: boolean
+          can_edit_leads: boolean
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          allowed_instance_ids?: string[] | null
+          allowed_pages?: string[] | null
+          can_create_instances?: boolean
+          can_create_leads?: boolean
+          can_delete_leads?: boolean
+          can_edit_leads?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          allowed_instance_ids?: string[] | null
+          allowed_pages?: string[] | null
+          can_create_instances?: boolean
+          can_create_leads?: boolean
+          can_delete_leads?: boolean
+          can_edit_leads?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_permissions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_accounts: {
         Row: {
           created_at: string
