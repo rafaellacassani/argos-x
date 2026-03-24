@@ -213,7 +213,7 @@ export function StyleTab({ agentId, formData, updateField }: Props) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground text-center py-2">
-              Nenhum print enviado ainda. Esta funcionalidade é opcional.
+              Nenhum print enviado ainda. Esta etapa é opcional, mas faz grande diferença na naturalidade das respostas da IA.
             </p>
           )}
 
