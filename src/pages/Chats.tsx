@@ -2961,6 +2961,10 @@ export default function Chats() {
                   <Button variant="ghost" size="icon">
                     <Star className="w-5 h-5" />
                   </Button>
+                  {(() => {
+                    const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                    return chatLead ? <TransferToAgentButton leadId={chatLead.id} /> : null;
+                  })()}
                   <Button variant="ghost" size="icon">
                     <MoreVertical className="w-5 h-5" />
                   </Button>
