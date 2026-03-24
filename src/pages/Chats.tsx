@@ -32,6 +32,7 @@ import { ChatTagManager } from "@/components/chat/ChatTagManager";
 import { ChatFilters, countActiveFilters, type ChatFiltersFormData } from "@/components/chat/ChatFilters";
 import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover";
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
+import { TransferToAgentButton } from "@/components/chat/TransferToAgentButton";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useIsMobile } from "@/hooks/use-mobile";
