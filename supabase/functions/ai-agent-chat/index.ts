@@ -1197,7 +1197,7 @@ serve(async (req) => {
       }
 
       const latencyMs = Date.now() - startTime;
-      const tokensUsed = 0;
+      const tokensUsed = tokensFromApi || 0;
 
       await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: finalResponse, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: finalStatus, workspace_id: agent.workspace_id });
 
