@@ -62,8 +62,8 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
   const availableAgents = (agents || []).filter(a => a.id !== sourceAgentId);
 
   const handleTransfer = async (targetAgentId: string, targetAgentName: string) => {
-    if (!leadId) {
-      toast({ title: "Lead não encontrado", description: "Não foi possível identificar o lead deste chat.", variant: "destructive" });
+    if (!leadId && !chatPhone) {
+      toast({ title: "Lead não encontrado", description: "Não foi possível identificar o contato deste chat.", variant: "destructive" });
       return;
     }
 
