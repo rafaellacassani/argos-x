@@ -58,7 +58,8 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
   });
 
   const sourceAgentId = currentAgentId || currentAgent?.agent_id;
-  const availableAgents = (agents || []).filter(a => a.id !== sourceAgentId);
+  const activeAgents = (agents || []).filter(a => a.is_active);
+  const availableAgents = activeAgents.filter(a => a.id !== sourceAgentId);
 
   const handleTransfer = async (targetAgentId: string, targetAgentName: string) => {
     if (!leadId && !chatPhone) {
