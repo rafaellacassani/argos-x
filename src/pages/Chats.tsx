@@ -3082,7 +3082,7 @@ export default function Chats() {
       </div>
 
       {/* Lead Side Panel */}
-      {selectedChat && (() => {
+      {!isMobile && selectedChat && (() => {
         const currentLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
         return (
           <LeadSidePanel
