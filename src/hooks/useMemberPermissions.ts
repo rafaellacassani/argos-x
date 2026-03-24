@@ -13,6 +13,7 @@ export interface MemberPermissions {
   can_edit_leads: boolean;
   can_delete_leads: boolean;
   can_create_instances: boolean;
+  can_export_data: boolean;
 }
 
 const ALL_PAGES = [
