@@ -741,6 +741,7 @@ serve(async (req) => {
           }
         }
 
+        let tokensFromApi = 0;
         const rawModelName = agent.model || "openai/gpt-4o-mini";
         const deprecatedModelMap: Record<string, string> = {
           "anthropic/claude-3-haiku-20240307": "anthropic/claude-haiku-4-5-20251001",
