@@ -868,13 +868,25 @@ serve(async (req) => {
             toolCalls = toolUseBlocks.map((b: any) => ({
               function: { name: b.name, arguments: JSON.stringify(b.input) }
             }));
+            // Anthropic usage: { input_tokens, output_tokens }
+            const anthropicUsage = aiData.usage;
+            if (anthropicUsage) {
+              tokensFromApi = (anthropicUsage.input_tokens || 0) + (anthropicUsage.output_tokens || 0);
+            }
           } else {
             // OpenAI / Lovable Gateway format
             const aiChoice = aiData.choices?.[0];
             if (!aiChoice) throw new Error("No response from AI");
             responseContent = aiChoice.message?.content || "";
             toolCalls = aiChoice.message?.tool_calls || [];
+            // OpenAI usage: { prompt_tokens, completion_tokens, total_tokens }
+            if (aiData.usage?.total_tokens) {
+              tokensFromApi = aiData.usage.total_tokens;
+            } else if (aiData.usage) {
+              tokensFromApi = (aiData.usage.prompt_tokens || 0) + (aiData.usage.completion_tokens || 0);
+            }
           }
+          console.log(`[ai-agent-chat] 📊 Tokens used: ${tokensFromApi}`);
         }
 
         if (!responseContent?.trim()) {
