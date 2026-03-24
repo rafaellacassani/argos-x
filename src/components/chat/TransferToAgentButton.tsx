@@ -24,8 +24,8 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
   const { workspace } = useWorkspace();
   const [transferring, setTransferring] = useState(false);
 
-  // Fetch active AI agents for this workspace
-  const { data: agents } = useQuery({
+  // Fetch ALL AI agents for this workspace (active or not, we show active ones)
+  const { data: agents, isLoading: loadingAgents } = useQuery({
     queryKey: ["ai-agents-transfer", workspace?.id],
     queryFn: async () => {
       if (!workspace?.id) return [];
@@ -33,7 +33,6 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
         .from("ai_agents")
         .select("id, name, instance_name, is_active, type, agent_role")
         .eq("workspace_id", workspace.id)
-        .eq("is_active", true)
         .order("name");
       if (error) throw error;
       return data || [];
