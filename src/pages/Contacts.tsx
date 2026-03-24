@@ -78,6 +78,7 @@ const formatContactPhone = (phone: string): string => {
 
 export default function Contacts() {
   const { canDeleteContacts } = useUserRole();
+  const { canExportData } = useMemberPermissions();
   const { listInstances, getConnectionState, fetchProfilesBatch } = useEvolutionAPI();
   const { tags: allTags, addTagToLead, removeTagFromLead, createTag, fetchTags } = useLeads();
   const { workspaceId } = useWorkspace();
