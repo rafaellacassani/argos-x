@@ -2900,8 +2900,8 @@ export default function Chats() {
           <>
             {/* Chat Header */}
             <div className="px-4 py-3 border-b border-border bg-card">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   {isMobile && (
                     <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setSelectedChat(null)}>
                       <ArrowLeft className="w-5 h-5" />
@@ -2929,12 +2929,20 @@ export default function Chats() {
                       <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-success rounded-full border-2 border-card" />
                     )}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="font-semibold text-foreground">{selectedChat.name}</h3>
                     <p className="text-xs text-muted-foreground">{selectedChat.phone}</p>
+                    {!isMobile && (() => {
+                      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                      return (
+                        <div className="mt-2">
+                          <TransferToAgentButton leadId={chatLead?.id} chatPhone={selectedChat.phone} />
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                   <ScheduleMessagePopover
                     channelType={
                       selectedChat.isMeta
@@ -2961,10 +2969,6 @@ export default function Chats() {
                   <Button variant="ghost" size="icon">
                     <Star className="w-5 h-5" />
                   </Button>
-                  {(() => {
-                    const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                    return <TransferToAgentButton leadId={chatLead?.id} chatPhone={selectedChat.phone} />;
-                  })()}
                   <Button variant="ghost" size="icon">
                     <MoreVertical className="w-5 h-5" />
                   </Button>
