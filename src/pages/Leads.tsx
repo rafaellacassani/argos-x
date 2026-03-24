@@ -401,9 +401,11 @@ export default function Leads() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button onClick={() => { setCreateDialogStageId(stages[0]?.id); setCreateDialogOpen(true); }}>
-              <Plus className="h-4 w-4 mr-2" />Novo Lead
-            </Button>
+            {canCreateLeads && (
+              <Button onClick={() => { setCreateDialogStageId(stages[0]?.id); setCreateDialogOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" />Novo Lead
+              </Button>
+            )}
           </div>
         </div>
 
