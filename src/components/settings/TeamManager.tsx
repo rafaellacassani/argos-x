@@ -106,6 +106,8 @@ function MemberEditor({
   onClose,
   onSave,
   isNew = false,
+  fetchUserPermissions,
+  saveUserPermissions,
 }: MemberEditorProps) {
   const [isActive, setIsActive] = useState(true);
   const [fullName, setFullName] = useState("");
