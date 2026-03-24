@@ -2071,6 +2071,7 @@ export type Database = {
           can_create_leads: boolean
           can_delete_leads: boolean
           can_edit_leads: boolean
+          can_export_data: boolean
           created_at: string
           id: string
           updated_at: string
@@ -2084,6 +2085,7 @@ export type Database = {
           can_create_leads?: boolean
           can_delete_leads?: boolean
           can_edit_leads?: boolean
+          can_export_data?: boolean
           created_at?: string
           id?: string
           updated_at?: string
@@ -2097,6 +2099,7 @@ export type Database = {
           can_create_leads?: boolean
           can_delete_leads?: boolean
           can_edit_leads?: boolean
+          can_export_data?: boolean
           created_at?: string
           id?: string
           updated_at?: string
