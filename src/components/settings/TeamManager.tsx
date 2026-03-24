@@ -655,6 +655,8 @@ export function TeamManager() {
         }}
         onSave={handleSave}
         isNew={!editingMember}
+        fetchUserPermissions={fetchUserPermissions}
+        saveUserPermissions={saveUserPermissions}
       />
 
       {/* Delete Confirmation Dialog */}
