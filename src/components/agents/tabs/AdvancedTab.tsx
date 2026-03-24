@@ -104,7 +104,7 @@ export function AdvancedTab({ formData, updateField }: Props) {
           <Label>System Prompt (manual)</Label>
           <div className="flex items-center gap-1 text-warning">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="text-xs">Editar aqui sobrescreve a geração automática da aba Personalidade</span>
+            <span className="text-xs">Atenção: se você preencher este campo, as configurações de Nome, Tom de Voz e Objetivo da aba Personalidade serão ignoradas pelo sistema. Preencha apenas se souber o que está fazendo.</span>
           </div>
         </div>
         <Textarea
