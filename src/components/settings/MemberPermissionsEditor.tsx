@@ -111,6 +111,7 @@ export function MemberPermissionsEditor({
       can_edit_leads: canEditLeads,
       can_delete_leads: canDeleteLeads,
       can_create_instances: canCreateInstances,
+      can_export_data: canExportData,
       ...overrides,
     });
     setSaving(false);
