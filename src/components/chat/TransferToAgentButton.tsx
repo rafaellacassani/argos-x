@@ -15,8 +15,9 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 
 interface TransferToAgentButtonProps {
-  leadId: string | undefined;
+  leadId?: string;
   currentAgentId?: string;
+  chatPhone?: string;
 }
 
 export function TransferToAgentButton({ leadId, currentAgentId }: TransferToAgentButtonProps) {
