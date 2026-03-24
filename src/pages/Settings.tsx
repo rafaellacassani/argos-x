@@ -815,17 +815,21 @@ export default function Settings() {
               <p className="text-muted-foreground mb-4">
                 Conecte seu primeiro número WhatsApp Business
               </p>
-              <Button onClick={() => {
-                if (!planLimits.canAddWhatsapp(instances.length)) {
-                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
-                  navigate("/planos");
-                  return;
-                }
-                setShowConnectionModal(true);
-              }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Criar Conexão
-              </Button>
+              {canCreateInstances ? (
+                <Button onClick={() => {
+                  if (!planLimits.canAddWhatsapp(instances.length)) {
+                    toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                    navigate("/planos");
+                    return;
+                  }
+                  setShowConnectionModal(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar Conexão
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">Você não tem permissão para criar conexões.</p>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
