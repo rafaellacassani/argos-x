@@ -166,6 +166,7 @@ export function useMemberPermissions() {
     canEditLeads,
     canDeleteLeads,
     canCreateInstances,
+    canExportData,
     fetchUserPermissions,
     saveUserPermissions,
     ALL_PAGES,
