@@ -33,6 +33,7 @@ import argosIcon from "@/assets/argos-icon.png";
 import argosLogoDarkHorizontal from "@/assets/argos-logo-dark-horizontal.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
