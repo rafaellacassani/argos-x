@@ -15,11 +15,12 @@ import { toast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 
 interface TransferToAgentButtonProps {
-  leadId: string | undefined;
+  leadId?: string;
   currentAgentId?: string;
+  chatPhone?: string;
 }
 
-export function TransferToAgentButton({ leadId, currentAgentId }: TransferToAgentButtonProps) {
+export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: TransferToAgentButtonProps) {
   const { workspace } = useWorkspace();
   const [transferring, setTransferring] = useState(false);
 
@@ -61,8 +62,8 @@ export function TransferToAgentButton({ leadId, currentAgentId }: TransferToAgen
   const availableAgents = (agents || []).filter(a => a.id !== sourceAgentId);
 
   const handleTransfer = async (targetAgentId: string, targetAgentName: string) => {
-    if (!leadId) {
-      toast({ title: "Lead não encontrado", description: "Não foi possível identificar o lead deste chat.", variant: "destructive" });
+    if (!leadId && !chatPhone) {
+      toast({ title: "Lead não encontrado", description: "Não foi possível identificar o contato deste chat.", variant: "destructive" });
       return;
     }
 
@@ -95,7 +96,7 @@ export function TransferToAgentButton({ leadId, currentAgentId }: TransferToAgen
     }
   };
 
-  if (!leadId || !availableAgents.length) return null;
+  if (!availableAgents.length) return null;
 
   return (
     <DropdownMenu>

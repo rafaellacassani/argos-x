@@ -2963,7 +2963,7 @@ export default function Chats() {
                   </Button>
                   {(() => {
                     const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                    return chatLead ? <TransferToAgentButton leadId={chatLead.id} /> : null;
+                    return <TransferToAgentButton leadId={chatLead?.id} chatPhone={selectedChat.phone} />;
                   })()}
                   <Button variant="ghost" size="icon">
                     <MoreVertical className="w-5 h-5" />
