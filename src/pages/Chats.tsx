@@ -587,11 +587,34 @@ export default function Chats() {
 
   // Handler for downloading media
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4 = false) => {
-    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    // Meta/WABA chat - download via Graph API
+    if (selectedChat?.isMeta && selectedChat?.metaPageId) {
+      // Find the message to get its mediaUrl (whatsapp-media://<id>)
+      const msg = messages.find((m) => m.id === messageId);
+      const rawMediaUrl = msg?.mediaUrl || "";
+      const mediaId = rawMediaUrl.replace("whatsapp-media://", "");
+      if (!mediaId) return null;
+
+      try {
+        const { data, error } = await supabase.functions.invoke("meta-download-media", {
+          body: { metaPageId: selectedChat.metaPageId, mediaId },
+        });
+        if (error || data?.error) {
+          console.error("[Chats] Meta media download error:", error || data?.error);
+          return null;
+        }
+        return { base64: data.base64, mimetype: data.mimetype };
+      } catch (err) {
+        console.error("[Chats] Meta media download failed:", err);
+        return null;
+      }
+    }
+
+    // Evolution API chat
     const targetInstance = selectedChat?.instanceName || selectedInstance;
     if (!targetInstance || targetInstance === "all") return null;
     return downloadMedia(targetInstance, messageId, convertToMp4);
-  }, [selectedInstance, selectedChat, downloadMedia]);
+  }, [selectedInstance, selectedChat, downloadMedia, messages]);
 
   // Handler for sending text message
   const handleSendMessage = useCallback(async (text: string): Promise<boolean> => {
