@@ -841,6 +841,7 @@ serve(async (req) => {
 
         let toolCalls: any[] = [];
         let usedFallback = false;
+        let tokensFromApi = 0;
 
         if (!aiResponse.ok) {
           const gatewayBody = await aiResponse.text().catch(() => "");
