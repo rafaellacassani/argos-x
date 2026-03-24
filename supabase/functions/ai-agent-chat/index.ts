@@ -541,6 +541,48 @@ serve(async (req) => {
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- TRAINER MODE DETECTION ---
+      const isTrainer = !!(phone_number && agent.trainer_phone && isTrainerPhone(phone_number, agent.trainer_phone));
+      if (isTrainer) {
+        console.log(`[ai-agent-chat] 🎓 Trainer detected: ${phone_number} matches trainer_phone ${agent.trainer_phone}`);
+        
+        // Check if trainer is approving a previous proposal
+        const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+        const pendingProposal = existingSummary.pending_trainer_proposal;
+        
+        if (pendingProposal && (messageText.trim() === "✅" || messageText.trim().toLowerCase() === "ok" || messageText.trim() === "👍")) {
+          console.log("[ai-agent-chat] ✅ Trainer approved proposal");
+          // Clear pending proposal
+          existingSummary.pending_trainer_proposal = null;
+          await supabase.from("agent_memories").update({
+            summary: JSON.stringify(existingSummary),
+            is_processing: false,
+            processing_started_at: null,
+          }).eq("id", memory.id);
+          lockAcquired = false;
+          
+          const approvalMsg = "✅ Resposta aprovada! Essa é a resposta que a IA daria ao lead:\n\n" + pendingProposal;
+          await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText, output_message: approvalMsg, status: "trainer_approved", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+          return new Response(JSON.stringify({ response: approvalMsg, chunks: [approvalMsg] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        
+        if (pendingProposal && messageText.trim().length > 3 && messageText.trim() !== "✅") {
+          // Trainer sent a correction/override
+          console.log("[ai-agent-chat] ✏️ Trainer sent correction");
+          existingSummary.pending_trainer_proposal = null;
+          await supabase.from("agent_memories").update({
+            summary: JSON.stringify(existingSummary),
+            is_processing: false,
+            processing_started_at: null,
+          }).eq("id", memory.id);
+          lockAcquired = false;
+          
+          const correctionMsg = "✏️ Correção registrada! Sua versão:\n\n" + messageText + "\n\n(A IA vai aprender com esse feedback)";
+          await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText, output_message: correctionMsg, status: "trainer_corrected", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
+          return new Response(JSON.stringify({ response: correctionMsg, chunks: [correctionMsg] }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+
       // --- REJECTION DETECTION (works even without AI credits) ---
       if (detectRejection(messageText)) {
         console.log(`[ai-agent-chat] 🚫 Rejection detected: "${messageText.substring(0, 50)}"`);
