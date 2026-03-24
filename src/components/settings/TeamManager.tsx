@@ -96,6 +96,8 @@ interface MemberEditorProps {
     roles: AppRole[];
   }) => Promise<void>;
   isNew?: boolean;
+  fetchUserPermissions: (userId: string) => Promise<any>;
+  saveUserPermissions: (userId: string, perms: any) => Promise<boolean>;
 }
 
 function MemberEditor({
