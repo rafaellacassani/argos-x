@@ -51,6 +51,25 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Trainer phone normalization ---
+function normalizePhone(phone: string): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  if (digits.startsWith("55") && digits.length >= 12) {
+    return digits.substring(2);
+  }
+  return digits;
+}
+
+function isTrainerPhone(senderPhone: string, trainerPhone: string): boolean {
+  if (!senderPhone || !trainerPhone) return false;
+  const normalizedSender = normalizePhone(senderPhone);
+  const normalizedTrainer = normalizePhone(trainerPhone);
+  if (!normalizedSender || !normalizedTrainer) return false;
+  return normalizedSender === normalizedTrainer ||
+    normalizedSender.endsWith(normalizedTrainer) ||
+    normalizedTrainer.endsWith(normalizedSender);
+}
+
 function buildAiFallbackReply(userMessage: string, mediaType?: string | null, agent?: any, memoryMessages?: ChatMessage[]): string {
   const text = (userMessage || "").trim().toLowerCase();
   const agentName = agent?.name || "IA";
