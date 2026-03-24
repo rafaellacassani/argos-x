@@ -342,6 +342,7 @@ export function TeamManager() {
   const [sessionMember, setSessionMember] = useState<UserProfile | null>(null);
   const { isAdmin } = useUserRole();
   const planLimits = usePlanLimits();
+  const { fetchUserPermissions, saveUserPermissions } = useMemberPermissions();
   const navigate = useNavigate();
 
   useEffect(() => {
