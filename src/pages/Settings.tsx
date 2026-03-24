@@ -785,17 +785,19 @@ export default function Settings() {
                   className={`w-4 h-4 ${loadingInstances ? "animate-spin" : ""}`}
                 />
               </Button>
-              <Button className="gap-2" onClick={() => {
-                if (!planLimits.canAddWhatsapp(instances.length)) {
-                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
-                  navigate("/planos");
-                  return;
-                }
-                setShowConnectionModal(true);
-              }}>
-                <Smartphone className="w-4 h-4" />
-                Adicionar Número
-              </Button>
+              {canCreateInstances && (
+                <Button className="gap-2" onClick={() => {
+                  if (!planLimits.canAddWhatsapp(instances.length)) {
+                    toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                    navigate("/planos");
+                    return;
+                  }
+                  setShowConnectionModal(true);
+                }}>
+                  <Smartphone className="w-4 h-4" />
+                  Adicionar Número
+                </Button>
+              )}
             </div>
           </div>
 
