@@ -82,7 +82,7 @@ function SidebarNavContent({
 
   return (
     <ul className="space-y-1">
-      {visibleItems.map((item) => {
+      {visibleItems.filter((item) => canAccessPage(item.path)).map((item) => {
         const isActive = location.pathname === item.path;
         const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
 
