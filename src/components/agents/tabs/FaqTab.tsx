@@ -45,7 +45,7 @@ export function FaqTab({ formData, updateField }: Props) {
       <div>
         <h3 className="font-display font-semibold text-lg text-foreground mb-1">FAQ — Perguntas Frequentes</h3>
         <p className="text-sm text-muted-foreground">
-          A agente consulta este FAQ automaticamente quando detecta perguntas similares.
+          Cadastre as perguntas que seus clientes mais fazem. A IA consulta estas respostas automaticamente durante a conversa. Seja direto e objetivo em cada resposta.
         </p>
         <p className="text-xs text-muted-foreground mt-1">{faqs.length}/50 perguntas cadastradas</p>
       </div>
