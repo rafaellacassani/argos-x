@@ -825,7 +825,7 @@ serve(async (req) => {
 
           let gatewayModel = modelName;
           if (!gatewayModel.includes("/") || gatewayModel.startsWith("anthropic/") || gatewayModel.startsWith("google/")) {
-            gatewayModel = "openai/gpt-4o-mini";
+            gatewayModel = "openai/gpt-5-nano";
           }
           aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
