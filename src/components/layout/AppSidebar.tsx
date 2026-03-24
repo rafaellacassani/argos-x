@@ -155,6 +155,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   const { workspace } = useWorkspace();
   const { user } = useAuth();
   const permissions = useUserRole();
+  const { canAccessPage } = useMemberPermissions();
   const isMobile = useIsMobile();
 
   // Close mobile drawer on navigation
