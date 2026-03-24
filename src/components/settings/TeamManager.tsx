@@ -67,6 +67,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTeam, type AppRole, type UserProfile, type NotificationType } from "@/hooks/useTeam";
 import { useWorkspace, type WorkspaceMember } from "@/hooks/useWorkspace";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
+import { MemberPermissionsEditor } from "@/components/settings/MemberPermissionsEditor";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
