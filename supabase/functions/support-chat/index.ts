@@ -97,8 +97,10 @@ serve(async (req) => {
   try {
     const { messages, ticketId, workspaceId, userId } = await req.json();
     
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const apiKey = OPENAI_API_KEY || LOVABLE_API_KEY;
+    if (!apiKey) throw new Error("No API key configured");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -145,14 +147,20 @@ serve(async (req) => {
     }
 
     // Stream AI response
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const useOpenAIDirect = !!OPENAI_API_KEY;
+    const aiUrl = useOpenAIDirect 
+      ? "https://api.openai.com/v1/chat/completions"
+      : "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const aiModel = useOpenAIDirect ? "gpt-4o-mini" : "openai/gpt-5-nano";
+
+    const response = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${useOpenAIDirect ? OPENAI_API_KEY : LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-4o-mini",
+        model: aiModel,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           ...messages,
