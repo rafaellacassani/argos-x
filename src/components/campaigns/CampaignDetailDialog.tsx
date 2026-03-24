@@ -41,6 +41,7 @@ const recipientStatusConfig: Record<string, { label: string; color: string }> = 
 
 export default function CampaignDetailDialog({ open, onOpenChange, campaign }: Props) {
   const { fetchRecipients, retryCampaign, updateCampaign } = useCampaigns();
+  const { canExportData } = useMemberPermissions();
   const { listInstances } = useEvolutionAPI();
   const { workspaceId } = useWorkspace();
   const { templates, fetchTemplates, syncTemplates, syncing: syncingTemplates } = useWhatsAppTemplates();
