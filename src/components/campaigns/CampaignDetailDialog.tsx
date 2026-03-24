@@ -684,9 +684,11 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                   <SelectItem value="skipped">Ignorados</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" onClick={exportCSV}>
-                <Download className="w-4 h-4 mr-1" /> CSV
-              </Button>
+              {canExportData && (
+                <Button variant="outline" size="sm" onClick={exportCSV}>
+                  <Download className="w-4 h-4 mr-1" /> CSV
+                </Button>
+              )}
             </div>
 
             {loading ? (
