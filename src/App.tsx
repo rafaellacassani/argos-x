@@ -9,6 +9,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { PermissionGuard } from "@/components/layout/PermissionGuard";
+import { PageAccessGuard } from "@/components/layout/PageAccessGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetaPixelLoader } from "@/components/settings/MetaPixelLoader";
 import { Loader2 } from "lucide-react";
