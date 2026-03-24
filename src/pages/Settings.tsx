@@ -51,6 +51,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 
 type MetaPage = Pick<Tables<"meta_pages">, "id" | "page_id" | "page_name" | "platform" | "instagram_username" | "is_active" | "meta_account_id" | "workspace_id">;
@@ -117,6 +118,7 @@ const formatPhoneNumber = (ownerJid: string | undefined) => {
 
 export default function Settings() {
   const { canManageIntegrations, canManageWhatsApp, isSeller } = useUserRole();
+  const { canCreateInstances } = useMemberPermissions();
   const { workspaceId } = useWorkspace();
   const planLimits = usePlanLimits();
   const navigate = useNavigate();
@@ -686,6 +688,10 @@ export default function Settings() {
                               onClick={() => {
                                 if (isLocked) return;
                                 if (integration.id === "whatsapp-business") {
+                                  if (!canCreateInstances) {
+                                    toast({ title: "Você não tem permissão para criar conexões WhatsApp." });
+                                    return;
+                                  }
                                   if (!planLimits.canAddWhatsapp(instances.length)) {
                                     toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
                                     navigate("/planos");
@@ -783,17 +789,19 @@ export default function Settings() {
                   className={`w-4 h-4 ${loadingInstances ? "animate-spin" : ""}`}
                 />
               </Button>
-              <Button className="gap-2" onClick={() => {
-                if (!planLimits.canAddWhatsapp(instances.length)) {
-                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
-                  navigate("/planos");
-                  return;
-                }
-                setShowConnectionModal(true);
-              }}>
-                <Smartphone className="w-4 h-4" />
-                Adicionar Número
-              </Button>
+              {canCreateInstances && (
+                <Button className="gap-2" onClick={() => {
+                  if (!planLimits.canAddWhatsapp(instances.length)) {
+                    toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                    navigate("/planos");
+                    return;
+                  }
+                  setShowConnectionModal(true);
+                }}>
+                  <Smartphone className="w-4 h-4" />
+                  Adicionar Número
+                </Button>
+              )}
             </div>
           </div>
 
@@ -811,17 +819,21 @@ export default function Settings() {
               <p className="text-muted-foreground mb-4">
                 Conecte seu primeiro número WhatsApp Business
               </p>
-              <Button onClick={() => {
-                if (!planLimits.canAddWhatsapp(instances.length)) {
-                  toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
-                  navigate("/planos");
-                  return;
-                }
-                setShowConnectionModal(true);
-              }}>
-                <Plus className="w-4 h-4 mr-2" />
-                Criar Conexão
-              </Button>
+              {canCreateInstances ? (
+                <Button onClick={() => {
+                  if (!planLimits.canAddWhatsapp(instances.length)) {
+                    toast({ title: `Seu plano permite ${planLimits.whatsappLimit} conexão(ões). Faça upgrade para adicionar mais.` });
+                    navigate("/planos");
+                    return;
+                  }
+                  setShowConnectionModal(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar Conexão
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">Você não tem permissão para criar conexões.</p>
+              )}
             </div>
           ) : (
             <div className="space-y-4">

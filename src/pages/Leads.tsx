@@ -33,6 +33,7 @@ import { LeadStats } from '@/components/leads/LeadStats';
 import { LeadFilters, LeadFiltersData, DEFAULT_FILTERS, countActiveFilters, getDateRange } from '@/components/leads/LeadFilters';
 import { LeadFilterChips } from '@/components/leads/LeadFilterChips';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useMemberPermissions } from '@/hooks/useMemberPermissions';
 import { useTeam } from '@/hooks/useTeam';
 
 const SESSION_KEY = 'leads-filters';
@@ -54,7 +55,8 @@ function saveSessionFilters(filters: LeadFiltersData) {
 
 export default function Leads() {
   const navigate = useNavigate();
-  const { role, userProfileId, isSeller, canDeleteLeads, isAdminOrManager } = useUserRole();
+  const { role, userProfileId, isSeller, isAdminOrManager } = useUserRole();
+  const { canCreateLeads, canEditLeads, canDeleteLeads } = useMemberPermissions();
   const {
     funnels, currentFunnel, stages, leads, tags, loading,
     setCurrentFunnel, fetchStages, fetchLeads, createLead, updateLead,
@@ -399,9 +401,11 @@ export default function Leads() {
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button onClick={() => { setCreateDialogStageId(stages[0]?.id); setCreateDialogOpen(true); }}>
-              <Plus className="h-4 w-4 mr-2" />Novo Lead
-            </Button>
+            {canCreateLeads && (
+              <Button onClick={() => { setCreateDialogStageId(stages[0]?.id); setCreateDialogOpen(true); }}>
+                <Plus className="h-4 w-4 mr-2" />Novo Lead
+              </Button>
+            )}
           </div>
         </div>
 
