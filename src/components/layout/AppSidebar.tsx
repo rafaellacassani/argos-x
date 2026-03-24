@@ -33,6 +33,7 @@ import argosIcon from "@/assets/argos-icon.png";
 import argosLogoDarkHorizontal from "@/assets/argos-logo-dark-horizontal.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -68,18 +69,20 @@ function SidebarNavContent({
   visibleItems,
   collapsed,
   permissions,
+  canAccessPage,
   onNavigate,
 }: {
   visibleItems: MenuItem[];
   collapsed: boolean;
   permissions: ReturnType<typeof useUserRole>;
+  canAccessPage: (path: string) => boolean;
   onNavigate?: () => void;
 }) {
   const location = useLocation();
 
   return (
     <ul className="space-y-1">
-      {visibleItems.map((item) => {
+      {visibleItems.filter((item) => canAccessPage(item.path)).map((item) => {
         const isActive = location.pathname === item.path;
         const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
 
@@ -152,6 +155,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   const { workspace } = useWorkspace();
   const { user } = useAuth();
   const permissions = useUserRole();
+  const { canAccessPage } = useMemberPermissions();
   const isMobile = useIsMobile();
 
   // Close mobile drawer on navigation
@@ -224,7 +228,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
           </div>
           {workspaceBlock(true)}
           <nav className="flex-1 py-4 px-3 overflow-y-auto">
-            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} onNavigate={() => onMobileOpenChange?.(false)} />
+            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} onNavigate={() => onMobileOpenChange?.(false)} />
           </nav>
         </SheetContent>
       </Sheet>
@@ -252,7 +256,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
       </div>
       {workspaceBlock(!collapsed)}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
-        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} />
+        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} canAccessPage={canAccessPage} />
       </nav>
       <div className="p-3 border-t border-sidebar-border">
         <button

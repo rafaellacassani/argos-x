@@ -67,6 +67,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTeam, type AppRole, type UserProfile, type NotificationType } from "@/hooks/useTeam";
 import { useWorkspace, type WorkspaceMember } from "@/hooks/useWorkspace";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
+import { MemberPermissionsEditor } from "@/components/settings/MemberPermissionsEditor";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +96,8 @@ interface MemberEditorProps {
     roles: AppRole[];
   }) => Promise<void>;
   isNew?: boolean;
+  fetchUserPermissions: (userId: string) => Promise<any>;
+  saveUserPermissions: (userId: string, perms: any) => Promise<boolean>;
 }
 
 function MemberEditor({
@@ -102,6 +106,8 @@ function MemberEditor({
   onClose,
   onSave,
   isNew = false,
+  fetchUserPermissions,
+  saveUserPermissions,
 }: MemberEditorProps) {
   const [isActive, setIsActive] = useState(true);
   const [fullName, setFullName] = useState("");
@@ -261,7 +267,7 @@ function MemberEditor({
         </div>
 
         {/* Role Tabs */}
-        <div className="p-6">
+        <div className="p-6 border-b">
           <Tabs value={selectedRole} onValueChange={(v) => setSelectedRole(v as AppRole)}>
             <TabsList className="h-auto p-1 bg-muted/50">
               {(Object.keys(ROLE_LABELS) as AppRole[]).map((role) => {
@@ -282,9 +288,27 @@ function MemberEditor({
               })}
             </TabsList>
           </Tabs>
+        </div>
 
-          {/* Info */}
-          <div className="mt-6 text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
+        {/* Permissions Section - only for existing non-admin members */}
+        {!isNew && member && (
+          <div className="p-6 border-b">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              Permissões granulares
+            </h3>
+            <MemberPermissionsEditor
+              userId={member.user_id}
+              isAdminRole={selectedRole === "admin"}
+              fetchUserPermissions={fetchUserPermissions}
+              saveUserPermissions={saveUserPermissions}
+            />
+          </div>
+        )}
+
+        {/* Info */}
+        <div className="p-6">
+          <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg">
             <strong>📱 Importante:</strong> As notificações serão enviadas para o WhatsApp
             cadastrado acima. Configure as preferências de notificação na tabela principal.
           </div>
@@ -318,6 +342,7 @@ export function TeamManager() {
   const [sessionMember, setSessionMember] = useState<UserProfile | null>(null);
   const { isAdmin } = useUserRole();
   const planLimits = usePlanLimits();
+  const { fetchUserPermissions, saveUserPermissions } = useMemberPermissions();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -630,6 +655,8 @@ export function TeamManager() {
         }}
         onSave={handleSave}
         isNew={!editingMember}
+        fetchUserPermissions={fetchUserPermissions}
+        saveUserPermissions={saveUserPermissions}
       />
 
       {/* Delete Confirmation Dialog */}
