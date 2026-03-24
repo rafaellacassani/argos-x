@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { useLeads } from "@/hooks/useLeads";
 import { toast } from "@/hooks/use-toast";
