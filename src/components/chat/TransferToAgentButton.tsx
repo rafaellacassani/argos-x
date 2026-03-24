@@ -96,7 +96,7 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
     }
   };
 
-  if (!leadId || !availableAgents.length) return null;
+  if (!availableAgents.length) return null;
 
   return (
     <DropdownMenu>
