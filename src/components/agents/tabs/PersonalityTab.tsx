@@ -70,7 +70,7 @@ export function PersonalityTab({ formData, updateField }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Nicho / Segmento</Label>
-          <Input value={formData.niche || ""} onChange={(e) => updateField("niche", e.target.value)} placeholder="Ex: Clínica odontológica" />
+          <Input value={formData.niche || ""} onChange={(e) => updateField("niche", e.target.value)} placeholder="Ex: clínica odontológica, loja de roupas, academia, salão de beleza, imobiliária" />
         </div>
         <div className="flex items-center gap-3 pt-6">
           <Switch checked={formData.use_emojis ?? true} onCheckedChange={(v) => updateField("use_emojis", v)} />
