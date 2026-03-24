@@ -96,8 +96,6 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
     }
   };
 
-  if (!availableAgents.length) return null;
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -119,21 +117,31 @@ export function TransferToAgentButton({ leadId, currentAgentId, chatPhone }: Tra
           Transferir para IA
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {availableAgents.map((agent) => (
-          <DropdownMenuItem
-            key={agent.id}
-            onClick={() => handleTransfer(agent.id, agent.name)}
-            className="cursor-pointer"
-          >
-            <Bot className="w-4 h-4 mr-2 text-primary" />
-            <div className="flex flex-col">
-              <span className="text-sm font-medium">{agent.name}</span>
-              {agent.agent_role && (
-                <span className="text-xs text-muted-foreground">{agent.agent_role}</span>
-              )}
-            </div>
-          </DropdownMenuItem>
-        ))}
+        {loadingAgents ? (
+          <div className="px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+            <Loader2 className="w-3 h-3 animate-spin" /> Carregando agentes...
+          </div>
+        ) : availableAgents.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-muted-foreground">
+            Nenhum agente disponível
+          </div>
+        ) : (
+          availableAgents.map((agent) => (
+            <DropdownMenuItem
+              key={agent.id}
+              onClick={() => handleTransfer(agent.id, agent.name)}
+              className="cursor-pointer"
+            >
+              <Bot className="w-4 h-4 mr-2 text-primary" />
+              <div className="flex flex-col">
+                <span className="text-sm font-medium">{agent.name}</span>
+                {agent.agent_role && (
+                  <span className="text-xs text-muted-foreground">{agent.agent_role}</span>
+                )}
+              </div>
+            </DropdownMenuItem>
+          ))
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
