@@ -34,6 +34,7 @@ import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 
