@@ -118,6 +118,7 @@ const formatPhoneNumber = (ownerJid: string | undefined) => {
 
 export default function Settings() {
   const { canManageIntegrations, canManageWhatsApp, isSeller } = useUserRole();
+  const { canCreateInstances } = useMemberPermissions();
   const { workspaceId } = useWorkspace();
   const planLimits = usePlanLimits();
   const navigate = useNavigate();
