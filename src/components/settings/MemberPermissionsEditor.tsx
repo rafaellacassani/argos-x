@@ -308,6 +308,20 @@ export function MemberPermissionsEditor({
             }}
           />
         </div>
+        <Separator />
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm font-medium">Exportar dados</Label>
+            <p className="text-xs text-muted-foreground">Pode exportar CSV, contatos e relatórios</p>
+          </div>
+          <Switch
+            checked={canExportData}
+            onCheckedChange={(v) => {
+              setCanExportData(v);
+              save({ can_export_data: v });
+            }}
+          />
+        </div>
       </TabsContent>
 
       {saving && (
