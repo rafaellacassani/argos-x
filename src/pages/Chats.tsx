@@ -2867,13 +2867,22 @@ export default function Chats() {
       </div>
 
       {/* Chat Window */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 min-h-0",
+        isMobile && !selectedChat && "hidden",
+        isMobile && "w-full"
+      )}>
         {selectedChat ? (
           <>
             {/* Chat Header */}
             <div className="px-4 py-3 border-b border-border bg-card">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {isMobile && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setSelectedChat(null)}>
+                      <ArrowLeft className="w-5 h-5" />
+                    </Button>
+                  )}
                   <div className="relative">
                     {selectedChat.profilePicUrl ? (
                       <img 
