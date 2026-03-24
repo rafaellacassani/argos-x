@@ -69,11 +69,13 @@ function SidebarNavContent({
   visibleItems,
   collapsed,
   permissions,
+  canAccessPage,
   onNavigate,
 }: {
   visibleItems: MenuItem[];
   collapsed: boolean;
   permissions: ReturnType<typeof useUserRole>;
+  canAccessPage: (path: string) => boolean;
   onNavigate?: () => void;
 }) {
   const location = useLocation();
