@@ -1,3 +1,4 @@
+// ai-agent-chat v2.1 - token tracking fix
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -466,6 +467,7 @@ serve(async (req) => {
     }
 
     // ============ MAIN PROCESSING (wrapped in try/finally to always release lock) ============
+    let tokensFromApi = 0;
     try {
       // --- respond_to check ---
       if (agent.respond_to === "new_leads" && lead_id) {
@@ -841,7 +843,7 @@ serve(async (req) => {
 
         let toolCalls: any[] = [];
         let usedFallback = false;
-        let tokensFromApi = 0;
+        tokensFromApi = 0;
 
         if (!aiResponse.ok) {
           const gatewayBody = await aiResponse.text().catch(() => "");

@@ -1,0 +1,1 @@
+UPDATE agent_memories SET is_processing = false, processing_started_at = NULL WHERE is_processing = true
