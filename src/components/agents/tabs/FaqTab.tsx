@@ -45,7 +45,7 @@ export function FaqTab({ formData, updateField }: Props) {
       <div>
         <h3 className="font-display font-semibold text-lg text-foreground mb-1">FAQ — Perguntas Frequentes</h3>
         <p className="text-sm text-muted-foreground">
-          A agente consulta este FAQ automaticamente quando detecta perguntas similares.
+          Cadastre as perguntas que seus clientes mais fazem. A IA consulta estas respostas automaticamente durante a conversa. Seja direto e objetivo em cada resposta.
         </p>
         <p className="text-xs text-muted-foreground mt-1">{faqs.length}/50 perguntas cadastradas</p>
       </div>
@@ -80,10 +80,24 @@ export function FaqTab({ formData, updateField }: Props) {
         ))}
 
         {faqs.length === 0 && (
-          <div className="text-center py-12 border-2 border-dashed border-border rounded-lg">
-            <HelpCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground mb-1">Nenhuma pergunta cadastrada</p>
-            <p className="text-xs text-muted-foreground mb-4">Adicione perguntas frequentes para que a agente responda melhor.</p>
+          <div className="border-2 border-dashed border-border rounded-lg p-5 space-y-4">
+            <div className="text-center">
+              <HelpCircle className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm font-medium text-muted-foreground mb-1">Nenhuma pergunta cadastrada</p>
+              <p className="text-xs text-muted-foreground">Veja alguns exemplos de como preencher:</p>
+            </div>
+            <div className="space-y-3">
+              {[
+                { q: "Qual o horário de atendimento?", a: "Atendemos de segunda a sexta, das 9h às 18h. Fora deste horário, a IA responde normalmente." },
+                { q: "Vocês fazem entrega?", a: "Sim! Entregamos em toda a cidade em até 2 dias úteis." },
+                { q: "Como faço para agendar?", a: "É só me dizer o serviço que você quer e eu verifico os horários disponíveis para você." },
+              ].map((ex, i) => (
+                <div key={i} className="p-3 bg-muted/40 rounded-md border border-border/50 opacity-70">
+                  <p className="text-xs font-semibold text-muted-foreground">P: {ex.q}</p>
+                  <p className="text-xs text-muted-foreground mt-1">R: {ex.a}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
