@@ -5,6 +5,7 @@ import {
   Phone,
   Video,
   MoreVertical,
+  ArrowLeft,
   Star,
   Archive,
   RefreshCw,
@@ -33,6 +34,7 @@ import { ScheduleMessagePopover } from "@/components/chat/ScheduleMessagePopover
 import { LeadSidePanel } from "@/components/chat/LeadSidePanel";
 import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -434,6 +436,7 @@ export default function Chats() {
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
   const { workspaceId } = useWorkspace();
+  const isMobile = useIsMobile();
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
@@ -2631,9 +2634,13 @@ export default function Chats() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background" data-tour="chat-section">
+    <div className={cn("h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background", isMobile && "h-[calc(100vh-4rem)] rounded-none border-0")} data-tour="chat-section">
       {/* Chat List */}
-      <div className="w-[320px] border-r border-border flex flex-col bg-card">
+      <div className={cn(
+        "w-[320px] border-r border-border flex flex-col bg-card",
+        isMobile && "w-full border-r-0",
+        isMobile && selectedChat && "hidden"
+      )}>
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
@@ -2860,13 +2867,22 @@ export default function Chats() {
       </div>
 
       {/* Chat Window */}
-      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 min-h-0",
+        isMobile && !selectedChat && "hidden",
+        isMobile && "w-full"
+      )}>
         {selectedChat ? (
           <>
             {/* Chat Header */}
             <div className="px-4 py-3 border-b border-border bg-card">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {isMobile && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2" onClick={() => setSelectedChat(null)}>
+                      <ArrowLeft className="w-5 h-5" />
+                    </Button>
+                  )}
                   <div className="relative">
                     {selectedChat.profilePicUrl ? (
                       <img 
@@ -3066,7 +3082,7 @@ export default function Chats() {
       </div>
 
       {/* Lead Side Panel */}
-      {selectedChat && (() => {
+      {!isMobile && selectedChat && (() => {
         const currentLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
         return (
           <LeadSidePanel
