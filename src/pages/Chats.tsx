@@ -2634,9 +2634,13 @@ export default function Chats() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background" data-tour="chat-section">
+    <div className={cn("h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background", isMobile && "h-[calc(100vh-4rem)] rounded-none border-0")} data-tour="chat-section">
       {/* Chat List */}
-      <div className="w-[320px] border-r border-border flex flex-col bg-card">
+      <div className={cn(
+        "w-[320px] border-r border-border flex flex-col bg-card",
+        isMobile && "w-full border-r-0",
+        isMobile && selectedChat && "hidden"
+      )}>
         {/* Header */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
