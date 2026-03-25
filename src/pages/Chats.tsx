@@ -774,6 +774,7 @@ export default function Chats() {
         fileName: file.name,
       };
       setMessages((prev) => [...prev, newMessage]);
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({
         title: "Erro ao enviar mídia",
@@ -820,6 +821,7 @@ export default function Chats() {
         localAudioBase64: localAudioDataUrl,
       };
       setMessages((prev) => [...prev, newMessage]);
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({
         title: "Erro ao enviar áudio",
