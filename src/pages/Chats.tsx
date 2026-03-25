@@ -2762,22 +2762,22 @@ export default function Chats() {
               >
                 Sem resposta
               </Button>
-              {waitingCount > 0 && (
-                <Button
-                  variant={showQueueOnly ? "default" : "outline"}
-                  size="sm"
-                  className={cn(
-                    "h-6 px-2 text-xs font-medium rounded-full gap-1",
-                    showQueueOnly
-                      ? "bg-amber-600 hover:bg-amber-700 text-white"
-                      : "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-                  )}
-                  onClick={() => setShowQueueOnly(!showQueueOnly)}
-                >
-                  <Headphones className="w-3 h-3" />
-                  {waitingCount}
-                </Button>
-              )}
+              <Button
+                variant={showQueueOnly ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-6 px-2 text-xs font-medium rounded-full gap-1",
+                  showQueueOnly
+                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                    : waitingCount > 0
+                      ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                      : "border-border text-muted-foreground hover:bg-accent"
+                )}
+                onClick={() => setShowQueueOnly(!showQueueOnly)}
+              >
+                <Headphones className="w-3 h-3" />
+                {waitingCount > 0 ? waitingCount : "Fila"}
+              </Button>
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -3030,6 +3030,44 @@ export default function Chats() {
                   <Button variant="ghost" size="icon">
                     <MoreVertical className="w-5 h-5" />
                   </Button>
+                  {/* Manual intercept button - only show if chat is NOT already in queue */}
+                  {(() => {
+                    const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
+                    const alreadyInQueue = queue.some(q => {
+                      if (q.status === "resolved") return false;
+                      const qPhone = q.lead_phone?.replace(/[^0-9]/g, "") || "";
+                      if (!qPhone || !chatPhone || qPhone.length < 8 || chatPhone.length < 8) return false;
+                      return chatPhone.slice(-10) === qPhone.slice(-10);
+                    });
+                    if (alreadyInQueue) return null;
+                    return (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
+                        onClick={async () => {
+                          const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                          const { error } = await supabase
+                            .from("human_support_queue" as any)
+                            .insert({
+                              workspace_id: workspaceId,
+                              lead_id: chatLead?.id || null,
+                              reason: "manual",
+                              status: "waiting",
+                              instance_name: selectedChat.instanceName || selectedInstance || null,
+                            });
+                          if (error) {
+                            toast({ title: "Erro ao interceptar", description: error.message, variant: "destructive" });
+                          } else {
+                            toast({ title: "Conversa adicionada à fila de atendimento" });
+                          }
+                        }}
+                      >
+                        <Headphones className="w-3.5 h-3.5" />
+                        Interceptar
+                      </Button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -3037,8 +3075,12 @@ export default function Chats() {
             {/* Human Support Queue Action Bar */}
             {(() => {
               const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
+              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
               const queueItem = queue.find(q => {
                 if (q.status !== "waiting" && q.status !== "in_progress") return false;
+                // Match by lead_id first
+                if (chatLead && q.lead_id === chatLead.id) return true;
+                // Fallback: match by phone
                 const qPhone = q.lead_phone?.replace(/[^0-9]/g, "") || "";
                 if (!qPhone || !chatPhone || qPhone.length < 8 || chatPhone.length < 8) return false;
                 return chatPhone.slice(-10) === qPhone.slice(-10);
