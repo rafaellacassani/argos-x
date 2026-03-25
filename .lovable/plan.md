@@ -1,44 +1,73 @@
 
 
-## Plano: Agentes de IA entenderem imagens (WABA/Meta)
+## Diagnóstico: Como funciona hoje
 
-### Situação atual
+Analisei todo o sistema e aqui está o cenário atual:
 
-- **Evolution API** (whatsapp-webhook): Já funciona. Imagens são baixadas via Evolution API e enviadas como base64 para o `ai-agent-chat`, que monta conteúdo multimodal para o modelo de IA.
-- **Meta/WABA** (facebook-webhook): **Não funciona**. Quando um lead envia uma imagem pelo WhatsApp Cloud API, o sistema salva apenas o caption (texto), mas nunca baixa a imagem e nunca a envia para a IA.
-- **ai-agent-chat**: Já suporta receber `media_type`, `media_base64` e `media_mimetype` e montar mensagens multimodais. Nenhuma alteração necessária.
+1. **A IA já sabe pedir ajuda humana** — O agente tem uma tool chamada `pausar_ia` que, quando acionada, marca `is_paused = true` na sessão (`agent_memories`). Também pausa automaticamente após 3 fallbacks consecutivos.
 
-### O que será feito
+2. **O que falta é a organização do lado humano** — Quando a IA pausa, o lead fica "solto" no chat geral misturado com todas as outras conversas. Não existe fila, prioridade, nem controle de "quem está atendendo quem".
 
-**Arquivo: `supabase/functions/facebook-webhook/index.ts`**
+3. **Já existe um sistema de tickets** (`support_tickets` + `support_messages`), mas é usado apenas para suporte interno da plataforma (Aria). Não está conectado ao fluxo de WhatsApp.
 
-1. **Atualizar `routeToAIAgent`** para aceitar parâmetros opcionais `mediaType`, `mediaId` e `accessToken` (para download).
+---
 
-2. **Baixar a imagem do Graph API** antes de chamar `ai-agent-chat`:
-   - Quando `mediaType === "image"` e `mediaId` existe, fazer GET em `https://graph.facebook.com/v21.0/{mediaId}` para obter a URL de download.
-   - Baixar o binário da imagem e converter para base64.
-   - Limitar a 5MB (mesmo limite do Evolution).
+## Proposta: Sistema de Fila de Atendimento Humano
 
-3. **Passar `media_type`, `media_base64` e `media_mimetype`** no body da chamada a `ai-agent-chat`, exatamente como o `whatsapp-webhook` já faz.
+Em vez de criar um módulo separado de tickets (que duplicaria o chat), a abordagem mais eficiente é **adicionar um sistema de fila dentro do próprio Chat**, aproveitando que as conversas já existem lá.
 
-4. **Atualizar a chamada no `processWhatsAppBusinessEvent`** para passar o `mediaId` e `mediaType` quando o tipo da mensagem for `image` (e futuramente `audio`).
-
-### O que NÃO será alterado
-
-- `ai-agent-chat` — já suporta multimodal
-- `whatsapp-webhook` — já funciona para Evolution
-- Nenhum componente frontend
-- Nenhuma outra edge function
-
-### Detalhes técnicos
+### Como funcionaria
 
 ```text
-Lead envia foto (WABA)
-  → facebook-webhook recebe msg.type = "image", msg.image.id = "MEDIA_ID"
-  → GET https://graph.facebook.com/v21.0/{MEDIA_ID} (com access_token)
-  → Obtém download URL + mime_type
-  → GET download URL → binário → base64
-  → Chama ai-agent-chat com media_type="image", media_base64, media_mimetype
-  → IA vê e entende a imagem, responde ao lead
+IA não consegue resolver
+  → IA usa tool "pausar_ia" (já existe)
+  → Sistema cria registro na fila de atendimento (NOVO)
+  → Badge aparece no Chat: "3 aguardando atendimento"
+  → Vendedor/Atendente clica → vê fila filtrada
+  → Abre conversa, resolve, clica "Finalizar atendimento"
+  → Remove da fila, retoma IA se desejado
 ```
+
+### Implementação
+
+**1. Nova tabela `human_support_queue`**
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | uuid | PK |
+| workspace_id | uuid | Tenant |
+| lead_id | uuid | Lead em atendimento |
+| agent_id | uuid | Agente de IA que pausou |
+| session_id | text | Sessão do agent_memories |
+| reason | text | Motivo (fallback_limit, pausar_ia, manual) |
+| status | text | waiting, in_progress, resolved |
+| assigned_to | uuid | Usuário humano atendendo |
+| instance_name | text | Instância WhatsApp |
+| created_at | timestamptz | Quando entrou na fila |
+| resolved_at | timestamptz | Quando finalizou |
+
+**2. Backend — Criar entrada na fila automaticamente** (`ai-agent-chat/index.ts`)
+- Quando `pausar_ia` é acionado ou fallback limit é atingido, inserir registro em `human_support_queue` com status `waiting`
+- Incluir o motivo da pausa
+
+**3. Frontend — Indicador de fila no Chat** (`src/pages/Chats.tsx`)
+- Badge no topo do chat mostrando quantidade de conversas aguardando atendimento humano
+- Filtro rápido "Aguardando atendimento" que mostra só os chats da fila
+- Ao abrir um chat da fila, botão "Assumir atendimento" que marca `assigned_to` e status `in_progress`
+- Botão "Finalizar atendimento" que marca `resolved` e opcionalmente retoma a IA (`is_paused = false`)
+
+**4. Notificação** — Reaproveitar a lógica existente de notificação WhatsApp para avisar responsáveis quando um lead entra na fila
+
+### Arquivos a modificar
+- **Nova migração**: criar tabela `human_support_queue` com RLS
+- **`supabase/functions/ai-agent-chat/index.ts`**: inserir na fila nos pontos de pausa
+- **`src/pages/Chats.tsx`**: badge de fila, filtros, botões de assumir/finalizar
+- **`src/components/chat/ChatFilters.tsx`**: novo filtro "Aguardando atendimento"
+
+### Vantagens desta abordagem
+- **Sem duplicação** — usa o chat que já existe, não cria tela nova
+- **Visibilidade** — badge mostra claramente quantos leads precisam de atenção
+- **Controle** — sabe quem está atendendo quem, quando começou, quando finalizou
+- **Métricas futuras** — tempo médio de espera, tempo de resolução, volume por período
+- **Retomada da IA** — ao finalizar, pode reativar o agente automaticamente
 
