@@ -2744,6 +2744,22 @@ export default function Chats() {
               >
                 Sem resposta
               </Button>
+              {waitingCount > 0 && (
+                <Button
+                  variant={showQueueOnly ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "h-6 px-2 text-xs font-medium rounded-full gap-1",
+                    showQueueOnly
+                      ? "bg-amber-600 hover:bg-amber-700 text-white"
+                      : "border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                  )}
+                  onClick={() => setShowQueueOnly(!showQueueOnly)}
+                >
+                  <Headphones className="w-3 h-3" />
+                  {waitingCount}
+                </Button>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <Button
