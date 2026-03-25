@@ -11,6 +11,9 @@ import {
   RefreshCw,
   MessageCircle,
   AlertCircle,
+  Headphones,
+  CheckCircle2,
+  UserCheck,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,7 @@ import { LeadDetailModal } from "@/components/leads/LeadDetailModal";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useHumanSupportQueue } from "@/hooks/useHumanSupportQueue";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Chat {
