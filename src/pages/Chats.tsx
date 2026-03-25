@@ -432,6 +432,12 @@ export default function Chats() {
   // Message cache: stores messages per chat ID to avoid re-fetching
   const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll messages container to the bottom (latest messages)
+  const scrollToBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
   
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
