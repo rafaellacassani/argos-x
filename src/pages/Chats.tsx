@@ -2254,6 +2254,7 @@ export default function Chats() {
             messageCacheRef.current.set(selectedChat.id, updated);
             return updated;
           });
+          requestAnimationFrame(() => scrollToBottom());
 
           // Also update chat list preview
           setChats((prev) =>
