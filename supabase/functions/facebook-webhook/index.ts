@@ -252,9 +252,62 @@ async function processInstagramEvent(igUserId: string, event: any) {
   });
 }
 
+// Helper: download media from Meta Graph API and return base64
+async function downloadMediaAsBase64(mediaId: string, accessToken: string): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    // Step 1: get the download URL
+    const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!metaRes.ok) {
+      console.error(`[Facebook Webhook] ❌ Failed to get media URL: ${metaRes.status}`);
+      await metaRes.text();
+      return null;
+    }
+    const metaData = await metaRes.json();
+    const downloadUrl = metaData.url;
+    const mimeType = metaData.mime_type || "image/jpeg";
+
+    if (!downloadUrl) {
+      console.error("[Facebook Webhook] ❌ No download URL in media response");
+      return null;
+    }
+
+    // Step 2: download the binary
+    const binRes = await fetch(downloadUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!binRes.ok) {
+      console.error(`[Facebook Webhook] ❌ Failed to download media: ${binRes.status}`);
+      await binRes.text();
+      return null;
+    }
+
+    const buffer = await binRes.arrayBuffer();
+    // Limit to 5MB
+    if (buffer.byteLength > 5 * 1024 * 1024) {
+      console.warn("[Facebook Webhook] ⚠️ Media too large (>5MB), skipping");
+      return null;
+    }
+
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    console.log(`[Facebook Webhook] ✅ Downloaded media ${mediaId}: ${mimeType}, ${Math.round(buffer.byteLength / 1024)}KB`);
+    return { base64, mimeType };
+  } catch (err) {
+    console.error("[Facebook Webhook] ❌ Media download error:", err);
+    return null;
+  }
+}
+
 // Helper: route inbound message to AI Agent (if active)
-async function routeToAIAgent(workspaceId: string, senderPhone: string, messageText: string, messageId: string, phoneNumberId: string, accessToken: string) {
-  if (!messageText) return;
+async function routeToAIAgent(workspaceId: string, senderPhone: string, messageText: string, messageId: string, phoneNumberId: string, accessToken: string, mediaType?: string, mediaId?: string) {
+  if (!messageText && !mediaId) return;
 
   try {
     // Find active AI agents for this workspace
@@ -339,27 +392,47 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
         .eq("status", "pending");
     }
 
+    // Download media if present (image support for AI vision)
+    let mediaBase64: string | undefined;
+    let mediaMimeType: string | undefined;
+    if (mediaType === "image" && mediaId) {
+      console.log(`[Facebook Webhook] 📷 Downloading image ${mediaId} for AI vision`);
+      const mediaData = await downloadMediaAsBase64(mediaId, accessToken);
+      if (mediaData) {
+        mediaBase64 = mediaData.base64;
+        mediaMimeType = mediaData.mimeType;
+      }
+    }
+
     // Call ai-agent-chat
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    console.log(`[Facebook Webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, phone ${senderPhone}`);
+    console.log(`[Facebook Webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, phone ${senderPhone}${mediaBase64 ? ' (with image)' : ''}`);
+
+    const agentPayload: Record<string, any> = {
+      agent_id: matchingAgent.id,
+      session_id: `waba_${senderPhone}`,
+      message: messageText || "(imagem enviada)",
+      lead_id: leadId,
+      message_id: messageId,
+      phone_number: senderPhone,
+      _internal_webhook: true,
+      channel_type: "whatsapp_cloud",
+      cloud_phone_number_id: phoneNumberId,
+      cloud_access_token: accessToken,
+    };
+
+    if (mediaBase64 && mediaMimeType) {
+      agentPayload.media_type = "image";
+      agentPayload.media_base64 = mediaBase64;
+      agentPayload.media_mimetype = mediaMimeType;
+    }
 
     const agentRes = await fetch(`${supabaseUrl}/functions/v1/ai-agent-chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        agent_id: matchingAgent.id,
-        session_id: `waba_${senderPhone}`,
-        message: messageText,
-        lead_id: leadId,
-        message_id: messageId,
-        phone_number: senderPhone,
-        _internal_webhook: true,
-        channel_type: "whatsapp_cloud",
-        cloud_phone_number_id: phoneNumberId,
-        cloud_access_token: accessToken,
-      }),
+      body: JSON.stringify(agentPayload),
     });
 
     const agentData = await agentRes.json();
@@ -550,11 +623,12 @@ async function processWhatsAppBusinessEvent(entry: any) {
         workspace_id: metaPage.workspace_id,
       });
 
-      // Route to AI Agent for text messages
-      if (content) {
-        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken);
+      // Route to AI Agent — pass media info for image understanding
+      const rawMediaId = msg[msg.type]?.id;
+      if (content || (msg.type === "image" && rawMediaId)) {
+        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken, msg.type === "image" ? "image" : undefined, msg.type === "image" ? rawMediaId : undefined);
       } else {
-        console.log(`[Facebook Webhook] ⚠️ No text content to route to AI agent for ${senderId} (type: ${messageType})`);
+        console.log(`[Facebook Webhook] ⚠️ No content to route to AI agent for ${senderId} (type: ${messageType})`);
       }
     }
 
