@@ -947,6 +947,17 @@ serve(async (req) => {
             case "pausar_ia":
               await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
               responseContent += `\n\n[Atendimento transferido para humano. Motivo: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}]`;
+              // Enqueue for human support
+              await supabase.from("human_support_queue").insert({
+                workspace_id: agent.workspace_id,
+                lead_id: lead_id && isValidUUID(lead_id) ? lead_id : null,
+                agent_id,
+                session_id,
+                reason: `pausar_ia: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}`,
+                status: "waiting",
+                instance_name: reqInstanceName || agent.instance_name || null,
+              }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support:", error); });
+              console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (pausar_ia)`);
               break;
             case "agendar_followup": {
               const targetLeadId = lead_id || toolArgs.lead_id;
@@ -1133,6 +1144,18 @@ serve(async (req) => {
           .update({ status: "canceled", canceled_reason: "fallback_limit" })
           .eq("session_id", session_id)
           .eq("status", "pending");
+
+        // Enqueue for human support
+        await supabase.from("human_support_queue").insert({
+          workspace_id: agent.workspace_id,
+          lead_id: lead_id && isValidUUID(lead_id) ? lead_id : null,
+          agent_id,
+          session_id,
+          reason: "fallback_limit",
+          status: "waiting",
+          instance_name: reqInstanceName || agent.instance_name || null,
+        }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support (fallback):", error); });
+        console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (fallback_limit)`);
 
         await supabase.from("agent_executions").insert({
           agent_id, lead_id, session_id,
