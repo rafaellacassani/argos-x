@@ -3075,8 +3075,12 @@ export default function Chats() {
             {/* Human Support Queue Action Bar */}
             {(() => {
               const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
+              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
               const queueItem = queue.find(q => {
                 if (q.status !== "waiting" && q.status !== "in_progress") return false;
+                // Match by lead_id first
+                if (chatLead && q.lead_id === chatLead.id) return true;
+                // Fallback: match by phone
                 const qPhone = q.lead_phone?.replace(/[^0-9]/g, "") || "";
                 if (!qPhone || !chatPhone || qPhone.length < 8 || chatPhone.length < 8) return false;
                 return chatPhone.slice(-10) === qPhone.slice(-10);
