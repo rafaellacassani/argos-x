@@ -683,6 +683,7 @@ export default function Chats() {
         if (selectedChat) messageCacheRef.current.set(selectedChat.id, updated);
         return updated;
       });
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
