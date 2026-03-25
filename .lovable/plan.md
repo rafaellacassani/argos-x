@@ -1,25 +1,38 @@
 
 
-## Plano: Criar aba "Conexão" no painel do Agente de IA
+## Plano: Scroll automático para última mensagem ao abrir chat
 
-### O que será feito
-- Criar uma nova aba **"Conexão"** como **primeira opção** no menu lateral do painel de edição do agente
-- Mover para essa aba: seleção de **Instância WhatsApp** e toggle **"Respeitar janela de 24h (Cloud API)"**
-- Remover esses dois blocos da aba "Comportamento"
+### Problema
+Ao abrir um chat, as mensagens aparecem no topo (mensagens mais antigas), forçando o usuário a rolar manualmente até o final para ver as mensagens recentes.
 
-### Mudanças técnicas
+### Solução
 
-**1. Novo arquivo: `src/components/agents/tabs/ConnectionTab.tsx`**
-- Componente com a mesma lógica que existe hoje no BehaviorTab (linhas 122-174): busca instâncias Evolution + Cloud connections do workspace, renderiza o `<Select>` de instância e o toggle de 24h
-- Props: `formData` + `updateField` (mesmo padrão das outras abas)
+**Arquivo: `src/pages/Chats.tsx`**
 
-**2. `src/components/agents/AgentDetailDialog.tsx`**
-- Importar `ConnectionTab` e ícone `Plug` do lucide-react
-- Adicionar `{ id: "connection", label: "Conexão", icon: Plug }` como **primeiro item** do array `tabs`
-- Renderizar `<ConnectionTab>` quando `activeTab === "connection"`
+1. **Adicionar função `scrollToBottom`** que rola o container de mensagens até o final:
+   ```ts
+   const scrollToBottom = useCallback(() => {
+     const el = messagesContainerRef.current;
+     if (el) el.scrollTop = el.scrollHeight;
+   }, []);
+   ```
 
-**3. `src/components/agents/tabs/BehaviorTab.tsx`**
-- Remover: estados `instances` e `cloudConnections`, queries de WhatsApp (linhas 22-23, 30-35)
-- Remover: bloco "Instância WhatsApp" (linhas 122-151) e bloco "Cloud API 24h" (linhas 153-174)
-- Manter: "Quem ela responde", "Tempo de resposta", "Tamanho das respostas", "Controle de Pausa"
+2. **Adicionar `useEffect` para scroll automático** após mensagens carregarem (quando `loadingMessages` muda de `true` para `false`, ou quando mensagens são definidas pela primeira vez para um chat):
+   ```ts
+   useEffect(() => {
+     if (!loadingMessages && messages.length > 0) {
+       requestAnimationFrame(() => scrollToBottom());
+     }
+   }, [loadingMessages, selectedChat?.id]);
+   ```
+
+3. **Scroll ao enviar mensagem** — adicionar `scrollToBottom()` após cada `setMessages` que adiciona mensagens novas (envio de texto, áudio, arquivo), e também no handler de realtime quando chega mensagem nova no chat aberto.
+
+4. **Limitar carga inicial a ~30 mensagens mais recentes** (já é o padrão atual com `limit(30)`) — manter o carregamento sob demanda de mensagens antigas via scroll-to-top, que já funciona.
+
+### O que NÃO será alterado
+- Nenhuma edge function
+- Nenhuma lógica de agentes de IA
+- Nenhum outro componente ou página
+- A lógica de infinite scroll para mensagens antigas (scroll-to-top) permanece intacta
 
