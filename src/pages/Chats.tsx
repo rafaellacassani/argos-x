@@ -439,6 +439,13 @@ export default function Chats() {
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
   
+  // Auto-scroll to bottom when messages finish loading or chat changes
+  useEffect(() => {
+    if (!loadingMessages && messages.length > 0) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [loadingMessages, selectedChat?.id, scrollToBottom]);
+
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
