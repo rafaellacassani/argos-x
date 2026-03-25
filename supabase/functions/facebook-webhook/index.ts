@@ -392,27 +392,47 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
         .eq("status", "pending");
     }
 
+    // Download media if present (image support for AI vision)
+    let mediaBase64: string | undefined;
+    let mediaMimeType: string | undefined;
+    if (mediaType === "image" && mediaId) {
+      console.log(`[Facebook Webhook] 📷 Downloading image ${mediaId} for AI vision`);
+      const mediaData = await downloadMediaAsBase64(mediaId, accessToken);
+      if (mediaData) {
+        mediaBase64 = mediaData.base64;
+        mediaMimeType = mediaData.mimeType;
+      }
+    }
+
     // Call ai-agent-chat
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    console.log(`[Facebook Webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, phone ${senderPhone}`);
+    console.log(`[Facebook Webhook] 🚀 Calling ai-agent-chat for agent ${matchingAgent.id}, phone ${senderPhone}${mediaBase64 ? ' (with image)' : ''}`);
+
+    const agentPayload: Record<string, any> = {
+      agent_id: matchingAgent.id,
+      session_id: `waba_${senderPhone}`,
+      message: messageText || "(imagem enviada)",
+      lead_id: leadId,
+      message_id: messageId,
+      phone_number: senderPhone,
+      _internal_webhook: true,
+      channel_type: "whatsapp_cloud",
+      cloud_phone_number_id: phoneNumberId,
+      cloud_access_token: accessToken,
+    };
+
+    if (mediaBase64 && mediaMimeType) {
+      agentPayload.media_type = "image";
+      agentPayload.media_base64 = mediaBase64;
+      agentPayload.media_mimetype = mediaMimeType;
+    }
 
     const agentRes = await fetch(`${supabaseUrl}/functions/v1/ai-agent-chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-      body: JSON.stringify({
-        agent_id: matchingAgent.id,
-        session_id: `waba_${senderPhone}`,
-        message: messageText,
-        lead_id: leadId,
-        message_id: messageId,
-        phone_number: senderPhone,
-        _internal_webhook: true,
-        channel_type: "whatsapp_cloud",
-        cloud_phone_number_id: phoneNumberId,
-        cloud_access_token: accessToken,
-      }),
+      body: JSON.stringify(agentPayload),
     });
 
     const agentData = await agentRes.json();
