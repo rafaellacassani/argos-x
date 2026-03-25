@@ -623,11 +623,12 @@ async function processWhatsAppBusinessEvent(entry: any) {
         workspace_id: metaPage.workspace_id,
       });
 
-      // Route to AI Agent for text messages
-      if (content) {
-        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken);
+      // Route to AI Agent — pass media info for image understanding
+      const rawMediaId = msg[msg.type]?.id;
+      if (content || (msg.type === "image" && rawMediaId)) {
+        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken, msg.type === "image" ? "image" : undefined, msg.type === "image" ? rawMediaId : undefined);
       } else {
-        console.log(`[Facebook Webhook] ⚠️ No text content to route to AI agent for ${senderId} (type: ${messageType})`);
+        console.log(`[Facebook Webhook] ⚠️ No content to route to AI agent for ${senderId} (type: ${messageType})`);
       }
     }
 
