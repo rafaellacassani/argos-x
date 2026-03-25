@@ -8,6 +8,10 @@ import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
+interface AdvancedTabProps extends Props {
+  isAdminViewing?: boolean;
+}
+
 interface Props {
   formData: Record<string, any>;
   updateField: (key: string, value: any) => void;
@@ -23,7 +27,7 @@ const baseModels = [
 ];
 
 export function AdvancedTab({ formData, updateField }: Props) {
-  const { workspace } = useWorkspace();
+  const { workspace, isAdminViewing } = useWorkspace();
   const planType = workspace?.plan_type || "gratuito";
   const isEscala = planType === "escala";
 
@@ -97,23 +101,26 @@ export function AdvancedTab({ formData, updateField }: Props) {
         )}
       </div>
 
-      <Separator />
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Label>System Prompt (manual)</Label>
-          <div className="flex items-center gap-1 text-warning">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span className="text-xs">Atenção: se você preencher este campo, as configurações de Nome, Tom de Voz e Objetivo da aba Personalidade serão ignoradas pelo sistema. Preencha apenas se souber o que está fazendo.</span>
+      {isAdminViewing && (
+        <>
+          <Separator />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Label>System Prompt (manual)</Label>
+              <div className="flex items-center gap-1 text-warning">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span className="text-xs">Atenção: se você preencher este campo, as configurações de Nome, Tom de Voz e Objetivo da aba Personalidade serão ignoradas pelo sistema.</span>
+              </div>
+            </div>
+            <Textarea
+              value={formData.system_prompt || ""}
+              onChange={(e) => updateField("system_prompt", e.target.value)}
+              placeholder="O prompt será gerado automaticamente a partir da aba Personalidade..."
+              className="min-h-[200px] font-mono text-sm"
+            />
           </div>
-        </div>
-        <Textarea
-          value={formData.system_prompt || ""}
-          onChange={(e) => updateField("system_prompt", e.target.value)}
-          placeholder="O prompt será gerado automaticamente a partir da aba Personalidade..."
-          className="min-h-[200px] font-mono text-sm"
-        />
-      </div>
+        </>
+      )}
     </div>
   );
 }

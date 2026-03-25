@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
@@ -46,6 +47,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
   const [isDirty, setIsDirty] = useState(false);
   const { updateAgent, toggleAgent } = useAIAgents();
   const { toast } = useToast();
+  const { isAdminViewing } = useWorkspace();
 
   useEffect(() => {
     if (agent) {
@@ -179,7 +181,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
       max_tokens: formData.max_tokens,
       message_split_enabled: formData.message_split_enabled,
       message_split_length: formData.message_split_length,
-      system_prompt: formData.system_prompt || autoPrompt,
+      system_prompt: isAdminViewing && formData.system_prompt ? formData.system_prompt : autoPrompt,
       type: formData.type,
     };
 
