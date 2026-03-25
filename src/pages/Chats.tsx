@@ -432,7 +432,20 @@ export default function Chats() {
   // Message cache: stores messages per chat ID to avoid re-fetching
   const messageCacheRef = useRef<Map<string, Message[]>>(new Map());
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  // Scroll messages container to the bottom (latest messages)
+  const scrollToBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, []);
   
+  // Auto-scroll to bottom when messages finish loading or chat changes
+  useEffect(() => {
+    if (!loadingMessages && messages.length > 0) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
+  }, [loadingMessages, selectedChat?.id, scrollToBottom]);
+
   // Load leads data for filters and auto-create leads
   const { stages, tags, leads, createLead, createLeadSilent, addTagToLead, removeTagFromLead, createTag, updateLead, moveLead, deleteLead } = useLeads();
   const { isSeller, userProfileId } = useUserRole();
@@ -638,6 +651,7 @@ export default function Chats() {
           messageCacheRef.current.set(selectedChat.id, updated);
           return updated;
         });
+        requestAnimationFrame(() => scrollToBottom());
       } else {
         toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
       }
@@ -669,6 +683,7 @@ export default function Chats() {
         if (selectedChat) messageCacheRef.current.set(selectedChat.id, updated);
         return updated;
       });
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
@@ -759,6 +774,7 @@ export default function Chats() {
         fileName: file.name,
       };
       setMessages((prev) => [...prev, newMessage]);
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({
         title: "Erro ao enviar mídia",
@@ -805,6 +821,7 @@ export default function Chats() {
         localAudioBase64: localAudioDataUrl,
       };
       setMessages((prev) => [...prev, newMessage]);
+      requestAnimationFrame(() => scrollToBottom());
     } else {
       toast({
         title: "Erro ao enviar áudio",
@@ -2237,6 +2254,7 @@ export default function Chats() {
             messageCacheRef.current.set(selectedChat.id, updated);
             return updated;
           });
+          requestAnimationFrame(() => scrollToBottom());
 
           // Also update chat list preview
           setChats((prev) =>
