@@ -455,6 +455,8 @@ export default function Chats() {
   const { isSeller, userProfileId } = useUserRole();
   const { workspaceId } = useWorkspace();
   const isMobile = useIsMobile();
+  const { queue, waitingCount, claimItem, resolveItem } = useHumanSupportQueue();
+  const [showQueueOnly, setShowQueueOnly] = useState(false);
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
