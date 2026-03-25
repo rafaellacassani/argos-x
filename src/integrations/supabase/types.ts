@@ -1557,6 +1557,76 @@ export type Database = {
           },
         ]
       }
+      human_support_queue: {
+        Row: {
+          agent_id: string | null
+          assigned_to: string | null
+          created_at: string
+          id: string
+          instance_name: string | null
+          lead_id: string | null
+          notes: string | null
+          reason: string
+          resolved_at: string | null
+          session_id: string | null
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          agent_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          instance_name?: string | null
+          lead_id?: string | null
+          notes?: string | null
+          reason?: string
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          agent_id?: string | null
+          assigned_to?: string | null
+          created_at?: string
+          id?: string
+          instance_name?: string | null
+          lead_id?: string | null
+          notes?: string | null
+          reason?: string
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "human_support_queue_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_support_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "human_support_queue_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_attribution: {
         Row: {
           created_at: string
