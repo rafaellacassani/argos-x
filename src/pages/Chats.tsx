@@ -3034,7 +3034,61 @@ export default function Chats() {
               </div>
             </div>
 
-            {/* Messages */}
+            {/* Human Support Queue Action Bar */}
+            {(() => {
+              const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
+              const queueItem = queue.find(q => {
+                if (q.status !== "waiting" && q.status !== "in_progress") return false;
+                const qPhone = q.lead_phone?.replace(/[^0-9]/g, "") || "";
+                if (!qPhone || !chatPhone || qPhone.length < 8 || chatPhone.length < 8) return false;
+                return chatPhone.slice(-10) === qPhone.slice(-10);
+              });
+              if (!queueItem) return null;
+              return (
+                <div className="px-4 py-2 border-b border-border bg-amber-500/10 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Headphones className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-xs text-amber-700 truncate">
+                      {queueItem.status === "waiting" ? "Aguardando atendimento humano" : "Em atendimento"}
+                      {queueItem.reason && (
+                        <span className="text-amber-600/70 ml-1">
+                          — {queueItem.reason.length > 40 ? queueItem.reason.slice(0, 40) + "…" : queueItem.reason}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {queueItem.status === "waiting" && userProfileId && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
+                        onClick={async () => {
+                          const ok = await claimItem(queueItem.id, userProfileId);
+                          if (ok) toast({ title: "Atendimento assumido" });
+                        }}
+                      >
+                        <UserCheck className="w-3 h-3" />
+                        Assumir
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
+                      onClick={async () => {
+                        const ok = await resolveItem(queueItem.id, true);
+                        if (ok) toast({ title: "Atendimento finalizado", description: "A IA foi retomada automaticamente." });
+                      }}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      Finalizar
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div 
               className="flex-1 overflow-y-auto p-4 min-h-0 w-full chat-pattern scrollbar-thin"
               ref={messagesContainerRef}
