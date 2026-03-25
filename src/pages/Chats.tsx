@@ -2536,8 +2536,26 @@ export default function Chats() {
       // This is a simplified implementation that can be extended
     }
 
+    // Filter by support queue (show only chats that have waiting/in_progress queue items)
+    if (showQueueOnly && queue.length > 0) {
+      const queuePhones = new Set(
+        queue
+          .filter(q => q.status === "waiting" || q.status === "in_progress")
+          .map(q => q.lead_phone?.replace(/[^0-9]/g, ""))
+          .filter(Boolean)
+      );
+      result = result.filter(chat => {
+        const chatDigits = cleanPhoneNumber(chat.phone || "");
+        if (!chatDigits || chatDigits.length < 8) return false;
+        return Array.from(queuePhones).some(qp => {
+          if (!qp || qp.length < 8) return false;
+          return chatDigits.slice(-10) === qp.slice(-10) || chatDigits.includes(qp) || qp.includes(chatDigits);
+        });
+      });
+    }
+
     return result;
-  }, [chats, searchTerm, activeFilters]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
