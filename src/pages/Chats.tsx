@@ -3019,12 +3019,6 @@ export default function Chats() {
                     contactName={selectedChat.name}
                   />
                   <Button variant="ghost" size="icon">
-                    <Phone className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
-                    <Video className="w-5 h-5" />
-                  </Button>
-                  <Button variant="ghost" size="icon">
                     <Star className="w-5 h-5" />
                   </Button>
                   <Button variant="ghost" size="icon">
