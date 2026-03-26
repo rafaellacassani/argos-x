@@ -1,52 +1,77 @@
 
 
-## Habilitar interpretação de áudio pelos Agentes de IA
+## Diagnóstico Completo: Calendário nos Agentes de IA
 
-### O que será feito
-Adicionar transcrição de áudio via Whisper (OpenAI) no `ai-agent-chat`, com gate por plano (Business/Escala + admin). Também habilitar o encaminhamento de áudio no `facebook-webhook` (WABA).
+### O que funciona hoje
+1. **Criar evento** — funciona, insere em `calendar_events`
+2. **Sync para Google Calendar** — tenta push após criar evento
+3. **Meet link** — gerado via Google Calendar e incluído nos lembretes
+4. **Lembretes automáticos** — cria `scheduled_messages` com os offsets configurados
+5. **Reagendar e cancelar** — atualiza/deleta no banco
+6. **UI de configuração** — aba Ferramentas permite configurar permissões, lembretes e Meet link
 
-### Alterações
+### Problemas encontrados
 
-**1. `supabase/functions/ai-agent-chat/index.ts`**
+**1. `calendar_config` não persiste no banco** (CRÍTICO)
+- A coluna `calendar_config` **não existe** na tabela `ai_agents`
+- A UI em `ToolsTab.tsx` permite configurar lembretes, permissões e Meet link, mas esses dados nunca são salvos
+- No `ai-agent-chat`, a leitura faz `(agent as any).calendar_config` que sempre retorna `undefined`, caindo no fallback `["180", "30"]`
+- Resultado: qualquer configuração de lembrete feita pelo cliente é **ignorada**
 
-- Adicionar função `transcribeAudio(base64, mimetype)`:
-  - Converte base64 em Blob
-  - Envia para `https://api.openai.com/v1/audio/transcriptions` (modelo `whisper-1`)
-  - Retorna texto transcrito
-  - Usa `OPENAI_API_KEY` (já configurada)
+**2. Reagendar não sincroniza com Google**
+- Ao reagendar, o código atualiza o banco local mas **não chama** `sync-google-calendar/push`
+- O evento fica dessincronizado: Google mostra horário antigo, sistema mostra novo
 
-- Adicionar verificação de plano antes de transcrever:
-  - Buscar `workspace.plan_type` via `workspaces` table usando o `agent.workspace_id`
-  - Permitir transcrição apenas para planos `negocio`, `escala`, `active` (Business+) e workspaces admin
-  - Se plano não permitir, responder com texto genérico: "Desculpa, não consigo ouvir áudios no momento. Me manda por texto!"
+**3. Cancelar não remove lembretes pendentes**
+- Ao cancelar um evento, o código deleta o `calendar_events` mas **não cancela** os `scheduled_messages` de lembrete associados
+- Resultado: lead recebe lembrete de reunião que já foi cancelada
 
-- Substituir o bloco `input_audio` (linhas 707-722) por transcrição Whisper:
-  ```
-  const transcription = await transcribeAudio(media_base64, media_mimetype);
-  aiMessages.push({
-    role: "user",
-    content: `[Áudio do lead - transcrição]: ${transcription}`
-  });
-  ```
+**4. Cancelar não sincroniza delete com Google**
+- Não chama `sync-google-calendar/delete` ao cancelar via IA
+- Evento permanece no Google Calendar do dono do workspace
 
-**2. `supabase/functions/facebook-webhook/index.ts`**
+**5. Consultar disponibilidade é limitado**
+- Só consulta eventos do lead específico, não verifica **horários ocupados** do calendário geral
+- A IA não sabe se um horário já está ocupado por outro compromisso
+- Pode agendar duas reuniões no mesmo horário
 
-- Linha 628: expandir condição para incluir `audio`:
-  ```
-  if (content || (["image", "audio"].includes(msg.type) && rawMediaId)) {
-  ```
-- Passar `media_type: "audio"` e `mediaId` para `routeToAIAgent` quando `msg.type === "audio"`
-- Na função `routeToAIAgent`, baixar áudio via Graph API (mesmo fluxo que imagem) e enviar `media_base64` + `media_mimetype`
+**6. Sem gate por plano**
+- A ferramenta de calendário está disponível para **todos os planos**, sem restrição
+- Deveria ser restrita a partir do plano Business (negócio)
 
-### O que NÃO será alterado
-- Nenhum componente frontend
-- Nenhuma tabela do banco de dados
-- O fluxo de imagens (já funciona)
-- O fluxo da Evolution API para áudio no `whatsapp-webhook` (já baixa e envia base64 corretamente, só o modelo não entendia — agora vai transcrever)
-- Nenhuma lógica de agentes, personalidade, tools, follow-ups
+**7. Reagendar não atualiza lembretes**
+- Ao reagendar, os lembretes antigos permanecem com horários errados
+- Não cria novos lembretes para o novo horário
 
-### Planos habilitados
-- **Negócio** e **Escala**: áudio habilitado
-- **Essencial** e **Trial**: resposta educada pedindo texto
-- **Admin (vocês)**: sempre habilitado
+### Plano de correção
+
+**1. Migração: adicionar coluna `calendar_config`**
+```sql
+ALTER TABLE ai_agents ADD COLUMN calendar_config jsonb DEFAULT '{}';
+```
+
+**2. `supabase/functions/ai-agent-chat/index.ts`**
+- **Gate por plano**: antes de executar `gerenciar_calendario`, verificar `workspace.plan_type` — permitir apenas `negocio`, `escala`, `active` e admin. Se não permitido, retornar mensagem educada
+- **Consultar disponibilidade real**: ao consultar, buscar TODOS os eventos do workspace no período (não só do lead), para verificar conflitos
+- **Reagendar com sync Google**: após atualizar o evento, chamar `sync-google-calendar/push` (igual ao criar)
+- **Reagendar atualiza lembretes**: deletar `scheduled_messages` antigos do evento e criar novos com base no novo horário
+- **Cancelar com sync Google**: chamar `sync-google-calendar/delete` antes de deletar localmente
+- **Cancelar remove lembretes**: deletar `scheduled_messages` pendentes associados ao evento cancelado
+
+**3. `src/components/agents/AgentDetailDialog.tsx`**
+- Incluir `calendar_config` no payload de save do agente
+
+### Arquivos alterados
+| Arquivo | Mudança |
+|---------|---------|
+| Migração SQL | Adicionar coluna `calendar_config` em `ai_agents` |
+| `supabase/functions/ai-agent-chat/index.ts` | Gate por plano, sync Google em reagendar/cancelar, lembretes em reagendar/cancelar, consulta de disponibilidade real |
+| `src/components/agents/AgentDetailDialog.tsx` | Incluir `calendar_config` no payload de save |
+
+### Resultado esperado
+- Configurações de lembrete persistem e são respeitadas
+- Reagendar/cancelar sincroniza com Google Calendar
+- Lembretes são atualizados/removidos corretamente
+- IA verifica conflitos de horário antes de agendar
+- Ferramenta restrita ao plano Business+
 
