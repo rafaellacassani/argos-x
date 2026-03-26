@@ -1368,7 +1368,11 @@ serve(async (req) => {
                 if (targetLeadId && isValidUUID(targetLeadId)) {
                   const leadEvents = (allEvents || []).filter((e: any) => e.lead_id === targetLeadId);
                   if (leadEvents.length > 0) {
-                    const eventList = leadEvents.map((e: any) => `- ${e.title} em ${e.start_at} (ID: ${e.id})`).join("\n");
+                    const eventList = leadEvents.map((e: any) => {
+                      const s = new Date(e.start_at);
+                      const eEnd = new Date(e.end_at);
+                      return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)} (ID: ${e.id})`;
+                    }).join("\n");
                     responseContent += `\n\n[Eventos do lead:\n${eventList}]`;
                   }
                 }
