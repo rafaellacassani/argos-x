@@ -1100,14 +1100,48 @@ serve(async (req) => {
               const action = toolArgs.action;
               console.log(`[ai-agent-chat] 📅 Calendar action: ${action}`);
 
+              // --- Plan gate: calendar only for Business+ ---
+              let calendarAllowed = false;
+              try {
+                const { data: wsCalData } = await supabase.from("workspaces").select("plan_type, created_by").eq("id", agent.workspace_id).single();
+                const calPlan = wsCalData?.plan_type || "";
+                const calAllowedPlans = ["negocio", "escala", "active"];
+                calendarAllowed = calAllowedPlans.includes(calPlan);
+                if (!calendarAllowed && wsCalData?.created_by) {
+                  const { data: creatorAdminRole } = await supabase.from("user_roles").select("role").eq("user_id", wsCalData.created_by).eq("role", "admin");
+                  if (creatorAdminRole && creatorAdminRole.length > 0) calendarAllowed = true;
+                }
+              } catch (e) {
+                console.warn("[ai-agent-chat] ⚠️ Could not check plan for calendar:", e);
+              }
+
+              if (!calendarAllowed) {
+                console.log("[ai-agent-chat] 🔒 Calendar not allowed for this plan");
+                responseContent = "No momento, a funcionalidade de calendário não está disponível no seu plano. 😊 Entre em contato com a equipe para saber mais sobre os planos que incluem essa funcionalidade!";
+                break;
+              }
+
               if (action === "criar") {
                 const startAt = toolArgs.start_at;
                 if (!startAt) { console.error("[ai-agent-chat] ❌ Calendar: missing start_at"); break; }
-                // Default 15min duration
                 const startDate = new Date(startAt);
                 const endAt = toolArgs.end_at || new Date(startDate.getTime() + 15 * 60 * 1000).toISOString();
 
-                // Get workspace owner for user_id
+                // Check availability - look for conflicts in the workspace
+                const { data: conflictEvents } = await supabase.from("calendar_events")
+                  .select("id, title, start_at, end_at")
+                  .eq("workspace_id", agent.workspace_id)
+                  .lt("start_at", endAt)
+                  .gt("end_at", startAt)
+                  .limit(5);
+
+                if (conflictEvents && conflictEvents.length > 0) {
+                  const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
+                  responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO - já existem eventos nesse horário:\n${conflictList}\nSugira outro horário ao lead.]`;
+                  console.log(`[ai-agent-chat] 📅 Conflict detected: ${conflictEvents.length} events`);
+                  break;
+                }
+
                 const { data: wsData } = await supabase.from("workspaces").select("created_by").eq("id", agent.workspace_id).single();
                 const userId = wsData?.created_by;
                 if (!userId) { console.error("[ai-agent-chat] ❌ Calendar: no workspace owner"); break; }
@@ -1147,15 +1181,13 @@ serve(async (req) => {
                     console.error("[ai-agent-chat] ⚠️ Google sync failed:", syncErr);
                   }
 
-                  // Create reminder messages using configured reminders
+                  // Create reminder messages
                   if (targetLeadId && isValidUUID(targetLeadId)) {
                     const { data: leadInfo } = await supabase.from("leads").select("phone, whatsapp_jid, instance_name, source, name").eq("id", targetLeadId).single();
                     if (leadInfo) {
                       const channelType = (leadInfo.source === "meta_facebook" || leadInfo.source === "meta_instagram") ? leadInfo.source : "whatsapp";
                       const leadName = leadInfo.name || "cliente";
                       const eventTitle = toolArgs.title || "sua reunião";
-
-                      // Use configured reminders from calendar_config
                       const reminderMinutes = configuredReminders.map((r: string) => parseInt(r, 10)).filter((n: number) => !isNaN(n));
                       const reminders = reminderMinutes.map((mins: number) => {
                         const hours = mins / 60;
@@ -1177,6 +1209,7 @@ serve(async (req) => {
                             channel_type: channelType,
                             status: "pending",
                             contact_name: leadInfo.phone,
+                            metadata: JSON.stringify({ calendar_event_id: newEvent.id }),
                           };
                           if (channelType === "whatsapp") {
                             insertData.instance_name = leadInfo.instance_name || reqInstanceName || agent.instance_name;
@@ -1202,28 +1235,150 @@ serve(async (req) => {
                 }
                 if (toolArgs.title) updateData.title = toolArgs.title;
                 if (Object.keys(updateData).length > 0) {
+                  // Check availability for new time
+                  const newStart = toolArgs.start_at;
+                  const newEnd = updateData.end_at as string || toolArgs.end_at;
+                  if (newStart && newEnd) {
+                    const { data: conflictEvents } = await supabase.from("calendar_events")
+                      .select("id, title, start_at, end_at")
+                      .eq("workspace_id", agent.workspace_id)
+                      .neq("id", eventId)
+                      .lt("start_at", newEnd)
+                      .gt("end_at", newStart)
+                      .limit(5);
+                    if (conflictEvents && conflictEvents.length > 0) {
+                      const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
+                      responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO:\n${conflictList}\nSugira outro horário ao lead.]`;
+                      break;
+                    }
+                  }
+
                   await supabase.from("calendar_events").update(updateData).eq("id", eventId).eq("workspace_id", agent.workspace_id);
                   console.log(`[ai-agent-chat] 📅 Event rescheduled: ${eventId}`);
+
+                  // Sync reschedule to Google Calendar
+                  try {
+                    const { data: eventData } = await supabase.from("calendar_events").select("user_id, google_event_id").eq("id", eventId).single();
+                    if (eventData?.google_event_id) {
+                      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-google-calendar/push`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+                        body: JSON.stringify({ eventId }),
+                      });
+                      console.log(`[ai-agent-chat] 📅 Rescheduled event synced to Google`);
+                    }
+                  } catch (syncErr) {
+                    console.error("[ai-agent-chat] ⚠️ Google sync on reschedule failed:", syncErr);
+                  }
+
+                  // Delete old reminders and create new ones
+                  try {
+                    await supabase.from("scheduled_messages")
+                      .delete()
+                      .eq("workspace_id", agent.workspace_id)
+                      .eq("status", "pending")
+                      .like("metadata", `%${eventId}%`);
+                    console.log(`[ai-agent-chat] 🗑️ Old reminders deleted for event ${eventId}`);
+
+                    // Create new reminders if we have a lead and new start time
+                    if (toolArgs.start_at && targetLeadId && isValidUUID(targetLeadId)) {
+                      const newStartDate = new Date(toolArgs.start_at);
+                      const { data: leadInfo } = await supabase.from("leads").select("phone, whatsapp_jid, instance_name, source, name").eq("id", targetLeadId).single();
+                      if (leadInfo) {
+                        const channelType = (leadInfo.source === "meta_facebook" || leadInfo.source === "meta_instagram") ? leadInfo.source : "whatsapp";
+                        const leadName = leadInfo.name || "cliente";
+                        const eventTitle = toolArgs.title || "sua reunião";
+
+                        // Get meet link from event
+                        const { data: evtData } = await supabase.from("calendar_events").select("meet_link").eq("id", eventId).single();
+                        const meetLink = evtData?.meet_link || null;
+
+                        const reminderMinutes = configuredReminders.map((r: string) => parseInt(r, 10)).filter((n: number) => !isNaN(n));
+                        for (const mins of reminderMinutes) {
+                          const reminderTime = new Date(newStartDate.getTime() - mins * 60 * 1000);
+                          if (reminderTime.getTime() > Date.now()) {
+                            const hours = mins / 60;
+                            const label = mins >= 60 ? `${hours} hora${hours > 1 ? 's' : ''}` : `${mins} minutos`;
+                            let reminderMsg = `Olá ${leadName}! 👋 Lembrete: ${eventTitle} começa em ${label}. Te espero lá! 😊`;
+                            if (meetLink) reminderMsg += `\n\n📹 Link da reunião: ${meetLink}`;
+                            const insertData: Record<string, unknown> = {
+                              workspace_id: agent.workspace_id,
+                              message: reminderMsg,
+                              scheduled_at: reminderTime.toISOString(),
+                              channel_type: channelType,
+                              status: "pending",
+                              contact_name: leadInfo.phone,
+                              metadata: JSON.stringify({ calendar_event_id: eventId }),
+                            };
+                            if (channelType === "whatsapp") {
+                              insertData.instance_name = leadInfo.instance_name || reqInstanceName || agent.instance_name;
+                              insertData.remote_jid = leadInfo.whatsapp_jid;
+                              insertData.phone_number = leadInfo.phone;
+                            }
+                            await supabase.from("scheduled_messages").insert(insertData);
+                          }
+                        }
+                        console.log(`[ai-agent-chat] ⏰ New reminders created for rescheduled event`);
+                      }
+                    }
+                  } catch (remErr) {
+                    console.error("[ai-agent-chat] ⚠️ Reminder update on reschedule failed:", remErr);
+                  }
                 }
               } else if (action === "cancelar") {
                 const eventId = toolArgs.event_id;
                 if (!eventId || !isValidUUID(eventId)) { console.error("[ai-agent-chat] ❌ Calendar: missing event_id for cancel"); break; }
+
+                // Delete pending reminders
+                try {
+                  await supabase.from("scheduled_messages")
+                    .delete()
+                    .eq("workspace_id", agent.workspace_id)
+                    .eq("status", "pending")
+                    .like("metadata", `%${eventId}%`);
+                  console.log(`[ai-agent-chat] 🗑️ Reminders deleted for cancelled event ${eventId}`);
+                } catch (remErr) {
+                  console.error("[ai-agent-chat] ⚠️ Could not delete reminders:", remErr);
+                }
+
+                // Sync delete to Google Calendar
+                try {
+                  const { data: eventData } = await supabase.from("calendar_events").select("google_event_id").eq("id", eventId).single();
+                  if (eventData?.google_event_id) {
+                    await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/sync-google-calendar/delete`, {
+                      method: "DELETE",
+                      headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+                      body: JSON.stringify({ eventId }),
+                    });
+                    console.log(`[ai-agent-chat] 📅 Event deleted from Google Calendar`);
+                  }
+                } catch (syncErr) {
+                  console.error("[ai-agent-chat] ⚠️ Google delete sync failed:", syncErr);
+                }
+
                 await supabase.from("calendar_events").delete().eq("id", eventId).eq("workspace_id", agent.workspace_id);
                 console.log(`[ai-agent-chat] 📅 Event cancelled: ${eventId}`);
               } else if (action === "consultar") {
-                // Query upcoming events for the lead
+                // Query ALL upcoming events in workspace to check availability
+                const { data: allEvents } = await supabase.from("calendar_events")
+                  .select("id, title, start_at, end_at, description, lead_id")
+                  .eq("workspace_id", agent.workspace_id)
+                  .gte("start_at", new Date().toISOString())
+                  .order("start_at")
+                  .limit(20);
+
                 if (targetLeadId && isValidUUID(targetLeadId)) {
-                  const { data: events } = await supabase.from("calendar_events")
-                    .select("id, title, start_at, end_at, description")
-                    .eq("workspace_id", agent.workspace_id)
-                    .eq("lead_id", targetLeadId)
-                    .gte("start_at", new Date().toISOString())
-                    .order("start_at")
-                    .limit(5);
-                  if (events && events.length > 0) {
-                    const eventList = events.map((e: any) => `- ${e.title} em ${e.start_at} (ID: ${e.id})`).join("\n");
-                    responseContent += `\n\n[Eventos encontrados:\n${eventList}]`;
+                  const leadEvents = (allEvents || []).filter((e: any) => e.lead_id === targetLeadId);
+                  if (leadEvents.length > 0) {
+                    const eventList = leadEvents.map((e: any) => `- ${e.title} em ${e.start_at} (ID: ${e.id})`).join("\n");
+                    responseContent += `\n\n[Eventos do lead:\n${eventList}]`;
                   }
+                }
+
+                // Also provide busy slots info
+                if (allEvents && allEvents.length > 0) {
+                  const busySlots = allEvents.map((e: any) => `- ${e.start_at} até ${e.end_at}`).join("\n");
+                  responseContent += `\n\n[Horários já ocupados:\n${busySlots}]`;
                 }
               }
               break;
