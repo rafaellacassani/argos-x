@@ -1,52 +1,41 @@
 
 
-## Corrigir: Cliente não consegue criar conexão WhatsApp ("already in use")
+## Bloquear contatos no Chat (Evolution API + WABA)
 
-### Problema
-O usuário `marubalves@gmail.com` (workspace "Realize", ID `054d8f7b...`) tenta criar uma conexão WhatsApp e recebe "Edge Function returned a non-2xx status code". 
+### O que será feito
+Transformar o botão `MoreVertical` (⋮) no header do chat em um dropdown menu com a opção **"Bloquear contato"** / **"Desbloquear contato"**. Funciona tanto para instâncias Evolution API quanto WABA (Meta).
 
-A causa é que a instância `054d8f7b-limpa-nome` já existe na Evolution API (de uma tentativa anterior), mas **não** existe na tabela local `whatsapp_instances`. Quando o sistema tenta `POST /instance/create`, a Evolution API retorna **403 "This name is already in use"**, e o código atual propaga o erro sem tratamento.
+### Alterações
 
-### Correção
+**1. `supabase/functions/evolution-api/index.ts`**
+- Adicionar endpoint `POST /block-contact/:instanceName`
+- Body: `{ number, status }` onde status = `"block"` ou `"unblock"`
+- Chama Evolution API: `POST /chat/updateBlockStatus/${instanceName}` (nota: a doc oficial diz `/message/...` mas o endpoint correto é `/chat/...` conforme issue #2225)
 
-**Arquivo**: `supabase/functions/evolution-api/index.ts` (endpoint `/create-instance`, linhas ~204-215)
+**2. `src/hooks/useEvolutionAPI.ts`**
+- Adicionar função `blockContact(instanceName: string, number: string, block: boolean): Promise<boolean>`
+- Chama `supabase.functions.invoke("evolution-api", { body: { action: "block-contact", instanceName, number, status: block ? "block" : "unblock" } })`
 
-Quando o `create` falhar com 403 (nome já em uso), fazer fallback para `connect` (buscar QR code da instância existente) em vez de retornar erro:
+**3. `supabase/functions/meta-send-message/index.ts`**
+- Para WABA: a Meta Graph API **não suporta bloqueio de contatos** programaticamente. A opção será desabilitada para chats Meta/WABA, mostrando tooltip explicativo.
 
-```ts
-app.post("/create-instance", async (c) => {
-  try {
-    const { instanceName } = await c.req.json();
-    if (!instanceName || typeof instanceName !== "string" || instanceName.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(instanceName)) {
-      return c.json({ error: "Invalid instanceName" }, 400, corsHeaders);
-    }
-    
-    let result;
-    try {
-      result = await evolutionRequest("/instance/create", "POST", { instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" });
-    } catch (createError: any) {
-      // If instance already exists in Evolution API, try to connect instead
-      if (createError.message?.includes("already in use") || createError.message?.includes("403")) {
-        console.log(`[evolution-api] Instance ${instanceName} already exists, connecting instead`);
-        result = await evolutionRequest(`/instance/connect/${instanceName}`);
-      } else {
-        throw createError;
-      }
-    }
-    
-    return c.json(result, 200, corsHeaders);
-  } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to create instance" }, 500, corsHeaders);
-  }
-});
-```
+**4. `src/pages/Chats.tsx`**
+- Substituir o `<Button>` com `<MoreVertical>` por um `<DropdownMenu>` contendo:
+  - **Bloquear contato** (ícone `Ban`) — apenas para instâncias Evolution
+  - Para instâncias Meta, o item aparece desabilitado com tooltip "Não disponível para WABA"
+- Ao clicar, exibe `AlertDialog` de confirmação
+- Executa `blockContact()` e mostra toast de sucesso/erro
+- Também pausar a IA para esse contato (inserir na `agent_memories` com `is_paused: true`)
+
+### Fluxo
+1. Usuário clica ⋮ → "Bloquear contato"
+2. Confirmação: "Tem certeza? O contato não poderá mais enviar mensagens."
+3. Chama Evolution API para bloquear
+4. Pausa IA para esse contato
+5. Toast: "Contato bloqueado com sucesso"
 
 ### O que NÃO será alterado
-- Nenhum componente frontend
 - Nenhuma tabela do banco
 - Nenhuma lógica de agentes, calendário, áudio, imagens
-
-### Resultado
-- **Antes**: erro 500 quando a instância já existe na Evolution API
-- **Depois**: reconecta automaticamente e retorna QR code normalmente
+- O fluxo de mensagens existente permanece igual
 
