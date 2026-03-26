@@ -1129,15 +1129,14 @@ serve(async (req) => {
 
                 // Check availability - look for conflicts in the workspace
                 const { data: conflictEvents } = await supabase.from("calendar_events")
-                  .select("id, title, start_at, end_at")
+                  .select("id")
                   .eq("workspace_id", agent.workspace_id)
                   .lt("start_at", endAt)
                   .gt("end_at", startAt)
                   .limit(5);
 
                 if (conflictEvents && conflictEvents.length > 0) {
-                  const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
-                  responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO - já existem eventos nesse horário:\n${conflictList}\nSugira outro horário ao lead.]`;
+                  responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Informe ao lead que esse horário não está disponível e sugira outro horário próximo. NÃO revele quais compromissos existem.]`;
                   console.log(`[ai-agent-chat] 📅 Conflict detected: ${conflictEvents.length} events`);
                   break;
                 }
@@ -1240,15 +1239,14 @@ serve(async (req) => {
                   const newEnd = updateData.end_at as string || toolArgs.end_at;
                   if (newStart && newEnd) {
                     const { data: conflictEvents } = await supabase.from("calendar_events")
-                      .select("id, title, start_at, end_at")
+                      .select("id")
                       .eq("workspace_id", agent.workspace_id)
                       .neq("id", eventId)
                       .lt("start_at", newEnd)
                       .gt("end_at", newStart)
                       .limit(5);
                     if (conflictEvents && conflictEvents.length > 0) {
-                      const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
-                      responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO:\n${conflictList}\nSugira outro horário ao lead.]`;
+                      responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Sugira outro horário ao lead. NÃO revele detalhes dos compromissos existentes.]`;
                       break;
                     }
                   }
@@ -1361,7 +1359,7 @@ serve(async (req) => {
               } else if (action === "consultar") {
                 // Query ALL upcoming events in workspace to check availability
                 const { data: allEvents } = await supabase.from("calendar_events")
-                  .select("id, title, start_at, end_at, description, lead_id")
+                  .select("id, start_at, end_at, lead_id")
                   .eq("workspace_id", agent.workspace_id)
                   .gte("start_at", new Date().toISOString())
                   .order("start_at")
@@ -1370,15 +1368,23 @@ serve(async (req) => {
                 if (targetLeadId && isValidUUID(targetLeadId)) {
                   const leadEvents = (allEvents || []).filter((e: any) => e.lead_id === targetLeadId);
                   if (leadEvents.length > 0) {
-                    const eventList = leadEvents.map((e: any) => `- ${e.title} em ${e.start_at} (ID: ${e.id})`).join("\n");
+                    const eventList = leadEvents.map((e: any) => {
+                      const s = new Date(e.start_at);
+                      const eEnd = new Date(e.end_at);
+                      return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)} (ID: ${e.id})`;
+                    }).join("\n");
                     responseContent += `\n\n[Eventos do lead:\n${eventList}]`;
                   }
                 }
 
-                // Also provide busy slots info
+                // Busy slots - only pass time ranges internally (no titles/details)
                 if (allEvents && allEvents.length > 0) {
-                  const busySlots = allEvents.map((e: any) => `- ${e.start_at} até ${e.end_at}`).join("\n");
-                  responseContent += `\n\n[Horários já ocupados:\n${busySlots}]`;
+                  const busySlots = allEvents.map((e: any) => {
+                    const s = new Date(e.start_at);
+                    const eEnd = new Date(e.end_at);
+                    return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)}`;
+                  }).join("\n");
+                  responseContent += `\n\n[INSTRUÇÃO INTERNA - Horários indisponíveis (NÃO revele ao lead os detalhes, apenas diga que o horário não está disponível):\n${busySlots}]`;
                 }
               }
               break;
