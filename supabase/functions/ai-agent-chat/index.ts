@@ -741,15 +741,41 @@ serve(async (req) => {
           if (isLastUserMessage && media_type && media_base64) {
             // Multimodal message: image or audio
             if (media_type === "image") {
-              const dataUrl = `data:${media_mimetype || "image/jpeg"};base64,${media_base64}`;
-              aiMessages.push({
-                role: "user",
-                content: [
-                  { type: "text", text: messageText || "[Imagem enviada pelo lead. Descreva o que vê e responda de acordo.]" },
-                  { type: "image_url", image_url: { url: dataUrl } }
-                ]
-              });
-              console.log("[ai-agent-chat] 🖼️ Multimodal image content built for AI");
+              // Sanitize base64: remove any existing data URL prefix
+              let cleanBase64 = media_base64;
+              if (cleanBase64.startsWith("data:")) {
+                cleanBase64 = cleanBase64.replace(/^data:[^;]+;base64,/, "");
+              }
+              
+              // Check size: base64 > 2MB (~1.5MB image) is too large for vision models
+              const base64SizeBytes = cleanBase64.length * 0.75;
+              const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+
+              if (!cleanBase64 || cleanBase64.length < 100) {
+                // Invalid/empty base64 — fallback to text
+                aiMessages.push({
+                  role: "user",
+                  content: messageText || "[O lead enviou uma imagem que não pôde ser processada. Continue a conversa normalmente.]"
+                });
+                console.log("[ai-agent-chat] ⚠️ Image base64 empty/invalid, using text fallback");
+              } else if (base64SizeBytes > MAX_IMAGE_SIZE) {
+                // Image too large — fallback to text
+                aiMessages.push({
+                  role: "user",
+                  content: (messageText ? messageText + "\n\n" : "") + "[O lead enviou uma imagem, mas ela é muito grande para análise visual. Responda normalmente com base no contexto da conversa. NÃO mencione base64 ou dados técnicos.]"
+                });
+                console.log(`[ai-agent-chat] ⚠️ Image too large (${(base64SizeBytes / 1024 / 1024).toFixed(1)}MB), using text fallback`);
+              } else {
+                const dataUrl = `data:${media_mimetype || "image/jpeg"};base64,${cleanBase64}`;
+                aiMessages.push({
+                  role: "user",
+                  content: [
+                    { type: "text", text: messageText || "[Imagem enviada pelo lead. Descreva o que vê e responda de acordo. NÃO mencione base64 ou dados técnicos.]" },
+                    { type: "image_url", image_url: { url: dataUrl } }
+                  ]
+                });
+                console.log(`[ai-agent-chat] 🖼️ Multimodal image content built for AI (${(base64SizeBytes / 1024).toFixed(0)}KB)`);
+              }
             } else if (media_type === "audio") {
               // Check plan: audio transcription only for Business+ plans
               let audioAllowed = false;
