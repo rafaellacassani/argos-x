@@ -1009,9 +1009,8 @@ serve(async (req) => {
           if (toolName) toolsUsed.push(toolName);
           console.log(`[ai-agent-chat] 🔧 Tool call: ${toolName}`);
 
-          // Guard: block execution of tools not enabled for this agent
           const enabledToolsList: string[] = agent.tools || [];
-          if (toolName && !enabledToolsList.includes(toolName) && !(toolName === "gerenciar_calendario" && enabledToolsList.includes("gerenciar_calendario"))) {
+          if (toolName && !enabledToolsList.includes(toolName)) {
             console.log(`[ai-agent-chat] ⛔ Tool "${toolName}" not enabled for agent ${agent.id}, skipping execution`);
             continue;
           }
