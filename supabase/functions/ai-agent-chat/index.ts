@@ -245,7 +245,7 @@ function getToolDefinitions(enabledTools: string[]) {
       }
     },
   ];
-  if (!enabledTools || enabledTools.length === 0) return allTools;
+  if (!enabledTools || enabledTools.length === 0) return [];
   return allTools.filter(t => enabledTools.includes(t.function.name));
 }
 
@@ -1008,6 +1008,13 @@ serve(async (req) => {
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
           if (toolName) toolsUsed.push(toolName);
           console.log(`[ai-agent-chat] 🔧 Tool call: ${toolName}`);
+
+          // Guard: block execution of tools not enabled for this agent
+          const enabledToolsList: string[] = agent.tools || [];
+          if (toolName && !enabledToolsList.includes(toolName) && !(toolName === "gerenciar_calendario" && enabledToolsList.includes("gerenciar_calendario"))) {
+            console.log(`[ai-agent-chat] ⛔ Tool "${toolName}" not enabled for agent ${agent.id}, skipping execution`);
+            continue;
+          }
 
           switch (toolName) {
             case "atualizar_lead": {
