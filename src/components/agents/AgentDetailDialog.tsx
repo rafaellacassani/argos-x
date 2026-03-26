@@ -89,6 +89,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         message_split_length: agent.message_split_length ?? 400,
         system_prompt: agent.system_prompt || "",
         type: agent.type || "sdr",
+        calendar_config: (agent as any).calendar_config || {},
       });
       setIsDirty(false);
     }
