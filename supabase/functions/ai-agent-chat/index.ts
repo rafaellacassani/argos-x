@@ -1136,8 +1136,7 @@ serve(async (req) => {
                   .limit(5);
 
                 if (conflictEvents && conflictEvents.length > 0) {
-                  const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
-                  responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO - já existem eventos nesse horário:\n${conflictList}\nSugira outro horário ao lead.]`;
+                  responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Informe ao lead que esse horário não está disponível e sugira outro horário próximo. NÃO revele quais compromissos existem.]`;
                   console.log(`[ai-agent-chat] 📅 Conflict detected: ${conflictEvents.length} events`);
                   break;
                 }
@@ -1247,8 +1246,7 @@ serve(async (req) => {
                       .gt("end_at", newStart)
                       .limit(5);
                     if (conflictEvents && conflictEvents.length > 0) {
-                      const conflictList = conflictEvents.map((e: any) => `- ${e.title} (${e.start_at} até ${e.end_at})`).join("\n");
-                      responseContent += `\n\n[⚠️ CONFLITO DE HORÁRIO:\n${conflictList}\nSugira outro horário ao lead.]`;
+                      responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Sugira outro horário ao lead. NÃO revele detalhes dos compromissos existentes.]`;
                       break;
                     }
                   }
@@ -1375,10 +1373,14 @@ serve(async (req) => {
                   }
                 }
 
-                // Also provide busy slots info
+                // Busy slots - only pass time ranges internally (no titles/details)
                 if (allEvents && allEvents.length > 0) {
-                  const busySlots = allEvents.map((e: any) => `- ${e.start_at} até ${e.end_at}`).join("\n");
-                  responseContent += `\n\n[Horários já ocupados:\n${busySlots}]`;
+                  const busySlots = allEvents.map((e: any) => {
+                    const s = new Date(e.start_at);
+                    const eEnd = new Date(e.end_at);
+                    return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)}`;
+                  }).join("\n");
+                  responseContent += `\n\n[INSTRUÇÃO INTERNA - Horários indisponíveis (NÃO revele ao lead os detalhes, apenas diga que o horário não está disponível):\n${busySlots}]`;
                 }
               }
               break;
