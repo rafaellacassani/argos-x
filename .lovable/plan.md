@@ -1,45 +1,39 @@
 
 
-## E-mail de convite em inglês e domínio errado — Diagnóstico e Correção
+## Corrigir vazamento de dados do calendário para leads
 
 ### Problema
-O convite de novo membro usa `auth.admin.inviteUserByEmail()` do Supabase, que dispara o **template padrão de auth** — em inglês e enviado por `no-reply@auth.lovable.cloud`. Não existe nenhum template de e-mail customizado configurado no projeto.
+A IA está expondo títulos e horários de eventos internos do workspace diretamente na mensagem enviada ao lead. Na imagem, o lead vê "Checkin semanal | Nautica" com horários completos — informação confidencial do workspace.
 
-### Causa raiz
-O projeto **não tem domínio de e-mail configurado** nem templates de auth personalizados (`auth-email-hook` não existe). Todos os e-mails de autenticação (convite, reset de senha, verificação) usam o template padrão do sistema — em inglês, sem branding.
+Isso acontece em 3 pontos do `ai-agent-chat`:
+1. **Criar evento com conflito** (linhas ~1138-1141): concatena título e horários dos eventos conflitantes no `responseContent` que vai para o lead
+2. **Reagendar com conflito** (linhas ~1249-1251): mesmo problema
+3. **Consultar** (linhas ~1379-1381): lista todos os horários ocupados do workspace
 
-### Solução em 2 etapas
+### Correção
 
-**Etapa 1: Configurar domínio de e-mail (argosx.com.br)**
-- Abrir o setup de domínio de e-mail e configurar `argosx.com.br` como domínio remetente
-- Será necessário adicionar registros DNS (NS) no provedor do domínio
-- Após verificação, todos os e-mails de auth passarão a sair desse domínio
+**Arquivo**: `supabase/functions/ai-agent-chat/index.ts`
 
-**Etapa 2: Criar templates de auth em Português**
-- Usar o sistema de templates de auth para criar os 6 templates padrão (signup, recovery, invite, magic-link, email-change, reauthentication)
-- Traduzir todos para português brasileiro
-- Aplicar branding do Argos X (cores, logo, tom)
-- Deploy da edge function `auth-email-hook`
+**1. Conflito ao criar (linhas ~1138-1142)**
+- Em vez de listar os eventos, apenas informar à IA que o horário está ocupado, sem revelar detalhes
+- Trocar por: `responseContent += "\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Informe ao lead que esse horário não está disponível e sugira outro horário próximo. NÃO revele quais compromissos existem.]";`
 
-### Templates que serão criados (todos em PT-BR)
-| Template | Assunto |
-|----------|---------|
-| **Convite** | "Você foi convidado para o Argos X" |
-| **Confirmação de e-mail** | "Confirme seu e-mail" |
-| **Recuperação de senha** | "Redefina sua senha" |
-| **Magic link** | "Seu link de acesso" |
-| **Mudança de e-mail** | "Confirme a alteração de e-mail" |
-| **Reautenticação** | "Código de verificação" |
+**2. Conflito ao reagendar (linhas ~1249-1252)**
+- Mesmo tratamento: informar que está ocupado sem revelar detalhes
+- Trocar por: `responseContent += "\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Sugira outro horário ao lead. NÃO revele detalhes dos compromissos existentes.]";`
 
-### Resultado
-- **Antes**: `no-reply@auth.lovable.cloud`, inglês, sem branding
-- **Depois**: `noreply@argosx.com.br` (ou subdomínio), português, com logo e cores do Argos X
+**3. Consultar (linhas ~1378-1382)**
+- Remover a listagem de "Horários já ocupados" com todos os eventos
+- Manter apenas os eventos do próprio lead (que já é filtrado por `lead_id`)
+- Os busy slots devem ser usados internamente pela IA apenas como referência de indisponibilidade, sem expor títulos
 
 ### O que NÃO será alterado
-- Nenhuma lógica de convite (invite-member continua igual)
-- Nenhuma lógica de agentes, calendário, áudio
 - Nenhum componente frontend
+- Nenhuma tabela do banco
+- A lógica de criar/reagendar/cancelar eventos permanece igual
+- A consulta de disponibilidade continua funcionando — apenas os detalhes não são mais expostos ao lead
 
-### Pré-requisito
-Acesso ao painel DNS do domínio `argosx.com.br` para adicionar os registros NS necessários.
+### Resultado
+- **Antes**: Lead vê "Checkin semanal | Nautica (2026-03-26T18:00...)"
+- **Depois**: Lead recebe "Esse horário não está disponível, que tal às 17h?" — sem ver nenhum dado interno
 
