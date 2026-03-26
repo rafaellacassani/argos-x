@@ -181,6 +181,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
       max_tokens: formData.max_tokens,
       message_split_enabled: formData.message_split_enabled,
       message_split_length: formData.message_split_length,
+      calendar_config: formData.calendar_config || {},
       system_prompt: isAdminViewing && formData.system_prompt ? formData.system_prompt : autoPrompt,
       type: formData.type,
     };
