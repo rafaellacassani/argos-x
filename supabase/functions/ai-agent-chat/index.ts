@@ -1129,7 +1129,7 @@ serve(async (req) => {
 
                 // Check availability - look for conflicts in the workspace
                 const { data: conflictEvents } = await supabase.from("calendar_events")
-                  .select("id, title, start_at, end_at")
+                  .select("id")
                   .eq("workspace_id", agent.workspace_id)
                   .lt("start_at", endAt)
                   .gt("end_at", startAt)
@@ -1239,7 +1239,7 @@ serve(async (req) => {
                   const newEnd = updateData.end_at as string || toolArgs.end_at;
                   if (newStart && newEnd) {
                     const { data: conflictEvents } = await supabase.from("calendar_events")
-                      .select("id, title, start_at, end_at")
+                      .select("id")
                       .eq("workspace_id", agent.workspace_id)
                       .neq("id", eventId)
                       .lt("start_at", newEnd)
@@ -1359,7 +1359,7 @@ serve(async (req) => {
               } else if (action === "consultar") {
                 // Query ALL upcoming events in workspace to check availability
                 const { data: allEvents } = await supabase.from("calendar_events")
-                  .select("id, title, start_at, end_at, description, lead_id")
+                  .select("id, start_at, end_at, lead_id")
                   .eq("workspace_id", agent.workspace_id)
                   .gte("start_at", new Date().toISOString())
                   .order("start_at")
