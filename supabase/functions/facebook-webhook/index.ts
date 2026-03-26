@@ -392,11 +392,11 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
         .eq("status", "pending");
     }
 
-    // Download media if present (image support for AI vision)
+    // Download media if present (image/audio support for AI)
     let mediaBase64: string | undefined;
     let mediaMimeType: string | undefined;
-    if (mediaType === "image" && mediaId) {
-      console.log(`[Facebook Webhook] 📷 Downloading image ${mediaId} for AI vision`);
+    if ((mediaType === "image" || mediaType === "audio") && mediaId) {
+      console.log(`[Facebook Webhook] 📦 Downloading ${mediaType} ${mediaId} for AI`);
       const mediaData = await downloadMediaAsBase64(mediaId, accessToken);
       if (mediaData) {
         mediaBase64 = mediaData.base64;
@@ -423,8 +423,8 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
       cloud_access_token: accessToken,
     };
 
-    if (mediaBase64 && mediaMimeType) {
-      agentPayload.media_type = "image";
+    if (mediaBase64 && mediaMimeType && mediaType) {
+      agentPayload.media_type = mediaType;
       agentPayload.media_base64 = mediaBase64;
       agentPayload.media_mimetype = mediaMimeType;
     }
@@ -623,10 +623,12 @@ async function processWhatsAppBusinessEvent(entry: any) {
         workspace_id: metaPage.workspace_id,
       });
 
-      // Route to AI Agent — pass media info for image understanding
+      // Route to AI Agent — pass media info for image/audio understanding
       const rawMediaId = msg[msg.type]?.id;
-      if (content || (msg.type === "image" && rawMediaId)) {
-        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken, msg.type === "image" ? "image" : undefined, msg.type === "image" ? rawMediaId : undefined);
+      const supportedMediaTypes = ["image", "audio"];
+      const isMediaWithId = supportedMediaTypes.includes(msg.type) && rawMediaId;
+      if (content || isMediaWithId) {
+        await routeToAIAgent(metaPage.workspace_id, senderId, content, messageId, phoneNumberId, accessToken, isMediaWithId ? msg.type : undefined, isMediaWithId ? rawMediaId : undefined);
       } else {
         console.log(`[Facebook Webhook] ⚠️ No content to route to AI agent for ${senderId} (type: ${messageType})`);
       }
