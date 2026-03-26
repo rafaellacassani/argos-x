@@ -32,6 +32,52 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// --- Whisper audio transcription ---
+async function transcribeAudio(base64: string, mimetype: string): Promise<string> {
+  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!openaiKey) throw new Error("OPENAI_API_KEY not configured for audio transcription");
+
+  // Convert base64 to binary
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Determine file extension from mimetype
+  const extMap: Record<string, string> = {
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/wav": "wav",
+    "audio/webm": "webm",
+    "audio/amr": "amr",
+    "audio/ogg; codecs=opus": "ogg",
+  };
+  const ext = extMap[mimetype] || "ogg";
+
+  const formData = new FormData();
+  formData.append("file", new Blob([bytes], { type: mimetype }), `audio.${ext}`);
+  formData.append("model", "whisper-1");
+  formData.append("language", "pt");
+
+  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${openaiKey}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[ai-agent-chat] ❌ Whisper transcription failed: ${res.status} ${errText}`);
+    throw new Error(`Whisper transcription failed: ${res.status}`);
+  }
+
+  const data = await res.json();
+  console.log(`[ai-agent-chat] 🎤 Whisper transcription: "${(data.text || "").substring(0, 100)}..."`);
+  return data.text || "";
+}
+
 // --- Rejection detection ---
 const REJECTION_KEYWORDS = [
   "não mande mais", "nao mande mais", "não mandar mais", "nao mandar mais",
@@ -705,21 +751,81 @@ serve(async (req) => {
               });
               console.log("[ai-agent-chat] 🖼️ Multimodal image content built for AI");
             } else if (media_type === "audio") {
-              // Gemini supports inline_data for audio natively
-              aiMessages.push({
-                role: "user",
-                content: [
-                  { type: "text", text: "[Áudio enviado pelo lead. Ouça e responda de acordo.]" },
-                  { 
-                    type: "input_audio", 
-                    input_audio: { 
-                      data: media_base64, 
-                      format: (media_mimetype || "audio/ogg").includes("ogg") ? "ogg" : "mp3"
-                    } 
+              // Check plan: audio transcription only for Business+ plans
+              let audioAllowed = false;
+              try {
+                const { data: wsData } = await supabase
+                  .from("workspaces")
+                  .select("plan_type")
+                  .eq("id", agent.workspace_id)
+                  .single();
+                const planType = wsData?.plan_type || "";
+                const allowedPlans = ["negocio", "escala", "active"];
+                audioAllowed = allowedPlans.includes(planType);
+                // Also allow if super admin is viewing (admin workspace override)
+                if (!audioAllowed) {
+                  const { data: adminRole } = await supabase
+                    .from("user_roles")
+                    .select("role")
+                    .eq("role", "admin")
+                    .limit(1);
+                  // If the workspace has any user with admin role, it's our internal workspace
+                  // Better: check if workspace is our default one via created_by having admin role
+                  const { data: wsCreator } = await supabase
+                    .from("workspaces")
+                    .select("created_by")
+                    .eq("id", agent.workspace_id)
+                    .single();
+                  if (wsCreator?.created_by) {
+                    const { data: creatorRole } = await supabase
+                      .from("user_roles")
+                      .select("role")
+                      .eq("user_id", wsCreator.created_by)
+                      .eq("role", "admin");
+                    if (creatorRole && creatorRole.length > 0) {
+                      audioAllowed = true;
+                    }
                   }
-                ]
-              });
-              console.log("[ai-agent-chat] 🎵 Multimodal audio content built for AI");
+                }
+              } catch (e) {
+                console.warn("[ai-agent-chat] ⚠️ Could not check plan for audio, denying:", e);
+              }
+
+              if (!audioAllowed) {
+                console.log("[ai-agent-chat] 🔒 Audio transcription not allowed for this plan");
+                // Return a polite message asking for text instead
+                return new Response(JSON.stringify({
+                  response: "Desculpa, não consigo ouvir áudios no momento. 😊 Me manda por texto que eu te ajudo!",
+                  chunks: ["Desculpa, não consigo ouvir áudios no momento. 😊 Me manda por texto que eu te ajudo!"],
+                  skipped: false,
+                  paused: false,
+                }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+              }
+
+              // Transcribe audio via Whisper
+              try {
+                const transcription = await transcribeAudio(media_base64, media_mimetype || "audio/ogg");
+                if (transcription.trim()) {
+                  aiMessages.push({
+                    role: "user",
+                    content: `[Áudio do lead - transcrição]: ${transcription}`
+                  });
+                  // Also update the message text for memory/context
+                  messageText = `[Áudio transcrito]: ${transcription}`;
+                } else {
+                  aiMessages.push({
+                    role: "user",
+                    content: messageText || "[Áudio enviado, mas não foi possível transcrever]"
+                  });
+                }
+                console.log("[ai-agent-chat] 🎤 Audio transcribed via Whisper for AI");
+              } catch (transcribeErr) {
+                console.error("[ai-agent-chat] ❌ Whisper transcription error:", transcribeErr);
+                aiMessages.push({
+                  role: "user",
+                  content: messageText || "[Áudio enviado, mas houve erro na transcrição]"
+                });
+              }
             } else {
               aiMessages.push({ role: m.role, content: m.content });
             }
