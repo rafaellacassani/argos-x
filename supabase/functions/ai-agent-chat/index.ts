@@ -389,7 +389,7 @@ serve(async (req) => {
     if (typeof session_id !== "string" || session_id.length > 200) {
       return new Response(JSON.stringify({ error: "Invalid session_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const messageText = message || "";
+    let messageText = message || "";
     if (messageText.length > 4000) {
       return new Response(JSON.stringify({ error: "Message must be at most 4000 characters" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
