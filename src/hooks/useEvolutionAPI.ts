@@ -718,6 +718,27 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const blockContact = useCallback(async (instanceName: string, number: string, block: boolean): Promise<boolean> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/block-contact/${instanceName}`, {
+        method: "POST",
+        body: { number, status: block ? "block" : "unblock" },
+      });
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao bloquear/desbloquear contato";
+      setError(message);
+      console.error("[useEvolutionAPI] blockContact error:", err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     error,
@@ -739,5 +760,6 @@ export function useEvolutionAPI() {
     deleteMessage,
     editMessage,
     reactToMessage,
+    blockContact,
   };
 }
