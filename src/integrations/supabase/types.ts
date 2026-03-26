@@ -2689,6 +2689,7 @@ export type Database = {
           instance_name: string | null
           message: string
           meta_page_id: string | null
+          metadata: string | null
           phone_number: string | null
           remote_jid: string | null
           scheduled_at: string
@@ -2708,6 +2709,7 @@ export type Database = {
           instance_name?: string | null
           message: string
           meta_page_id?: string | null
+          metadata?: string | null
           phone_number?: string | null
           remote_jid?: string | null
           scheduled_at: string
@@ -2727,6 +2729,7 @@ export type Database = {
           instance_name?: string | null
           message?: string
           meta_page_id?: string | null
+          metadata?: string | null
           phone_number?: string | null
           remote_jid?: string | null
           scheduled_at?: string
