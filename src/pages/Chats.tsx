@@ -44,6 +44,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useHumanSupportQueue } from "@/hooks/useHumanSupportQueue";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Chat {
   id: string;
@@ -513,6 +519,7 @@ export default function Chats() {
     deleteMessage: evolutionDeleteMessage,
     editMessage: evolutionEditMessage,
     reactToMessage: evolutionReactToMessage,
+    blockContact,
     loading: apiLoading 
   } = useEvolutionAPI();
 
