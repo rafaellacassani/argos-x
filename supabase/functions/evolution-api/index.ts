@@ -566,4 +566,23 @@ app.post("/react-message/:instanceName", async (c) => {
   }
 });
 
+// Block/unblock contact (Evolution API)
+app.post("/block-contact/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const { number, status } = await c.req.json();
+    if (!number || !status || !["block", "unblock"].includes(status)) {
+      return c.json({ error: "number and status (block|unblock) are required" }, 400, corsHeaders);
+    }
+    const result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
+      number,
+      status,
+    });
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Failed to block/unblock contact" }, 500, corsHeaders);
+  }
+});
+
 Deno.serve(app.fetch);
