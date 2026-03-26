@@ -207,7 +207,21 @@ app.post("/create-instance", async (c) => {
     if (!instanceName || typeof instanceName !== "string" || instanceName.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(instanceName)) {
       return c.json({ error: "Invalid instanceName" }, 400, corsHeaders);
     }
-    const result = await evolutionRequest("/instance/create", "POST", { instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" });
+    
+    let result;
+    try {
+      result = await evolutionRequest("/instance/create", "POST", { instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" });
+    } catch (createError: any) {
+      // If instance already exists in Evolution API, try to connect instead
+      const errMsg = createError?.message || "";
+      if (errMsg.includes("already in use") || errMsg.includes("403") || errMsg.includes("Forbidden")) {
+        console.log(`[evolution-api] Instance ${instanceName} already exists, connecting instead`);
+        result = await getConnectResponse(instanceName);
+      } else {
+        throw createError;
+      }
+    }
+    
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to create instance" }, 500, corsHeaders);
