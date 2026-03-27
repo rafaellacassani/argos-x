@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
             throw new Error(`Evolution API error ${evoRes.status}: ${JSON.stringify(errData)}`);
           }
           success = true;
-        } else if (msg.channel_type === "meta_facebook" || msg.channel_type === "meta_instagram") {
+        } else if (msg.channel_type === "meta_facebook" || msg.channel_type === "meta_instagram" || msg.channel_type === "meta_whatsapp") {
           // Send via Meta Graph API
           if (!msg.meta_page_id || !msg.sender_id) {
             throw new Error("Missing Meta routing info");

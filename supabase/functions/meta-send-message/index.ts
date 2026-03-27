@@ -111,6 +111,13 @@ Deno.serve(async (req) => {
           type: "image",
           image: { link: mediaUrl, caption: message || undefined },
         };
+      } else if (messageType === "audio" && mediaUrl) {
+        graphPayload = {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: "audio",
+          audio: { link: mediaUrl },
+        };
       } else if (messageType === "document" && mediaUrl) {
         graphPayload = {
           messaging_product: "whatsapp",
