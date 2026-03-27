@@ -298,11 +298,10 @@ export default function AdminClients() {
         const persistedDays = Array.isArray(configRes.data.cadence_days)
           ? (configRes.data.cadence_days as number[])
           : [-2, -1, 0, 3, 7];
-        const messageDays = (msgs || []).map((message) => message.cadence_day);
 
         setCadenceConfig({
           ...configRes.data,
-          cadence_days: normalizeCadenceDays([...persistedDays, ...messageDays]),
+          cadence_days: normalizeCadenceDays(persistedDays),
           welcome_message_template: (configRes.data as any).welcome_message_template || null,
         });
         setCadenceMessages((msgs || []) as CadenceMessage[]);
