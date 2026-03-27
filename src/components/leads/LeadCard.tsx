@@ -39,6 +39,7 @@ export const LeadCard = memo(function LeadCard({
   onClick, 
   onDelete,
   onOpenChat,
+  onMoveToNextStage,
   canDelete = true,
   teamMembers = [],
   bulkMode = false,
