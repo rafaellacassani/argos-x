@@ -25,6 +25,7 @@ interface LeadCardProps {
   onClick: (lead: Lead) => void;
   onDelete: (leadId: string) => void;
   onOpenChat?: (jid: string) => void;
+  onMoveToNextStage?: (leadId: string) => void;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
   bulkMode?: boolean;
