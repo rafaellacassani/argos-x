@@ -1272,6 +1272,8 @@ serve(async (req) => {
           instances,
           alerts,
           tokens_total: wsTokensTotal,
+          tokens_30d: tokens30dByWs.get(ws.id) || 0,
+          executions_30d: executions30dByWs.get(ws.id) || 0,
           cost_estimate_brl: Math.round(wsCostBrl * 100) / 100,
         };
       });
