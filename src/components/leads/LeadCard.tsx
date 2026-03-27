@@ -105,6 +105,23 @@ export const LeadCard = memo(function LeadCard({
     return { label, color, diffHours };
   }, [lead.updated_at]);
 
+  const quickAction = useMemo(() => {
+    if (urgency.diffHours > 24) {
+      if (lead.whatsapp_jid && onOpenChat) {
+        return { label: 'Follow-up', icon: Send, action: () => onOpenChat(lead.whatsapp_jid!) };
+      }
+      return onMoveToNextStage 
+        ? { label: 'Mover etapa', icon: ArrowRight, action: () => onMoveToNextStage(lead.id) }
+        : null;
+    }
+    if (lead.whatsapp_jid && onOpenChat) {
+      return { label: 'Abrir chat', icon: MessageSquare, action: () => onOpenChat(lead.whatsapp_jid!) };
+    }
+    return onMoveToNextStage 
+      ? { label: 'Mover etapa', icon: ArrowRight, action: () => onMoveToNextStage(lead.id) }
+      : null;
+  }, [urgency.diffHours, lead.whatsapp_jid, lead.id, onOpenChat, onMoveToNextStage]);
+
   const handleClick = () => {
     if (bulkMode && onToggleSelect) {
       onToggleSelect(lead.id);
