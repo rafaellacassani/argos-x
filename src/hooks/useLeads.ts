@@ -419,6 +419,12 @@ export function useLeads() {
           });
         }
       }
+      // AI score label filter
+      if (filters?.aiScoreLabels && filters.aiScoreLabels.length > 0) {
+        leadsWithData = leadsWithData.filter(lead =>
+          lead.ai_score_label && filters.aiScoreLabels!.includes(lead.ai_score_label)
+        );
+      }
       
       setLeads(leadsWithData as Lead[]);
       return leadsWithData;
