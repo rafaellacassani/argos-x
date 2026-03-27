@@ -75,6 +75,34 @@ export const LeadCard = memo(function LeadCard({
     return phone;
   };
 
+  const urgency = useMemo(() => {
+    const now = Date.now();
+    const updated = new Date(lead.updated_at).getTime();
+    const diffMs = now - updated;
+    const diffHours = diffMs / (1000 * 60 * 60);
+    const diffDays = diffHours / 24;
+
+    let label: string;
+    let color: string; // tailwind classes
+    if (diffHours < 1) {
+      label = `${Math.max(1, Math.floor(diffMs / 60000))}m`;
+      color = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400';
+    } else if (diffHours < 24) {
+      label = `${Math.floor(diffHours)}h`;
+      color = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400';
+    } else if (diffDays < 2) {
+      label = '1d';
+      color = 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400';
+    } else if (diffDays < 7) {
+      label = `${Math.floor(diffDays)}d`;
+      color = 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400';
+    } else {
+      label = `${Math.floor(diffDays)}d`;
+      color = 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400';
+    }
+    return { label, color, diffHours };
+  }, [lead.updated_at]);
+
   const handleClick = () => {
     if (bulkMode && onToggleSelect) {
       onToggleSelect(lead.id);
