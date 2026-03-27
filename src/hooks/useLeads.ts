@@ -213,6 +213,9 @@ export interface Lead {
   sales?: LeadSale[];
   total_sales_value?: number;
   sales_count?: number;
+  ai_score?: number | null;
+  ai_score_label?: string | null;
+  ai_scored_at?: string | null;
 }
 
 export interface Funnel {
