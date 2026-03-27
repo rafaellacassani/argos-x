@@ -328,6 +328,7 @@ export function useLeads() {
     dateType?: 'created_at' | 'sale_date';
     sources?: string[];
     unassigned?: boolean;
+    aiScoreLabels?: string[];
   }) => {
     if (stageIds.length === 0) return [];
     
