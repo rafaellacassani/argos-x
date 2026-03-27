@@ -160,9 +160,34 @@ export function LeadSidePanel({
   chatContact,
   onCreateLead,
   onOpenDetailModal,
+  workspaceId,
 }: LeadSidePanelProps) {
   const [responsibleName, setResponsibleName] = useState<string | null>(null);
   const [creatingLead, setCreatingLead] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(true);
+
+  const handleSummarize = async () => {
+    const jid = lead?.whatsapp_jid || chatContact?.remoteJid;
+    const instance = lead?.instance_name || chatContact?.instanceName;
+    if (!jid || !workspaceId) return;
+
+    setLoadingSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("summarize-conversation", {
+        body: { remoteJid: jid, instanceName: instance, workspaceId },
+      });
+      if (error) throw error;
+      setSummary(data?.summary || "Não foi possível gerar o resumo.");
+      setSummaryOpen(true);
+    } catch (e) {
+      console.error("Error summarizing:", e);
+      setSummary("Erro ao gerar resumo. Tente novamente.");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   // Fetch responsible user name
   useEffect(() => {
