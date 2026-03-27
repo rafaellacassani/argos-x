@@ -339,6 +339,7 @@ export const LeadColumn = memo(function LeadColumn({
                   onClick={onLeadClick}
                   onDelete={onLeadDelete}
                   onOpenChat={onOpenChat}
+                  onMoveToNextStage={onMoveToNextStage}
                   canDelete={canDelete}
                   teamMembers={teamMembers}
                   bulkMode={bulkMode}

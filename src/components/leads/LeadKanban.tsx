@@ -265,6 +265,7 @@ export const LeadKanban = memo(function LeadKanban({
                   onLeadClick={onLeadClick}
                   onLeadDelete={onLeadDelete}
                   onOpenChat={onOpenChat}
+                  onMoveToNextStage={handleMoveToNextStage}
                   onAddLead={onAddLead}
                   onEditStage={onEditStage}
                   onUpdateStage={onUpdateStage}
