@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   X, Phone, Mail, Building2, MessageSquare, Calendar, DollarSign,
   User, Tag, ChevronRight, Trash2, Plus, Edit2, Check, FileText,
-  History, BarChart3, CalendarClock,
+  History, BarChart3, CalendarClock, Brain, Loader2, Flame, Sun, Snowflake,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogTitle,
@@ -106,6 +106,39 @@ export function LeadDetailModal({
   const [history, setHistory] = useState<LeadHistory[]>([]);
   const [performerNames, setPerformerNames] = useState<Record<string, string>>({});
   const [responsibleName, setResponsibleName] = useState<string | null>(null);
+  const [isScoring, setIsScoring] = useState(false);
+  const [aiScore, setAiScore] = useState<number | null>(lead?.ai_score ?? null);
+  const [aiScoreLabel, setAiScoreLabel] = useState<string | null>(lead?.ai_score_label ?? null);
+
+  useEffect(() => {
+    setAiScore(lead?.ai_score ?? null);
+    setAiScoreLabel(lead?.ai_score_label ?? null);
+  }, [lead?.ai_score, lead?.ai_score_label]);
+
+  const handleScoreLead = async () => {
+    if (!lead || !workspaceId) return;
+    setIsScoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("score-lead", {
+        body: { leadId: lead.id, workspaceId },
+      });
+      if (error) throw error;
+      const score = data?.score ?? null;
+      const label = data?.label ?? null;
+      setAiScore(score);
+      setAiScoreLabel(label);
+      await onUpdate(lead.id, { ai_score: score, ai_score_label: label });
+      toast({ title: `Lead classificado: ${label} (${score}/100)` });
+    } catch (e) {
+      console.error("Score error:", e);
+      toast({ title: "Erro ao classificar lead", variant: "destructive" });
+    } finally {
+      setIsScoring(false);
+    }
+  };
+
+  const scoreIcon = aiScoreLabel === "quente" ? Flame : aiScoreLabel === "morno" ? Sun : aiScoreLabel === "frio" ? Snowflake : null;
+  const scoreColor = aiScoreLabel === "quente" ? "text-red-500" : aiScoreLabel === "morno" ? "text-yellow-500" : aiScoreLabel === "frio" ? "text-blue-400" : "";
 
   // Fetch history
   useEffect(() => {
@@ -215,6 +248,20 @@ export function LeadDetailModal({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* AI Score Badge */}
+            {aiScore !== null && scoreIcon && (
+              <Badge variant="outline" className={`text-xs border-white/30 bg-white/10 ${scoreColor} gap-1`}>
+                {(() => { const SI = scoreIcon; return <SI className="w-3.5 h-3.5" />; })()}
+                {aiScoreLabel === "quente" ? "Quente" : aiScoreLabel === "morno" ? "Morno" : "Frio"} · {aiScore}
+              </Badge>
+            )}
+            {/* Score Button */}
+            <Button variant="outline" size="sm"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              onClick={handleScoreLead} disabled={isScoring}>
+              {isScoring ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Brain className="h-4 w-4 mr-1.5" />}
+              {aiScore !== null ? "Reclassificar" : "Classificar IA"}
+            </Button>
             {onOpenChat && (
               <Button variant="outline" size="sm"
                 className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
