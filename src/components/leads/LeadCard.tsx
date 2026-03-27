@@ -140,7 +140,13 @@ export const LeadCard = memo(function LeadCard({
         )}
         
         <div className="flex-1 min-w-0">
-          <h4 className="font-medium text-foreground truncate">{lead.name}</h4>
+          <div className="flex items-center gap-2">
+            <h4 className="font-medium text-foreground truncate">{lead.name}</h4>
+            <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0", urgency.color)}>
+              <Clock className="h-2.5 w-2.5" />
+              {urgency.label}
+            </span>
+          </div>
           {lead.company && (
             <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
           )}
