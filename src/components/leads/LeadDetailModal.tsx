@@ -226,29 +226,11 @@ export function LeadDetailModal({
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white" asChild>
               <a href={`tel:${lead.phone}`}><Phone className="h-4 w-4 mr-1.5" />Ligar</a>
             </Button>
-            {canDelete && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm"
-                    className="bg-red-500/20 border-red-500/30 text-red-300 hover:bg-red-500/30 hover:text-red-200">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Excluir Lead?</AlertDialogTitle>
-                    <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      onClick={() => { onDelete(lead.id); onOpenChange(false); }}>
-                      Excluir
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+            <Button variant="ghost" size="icon"
+              className="text-white/70 hover:text-white hover:bg-white/10 h-8 w-8"
+              onClick={() => onOpenChange(false)}>
+              <X className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
@@ -381,6 +363,34 @@ export function LeadDetailModal({
                   <span className="text-xs text-muted-foreground">{formatDate(lead.created_at)}</span>
                 </div>
               </div>
+
+              {/* Delete Lead */}
+              {canDelete && (
+                <div className="pt-4 border-t border-border">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm"
+                        className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Excluir lead
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir Lead?</AlertDialogTitle>
+                        <AlertDialogDescription>Esta ação não pode ser desfeita. Todos os dados deste lead serão removidos permanentemente.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => { onDelete(lead.id); onOpenChange(false); }}>
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
             </div>
           </ScrollArea>
 
