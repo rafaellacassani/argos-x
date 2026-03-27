@@ -376,6 +376,43 @@ export function LeadSidePanel({
         </div>
       </div>
 
+      {/* AI Summary Section */}
+      <div className="px-4 py-3 border-b border-border space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Resumo IA</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 px-2"
+            onClick={handleSummarize}
+            disabled={loadingSummary}
+          >
+            {loadingSummary ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <FileText className="w-3 h-3" />
+            )}
+            {summary ? "Atualizar" : "Resumir conversa"}
+          </Button>
+        </div>
+        {summary && (
+          <div className="space-y-1">
+            <button
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setSummaryOpen((v) => !v)}
+            >
+              <ChevronUp className={cn("w-3 h-3 transition-transform", !summaryOpen && "rotate-180")} />
+              {summaryOpen ? "Recolher" : "Expandir"}
+            </button>
+            {summaryOpen && (
+              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Funnel Section */}
       <div className="px-4 py-3 border-b border-border space-y-2">
         <div className="flex items-center justify-between">

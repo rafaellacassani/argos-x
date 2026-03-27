@@ -3351,12 +3351,18 @@ export default function Chats() {
             onAddTag={addTagToLead}
             onRemoveTag={removeTagFromLead}
             onCreateTag={createTag}
+            workspaceId={workspaceId || undefined}
             chatContact={!currentLead ? {
               name: selectedChat.name,
               phone: selectedChat.phone,
               remoteJid: selectedChat.remoteJid,
               instanceName: selectedChat.instanceName,
-            } : undefined}
+            } : {
+              name: selectedChat.name,
+              phone: selectedChat.phone,
+              remoteJid: selectedChat.remoteJid,
+              instanceName: selectedChat.instanceName,
+            }}
             onCreateLead={!currentLead ? async () => {
               const phoneCandidates = [
                 cleanPhoneNumber(selectedChat.phone || ""),
