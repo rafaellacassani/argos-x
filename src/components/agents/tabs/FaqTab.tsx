@@ -1,14 +1,23 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, HelpCircle } from "lucide-react";
+import { Plus, Trash2, HelpCircle, ImagePlus, Video, FileText, X, Loader2, File } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useWorkspace } from "@/hooks/useWorkspace";
+
+interface FaqAttachment {
+  url: string;
+  type: "image" | "video" | "pdf";
+  fileName: string;
+}
 
 interface FaqItem {
   id: string;
   question: string;
   answer: string;
+  attachments?: FaqAttachment[];
 }
 
 interface Props {
@@ -16,8 +25,17 @@ interface Props {
   updateField: (key: string, value: any) => void;
 }
 
+const ACCEPTED: Record<string, string> = {
+  image: "image/jpeg,image/png,image/webp,image/gif",
+  video: "video/mp4,video/3gpp",
+  pdf: "application/pdf",
+};
+
 export function FaqTab({ formData, updateField }: Props) {
   const faqs: FaqItem[] = formData.knowledge_faq || [];
+  const { workspaceId } = useWorkspace();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploadingFaqId, setUploadingFaqId] = useState<string | null>(null);
 
   const addFaq = () => {
     if (faqs.length >= 50) return;
@@ -25,6 +43,7 @@ export function FaqTab({ formData, updateField }: Props) {
       id: crypto.randomUUID(),
       question: "",
       answer: "",
+      attachments: [],
     };
     updateField("knowledge_faq", [...faqs, newFaq]);
   };
@@ -40,8 +59,68 @@ export function FaqTab({ formData, updateField }: Props) {
     updateField("knowledge_faq", faqs.filter((f) => f.id !== id));
   };
 
+  const handleAttachUpload = (faqId: string, type: "image" | "video" | "pdf") => {
+    if (!fileRef.current) return;
+    fileRef.current.accept = ACCEPTED[type];
+    fileRef.current.dataset.faqId = faqId;
+    fileRef.current.dataset.attachType = type;
+    fileRef.current.click();
+  };
+
+  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const faqId = e.target.dataset.faqId;
+    const attachType = e.target.dataset.attachType as "image" | "video" | "pdf";
+    if (!file || !faqId || !attachType || !workspaceId) return;
+
+    setUploadingFaqId(faqId);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${workspaceId}/faq/${faqId}/${Date.now()}.${ext}`;
+
+      const { error } = await supabase.storage.from("salesbot-media").upload(path, file, { upsert: true });
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
+
+      const newAttachment: FaqAttachment = {
+        url: urlData.publicUrl,
+        type: attachType,
+        fileName: file.name,
+      };
+
+      updateField(
+        "knowledge_faq",
+        faqs.map((f) =>
+          f.id === faqId
+            ? { ...f, attachments: [...(f.attachments || []), newAttachment] }
+            : f
+        )
+      );
+    } catch (err) {
+      console.error("FAQ attachment upload error:", err);
+    } finally {
+      setUploadingFaqId(null);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (faqId: string, index: number) => {
+    updateField(
+      "knowledge_faq",
+      faqs.map((f) =>
+        f.id === faqId
+          ? { ...f, attachments: (f.attachments || []).filter((_, i) => i !== index) }
+          : f
+      )
+    );
+  };
+
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Hidden file input */}
+      <input ref={fileRef} type="file" className="hidden" onChange={onFileSelected} />
+
       <div>
         <h3 className="font-display font-semibold text-lg text-foreground mb-1">FAQ — Perguntas Frequentes</h3>
         <p className="text-sm text-muted-foreground">
@@ -75,6 +154,64 @@ export function FaqTab({ formData, updateField }: Props) {
                 placeholder="Resposta completa para esta pergunta..."
                 className="min-h-[80px]"
               />
+            </div>
+
+            {/* Attachments preview */}
+            {(faq.attachments || []).length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Anexos</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(faq.attachments || []).map((att, idx) => (
+                    <div key={idx} className="relative group border rounded p-1.5 bg-background flex items-center gap-1.5 max-w-[200px]">
+                      {att.type === "image" && (
+                        <img src={att.url} alt="" className="w-10 h-10 object-cover rounded" />
+                      )}
+                      {att.type === "video" && <Video className="w-4 h-4 text-muted-foreground shrink-0" />}
+                      {att.type === "pdf" && <FileText className="w-4 h-4 text-muted-foreground shrink-0" />}
+                      <span className="text-[10px] truncate">{att.fileName}</span>
+                      <button
+                        type="button"
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeAttachment(faq.id, idx)}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Attachment buttons */}
+            <div className="flex items-center gap-1 pt-1">
+              <span className="text-[10px] text-muted-foreground mr-1">Anexar:</span>
+              <button
+                type="button"
+                className="flex items-center gap-0.5 text-[10px] text-primary hover:underline disabled:opacity-50"
+                onClick={() => handleAttachUpload(faq.id, "image")}
+                disabled={uploadingFaqId === faq.id}
+              >
+                <ImagePlus className="w-3 h-3" /> Imagem
+              </button>
+              <span className="text-muted-foreground text-[10px]">|</span>
+              <button
+                type="button"
+                className="flex items-center gap-0.5 text-[10px] text-primary hover:underline disabled:opacity-50"
+                onClick={() => handleAttachUpload(faq.id, "video")}
+                disabled={uploadingFaqId === faq.id}
+              >
+                <Video className="w-3 h-3" /> Vídeo
+              </button>
+              <span className="text-muted-foreground text-[10px]">|</span>
+              <button
+                type="button"
+                className="flex items-center gap-0.5 text-[10px] text-primary hover:underline disabled:opacity-50"
+                onClick={() => handleAttachUpload(faq.id, "pdf")}
+                disabled={uploadingFaqId === faq.id}
+              >
+                <FileText className="w-3 h-3" /> PDF
+              </button>
+              {uploadingFaqId === faq.id && <Loader2 className="w-3 h-3 animate-spin text-primary ml-1" />}
             </div>
           </div>
         ))}

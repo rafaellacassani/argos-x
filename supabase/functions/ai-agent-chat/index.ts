@@ -260,7 +260,20 @@ function buildKnowledgeBlock(agent: any): string {
   }
   const faq = agent.knowledge_faq || [];
   if (faq.length > 0) {
-    const faqText = faq.map((f: any) => `P: ${f.question}\nR: ${f.answer}`).join("\n\n");
+    const faqText = faq.map((f: any) => {
+      let entry = `P: ${f.question}\nR: ${f.answer}`;
+      const attachments = f.attachments || [];
+      if (attachments.length > 0) {
+        const attList = attachments.map((a: any) => {
+          if (a.type === "image") return `[Imagem anexa: ${a.url}]`;
+          if (a.type === "video") return `[Vídeo anexo: ${a.url}]`;
+          if (a.type === "pdf") return `[PDF anexo: ${a.url}]`;
+          return `[Anexo: ${a.url}]`;
+        }).join("\n");
+        entry += "\nAnexos para enviar ao cliente quando relevante:\n" + attList;
+      }
+      return entry;
+    }).join("\n\n");
     parts.push("FAQ:\n" + faqText);
   }
   if (agent.knowledge_rules) {
