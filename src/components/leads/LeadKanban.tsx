@@ -78,6 +78,14 @@ export const LeadKanban = memo(function LeadKanban({
   teamMembers = [],
   tags = [],
 }: LeadKanbanProps) {
+  const handleMoveToNextStage = useCallback((leadId: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+    const currentIndex = stages.findIndex(s => s.id === lead.stage_id);
+    if (currentIndex < 0 || currentIndex >= stages.length - 1) return;
+    const nextStage = stages[currentIndex + 1];
+    onLeadMove(leadId, nextStage.id, 0);
+  }, [leads, stages, onLeadMove]);
   const { fetchAutomationCounts } = useStageAutomations();
   const [automationCounts, setAutomationCounts] = useState<Record<string, number>>({});
   const [isAddingStage, setIsAddingStage] = useState(false);
