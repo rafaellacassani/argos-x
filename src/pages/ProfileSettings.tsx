@@ -433,6 +433,107 @@ export default function ProfileSettings() {
           )}
         </CardContent>
       </Card>
+      <Separator />
+
+      {/* Danger Zone */}
+      <DangerZone />
     </div>
+  );
+}
+
+function DangerZone() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (confirmText !== "EXCLUIR") return;
+    setDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão expirada");
+
+      const res = await supabase.functions.invoke("cancel-account", {
+        body: { confirmation: "EXCLUIR" },
+      });
+
+      if (res.error) throw new Error(res.error.message || "Erro ao excluir conta");
+
+      toast.success("Conta excluída com sucesso");
+      await signOut();
+      navigate("/auth");
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao excluir conta");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Card className="border-destructive/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Trash2 className="w-5 h-5 text-destructive" />
+          <CardTitle className="text-lg text-destructive">Zona de perigo</CardTitle>
+        </div>
+        <CardDescription>
+          Esta ação é <strong>irreversível</strong>. Todos os seus dados serão apagados permanentemente:
+          leads, conversas, conexões WhatsApp, agentes de IA, campanhas e configurações.
+          Sua assinatura será cancelada automaticamente.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <AlertDialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setConfirmText(""); }}>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive">
+              <Trash2 className="w-4 h-4 mr-2" />
+              Excluir minha conta
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+                Tem certeza absoluta?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-3">
+                <p>
+                  Esta ação <strong>não pode ser desfeita</strong>. Isso irá excluir permanentemente
+                  sua conta, workspace e todos os dados associados:
+                </p>
+                <ul className="list-disc list-inside text-sm space-y-1">
+                  <li>Todos os leads e histórico de conversas</li>
+                  <li>Conexões WhatsApp e instâncias</li>
+                  <li>Agentes de IA e configurações</li>
+                  <li>Campanhas e automações</li>
+                  <li>Assinatura e dados de cobrança</li>
+                </ul>
+                <p className="font-medium">
+                  Digite <code className="bg-muted px-1.5 py-0.5 rounded text-destructive font-bold">EXCLUIR</code> para confirmar:
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="Digite EXCLUIR"
+              className="border-destructive/50"
+            />
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteAccount}
+                disabled={confirmText !== "EXCLUIR" || deleting}
+              >
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Excluir permanentemente
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </CardContent>
+    </Card>
   );
 }
