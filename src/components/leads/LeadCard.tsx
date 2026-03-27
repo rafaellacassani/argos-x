@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Phone, MessageSquare, MoreVertical, DollarSign, Clock, Zap, ArrowRight, Send } from 'lucide-react';
+import { Phone, MessageSquare, MoreVertical, DollarSign, Clock, Zap, ArrowRight, Send, Flame, Snowflake, Sun } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -159,12 +159,25 @@ export const LeadCard = memo(function LeadCard({
         )}
         
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <h4 className="font-medium text-foreground truncate">{lead.name}</h4>
             <span className={cn("inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0", urgency.color)}>
               <Clock className="h-2.5 w-2.5" />
               {urgency.label}
             </span>
+            {lead.ai_score_label && (
+              <span className={cn(
+                "inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0",
+                lead.ai_score_label === 'quente' && 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
+                lead.ai_score_label === 'morno' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400',
+                lead.ai_score_label === 'frio' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
+              )}>
+                {lead.ai_score_label === 'quente' && <Flame className="h-2.5 w-2.5" />}
+                {lead.ai_score_label === 'morno' && <Sun className="h-2.5 w-2.5" />}
+                {lead.ai_score_label === 'frio' && <Snowflake className="h-2.5 w-2.5" />}
+                {lead.ai_score ?? 0}
+              </span>
+            )}
           </div>
           {lead.company && (
             <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
