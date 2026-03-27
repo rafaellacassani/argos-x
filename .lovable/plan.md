@@ -1,39 +1,49 @@
 
 
-## Adicionar "Cancelar minha conta" na página Perfil & Segurança
+## Plano: Corrigir tracking de tokens Anthropic + Redesign Admin Saúde
 
-### Situação atual
-Não existe nenhum botão de cancelamento de conta acessível ao cliente. A exclusão de workspace só existe no painel admin (`admin-clients` → action `delete-workspace`). O cliente não tem como cancelar por conta própria.
+### Problema 1: Tokens Anthropic não registrados
+O `ai-agent-chat` extrai tokens do response da API, mas para Anthropic o campo está diferente (`usage.input_tokens` + `usage.output_tokens`) e provavelmente não está sendo lido corretamente — todos os registros mostram `tokens_used: 0`.
 
-### O que será feito
+### Problema 2: Consumo 10x maior
+O pico de execuções (64/dia → 800/dia) precisa investigação. Possíveis causas:
+- Follow-ups automáticos gerando loops
+- Reprocessamento de mensagens duplicadas
+- Aumento real de volume de leads
 
-**1. Nova Edge Function `supabase/functions/cancel-account/index.ts`**
-- Autenticação obrigatória (Bearer token → `getUser()`)
-- Busca o workspace do usuário via `workspace_members`
-- Cancela assinatura Stripe (subscription + customer subscriptions, mesma lógica do `admin-clients` delete-workspace)
-- Deleta todas as tabelas dependentes (mesma cascata do admin-clients: leads, mensagens, agentes, campanhas, etc.)
-- Deleta workspace, membership, profile
-- Deleta o usuário do auth via `supabaseAdmin.auth.admin.deleteUser()`
-- Retorna sucesso
+### Problema 3: Admin Saúde lento e pouco prático
+Hoje abre tudo via Accordion na mesma página. Proposta: lista compacta com métricas-resumo + clique para abrir detalhes do workspace em um dialog/sheet.
 
-**2. `src/pages/ProfileSettings.tsx` — Seção "Zona de perigo" no final**
-- Card vermelho com ícone `Trash2` e título "Excluir minha conta"
-- Descrição: "Esta ação é **irreversível**. Todos os seus dados serão apagados permanentemente: leads, conversas, conexões WhatsApp, agentes de IA, campanhas e configurações. Sua assinatura será cancelada automaticamente."
-- Botão "Excluir minha conta" (vermelho)
-- Ao clicar: AlertDialog de confirmação com campo de texto pedindo digitar "EXCLUIR" para confirmar
-- Após confirmar: chama a Edge Function, faz signOut, redireciona para `/auth`
+### Alterações
 
-### Fluxo do usuário
-1. Vai em **Perfil & Segurança** (menu dropdown do avatar → "Perfil")
-2. Rola até o final → seção "Zona de perigo"
-3. Clica "Excluir minha conta"
-4. Dialog: "Tem certeza? Esta ação é irreversível. Digite EXCLUIR para confirmar."
-5. Digita "EXCLUIR" → clica confirmar
-6. Edge Function cancela Stripe + deleta tudo
-7. Usuário é deslogado e redirecionado para `/auth`
+**1. `supabase/functions/ai-agent-chat/index.ts` — Fix token tracking Anthropic**
+- Localizar onde extrai `usage` da resposta da API
+- Garantir que para Anthropic lê `usage.input_tokens + usage.output_tokens`
+- Para OpenAI/Lovable Gateway lê `usage.total_tokens`
+- Salvar corretamente em `agent_executions.tokens_used`
+
+**2. `supabase/functions/admin-clients/index.ts` — Adicionar tokens por workspace no health-monitoring**
+- Na action `health-monitoring`, já calcula `tokens_total` por agente
+- Garantir que soma tokens de `agent_executions` dos últimos 30 dias por workspace
+- Adicionar campo `executions_30d` e `tokens_30d` ao retorno
+
+**3. `src/components/admin/WorkspaceHealthTab.tsx` — Redesign para lista compacta + dialog de detalhes**
+- Substituir o Accordion por uma **tabela/lista compacta** com colunas:
+  - Nome | Plano | Leads (usado/limite) | Execuções IA 30d | Tokens 30d | Instâncias | Status | Ações
+- Ao clicar na linha ou botão "Ver detalhes": abre um **Sheet/Dialog** com todas as informações expandidas (agentes, instâncias, alertas, consumo detalhado)
+- Manter filtros e busca no topo
+- Adicionar coluna de tokens/custo estimado visível na lista principal
+
+### Detalhes técnicos
+
+| Arquivo | Mudança |
+|---|---|
+| `ai-agent-chat/index.ts` | Fix extração de tokens para Anthropic (usage.input_tokens + output_tokens) |
+| `admin-clients/index.ts` | Agregar tokens_30d e executions_30d por workspace no health-monitoring |
+| `WorkspaceHealthTab.tsx` | Tabela compacta + Sheet de detalhes ao clicar |
 
 ### O que NÃO será alterado
-- Nenhuma outra página
-- Nenhuma lógica de agentes, calendário, SalesBots
-- O painel admin continua com sua própria funcionalidade de deletar workspaces
+- Nenhum modelo de agente de cliente será alterado
+- Nenhuma lógica de SalesBot, calendário, FAQ
+- Nenhuma tabela do banco (apenas leitura de dados existentes)
 
