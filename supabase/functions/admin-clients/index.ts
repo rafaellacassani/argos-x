@@ -1055,6 +1055,7 @@ serve(async (req) => {
       const now = new Date();
       const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
       const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
       // Fetch all data in parallel
       const wsIds = workspaces.map((w: any) => w.id);
@@ -1067,6 +1068,7 @@ serve(async (req) => {
         wabaRes,
         executionsRes,
         allTokensRes,
+        executions30dRes,
         profilesRes,
       ] = await Promise.all([
         supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
@@ -1076,6 +1078,7 @@ serve(async (req) => {
         supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds),
+        supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds).gte("executed_at", thirtyDaysAgo.toISOString()),
         supabaseAdmin.from("user_profiles").select("user_id, full_name, phone, email"),
       ]);
 
@@ -1130,6 +1133,15 @@ serve(async (req) => {
         const t = e.tokens_used || 0;
         tokensByAgent.set(e.agent_id, (tokensByAgent.get(e.agent_id) || 0) + t);
         tokensByWs.set(e.workspace_id, (tokensByWs.get(e.workspace_id) || 0) + t);
+      }
+
+      // 30-day metrics by workspace
+      const tokens30dByWs = new Map<string, number>();
+      const executions30dByWs = new Map<string, number>();
+      for (const e of (executions30dRes.data || [])) {
+        const t = e.tokens_used || 0;
+        tokens30dByWs.set(e.workspace_id, (tokens30dByWs.get(e.workspace_id) || 0) + t);
+        executions30dByWs.set(e.workspace_id, (executions30dByWs.get(e.workspace_id) || 0) + 1);
       }
 
       // Cost estimation: USD per 1K tokens by model family, then convert to BRL
@@ -1260,6 +1272,8 @@ serve(async (req) => {
           instances,
           alerts,
           tokens_total: wsTokensTotal,
+          tokens_30d: tokens30dByWs.get(ws.id) || 0,
+          executions_30d: executions30dByWs.get(ws.id) || 0,
           cost_estimate_brl: Math.round(wsCostBrl * 100) / 100,
         };
       });
