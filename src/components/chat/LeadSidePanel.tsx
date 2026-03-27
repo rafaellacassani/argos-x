@@ -65,6 +65,7 @@ interface LeadSidePanelProps {
   chatContact?: ChatContactInfo;
   onCreateLead?: () => Promise<boolean>;
   onOpenDetailModal?: () => void;
+  workspaceId?: string;
 }
 
 // Inline editable field
