@@ -3029,7 +3029,7 @@ export default function Chats() {
                         <DropdownMenuContent align="end">
                           {nextStage && (
                             <DropdownMenuItem onClick={() => {
-                              moveLead(chatLead.id, nextStage.id);
+                              moveLead(chatLead.id, nextStage.id, 0);
                               toast({ title: `Lead movido para ${nextStage.name}` });
                             }}>
                               <ArrowRight className="h-4 w-4 mr-2" />
