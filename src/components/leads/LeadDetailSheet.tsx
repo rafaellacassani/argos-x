@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -14,7 +14,12 @@ import {
   History,
   ChevronRight,
   Trash2,
-  Plus
+  Plus,
+  Flame,
+  Snowflake,
+  Sun,
+  Loader2,
+  Brain,
 } from 'lucide-react';
 import {
   Sheet,
@@ -49,6 +54,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import type { Lead, FunnelStage, LeadTag, LeadHistory, LeadSale } from '@/hooks/useLeads';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+import { useWorkspace } from '@/hooks/useWorkspace';
+import { cn } from '@/lib/utils';
 
 interface LeadDetailSheetProps {
   lead: Lead | null;
@@ -93,9 +102,36 @@ export function LeadDetailSheet({
   onSaveSales,
   canDelete = true
 }: LeadDetailSheetProps) {
+  const { workspaceId } = useWorkspace();
   const [editedLead, setEditedLead] = useState<Partial<Lead>>({});
   const [editedSales, setEditedSales] = useState<EditableSale[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isScoring, setIsScoring] = useState(false);
+
+  const handleScoreLead = useCallback(async () => {
+    if (!lead || !workspaceId) return;
+    setIsScoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('score-lead', {
+        body: { leadId: lead.id, workspaceId },
+      });
+      if (error) throw error;
+      toast.success(`Lead classificado: ${data.label?.toUpperCase()} (${data.score}/100)`);
+      // Update local state
+      if (data.score !== undefined) {
+        onUpdate(lead.id, {
+          ai_score: data.score,
+          ai_score_label: data.label,
+          ai_scored_at: new Date().toISOString(),
+        } as any);
+      }
+    } catch (err: any) {
+      toast.error('Erro ao classificar lead');
+      console.error(err);
+    } finally {
+      setIsScoring(false);
+    }
+  }, [lead, workspaceId, onUpdate]);
 
   // Reset edited state when lead changes
   useEffect(() => {
@@ -298,7 +334,31 @@ export function LeadDetailSheet({
           </div>
 
           {/* Quick Actions */}
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-2 flex-wrap">
+            {/* AI Score Badge */}
+            {lead.ai_score_label && (
+              <div className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
+                lead.ai_score_label === 'quente' && 'bg-red-500/20 text-red-300',
+                lead.ai_score_label === 'morno' && 'bg-yellow-500/20 text-yellow-300',
+                lead.ai_score_label === 'frio' && 'bg-blue-500/20 text-blue-300',
+              )}>
+                {lead.ai_score_label === 'quente' && <Flame className="h-4 w-4" />}
+                {lead.ai_score_label === 'morno' && <Sun className="h-4 w-4" />}
+                {lead.ai_score_label === 'frio' && <Snowflake className="h-4 w-4" />}
+                {lead.ai_score_label.charAt(0).toUpperCase() + lead.ai_score_label.slice(1)} ({lead.ai_score}/100)
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              onClick={handleScoreLead}
+              disabled={isScoring}
+            >
+              {isScoring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
+              {lead.ai_score_label ? 'Reclassificar' : 'Classificar IA'}
+            </Button>
             {lead.whatsapp_jid && onOpenChat && (
               <Button 
                 variant="outline" 

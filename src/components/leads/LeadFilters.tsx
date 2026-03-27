@@ -31,6 +31,7 @@ export interface LeadFiltersData {
   visibleStageIds: string[];
   sources: string[];
   unassigned: boolean;
+  aiScoreLabels: string[];
 }
 
 export const DEFAULT_FILTERS: LeadFiltersData = {
@@ -46,6 +47,7 @@ export const DEFAULT_FILTERS: LeadFiltersData = {
   visibleStageIds: [],
   sources: [],
   unassigned: false,
+  aiScoreLabels: [],
 };
 
 const DATE_PRESETS = [
@@ -101,6 +103,7 @@ export function countActiveFilters(filters: LeadFiltersData, allStageIds: string
   if (filters.product.trim()) count++;
   if (filters.datePreset || filters.dateFrom) count++;
   if (filters.sources.length > 0) count++;
+  if (filters.aiScoreLabels.length > 0) count++;
   // Stage filter counts only if some stages are hidden
   if (filters.visibleStageIds.length > 0 && filters.visibleStageIds.length < allStageIds.length) count++;
   return count;
@@ -396,6 +399,26 @@ export function LeadFilters({
                       }
                     />
                     {src.label}
+                  </label>
+                ))}
+              </div>
+            </FilterSection>
+
+            <FilterSection title="CLASSIFICAÇÃO IA">
+              <div className="space-y-1">
+                {[
+                  { id: 'quente', label: '🔥 Quente (70-100)' },
+                  { id: 'morno', label: '🟡 Morno (30-69)' },
+                  { id: 'frio', label: '🔵 Frio (0-29)' },
+                ].map(opt => (
+                  <label key={opt.id} className="flex items-center gap-2 cursor-pointer text-sm py-1">
+                    <Checkbox
+                      checked={draft.aiScoreLabels.includes(opt.id)}
+                      onCheckedChange={() =>
+                        setDraft(d => ({ ...d, aiScoreLabels: toggleArray(d.aiScoreLabels, opt.id) }))
+                      }
+                    />
+                    {opt.label}
                   </label>
                 ))}
               </div>
