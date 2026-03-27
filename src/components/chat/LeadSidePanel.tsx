@@ -12,6 +12,9 @@ import {
   Check,
   ChevronDown,
   Calendar,
+  FileText,
+  RefreshCw,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +65,7 @@ interface LeadSidePanelProps {
   chatContact?: ChatContactInfo;
   onCreateLead?: () => Promise<boolean>;
   onOpenDetailModal?: () => void;
+  workspaceId?: string;
 }
 
 // Inline editable field
@@ -156,9 +160,34 @@ export function LeadSidePanel({
   chatContact,
   onCreateLead,
   onOpenDetailModal,
+  workspaceId,
 }: LeadSidePanelProps) {
   const [responsibleName, setResponsibleName] = useState<string | null>(null);
   const [creatingLead, setCreatingLead] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(true);
+
+  const handleSummarize = async () => {
+    const jid = lead?.whatsapp_jid || chatContact?.remoteJid;
+    const instance = lead?.instance_name || chatContact?.instanceName;
+    if (!jid || !workspaceId) return;
+
+    setLoadingSummary(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("summarize-conversation", {
+        body: { remoteJid: jid, instanceName: instance, workspaceId },
+      });
+      if (error) throw error;
+      setSummary(data?.summary || "Não foi possível gerar o resumo.");
+      setSummaryOpen(true);
+    } catch (e) {
+      console.error("Error summarizing:", e);
+      setSummary("Erro ao gerar resumo. Tente novamente.");
+    } finally {
+      setLoadingSummary(false);
+    }
+  };
 
   // Fetch responsible user name
   useEffect(() => {
@@ -345,6 +374,43 @@ export function LeadSidePanel({
             onCreateTag={onCreateTag}
           />
         </div>
+      </div>
+
+      {/* AI Summary Section */}
+      <div className="px-4 py-3 border-b border-border space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Resumo IA</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1.5 px-2"
+            onClick={handleSummarize}
+            disabled={loadingSummary}
+          >
+            {loadingSummary ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <FileText className="w-3 h-3" />
+            )}
+            {summary ? "Atualizar" : "Resumir conversa"}
+          </Button>
+        </div>
+        {summary && (
+          <div className="space-y-1">
+            <button
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setSummaryOpen((v) => !v)}
+            >
+              <ChevronUp className={cn("w-3 h-3 transition-transform", !summaryOpen && "rotate-180")} />
+              {summaryOpen ? "Recolher" : "Expandir"}
+            </button>
+            {summaryOpen && (
+              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                {summary}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Funnel Section */}
