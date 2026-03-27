@@ -2053,6 +2053,9 @@ export type Database = {
       }
       leads: {
         Row: {
+          ai_score: number | null
+          ai_score_label: string | null
+          ai_scored_at: string | null
           avatar_url: string | null
           company: string | null
           created_at: string
@@ -2073,6 +2076,9 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          ai_score?: number | null
+          ai_score_label?: string | null
+          ai_scored_at?: string | null
           avatar_url?: string | null
           company?: string | null
           created_at?: string
@@ -2093,6 +2099,9 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          ai_score?: number | null
+          ai_score_label?: string | null
+          ai_scored_at?: string | null
           avatar_url?: string | null
           company?: string | null
           created_at?: string
