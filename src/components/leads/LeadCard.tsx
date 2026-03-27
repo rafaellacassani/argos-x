@@ -1,6 +1,6 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Phone, MessageSquare, MoreVertical, DollarSign } from 'lucide-react';
+import { Phone, MessageSquare, MoreVertical, DollarSign, Clock } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
