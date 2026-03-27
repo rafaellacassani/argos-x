@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, User, Building2, Mail, Lock, ShieldCheck, Loader2, Check } from "lucide-react";
+import { ArrowLeft, User, Building2, Mail, Lock, ShieldCheck, Loader2, Check, Trash2, AlertTriangle } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useNavigate } from "react-router-dom";
 
 export default function ProfileSettings() {
