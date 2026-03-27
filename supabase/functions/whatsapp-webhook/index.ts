@@ -1121,13 +1121,14 @@ app.post("/", async (c) => {
                     console.log(`[whatsapp-webhook] ✅ Media downloaded: ${mime}, ${(sizeBytes / 1024).toFixed(0)}KB`);
                   }
                 } else {
-                  console.error(`[whatsapp-webhook] ❌ Media download failed: ${mediaRes.status}`);
+                  const errBody = await mediaRes.text().catch(() => "");
+                  console.error(`[whatsapp-webhook] ❌ Media download failed: ${mediaRes.status} - ${errBody.substring(0, 200)}`);
                 }
               } catch (mediaErr: any) {
                 if (mediaErr.name === "AbortError") {
                   console.error("[whatsapp-webhook] ❌ Media download timeout (25s)");
                 } else {
-                  console.error("[whatsapp-webhook] ❌ Media download error:", mediaErr);
+                  console.error("[whatsapp-webhook] ❌ Media download error:", mediaErr.message || mediaErr);
                 }
               }
             }
