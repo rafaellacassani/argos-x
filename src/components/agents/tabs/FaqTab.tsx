@@ -78,11 +78,10 @@ export function FaqTab({ formData, updateField }: Props) {
       const ext = file.name.split(".").pop() || "bin";
       const path = `${workspaceId}/faq/${faqId}/${Date.now()}.${ext}`;
 
-      // Use agent-attachments bucket (already exists)
-      const { error } = await supabase.storage.from("agent-attachments").upload(path, file, { upsert: true });
+      const { error } = await supabase.storage.from("salesbot-media").upload(path, file, { upsert: true });
       if (error) throw error;
 
-      const { data: urlData } = supabase.storage.from("agent-attachments").getPublicUrl(path);
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
 
       const newAttachment: FaqAttachment = {
         url: urlData.publicUrl,
