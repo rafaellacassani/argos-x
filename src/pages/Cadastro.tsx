@@ -212,9 +212,13 @@ export default function Cadastro() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               Comece grátis por 7 dias
             </h1>
-            <p className="text-gray-500">
-              Cartão necessário para ativar. Você só é cobrado após 7 dias. Cancele quando quiser.
+            <p className="text-gray-500 mb-3">
+              Cada minuto sem o Argos X é um cliente que pode ir embora. Comece agora!
             </p>
+            <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
+              <span className="flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Cancela quando quiser</span>
+              <span className="flex items-center gap-1"><Check className="w-4 h-4 text-emerald-500" /> Começa em 2 minutos</span>
+            </div>
           </div>
 
           <Card className="shadow-lg border-gray-100">
