@@ -765,9 +765,55 @@ export default function Chats() {
 
   // Handler for sending media
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
-    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    if (!selectedChat) return false;
+
+    // Meta/WABA: upload to storage and send via meta-send-message
+    if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
+      try {
+        const mediatype = getMediaType(file);
+        const fileName = `meta-media/${Date.now()}-${file.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("campaign-attachments")
+          .upload(fileName, file, { contentType: file.type });
+        if (uploadError || !uploadData) throw new Error(uploadError?.message || "Upload failed");
+        const { data: urlData } = supabase.storage.from("campaign-attachments").getPublicUrl(fileName);
+        const mediaUrl = urlData?.publicUrl;
+        if (!mediaUrl) throw new Error("Could not get public URL");
+
+        const { error } = await supabase.functions.invoke("meta-send-message", {
+          body: {
+            metaPageId: selectedChat.metaPageId,
+            recipientId: selectedChat.metaSenderId,
+            message: caption || "",
+            messageType: mediatype,
+            mediaUrl,
+          },
+        });
+        if (error) throw error;
+
+        const newMessage: Message = {
+          id: `local-${Date.now()}`,
+          content: caption || "",
+          time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          sent: true,
+          read: false,
+          type: mediatype,
+          fileName: file.name,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+        requestAnimationFrame(() => scrollToBottom());
+        autoAssignLead(selectedChat);
+        return true;
+      } catch (err: any) {
+        console.error("[Chats] Meta sendMedia error:", err);
+        toast({ title: "Erro ao enviar mídia", description: err.message || "Tente novamente.", variant: "destructive" });
+        return false;
+      }
+    }
+
+    // Evolution API path
     const targetInstance = selectedChat?.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
+    if (!targetInstance || targetInstance === "all") return false;
     
     const mediatype = getMediaType(file);
     const base64 = await fileToBase64(file);
@@ -779,7 +825,6 @@ export default function Chats() {
     const success = await sendMedia(targetInstance, number, mediatype, base64, caption, file.name);
     
     if (success) {
-      // Add message to local state optimistically
       const newMessage: Message = {
         id: `local-${Date.now()}`,
         content: caption || "",
@@ -806,9 +851,60 @@ export default function Chats() {
 
   // Handler for sending audio
   const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
-    // Use chat's instance if in "all" mode, otherwise use selectedInstance
+    if (!selectedChat) return false;
+
+    // Meta/WABA: upload to storage and send via meta-send-message
+    if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
+      try {
+        const fileName = `meta-audio/${Date.now()}-audio.ogg`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("campaign-attachments")
+          .upload(fileName, audioBlob, { contentType: "audio/ogg" });
+        if (uploadError || !uploadData) throw new Error(uploadError?.message || "Upload failed");
+        const { data: urlData } = supabase.storage.from("campaign-attachments").getPublicUrl(fileName);
+        const mediaUrl = urlData?.publicUrl;
+        if (!mediaUrl) throw new Error("Could not get public URL");
+
+        const { error } = await supabase.functions.invoke("meta-send-message", {
+          body: {
+            metaPageId: selectedChat.metaPageId,
+            recipientId: selectedChat.metaSenderId,
+            message: "",
+            messageType: "audio",
+            mediaUrl,
+          },
+        });
+        if (error) throw error;
+
+        const reader = new FileReader();
+        const localAudioDataUrl = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(audioBlob);
+        });
+
+        const newMessage: Message = {
+          id: `local-${Date.now()}`,
+          content: "",
+          time: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+          sent: true,
+          read: false,
+          type: "audio",
+          localAudioBase64: localAudioDataUrl,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+        requestAnimationFrame(() => scrollToBottom());
+        autoAssignLead(selectedChat);
+        return true;
+      } catch (err: any) {
+        console.error("[Chats] Meta sendAudio error:", err);
+        toast({ title: "Erro ao enviar áudio", description: err.message || "Tente novamente.", variant: "destructive" });
+        return false;
+      }
+    }
+
+    // Evolution API path
     const targetInstance = selectedChat?.instanceName || selectedInstance;
-    if (!targetInstance || targetInstance === "all" || !selectedChat) return false;
+    if (!targetInstance || targetInstance === "all") return false;
     
     const number = resolveRecipientNumber(selectedChat);
     if (!number) {
@@ -817,7 +913,6 @@ export default function Chats() {
     }
     const base64 = await blobToBase64(audioBlob);
     
-    // Create data URL for local playback (with proper prefix)
     const reader = new FileReader();
     const localAudioDataUrl = await new Promise<string>((resolve) => {
       reader.onload = () => resolve(reader.result as string);
@@ -827,7 +922,6 @@ export default function Chats() {
     const success = await sendAudio(targetInstance, number, base64);
     
     if (success) {
-      // Add message to local state optimistically with audio data for playback
       const newMessage: Message = {
         id: `local-${Date.now()}`,
         content: "",
