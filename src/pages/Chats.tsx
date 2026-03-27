@@ -3172,60 +3172,83 @@ export default function Chats() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={isMeta}
-                            onClick={async () => {
-                              if (isMeta) return;
-                              const instName = selectedChat.instanceName || selectedInstance || "";
-                              const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
-                              if (!instName || !number) {
-                                toast({ title: "Dados insuficientes para bloquear", variant: "destructive" });
-                                return;
-                              }
-                              const confirmed = window.confirm("Tem certeza que deseja bloquear este contato? Ele não poderá mais enviar mensagens para esta instância.");
-                              if (!confirmed) return;
-                              const ok = await blockContact(instName, number, true);
-                              if (ok) {
-                                toast({ title: "Contato bloqueado com sucesso" });
-                                // Also pause AI for this contact
+                          {isMeta ? (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                if (!chatLead?.id) {
+                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                  return;
+                                }
+                                const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
+                                if (!confirmed) return;
                                 try {
-                                  const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                  if (chatLead?.id) {
-                                    await supabase
-                                      .from("agent_memories")
-                                      .update({ is_paused: true } as any)
-                                      .eq("lead_id", chatLead.id);
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: true } as any)
+                                    .eq("lead_id", chatLead.id);
+                                  toast({ title: "✅ IA pausada para este contato" });
+                                } catch {
+                                  toast({ title: "Erro ao pausar IA", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              <Ban className="w-4 h-4 mr-2" />
+                              Pausar IA para este contato
+                            </DropdownMenuItem>
+                          ) : (
+                            <>
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  const instName = selectedChat.instanceName || selectedInstance || "";
+                                  const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
+                                  if (!instName || !number) {
+                                    toast({ title: "Dados insuficientes para bloquear", variant: "destructive" });
+                                    return;
                                   }
-                                } catch {}
-                              } else {
-                                toast({ title: "Erro ao bloquear contato", variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <Ban className="w-4 h-4 mr-2" />
-                            {isMeta ? "Bloquear (indisponível para WABA)" : "Bloquear contato"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={isMeta}
-                            onClick={async () => {
-                              if (isMeta) return;
-                              const instName = selectedChat.instanceName || selectedInstance || "";
-                              const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
-                              if (!instName || !number) {
-                                toast({ title: "Dados insuficientes para desbloquear", variant: "destructive" });
-                                return;
-                              }
-                              const ok = await blockContact(instName, number, false);
-                              if (ok) {
-                                toast({ title: "Contato desbloqueado com sucesso" });
-                              } else {
-                                toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <ShieldOff className="w-4 h-4 mr-2" />
-                            {isMeta ? "Desbloquear (indisponível para WABA)" : "Desbloquear contato"}
-                          </DropdownMenuItem>
+                                  const confirmed = window.confirm("Tem certeza que deseja bloquear este contato? Ele não poderá mais enviar mensagens para esta instância.");
+                                  if (!confirmed) return;
+                                  const ok = await blockContact(instName, number, true);
+                                  if (ok) {
+                                    toast({ title: "Contato bloqueado com sucesso" });
+                                    try {
+                                      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                      if (chatLead?.id) {
+                                        await supabase
+                                          .from("agent_memories")
+                                          .update({ is_paused: true } as any)
+                                          .eq("lead_id", chatLead.id);
+                                      }
+                                    } catch {}
+                                  } else {
+                                    toast({ title: "Erro ao bloquear contato", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <Ban className="w-4 h-4 mr-2" />
+                                Bloquear contato
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  const instName = selectedChat.instanceName || selectedInstance || "";
+                                  const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
+                                  if (!instName || !number) {
+                                    toast({ title: "Dados insuficientes para desbloquear", variant: "destructive" });
+                                    return;
+                                  }
+                                  const ok = await blockContact(instName, number, false);
+                                  if (ok) {
+                                    toast({ title: "Contato desbloqueado com sucesso" });
+                                  } else {
+                                    toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <ShieldOff className="w-4 h-4 mr-2" />
+                                Desbloquear contato
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     );

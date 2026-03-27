@@ -799,7 +799,7 @@ serve(async (req) => {
                   .eq("id", agent.workspace_id)
                   .single();
                 const planType = wsData?.plan_type || "";
-                const allowedPlans = ["negocio", "escala", "active"];
+                const allowedPlans = ["negocio", "escala", "active", "trial", "essencial"];
                 audioAllowed = allowedPlans.includes(planType);
                 // Also allow if super admin is viewing (admin workspace override)
                 if (!audioAllowed) {
