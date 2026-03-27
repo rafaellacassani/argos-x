@@ -1,49 +1,73 @@
 
 
-## Plano: Corrigir tracking de tokens Anthropic + Redesign Admin Saúde
+## Criar lead automaticamente quando a IA atende (sem depender de SalesBot)
 
-### Problema 1: Tokens Anthropic não registrados
-O `ai-agent-chat` extrai tokens do response da API, mas para Anthropic o campo está diferente (`usage.input_tokens` + `usage.output_tokens`) e provavelmente não está sendo lido corretamente — todos os registros mostram `tokens_used: 0`.
+### Problema identificado
+No `whatsapp-webhook/index.ts`, a criação automática de leads acontece **somente** dentro do fluxo de SalesBots (linha 1334). Quando um **Agente de IA** atende a conversa, o webhook retorna na linha 1243 (`handler: "ai_agent"`) **antes** de chegar ao código que cria o lead. Resultado: contatos atendidos pela IA ficam sem card no funil.
 
-### Problema 2: Consumo 10x maior
-O pico de execuções (64/dia → 800/dia) precisa investigação. Possíveis causas:
-- Follow-ups automáticos gerando loops
-- Reprocessamento de mensagens duplicadas
-- Aumento real de volume de leads
+### Causa raiz
+O fluxo é sequencial:
+1. Verifica AI Agents → se encontra, responde e **retorna** (sem criar lead)
+2. Verifica SalesBots → se encontra, **cria lead** se não existe e executa o bot
 
-### Problema 3: Admin Saúde lento e pouco prático
-Hoje abre tudo via Accordion na mesma página. Proposta: lista compacta com métricas-resumo + clique para abrir detalhes do workspace em um dialog/sheet.
+Workspaces que usam apenas IA (sem SalesBot ativo) nunca criam leads automaticamente.
 
-### Alterações
+### Correção
 
-**1. `supabase/functions/ai-agent-chat/index.ts` — Fix token tracking Anthropic**
-- Localizar onde extrai `usage` da resposta da API
-- Garantir que para Anthropic lê `usage.input_tokens + usage.output_tokens`
-- Para OpenAI/Lovable Gateway lê `usage.total_tokens`
-- Salvar corretamente em `agent_executions.tokens_used`
+**Arquivo: `supabase/functions/whatsapp-webhook/index.ts`**
 
-**2. `supabase/functions/admin-clients/index.ts` — Adicionar tokens por workspace no health-monitoring**
-- Na action `health-monitoring`, já calcula `tokens_total` por agente
-- Garantir que soma tokens de `agent_executions` dos últimos 30 dias por workspace
-- Adicionar campo `executions_30d` e `tokens_30d` ao retorno
+Adicionar criação automática de lead **dentro do bloco do AI Agent** (antes de chamar `ai-agent-chat`), quando `leadId` for null:
 
-**3. `src/components/admin/WorkspaceHealthTab.tsx` — Redesign para lista compacta + dialog de detalhes**
-- Substituir o Accordion por uma **tabela/lista compacta** com colunas:
-  - Nome | Plano | Leads (usado/limite) | Execuções IA 30d | Tokens 30d | Instâncias | Status | Ações
-- Ao clicar na linha ou botão "Ver detalhes": abre um **Sheet/Dialog** com todas as informações expandidas (agentes, instâncias, alertas, consumo detalhado)
-- Manter filtros e busca no topo
-- Adicionar coluna de tokens/custo estimado visível na lista principal
+```
+// Após linha ~1018 (leadId = existingLead?.id || null)
+// Se não existe lead, criar automaticamente
+if (!leadId && phoneNumber.length >= 10 && phoneNumber.length <= 15) {
+  // Buscar primeira etapa do funil padrão
+  const { data: defaultFunnel } = await supabase
+    .from("funnels").select("id")
+    .eq("workspace_id", workspaceId).eq("is_default", true)
+    .limit(1).single();
+  
+  let stageId = null;
+  if (defaultFunnel) {
+    const { data: firstStage } = await supabase
+      .from("funnel_stages").select("id")
+      .eq("funnel_id", defaultFunnel.id)
+      .order("position", { ascending: true }).limit(1).single();
+    stageId = firstStage?.id;
+  }
+  if (!stageId) {
+    const { data: anyStage } = await supabase
+      .from("funnel_stages").select("id")
+      .eq("workspace_id", workspaceId)
+      .order("position", { ascending: true }).limit(1).single();
+    stageId = anyStage?.id;
+  }
+  
+  if (stageId) {
+    const preferredJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
+    const { data: newLead } = await supabase
+      .from("leads").insert({
+        name: pushName || `+${phoneNumber}`,
+        phone: phoneNumber,
+        whatsapp_jid: preferredJid,
+        instance_name: instanceName,
+        source: "whatsapp",
+        stage_id: stageId,
+        workspace_id: workspaceId,
+      }).select("id").single();
+    
+    if (newLead) {
+      leadId = newLead.id;
+      console.log(`[whatsapp-webhook] ✅ Auto-created lead for AI agent: ${leadId}`);
+    }
+  }
+}
+```
 
-### Detalhes técnicos
-
-| Arquivo | Mudança |
-|---|---|
-| `ai-agent-chat/index.ts` | Fix extração de tokens para Anthropic (usage.input_tokens + output_tokens) |
-| `admin-clients/index.ts` | Agregar tokens_30d e executions_30d por workspace no health-monitoring |
-| `WorkspaceHealthTab.tsx` | Tabela compacta + Sheet de detalhes ao clicar |
-
-### O que NÃO será alterado
-- Nenhum modelo de agente de cliente será alterado
-- Nenhuma lógica de SalesBot, calendário, FAQ
-- Nenhuma tabela do banco (apenas leitura de dados existentes)
+### Resultado
+- **Antes**: Contatos atendidos pela IA ficavam sem lead no funil
+- **Depois**: Todo contato novo que a IA atende ganha um card automaticamente na primeira etapa do funil padrão
+- A lógica de SalesBots permanece inalterada
+- Nenhuma outra alteração necessária
 
