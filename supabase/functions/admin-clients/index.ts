@@ -1135,6 +1135,15 @@ serve(async (req) => {
         tokensByWs.set(e.workspace_id, (tokensByWs.get(e.workspace_id) || 0) + t);
       }
 
+      // 30-day metrics by workspace
+      const tokens30dByWs = new Map<string, number>();
+      const executions30dByWs = new Map<string, number>();
+      for (const e of (executions30dRes.data || [])) {
+        const t = e.tokens_used || 0;
+        tokens30dByWs.set(e.workspace_id, (tokens30dByWs.get(e.workspace_id) || 0) + t);
+        executions30dByWs.set(e.workspace_id, (executions30dByWs.get(e.workspace_id) || 0) + 1);
+      }
+
       // Cost estimation: USD per 1K tokens by model family, then convert to BRL
       const USD_TO_BRL = 5.50;
       const costPer1kTokens = (model: string): number => {
