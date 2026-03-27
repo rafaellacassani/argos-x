@@ -263,9 +263,27 @@ export const LeadCard = memo(function LeadCard({
         </div>
       )}
 
+      {/* Quick Action Button */}
+      {!bulkMode && quickAction && (
+        <div className="mt-3 pt-3 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-7 text-xs gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              quickAction.action();
+            }}
+          >
+            <quickAction.icon className="h-3 w-3" />
+            {quickAction.label}
+          </Button>
+        </div>
+      )}
+
       {/* Source indicator */}
       {lead.source === 'whatsapp' && (
-        <div className="mt-3 pt-3 border-t flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className={cn("mt-3 pt-3 border-t flex items-center gap-1.5 text-xs text-muted-foreground", !bulkMode && quickAction && "mt-2 pt-2")}>
           <MessageSquare className="h-3 w-3 text-emerald-500" />
           Via WhatsApp
         </div>
