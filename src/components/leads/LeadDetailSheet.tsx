@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
@@ -14,7 +14,12 @@ import {
   History,
   ChevronRight,
   Trash2,
-  Plus
+  Plus,
+  Flame,
+  Snowflake,
+  Sun,
+  Loader2,
+  Brain,
 } from 'lucide-react';
 import {
   Sheet,
