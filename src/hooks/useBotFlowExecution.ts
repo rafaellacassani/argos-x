@@ -274,7 +274,7 @@ export function useBotFlowExecution() {
           if (nodeMediaType === 'audio') {
             sent = await sendAudio(instanceName, targetNumber, nodeMediaUrl);
           } else {
-            sent = await sendMedia(instanceName, targetNumber, nodeMediaType, nodeMediaUrl, messageText || undefined);
+            sent = await sendMedia(instanceName, targetNumber, nodeMediaType as 'image' | 'video' | 'document', nodeMediaUrl, messageText || undefined);
           }
           return { success: sent, message: sent ? 'Mídia enviada com sucesso' : `Falha ao enviar mídia para ${targetNumber}` };
         }
