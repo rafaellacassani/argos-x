@@ -6,6 +6,7 @@ import {
   Video,
   MoreVertical,
   ArrowLeft,
+  ArrowRight,
   Star,
   Archive,
   RefreshCw,
@@ -16,6 +17,7 @@ import {
   UserCheck,
   Ban,
   ShieldOff,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -3035,7 +3037,7 @@ export default function Chats() {
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem onClick={() => {
-                            setSelectedLeadForModal(chatLead);
+                            setLeadModalLead(chatLead);
                             setLeadModalOpen(true);
                           }}>
                             <UserCheck className="h-4 w-4 mr-2" />
