@@ -101,9 +101,36 @@ export function LeadDetailSheet({
   onSaveSales,
   canDelete = true
 }: LeadDetailSheetProps) {
+  const { workspaceId } = useWorkspace();
   const [editedLead, setEditedLead] = useState<Partial<Lead>>({});
   const [editedSales, setEditedSales] = useState<EditableSale[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isScoring, setIsScoring] = useState(false);
+
+  const handleScoreLead = useCallback(async () => {
+    if (!lead || !workspaceId) return;
+    setIsScoring(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('score-lead', {
+        body: { leadId: lead.id, workspaceId },
+      });
+      if (error) throw error;
+      toast.success(`Lead classificado: ${data.label?.toUpperCase()} (${data.score}/100)`);
+      // Update local state
+      if (data.score !== undefined) {
+        onUpdate(lead.id, {
+          ai_score: data.score,
+          ai_score_label: data.label,
+          ai_scored_at: new Date().toISOString(),
+        } as any);
+      }
+    } catch (err: any) {
+      toast.error('Erro ao classificar lead');
+      console.error(err);
+    } finally {
+      setIsScoring(false);
+    }
+  }, [lead, workspaceId, onUpdate]);
 
   // Reset edited state when lead changes
   useEffect(() => {
