@@ -103,6 +103,7 @@ export function countActiveFilters(filters: LeadFiltersData, allStageIds: string
   if (filters.product.trim()) count++;
   if (filters.datePreset || filters.dateFrom) count++;
   if (filters.sources.length > 0) count++;
+  if (filters.aiScoreLabels.length > 0) count++;
   // Stage filter counts only if some stages are hidden
   if (filters.visibleStageIds.length > 0 && filters.visibleStageIds.length < allStageIds.length) count++;
   return count;
