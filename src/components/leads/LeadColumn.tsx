@@ -46,6 +46,7 @@ interface LeadColumnProps {
   onLeadClick: (lead: Lead) => void;
   onLeadDelete: (leadId: string) => void;
   onOpenChat?: (jid: string) => void;
+  onMoveToNextStage?: (leadId: string) => void;
   onAddLead?: (stageId: string) => void;
   onEditStage?: (stage: FunnelStage) => void;
   onUpdateStage?: (stageId: string, updates: Partial<FunnelStage>) => void;
@@ -71,6 +72,7 @@ export const LeadColumn = memo(function LeadColumn({
   onLeadClick,
   onLeadDelete,
   onOpenChat,
+  onMoveToNextStage,
   onAddLead,
   onEditStage,
   onUpdateStage,
@@ -337,6 +339,7 @@ export const LeadColumn = memo(function LeadColumn({
                   onClick={onLeadClick}
                   onDelete={onLeadDelete}
                   onOpenChat={onOpenChat}
+                  onMoveToNextStage={onMoveToNextStage}
                   canDelete={canDelete}
                   teamMembers={teamMembers}
                   bulkMode={bulkMode}

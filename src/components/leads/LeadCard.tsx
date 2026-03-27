@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
-import { Phone, MessageSquare, MoreVertical, DollarSign, Clock } from 'lucide-react';
+import { Phone, MessageSquare, MoreVertical, DollarSign, Clock, Zap, ArrowRight, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,7 @@ interface LeadCardProps {
   onClick: (lead: Lead) => void;
   onDelete: (leadId: string) => void;
   onOpenChat?: (jid: string) => void;
+  onMoveToNextStage?: (leadId: string) => void;
   canDelete?: boolean;
   teamMembers?: TeamMember[];
   bulkMode?: boolean;
@@ -38,6 +39,7 @@ export const LeadCard = memo(function LeadCard({
   onClick, 
   onDelete,
   onOpenChat,
+  onMoveToNextStage,
   canDelete = true,
   teamMembers = [],
   bulkMode = false,
@@ -102,6 +104,23 @@ export const LeadCard = memo(function LeadCard({
     }
     return { label, color, diffHours };
   }, [lead.updated_at]);
+
+  const quickAction = useMemo(() => {
+    if (urgency.diffHours > 24) {
+      if (lead.whatsapp_jid && onOpenChat) {
+        return { label: 'Follow-up', icon: Send, action: () => onOpenChat(lead.whatsapp_jid!) };
+      }
+      return onMoveToNextStage 
+        ? { label: 'Mover etapa', icon: ArrowRight, action: () => onMoveToNextStage(lead.id) }
+        : null;
+    }
+    if (lead.whatsapp_jid && onOpenChat) {
+      return { label: 'Abrir chat', icon: MessageSquare, action: () => onOpenChat(lead.whatsapp_jid!) };
+    }
+    return onMoveToNextStage 
+      ? { label: 'Mover etapa', icon: ArrowRight, action: () => onMoveToNextStage(lead.id) }
+      : null;
+  }, [urgency.diffHours, lead.whatsapp_jid, lead.id, onOpenChat, onMoveToNextStage]);
 
   const handleClick = () => {
     if (bulkMode && onToggleSelect) {
@@ -244,9 +263,27 @@ export const LeadCard = memo(function LeadCard({
         </div>
       )}
 
+      {/* Quick Action Button */}
+      {!bulkMode && quickAction && (
+        <div className="mt-3 pt-3 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full h-7 text-xs gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              quickAction.action();
+            }}
+          >
+            <quickAction.icon className="h-3 w-3" />
+            {quickAction.label}
+          </Button>
+        </div>
+      )}
+
       {/* Source indicator */}
       {lead.source === 'whatsapp' && (
-        <div className="mt-3 pt-3 border-t flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className={cn("mt-3 pt-3 border-t flex items-center gap-1.5 text-xs text-muted-foreground", !bulkMode && quickAction && "mt-2 pt-2")}>
           <MessageSquare className="h-3 w-3 text-emerald-500" />
           Via WhatsApp
         </div>
