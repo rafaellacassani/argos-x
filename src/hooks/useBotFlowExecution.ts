@@ -19,7 +19,7 @@ export interface FlowExecutionResult {
 }
 
 export function useBotFlowExecution() {
-  const { sendText } = useEvolutionAPI();
+  const { sendText, sendMedia, sendAudio } = useEvolutionAPI();
   const { workspaceId } = useWorkspace();
 
   const logExecution = useCallback(async (log: ExecutionLog) => {
