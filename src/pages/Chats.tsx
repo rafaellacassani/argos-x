@@ -3010,6 +3010,41 @@ export default function Chats() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  {/* Quick Actions */}
+                  {(() => {
+                    const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                    if (!chatLead) return null;
+                    const currentStageIndex = stages.findIndex(s => s.id === chatLead.stage_id);
+                    const nextStage = currentStageIndex >= 0 && currentStageIndex < stages.length - 1 ? stages[currentStageIndex + 1] : null;
+                    return (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                            <Zap className="w-3.5 h-3.5" />
+                            Ação rápida
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {nextStage && (
+                            <DropdownMenuItem onClick={() => {
+                              moveLead(chatLead.id, nextStage.id);
+                              toast({ title: `Lead movido para ${nextStage.name}` });
+                            }}>
+                              <ArrowRight className="h-4 w-4 mr-2" />
+                              Mover para {nextStage.name}
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedLeadForModal(chatLead);
+                            setLeadModalOpen(true);
+                          }}>
+                            <UserCheck className="h-4 w-4 mr-2" />
+                            Ver detalhes do lead
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })()}
                   <ScheduleMessagePopover
                     channelType={
                       selectedChat.isMeta
