@@ -1017,6 +1017,53 @@ app.post("/", async (c) => {
           .single();
         leadId = existingLead?.id || null;
 
+        // Auto-create lead if none exists (so AI-handled chats get a funnel card)
+        if (!leadId && phoneNumber.length >= 10 && phoneNumber.length <= 15) {
+          try {
+            const { data: defaultFunnel } = await supabase
+              .from("funnels").select("id")
+              .eq("workspace_id", workspaceId).eq("is_default", true)
+              .limit(1).single();
+
+            let stageId: string | null = null;
+            if (defaultFunnel) {
+              const { data: firstStage } = await supabase
+                .from("funnel_stages").select("id")
+                .eq("funnel_id", defaultFunnel.id)
+                .order("position", { ascending: true }).limit(1).single();
+              stageId = firstStage?.id || null;
+            }
+            if (!stageId) {
+              const { data: anyStage } = await supabase
+                .from("funnel_stages").select("id")
+                .eq("workspace_id", workspaceId)
+                .order("position", { ascending: true }).limit(1).single();
+              stageId = anyStage?.id || null;
+            }
+
+            if (stageId) {
+              const preferredJid = (!resolvedRemoteJid.endsWith("@lid") ? resolvedRemoteJid : remoteJid) || remoteJid;
+              const { data: newLead } = await supabase
+                .from("leads").insert({
+                  name: pushName || `+${phoneNumber}`,
+                  phone: phoneNumber,
+                  whatsapp_jid: preferredJid,
+                  instance_name: instanceName,
+                  source: "whatsapp",
+                  stage_id: stageId,
+                  workspace_id: workspaceId,
+                }).select("id").single();
+
+              if (newLead) {
+                leadId = newLead.id;
+                console.log(`[whatsapp-webhook] ✅ Auto-created lead for AI agent: ${leadId}`);
+              }
+            }
+          } catch (autoLeadErr) {
+            console.error("[whatsapp-webhook] Auto-create lead error:", autoLeadErr);
+          }
+        }
+
         if (matchingAgent.respond_to === "specific_stages" && existingLead) {
           const stages = matchingAgent.respond_to_stages || [];
           if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
