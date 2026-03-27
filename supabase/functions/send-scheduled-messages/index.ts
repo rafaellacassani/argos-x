@@ -107,6 +107,14 @@ Deno.serve(async (req) => {
           if (msg.channel_type === "meta_instagram") {
             graphUrl = `https://graph.facebook.com/v21.0/${page.instagram_account_id || page.page_id}/messages`;
             graphPayload = { recipient: { id: msg.sender_id }, message: { text: msg.message } };
+          } else if (msg.channel_type === "meta_whatsapp") {
+            graphUrl = `https://graph.facebook.com/v21.0/${page.page_id}/messages`;
+            graphPayload = {
+              messaging_product: "whatsapp",
+              to: msg.sender_id,
+              type: "text",
+              text: { body: msg.message },
+            };
           } else {
             graphUrl = `https://graph.facebook.com/v21.0/${page.page_id}/messages`;
             graphPayload = { recipient: { id: msg.sender_id }, message: { text: msg.message } };
