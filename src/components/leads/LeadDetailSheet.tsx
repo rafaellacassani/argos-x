@@ -333,7 +333,31 @@ export function LeadDetailSheet({
           </div>
 
           {/* Quick Actions */}
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2 pt-2 flex-wrap">
+            {/* AI Score Badge */}
+            {lead.ai_score_label && (
+              <div className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium",
+                lead.ai_score_label === 'quente' && 'bg-red-500/20 text-red-300',
+                lead.ai_score_label === 'morno' && 'bg-yellow-500/20 text-yellow-300',
+                lead.ai_score_label === 'frio' && 'bg-blue-500/20 text-blue-300',
+              )}>
+                {lead.ai_score_label === 'quente' && <Flame className="h-4 w-4" />}
+                {lead.ai_score_label === 'morno' && <Sun className="h-4 w-4" />}
+                {lead.ai_score_label === 'frio' && <Snowflake className="h-4 w-4" />}
+                {lead.ai_score_label.charAt(0).toUpperCase() + lead.ai_score_label.slice(1)} ({lead.ai_score}/100)
+              </div>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:text-white"
+              onClick={handleScoreLead}
+              disabled={isScoring}
+            >
+              {isScoring ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
+              {lead.ai_score_label ? 'Reclassificar' : 'Classificar IA'}
+            </Button>
             {lead.whatsapp_jid && onOpenChat && (
               <Button 
                 variant="outline" 
