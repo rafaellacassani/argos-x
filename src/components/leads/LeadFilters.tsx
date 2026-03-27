@@ -31,6 +31,7 @@ export interface LeadFiltersData {
   visibleStageIds: string[];
   sources: string[];
   unassigned: boolean;
+  aiScoreLabels: string[];
 }
 
 export const DEFAULT_FILTERS: LeadFiltersData = {
@@ -46,6 +47,7 @@ export const DEFAULT_FILTERS: LeadFiltersData = {
   visibleStageIds: [],
   sources: [],
   unassigned: false,
+  aiScoreLabels: [],
 };
 
 const DATE_PRESETS = [
