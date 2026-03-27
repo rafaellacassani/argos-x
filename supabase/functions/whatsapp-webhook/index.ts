@@ -200,10 +200,39 @@ async function executeNode(
     switch (nodeType) {
       case "send_message": {
         const rawText = node.data?.message || node.data?.text || "";
-        if (!rawText) return { success: true };
-        const text = replaceVars(rawText, lead, instanceName);
+        const nodeMediaUrl = node.data?.mediaUrl as string || "";
+        const nodeMediaType = node.data?.mediaType as string || "";
         const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
         if (!number) return { success: false };
+
+        // Send media if configured
+        if (nodeMediaUrl && nodeMediaType) {
+          const text = rawText ? replaceVars(rawText, lead, instanceName) : "";
+          
+          if (nodeMediaType === "audio") {
+            // Send as WhatsApp audio (PTT / voice note)
+            await evolutionFetch(`/message/sendWhatsAppAudio/${instanceName}`, "POST", {
+              number,
+              audio: nodeMediaUrl,
+              delay: 0,
+            });
+          } else {
+            // Send image or video with optional caption
+            await evolutionFetch(`/message/sendMedia/${instanceName}`, "POST", {
+              number,
+              mediatype: nodeMediaType,
+              media: nodeMediaUrl,
+              caption: text || undefined,
+              delay: 0,
+            });
+          }
+          await logExecution(supabase, botId, lead.id, node.id, "success", `[${nodeMediaType}] ${text?.substring(0, 150) || nodeMediaUrl}`, workspaceId);
+          return { success: true };
+        }
+
+        // Text-only message
+        if (!rawText) return { success: true };
+        const text = replaceVars(rawText, lead, instanceName);
         await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
           number,
           text,

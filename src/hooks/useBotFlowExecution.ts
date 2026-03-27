@@ -247,26 +247,39 @@ export function useBotFlowExecution() {
           }
         }
 
-        // Regular text message via Evolution API
-        const messageText = node.data?.message as string;
-        if (!messageText) return { success: false, message: 'Mensagem não configurada no bloco' };
+        // Regular message via Evolution API (text, media, or both)
+        const messageText = (node.data?.message as string) || '';
+        const nodeMediaUrl = (node.data?.mediaUrl as string) || '';
+        const nodeMediaType = (node.data?.mediaType as string) || '';
+
+        if (!messageText && !nodeMediaUrl) return { success: false, message: 'Mensagem não configurada no bloco' };
 
         let targetNumber = lead.whatsapp_jid || lead.phone;
         if (!targetNumber) return { success: false, message: 'Lead sem telefone ou WhatsApp JID' };
 
         if (!targetNumber.includes('@')) {
           targetNumber = targetNumber.replace(/\D/g, '');
-          // Normalize Brazilian numbers: add country code if missing
           if (targetNumber.length === 11 || targetNumber.length === 10) {
             targetNumber = `55${targetNumber}`;
           }
           if (targetNumber.length < 12) return { success: false, message: `Número inválido: ${targetNumber}` };
         }
 
-        // Use node's configured instanceName as fallback if lead has none
         const instanceName = lead.instance_name || (node.data?.instanceName as string);
         if (!instanceName) return { success: false, message: 'Lead sem instância WhatsApp vinculada' };
 
+        // Send media if configured
+        if (nodeMediaUrl && nodeMediaType) {
+          let sent = false;
+          if (nodeMediaType === 'audio') {
+            sent = await sendAudio(instanceName, targetNumber, nodeMediaUrl);
+          } else {
+            sent = await sendMedia(instanceName, targetNumber, nodeMediaType, nodeMediaUrl, messageText || undefined);
+          }
+          return { success: sent, message: sent ? 'Mídia enviada com sucesso' : `Falha ao enviar mídia para ${targetNumber}` };
+        }
+
+        // Text only
         const sent = await sendText(instanceName, targetNumber, messageText);
         return { success: sent, message: sent ? 'Mensagem enviada com sucesso' : `Falha ao enviar para ${targetNumber}` };
       }
