@@ -402,6 +402,26 @@ export function LeadFilters({
                 ))}
               </div>
             </FilterSection>
+
+            <FilterSection title="CLASSIFICAÇÃO IA">
+              <div className="space-y-1">
+                {[
+                  { id: 'quente', label: '🔥 Quente (70-100)' },
+                  { id: 'morno', label: '🟡 Morno (30-69)' },
+                  { id: 'frio', label: '🔵 Frio (0-29)' },
+                ].map(opt => (
+                  <label key={opt.id} className="flex items-center gap-2 cursor-pointer text-sm py-1">
+                    <Checkbox
+                      checked={draft.aiScoreLabels.includes(opt.id)}
+                      onCheckedChange={() =>
+                        setDraft(d => ({ ...d, aiScoreLabels: toggleArray(d.aiScoreLabels, opt.id) }))
+                      }
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </FilterSection>
           </div>
         </ScrollArea>
 
