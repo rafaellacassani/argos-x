@@ -1171,43 +1171,94 @@ app.post("/", async (c) => {
               ? phoneNumber
               : remoteJid; // Use full JID (Evolution API may handle @lid internally)
 
+            // Helper: extract media references from AI text like [Vídeo anexo: URL], [Imagem anexa: URL], [PDF anexo: URL]
+            const mediaPattern = /\[(Vídeo anexo|Imagem anexa|PDF anexo|Anexo|Video anexo|Imagen anexa):\s*(https?:\/\/[^\]\s]+)\]/gi;
+
+            const extractMediaFromChunk = (text: string) => {
+              const medias: Array<{ url: string; type: string }> = [];
+              let match;
+              const regex = new RegExp(mediaPattern.source, "gi");
+              while ((match = regex.exec(text)) !== null) {
+                const label = match[1].toLowerCase();
+                let mediatype = "document";
+                if (label.includes("vídeo") || label.includes("video")) mediatype = "video";
+                else if (label.includes("imagem") || label.includes("imagen")) mediatype = "image";
+                else if (label.includes("pdf")) mediatype = "document";
+                medias.push({ url: match[2], type: mediatype });
+              }
+              const cleanText = text.replace(new RegExp(mediaPattern.source, "gi"), "").replace(/\n{3,}/g, "\n\n").trim();
+              return { medias, cleanText };
+            };
+
+            const sendWithFallback = async (endpoint: string, payload: any) => {
+              let result = await evolutionFetch(`/message/${endpoint}/${instanceName}`, "POST", payload);
+              if (!result && payload.number !== remoteJid) {
+                console.log(`[whatsapp-webhook] 🔄 Retrying ${endpoint} with original JID: ${remoteJid}`);
+                result = await evolutionFetch(`/message/${endpoint}/${instanceName}`, "POST", { ...payload, number: remoteJid });
+              }
+              return result;
+            };
+
             if (agentData.chunks && Array.isArray(agentData.chunks)) {
               console.log(`[whatsapp-webhook] 💬 Sending ${agentData.chunks.length} chunks to ${sendToNumber}`);
               for (const chunk of agentData.chunks) {
                 if (chunk && chunk.trim()) {
-                  let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                    number: sendToNumber,
-                    text: chunk,
-                    delay: 0,
-                    linkPreview: false,
-                  });
-                  // Fallback: if send failed and we used phoneNumber, retry with full remoteJid
-                  if (!sendResult && sendToNumber !== remoteJid) {
-                    console.log(`[whatsapp-webhook] 🔄 Retrying send with original JID: ${remoteJid}`);
-                    sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                      number: remoteJid,
-                      text: chunk,
+                  const { medias, cleanText } = extractMediaFromChunk(chunk);
+
+                  // Send clean text first (if any)
+                  if (cleanText) {
+                    const sendResult = await sendWithFallback("sendText", {
+                      number: sendToNumber,
+                      text: cleanText,
                       delay: 0,
                       linkPreview: false,
                     });
+                    if (sendResult) {
+                      await supabase.from("whatsapp_messages").insert({
+                        workspace_id: workspaceId,
+                        instance_name: instanceName,
+                        remote_jid: canonicalSessionJid,
+                        from_me: true,
+                        direction: "outbound",
+                        content: cleanText,
+                        message_type: "text",
+                        push_name: "IA",
+                        message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        timestamp: new Date().toISOString(),
+                      });
+                    } else {
+                      console.error(`[whatsapp-webhook] ❌ Failed to send text chunk`);
+                    }
                   }
-                  if (sendResult) {
-                    // Persist outbound message so it appears in the Chat UI
-                    await supabase.from("whatsapp_messages").insert({
-                      workspace_id: workspaceId,
-                      instance_name: instanceName,
-                      remote_jid: canonicalSessionJid,
-                      from_me: true,
-                      direction: "outbound",
-                      content: chunk,
-                      message_type: "text",
-                      push_name: "IA",
-                      message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                      timestamp: new Date().toISOString(),
+
+                  // Send each extracted media
+                  for (const media of medias) {
+                    console.log(`[whatsapp-webhook] 📎 Sending FAQ media: ${media.type} → ${media.url}`);
+                    await new Promise((r) => setTimeout(r, 500));
+                    const mediaResult = await sendWithFallback("sendMedia", {
+                      number: sendToNumber,
+                      mediatype: media.type,
+                      media: media.url,
+                      delay: 0,
                     });
-                  } else {
-                    console.error(`[whatsapp-webhook] ❌ Failed to send chunk to ${sendToNumber} (and fallback ${remoteJid})`);
+                    if (mediaResult) {
+                      await supabase.from("whatsapp_messages").insert({
+                        workspace_id: workspaceId,
+                        instance_name: instanceName,
+                        remote_jid: canonicalSessionJid,
+                        from_me: true,
+                        direction: "outbound",
+                        content: media.url,
+                        message_type: media.type === "image" ? "image" : media.type === "video" ? "video" : "document",
+                        push_name: "IA",
+                        message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        timestamp: new Date().toISOString(),
+                      });
+                    } else {
+                      console.error(`[whatsapp-webhook] ❌ Failed to send FAQ media: ${media.url}`);
+                    }
                   }
+
                   if (agentData.chunks.length > 1) {
                     await new Promise((r) => setTimeout(r, 1000));
                   }
