@@ -683,6 +683,34 @@ serve(async (req) => {
         return new Response(JSON.stringify({ response: rejectResponse, chunks: [rejectResponse], rejected: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- AI LOOP DETECTION (IA-vs-IA) ---
+      const loopDetected = detectAILoop(memory.messages || [], memory.updated_at);
+      if (loopDetected) {
+        console.log(`[ai-agent-chat] 🔄 AI LOOP DETECTED for session ${session_id}: ${loopDetected}`);
+        
+        // Pause session
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "loop_detected" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+        
+        // Log execution
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: null,
+          status: "loop_detected",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+        });
+        
+        console.log(`[ai-agent-chat] ⏸️ Session ${session_id} paused due to loop: ${loopDetected}`);
+        return new Response(JSON.stringify({ response: null, paused: true, reason: "loop_detected", detail: loopDetected }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- Qualification flow ---
       const qualificationEnabled = agent.qualification_enabled || false;
       const qualificationFields = agent.qualification_fields || [];
