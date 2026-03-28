@@ -579,17 +579,26 @@ app.post("/block-contact/:instanceName", async (c) => {
     const formattedNumber = number.includes("@") ? number : `${number.replace(/\D/g, "")}@s.whatsapp.net`;
     console.log(`[evolution-api] Block contact: ${formattedNumber} status=${status} instance=${instanceName}`);
     
-    // Try PUT first (Evolution API v2 standard)
-    let result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
+    // Evolution API v2 uses POST /message/updateBlockStatus (not /chat, not PUT)
+    let result = await evolutionRequest(`/message/updateBlockStatus/${instanceName}`, "POST", {
       number: formattedNumber,
       status,
     }, false);
     
+    // Fallback: try /chat/updateBlockStatus (some versions use this path)
+    if (!result) {
+      console.log(`[evolution-api] Block fallback with /chat/ path`);
+      result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "POST", {
+        number: formattedNumber,
+        status,
+      }, false);
+    }
+
     // Fallback: try with raw number (without @s.whatsapp.net)
     if (!result) {
       const rawNumber = number.replace(/\D/g, "");
       console.log(`[evolution-api] Block fallback with raw number: ${rawNumber}`);
-      result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
+      result = await evolutionRequest(`/message/updateBlockStatus/${instanceName}`, "POST", {
         number: rawNumber,
         status,
       }, false);
