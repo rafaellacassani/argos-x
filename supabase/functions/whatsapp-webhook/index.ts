@@ -1266,39 +1266,57 @@ app.post("/", async (c) => {
               }
               console.log(`[whatsapp-webhook] ✅ Agent response sent successfully`);
             } else if (agentData.response) {
-              let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                number: sendToNumber,
-                text: agentData.response,
-                delay: 0,
-                linkPreview: false,
-              });
-              // Fallback with full JID
-              if (!sendResult && sendToNumber !== remoteJid) {
-                console.log(`[whatsapp-webhook] 🔄 Retrying single response with original JID: ${remoteJid}`);
-                sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
-                  number: remoteJid,
-                  text: agentData.response,
+              const { medias: singleMedias, cleanText: singleCleanText } = extractMediaFromChunk(agentData.response);
+
+              if (singleCleanText) {
+                const sendResult = await sendWithFallback("sendText", {
+                  number: sendToNumber,
+                  text: singleCleanText,
                   delay: 0,
                   linkPreview: false,
                 });
+                if (sendResult) {
+                  console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
+                  await supabase.from("whatsapp_messages").insert({
+                    workspace_id: workspaceId,
+                    instance_name: instanceName,
+                    remote_jid: canonicalSessionJid,
+                    from_me: true,
+                    direction: "outbound",
+                    content: singleCleanText,
+                    message_type: "text",
+                    push_name: "IA",
+                    message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                  });
+                } else {
+                  console.error(`[whatsapp-webhook] ❌ Failed to send agent response`);
+                }
               }
-              if (sendResult) {
-                console.log(`[whatsapp-webhook] ✅ Agent single response sent`);
-                // Persist outbound message so it appears in the Chat UI
-                await supabase.from("whatsapp_messages").insert({
-                  workspace_id: workspaceId,
-                  instance_name: instanceName,
-                  remote_jid: canonicalSessionJid,
-                  from_me: true,
-                  direction: "outbound",
-                  content: agentData.response,
-                  message_type: "text",
-                  push_name: "IA",
-                  message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  timestamp: new Date().toISOString(),
+
+              for (const media of singleMedias) {
+                console.log(`[whatsapp-webhook] 📎 Sending FAQ media (single): ${media.type} → ${media.url}`);
+                await new Promise((r) => setTimeout(r, 500));
+                const mediaResult = await sendWithFallback("sendMedia", {
+                  number: sendToNumber,
+                  mediatype: media.type,
+                  media: media.url,
+                  delay: 0,
                 });
-              } else {
-                console.error(`[whatsapp-webhook] ❌ Failed to send agent response`);
+                if (mediaResult) {
+                  await supabase.from("whatsapp_messages").insert({
+                    workspace_id: workspaceId,
+                    instance_name: instanceName,
+                    remote_jid: canonicalSessionJid,
+                    from_me: true,
+                    direction: "outbound",
+                    content: media.url,
+                    message_type: media.type === "image" ? "image" : media.type === "video" ? "video" : "document",
+                    push_name: "IA",
+                    message_id: `out-agent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                  });
+                }
               }
             } else if (agentData.skipped) {
               console.log(`[whatsapp-webhook] ⏭️ Agent skipped: ${agentData.reason || 'unknown reason'}`);
