@@ -106,6 +106,7 @@ import { useToast } from "@/hooks/use-toast";
 import WorkspaceHealthTab from "@/components/admin/WorkspaceHealthTab";
 import ExecutiveDashboardTab from "@/components/admin/ExecutiveDashboardTab";
 import CadenceMetricsPanel from "@/components/admin/CadenceMetricsPanel";
+import PreBillingCadencePanel from "@/components/admin/PreBillingCadencePanel";
 import { format } from "date-fns";
 import { PLAN_DEFINITIONS } from "@/hooks/usePlanLimits";
 
@@ -924,6 +925,10 @@ export default function AdminClients() {
           <TabsTrigger value="cadence" className="gap-2">
             <CalendarClock className="w-4 h-4" />
             Cadência
+          </TabsTrigger>
+          <TabsTrigger value="pre-billing" className="gap-2">
+            <CreditCard className="w-4 h-4" />
+            Pré-Cobrança
           </TabsTrigger>
           <TabsTrigger value="health" className="gap-2">
             <Activity className="w-4 h-4" />
@@ -1975,6 +1980,11 @@ export default function AdminClients() {
           ) : (
             <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
           )}
+        </TabsContent>
+
+        {/* ───────── TAB: PRÉ-COBRANÇA ───────── */}
+        <TabsContent value="pre-billing">
+          <PreBillingCadencePanel />
         </TabsContent>
 
         {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}

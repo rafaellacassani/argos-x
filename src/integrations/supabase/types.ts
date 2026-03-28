@@ -2487,6 +2487,74 @@ export type Database = {
           },
         ]
       }
+      pre_billing_cadence_config: {
+        Row: {
+          assunto: string
+          ativo: boolean
+          corpo: string
+          email_type: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          assunto: string
+          ativo?: boolean
+          corpo: string
+          email_type: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          assunto?: string
+          ativo?: boolean
+          corpo?: string
+          email_type?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pre_billing_email_logs: {
+        Row: {
+          error_message: string | null
+          id: string
+          resend_message_id: string | null
+          status_entrega: string
+          timestamp_envio: string
+          tipo_email: string
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          error_message?: string | null
+          id?: string
+          resend_message_id?: string | null
+          status_entrega?: string
+          timestamp_envio?: string
+          tipo_email: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          error_message?: string | null
+          id?: string
+          resend_message_id?: string | null
+          status_entrega?: string
+          timestamp_envio?: string
+          tipo_email?: string
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pre_billing_email_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reactivation_cadence_config: {
         Row: {
           cadence_days: Json
