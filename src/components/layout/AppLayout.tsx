@@ -9,6 +9,8 @@ import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
 import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { DisconnectedInstanceBanner } from "./DisconnectedInstanceBanner";
+import { useInstanceHealth } from "@/hooks/useInstanceHealth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
 
