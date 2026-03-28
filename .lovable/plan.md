@@ -1,39 +1,54 @@
 
 
-## Alerta de instância WhatsApp desconectada — Banner no topo do app
+## Cadência Pré-Cobrança — Plano Revisado
 
-### O que será feito
-Um banner de alerta discreto que aparece no topo do app quando alguma instância WhatsApp do workspace perde a conexão. O cliente vê qual instância caiu e tem um botão direto para ir à página de configurações e reconectar.
+### Resumo
+Sistema separado de e-mails pré-cobrança (D-3, D-1, dia da cobrança) com painel admin e edge function de disparo via Resend. Sem alterar a cadência de reativação existente.
 
-### Como funciona
-
-1. **Hook `useInstanceHealth`** — novo hook que roda a cada 2 minutos (polling leve):
-   - Busca as instâncias do workspace em `whatsapp_instances`
-   - Para cada uma, chama `getConnectionState` via Evolution API
-   - Retorna lista de instâncias desconectadas (state !== "open")
-   - Só roda se o workspace tem instâncias cadastradas
-
-2. **Componente `DisconnectedInstanceBanner`** — banner amarelo/vermelho no layout:
-   - Aparece entre o `TopBar` e o conteúdo, similar ao `TrialBanner`
-   - Mostra: "⚠️ WhatsApp desconectado: **Nome da instância** — Reconectar"
-   - Botão "Reconectar" leva para `/settings` na aba WhatsApp
-   - Se múltiplas instâncias estão off, mostra contagem
-   - Pode ser dispensado temporariamente (dismiss por 30min)
-
-3. **Integração no `AppLayout.tsx`**:
-   - Adicionar o banner logo após o `TopBar`/`TrialBanner`
-   - Não aparece para admin viewing
+### Nota sobre links de cancelamento
+O projeto **não tem** Stripe Customer Portal configurado. A edge function `process-pre-billing` vai gerar dinamicamente uma sessão do Stripe Billing Portal (`stripe.billingPortal.sessions.create()`) para cada cliente no momento do envio. Isso gera uma URL temporária onde o cliente pode cancelar ou gerenciar a assinatura. Tanto `{link_cancelamento}` quanto `{link_gerenciar_assinatura}` usarão essa URL. Se o workspace não tiver `stripe_customer_id`, usará a URL interna do app (`https://argos-x.lovable.app/settings`).
 
 ### Alterações
 
+**1. Migration SQL** — Criar 2 tabelas + popular dados padrão
+- `pre_billing_cadence_config` (email_type, ativo, assunto, corpo, updated_at) com RLS admin
+- `pre_billing_email_logs` (workspace_id, user_id, tipo_email, timestamp_envio, status_entrega, resend_message_id, error_message) com RLS admin
+- INSERT dos 3 templates padrão (D-3, D-1, dia_cobranca)
+
+**2. Componente `src/components/admin/PreBillingCadencePanel.tsx`**
+- Busca os 3 registros de config
+- Para cada: switch ativo/desativo, campo assunto, textarea corpo
+- Legenda de variáveis disponíveis
+- Botão "Salvar alterações"
+- Histórico recente de envios (últimos 20 logs)
+
+**3. `src/pages/AdminClients.tsx`**
+- Adicionar aba "Pré-Cobrança" com ícone Mail, renderizando `<PreBillingCadencePanel />`
+
+**4. Edge Function `supabase/functions/process-pre-billing/index.ts`**
+- Carrega configs ativas de `pre_billing_cadence_config`
+- Busca workspaces em trial com `trial_end` em D-3, D-1, hoje
+- Verifica se já enviou (consulta `pre_billing_email_logs`)
+- Para `{link_cancelamento}` e `{link_gerenciar_assinatura}`:
+  - Se workspace tem `stripe_customer_id`: cria sessão do Stripe Billing Portal via `stripe.billingPortal.sessions.create({ customer, return_url })` e usa a URL gerada
+  - Se não tem: usa `https://argos-x.lovable.app/settings`
+- Substitui variáveis nos templates e envia via Resend
+- Registra resultado em `pre_billing_email_logs`
+
+**5. Cron job** — Agendar via `pg_cron` + `pg_net` para rodar 1x/dia às 09:00 UTC
+
+### Arquivos
+
 | Arquivo | Mudança |
 |---|---|
-| `src/hooks/useInstanceHealth.ts` | Novo hook — polling de status das instâncias |
-| `src/components/layout/DisconnectedInstanceBanner.tsx` | Novo componente — banner de alerta |
-| `src/components/layout/AppLayout.tsx` | Montar o banner no layout |
+| Migration SQL | Criar tabelas + dados padrão |
+| `src/components/admin/PreBillingCadencePanel.tsx` | Novo componente |
+| `src/pages/AdminClients.tsx` | Adicionar aba |
+| `supabase/functions/process-pre-billing/index.ts` | Nova edge function |
+| Insert SQL (cron) | Agendar execução diária |
 
 ### O que NÃO será alterado
-- Nenhuma edge function
-- Nenhuma tabela do banco
+- Cadência de reativação existente
+- Nenhuma edge function existente
 - Nenhum outro componente
 
