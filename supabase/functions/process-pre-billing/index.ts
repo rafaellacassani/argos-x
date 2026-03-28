@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
+
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,10 +9,7 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")!;
-const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")!;
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
+const STRIPE_PORTAL_URL = "https://billing.stripe.com/p/login/5kQcN7a4y2yX8x7bCe2sM00";
 
 const PLAN_NAMES: Record<string, string> = {
   essencial: "Essencial",
@@ -26,18 +23,7 @@ const PLAN_PRICES: Record<string, string> = {
   escala: "497,90",
 };
 
-async function getPortalUrl(stripeCustomerId: string): Promise<string> {
-  try {
-    const session = await stripe.billingPortal.sessions.create({
-      customer: stripeCustomerId,
-      return_url: "https://argos-x.lovable.app/settings",
-    });
-    return session.url;
-  } catch (err) {
-    console.error("[pre-billing] Stripe portal error:", err);
-    return "https://argos-x.lovable.app/settings";
-  }
-}
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function replaceVariables(
   template: string,
@@ -175,12 +161,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Get portal URL
-      let portalUrl = "https://argos-x.lovable.app/settings";
-      if (ws.stripe_customer_id) {
-        portalUrl = await getPortalUrl(ws.stripe_customer_id);
-      }
-
+      const portalUrl = STRIPE_PORTAL_URL;
       const planName = PLAN_NAMES[ws.plan_type] || ws.plan_type || "Essencial";
       const planPrice = PLAN_PRICES[ws.plan_type] || "97,90";
       const trialEndFormatted = new Date(ws.trial_end).toLocaleDateString("pt-BR");
