@@ -9,6 +9,8 @@ import { TrialBanner } from "./TrialBanner";
 import { LeadLimitBanner } from "./LeadLimitBanner";
 import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { DisconnectedInstanceBanner } from "./DisconnectedInstanceBanner";
+import { useInstanceHealth } from "@/hooks/useInstanceHealth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
 
@@ -22,6 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { disconnected: disconnectedInstances } = useInstanceHealth();
 
   const [tourActive, setTourActive] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -96,6 +99,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         {showTrialBanner && !isAdminViewing && <TrialBanner daysRemaining={daysRemaining} />}
         {!isAdminViewing && <LeadLimitBanner />}
+        {!isAdminViewing && <DisconnectedInstanceBanner instances={disconnectedInstances} />}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>
