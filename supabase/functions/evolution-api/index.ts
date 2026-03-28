@@ -575,12 +575,32 @@ app.post("/block-contact/:instanceName", async (c) => {
     if (!number || !status || !["block", "unblock"].includes(status)) {
       return c.json({ error: "number and status (block|unblock) are required" }, 400, corsHeaders);
     }
-    const result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
-      number,
+    // Ensure number has @s.whatsapp.net suffix for Evolution API v2
+    const formattedNumber = number.includes("@") ? number : `${number.replace(/\D/g, "")}@s.whatsapp.net`;
+    console.log(`[evolution-api] Block contact: ${formattedNumber} status=${status} instance=${instanceName}`);
+    
+    // Try PUT first (Evolution API v2 standard)
+    let result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
+      number: formattedNumber,
       status,
-    });
+    }, false);
+    
+    // Fallback: try with raw number (without @s.whatsapp.net)
+    if (!result) {
+      const rawNumber = number.replace(/\D/g, "");
+      console.log(`[evolution-api] Block fallback with raw number: ${rawNumber}`);
+      result = await evolutionRequest(`/chat/updateBlockStatus/${instanceName}`, "PUT", {
+        number: rawNumber,
+        status,
+      }, false);
+    }
+    
+    if (!result) {
+      return c.json({ error: "Evolution API did not accept the block request. Check instance connection." }, 500, corsHeaders);
+    }
     return c.json(result, 200, corsHeaders);
   } catch (error) {
+    console.error(`[evolution-api] Block error:`, error);
     return c.json({ error: error instanceof Error ? error.message : "Failed to block/unblock contact" }, 500, corsHeaders);
   }
 });
