@@ -258,7 +258,7 @@ serve(async (req) => {
       metadata: { user_id: userId, company_name: companyName, plan },
     });
 
-    // 4. Save client_invite record
+    // 4. Save client_invite record with consent data
     await supabaseAdmin.from("client_invites").insert({
       email,
       full_name: name,
@@ -267,6 +267,10 @@ serve(async (req) => {
       invite_type: "signup_checkout",
       status: "pending_payment",
       created_by: userId,
+      terms_accepted_at: new Date().toISOString(),
+      terms_accepted_ip: ip,
+      terms_accepted_user_agent: userAgent,
+      terms_version: "v1.0-2026-03-28",
     });
 
     // 5. Store signup data in customer metadata so webhook can use it

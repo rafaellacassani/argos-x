@@ -979,6 +979,10 @@ export type Database = {
           plan: string
           status: string
           stripe_customer_id: string | null
+          terms_accepted_at: string | null
+          terms_accepted_ip: string | null
+          terms_accepted_user_agent: string | null
+          terms_version: string | null
           updated_at: string
           workspace_id: string | null
         }
@@ -994,6 +998,10 @@ export type Database = {
           plan?: string
           status?: string
           stripe_customer_id?: string | null
+          terms_accepted_at?: string | null
+          terms_accepted_ip?: string | null
+          terms_accepted_user_agent?: string | null
+          terms_version?: string | null
           updated_at?: string
           workspace_id?: string | null
         }
@@ -1009,6 +1017,10 @@ export type Database = {
           plan?: string
           status?: string
           stripe_customer_id?: string | null
+          terms_accepted_at?: string | null
+          terms_accepted_ip?: string | null
+          terms_accepted_user_agent?: string | null
+          terms_version?: string | null
           updated_at?: string
           workspace_id?: string | null
         }

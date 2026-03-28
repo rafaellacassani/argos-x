@@ -14,8 +14,11 @@ export default function TermsOfService() {
           <h1 className="text-3xl font-bold text-foreground mb-8">Termos de Uso</h1>
           
           <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6 text-muted-foreground">
+            <p className="text-sm font-medium text-foreground">
+              Versão 1.0 — vigente desde 28/03/2026
+            </p>
             <p className="text-sm text-muted-foreground">
-              Última atualização: {new Date().toLocaleDateString('pt-BR')}
+              Última atualização: 28 de março de 2026
             </p>
 
             <section>

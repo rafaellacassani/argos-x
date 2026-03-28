@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown, Lock, Check } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +52,7 @@ export default function Cadastro() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixelReady, setPixelReady] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState("essencial");
+  const [termsAccepted, setTermsAccepted] = useState(true);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -368,20 +371,48 @@ export default function Cadastro() {
                   </div>
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-12 text-base font-semibold bg-[#1a1a6e] hover:bg-[#1a1a6e]/90 text-white"
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <>
-                      Ativar meu teste grátis
-                      <ArrowRight className="w-5 h-5 ml-2" />
-                    </>
-                  )}
-                </Button>
+                {/* Terms checkbox */}
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="terms"
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <label htmlFor="terms" className="text-xs text-gray-500 leading-relaxed cursor-pointer">
+                    Eu entendo que após 7 dias gratuitos serei cobrado automaticamente o valor do plano escolhido. Posso cancelar a qualquer momento antes do fim do período de teste. Li e aceito os{" "}
+                    <a href="/terms" className="underline text-gray-600" target="_blank" onClick={(e) => e.stopPropagation()}>Termos de Serviço</a> e a{" "}
+                    <a href="/privacy-policy" className="underline text-gray-600" target="_blank" onClick={(e) => e.stopPropagation()}>Política de Privacidade</a>.
+                  </label>
+                </div>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-full">
+                        <Button
+                          type="submit"
+                          disabled={loading || !termsAccepted}
+                          className="w-full h-12 text-base font-semibold bg-[#1a1a6e] hover:bg-[#1a1a6e]/90 text-white"
+                        >
+                          {loading ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <>
+                              Ativar meu teste grátis
+                              <ArrowRight className="w-5 h-5 ml-2" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </TooltipTrigger>
+                    {!termsAccepted && (
+                      <TooltipContent>
+                        <p>Aceite os termos para continuar</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
 
                 <p className="text-center text-xs text-gray-500 flex items-center justify-center gap-1.5">
                   <Lock className="w-3.5 h-3.5" />
@@ -391,14 +422,9 @@ export default function Cadastro() {
             </CardContent>
           </Card>
 
-          <div className="text-center mt-6 space-y-2">
+          <div className="text-center mt-6">
             <p className="text-sm text-gray-500">
               ✅ 7 dias grátis — depois {currentPlan.price}/mês
-            </p>
-            <p className="text-xs text-gray-400">
-              Ao continuar, você concorda com nossos{" "}
-              <a href="/terms" className="underline">Termos de Serviço</a> e{" "}
-              <a href="/privacy-policy" className="underline">Política de Privacidade</a>.
             </p>
           </div>
         </motion.div>
