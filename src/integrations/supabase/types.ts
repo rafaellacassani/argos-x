@@ -2062,6 +2062,7 @@ export type Database = {
           email: string | null
           id: string
           instance_name: string | null
+          is_opted_out: boolean | null
           name: string
           notes: string | null
           phone: string
@@ -2085,6 +2086,7 @@ export type Database = {
           email?: string | null
           id?: string
           instance_name?: string | null
+          is_opted_out?: boolean | null
           name: string
           notes?: string | null
           phone: string
@@ -2108,6 +2110,7 @@ export type Database = {
           email?: string | null
           id?: string
           instance_name?: string | null
+          is_opted_out?: boolean | null
           name?: string
           notes?: string | null
           phone?: string

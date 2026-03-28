@@ -1017,7 +1017,12 @@ app.post("/", async (c) => {
           .single();
         leadId = existingLead?.id || null;
 
-        // Auto-create lead if none exists (so AI-handled chats get a funnel card)
+        // Skip AI if lead has opted out
+        if (existingLead?.is_opted_out) {
+          console.log(`[whatsapp-webhook] 🚫 Lead ${leadId} has opted out, skipping AI agent`);
+          return new Response(JSON.stringify({ handler: "ai_agent", action: "skipped_opted_out" }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+
         if (!leadId && phoneNumber.length >= 10 && phoneNumber.length <= 15) {
           try {
             const { data: defaultFunnel } = await supabase

@@ -664,6 +664,64 @@ serve(async (req) => {
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- OPT-OUT DETECTION ---
+      // Detect when a contact explicitly asks to stop receiving messages
+      const optOutPatterns = [
+        /n[aã]o\s+(quero|quer)\s+mais/i,
+        /para[r]?\s+de\s+(me\s+)?(mandar|enviar|mand|envi)/i,
+        /n[aã]o\s+me\s+(mand|envi|escrev)/i,
+        /sai\s+daqui/i,
+        /me\s+tira\s+d(a|essa)\s+(lista|base)/i,
+        /n[aã]o\s+quero\s+receber/i,
+        /cancela[r]?\s+(meu|minha|o)\s+(cadastro|inscri)/i,
+        /me\s+deixa\s+em\s+paz/i,
+        /para\s+com\s+isso/i,
+        /me\s+bloqueia/i,
+        /n[aã]o\s+entre\s+mais\s+em\s+contato/i,
+        /n[aã]o\s+manda\s+mais/i,
+        /desinscrever/i,
+        /opt.?out/i,
+        /unsubscribe/i,
+        /stop/i,
+      ];
+      const msgLower = (messageText || "").toLowerCase().trim();
+      const isOptOut = msgLower.length > 2 && optOutPatterns.some(p => p.test(msgLower));
+      
+      if (isOptOut && lead_id) {
+        console.log(`[ai-agent-chat] 🚫 Opt-out detected from lead ${lead_id}: "${msgLower}"`);
+        
+        // Mark lead as opted out
+        await supabase.from("leads").update({ is_opted_out: true } as any).eq("id", lead_id);
+        
+        // Pause the AI session permanently
+        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        
+        // Cancel any pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "lead_opted_out" })
+          .eq("lead_id", lead_id)
+          .eq("status", "pending");
+        
+        // Log the opt-out
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: "Lead opted out — AI permanently paused",
+          status: "opted_out",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+        });
+        
+        // Send a polite goodbye message
+        const goodbyeMsg = "Entendido! Peço desculpas pelo incômodo. Não enviarei mais mensagens. Caso precise de algo no futuro, é só nos chamar. Tenha um ótimo dia! 😊";
+        
+        return new Response(JSON.stringify({ 
+          response: goodbyeMsg, 
+          chunks: [goodbyeMsg],
+          opted_out: true 
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- TRAINER MODE DETECTION ---
       const isTrainer = !!(phone_number && agent.trainer_phone && isTrainerPhone(phone_number, agent.trainer_phone));
       if (isTrainer) {
