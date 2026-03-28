@@ -99,6 +99,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
         {showTrialBanner && !isAdminViewing && <TrialBanner daysRemaining={daysRemaining} />}
         {!isAdminViewing && <LeadLimitBanner />}
+        {!isAdminViewing && <DisconnectedInstanceBanner instances={disconnectedInstances} />}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>
