@@ -1,53 +1,39 @@
 
 
-## Correção de 2 problemas no Chat
+## Alerta de instância WhatsApp desconectada — Banner no topo do app
 
-### Problema 1: Erro ao bloquear contato
+### O que será feito
+Um banner de alerta discreto que aparece no topo do app quando alguma instância WhatsApp do workspace perde a conexão. O cliente vê qual instância caiu e tem um botão direto para ir à página de configurações e reconectar.
 
-**Diagnóstico**: No `Chats.tsx` (linha 3204), o número é extraído como digits puros (`phone.replace(/\D/g, "")` ou `remoteJid.replace(/@.*/, "")`). Porém a Evolution API v2 espera o número **sem** o `@s.whatsapp.net` mas pode exigir formato específico. O problema mais provável é que o `evolutionRequest` na edge function usa `PUT` mas o CORS header (linha 9) só lista `GET, POST, DELETE, OPTIONS` — embora isso não afete chamadas server-side, o erro pode vir da resposta da Evolution API.
+### Como funciona
 
-**Investigação adicional**: O endpoint `/chat/updateBlockStatus` pode ter mudado na versão atual da Evolution API. Vou adicionar logging detalhado e também garantir que o número seja passado no formato correto (com ou sem `@s.whatsapp.net`).
+1. **Hook `useInstanceHealth`** — novo hook que roda a cada 2 minutos (polling leve):
+   - Busca as instâncias do workspace em `whatsapp_instances`
+   - Para cada uma, chama `getConnectionState` via Evolution API
+   - Retorna lista de instâncias desconectadas (state !== "open")
+   - Só roda se o workspace tem instâncias cadastradas
 
-**Correções**:
+2. **Componente `DisconnectedInstanceBanner`** — banner amarelo/vermelho no layout:
+   - Aparece entre o `TopBar` e o conteúdo, similar ao `TrialBanner`
+   - Mostra: "⚠️ WhatsApp desconectado: **Nome da instância** — Reconectar"
+   - Botão "Reconectar" leva para `/settings` na aba WhatsApp
+   - Se múltiplas instâncias estão off, mostra contagem
+   - Pode ser dispensado temporariamente (dismiss por 30min)
 
-1. **`supabase/functions/evolution-api/index.ts`** (block-contact endpoint):
-   - Adicionar `PUT` ao CORS Allow-Methods (linha 9)
-   - Garantir que o `number` seja formatado corretamente (adicionar `@s.whatsapp.net` se não tiver)
-   - Adicionar log detalhado para debug
-   - Tratar resposta de erro da Evolution API com mensagem clara
+3. **Integração no `AppLayout.tsx`**:
+   - Adicionar o banner logo após o `TopBar`/`TrialBanner`
+   - Não aparece para admin viewing
 
-2. **`src/pages/Chats.tsx`**: Sem mudanças necessárias, o front está correto.
-
----
-
-### Problema 2: Detecção de loop IA-vs-IA
-
-**Diagnóstico**: Quando duas IAs conversam entre si (ex: a IA do Argos X responde a um contato que também é um bot/IA), elas entram em loop infinito. O sistema não tem nenhum mecanismo para detectar isso.
-
-**Solução — Detecção de padrões de loop no `ai-agent-chat`**:
-
-Adicionar no `ai-agent-chat/index.ts`, **antes** de chamar o modelo de IA, uma verificação de 3 sinais de loop:
-
-1. **Frequência excessiva**: Se houve mais de 10 trocas (user+assistant) nos últimos 5 minutos na mesma sessão, pausar automaticamente
-2. **Repetição de conteúdo**: Se as últimas 4 mensagens do assistant são muito similares entre si (ou as do user), pausar
-3. **Padrão de resposta instantânea**: Se as últimas 5 mensagens do user chegaram com intervalo < 3 segundos entre elas (bot behavior)
-
-Quando detectado:
-- Pausar a sessão (`is_paused: true`)
-- Cancelar follow-ups pendentes
-- Registrar em `agent_executions` com status `"loop_detected"`
-- **Não** responder mais — silêncio quebra o loop
-- Log claro para monitoramento
-
-**Alterações**:
+### Alterações
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/evolution-api/index.ts` | Adicionar PUT ao CORS + formatar número para block |
-| `supabase/functions/ai-agent-chat/index.ts` | Adicionar função `detectAILoop()` antes da chamada ao modelo |
+| `src/hooks/useInstanceHealth.ts` | Novo hook — polling de status das instâncias |
+| `src/components/layout/DisconnectedInstanceBanner.tsx` | Novo componente — banner de alerta |
+| `src/components/layout/AppLayout.tsx` | Montar o banner no layout |
 
 ### O que NÃO será alterado
+- Nenhuma edge function
 - Nenhuma tabela do banco
-- Nenhum componente de UI
-- Nenhuma outra edge function
+- Nenhum outro componente
 
