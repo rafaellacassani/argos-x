@@ -98,7 +98,69 @@ function detectRejection(text: string): boolean {
   });
 }
 
-// --- Trainer phone normalization ---
+// --- AI Loop detection (IA-vs-IA) ---
+function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string | null {
+  if (!messages || messages.length < 6) return null;
+
+  const now = Date.now();
+  const fiveMinAgo = now - 5 * 60 * 1000;
+
+  // Signal 1: Excessive frequency — more than 10 exchanges in 5 minutes
+  const recentMessages = messages.filter(m => {
+    if (!m.timestamp) return false;
+    return new Date(m.timestamp).getTime() > fiveMinAgo;
+  });
+  if (recentMessages.length > 10) {
+    return `excessive_frequency: ${recentMessages.length} messages in 5min`;
+  }
+
+  // Signal 2: Repetitive content — last 4 user messages very similar
+  const lastUserMsgs = messages.filter(m => m.role === "user").slice(-4);
+  if (lastUserMsgs.length >= 4) {
+    const contents = lastUserMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
+    const unique = new Set(contents);
+    if (unique.size <= 1) {
+      return `user_repetition: identical messages x${lastUserMsgs.length}`;
+    }
+    // Check similarity: if 3 out of 4 are the same
+    const freq = new Map<string, number>();
+    for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
+    for (const [, count] of freq) {
+      if (count >= 3) return `user_repetition: ${count}/4 similar messages`;
+    }
+  }
+
+  // Signal 3: Last 4 assistant messages very similar
+  const lastAssistantMsgs = messages.filter(m => m.role === "assistant").slice(-4);
+  if (lastAssistantMsgs.length >= 4) {
+    const contents = lastAssistantMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
+    const unique = new Set(contents);
+    if (unique.size <= 1) {
+      return `assistant_repetition: identical responses x${lastAssistantMsgs.length}`;
+    }
+    const freq = new Map<string, number>();
+    for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
+    for (const [, count] of freq) {
+      if (count >= 3) return `assistant_repetition: ${count}/4 similar responses`;
+    }
+  }
+
+  // Signal 4: Rapid-fire user messages (< 3s apart = bot behavior)
+  const lastFiveUser = messages.filter(m => m.role === "user" && m.timestamp).slice(-5);
+  if (lastFiveUser.length >= 5) {
+    let rapidCount = 0;
+    for (let i = 1; i < lastFiveUser.length; i++) {
+      const diff = new Date(lastFiveUser[i].timestamp!).getTime() - new Date(lastFiveUser[i - 1].timestamp!).getTime();
+      if (diff >= 0 && diff < 3000) rapidCount++;
+    }
+    if (rapidCount >= 3) {
+      return `rapid_fire: ${rapidCount} messages with <3s interval`;
+    }
+  }
+
+  return null;
+}
+
 function normalizePhone(phone: string): string {
   const digits = (phone || "").replace(/\D/g, "");
   if (digits.startsWith("55") && digits.length >= 12) {
