@@ -259,6 +259,13 @@ serve(async (req) => {
                     headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
                     body: JSON.stringify({ number: cleanPhone, audio: msg.audio_url }),
                   });
+                } else if ((msg.message_type === "video" || msg.message_type === "image") && msg.audio_url) {
+                  const caption = msg.content ? replaceVars(msg.content, vars) : undefined;
+                  res = await fetch(`${apiUrl}/message/sendMedia/${config.whatsapp_instance_name}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                    body: JSON.stringify({ number: cleanPhone, mediatype: msg.message_type, media: msg.audio_url, caption, delay: 0 }),
+                  });
                 } else {
                   const text = replaceVars(msg.content || "", vars);
                   res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
