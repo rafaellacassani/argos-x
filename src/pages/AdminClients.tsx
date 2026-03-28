@@ -1982,6 +1982,11 @@ export default function AdminClients() {
           )}
         </TabsContent>
 
+        {/* ───────── TAB: PRÉ-COBRANÇA ───────── */}
+        <TabsContent value="pre-billing">
+          <PreBillingCadencePanel />
+        </TabsContent>
+
         {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
         <TabsContent value="health">
           <WorkspaceHealthTab />
