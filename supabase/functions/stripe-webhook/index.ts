@@ -1,7 +1,8 @@
-// Stripe webhook handler — redeployed 2026-03-29
+// Stripe webhook handler — redeployed 2026-03-29 — constructEventAsync fix
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "npm:stripe@14.21.0";
+import { crypto as stdCrypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
