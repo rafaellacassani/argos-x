@@ -40,7 +40,13 @@ export default function CadastroSucesso() {
       document.head.appendChild(script);
     }
 
-    window.fbq("init", PIXEL_ID);
+    // Advanced matching with email from URL
+    const advancedMatching: Record<string, string> = {};
+    if (email) {
+      advancedMatching.em = email;
+    }
+
+    window.fbq("init", PIXEL_ID, advancedMatching);
     window.fbq("track", "PageView");
 
     // Fire CompleteRegistration with session_id as eventID for deduplication
@@ -50,7 +56,7 @@ export default function CadastroSucesso() {
       currency: "BRL",
       value: 0,
     }, { eventID: eventId });
-  }, [sessionId]);
+  }, [sessionId, email]);
 
   return (
     <div className="min-h-screen bg-white">
