@@ -435,6 +435,57 @@ serve(async (req) => {
         const subscriptionId = session.subscription as string;
         const sessionMeta = session.metadata || {};
 
+        // Fire CompleteRegistration via Meta CAPI (server-side deduplication)
+        try {
+          const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+          const custEmail = customer.email || "";
+          const custPhone = (customer as any).phone || (customer as any).metadata?.signup_phone || "";
+
+          if (custEmail) {
+            const { data: internalWs } = await supabaseAdmin
+              .from("workspaces")
+              .select("meta_pixel_id, meta_conversions_token")
+              .eq("id", INTERNAL_WS)
+              .single();
+
+            if (internalWs?.meta_pixel_id && internalWs?.meta_conversions_token) {
+              const sha256 = async (v: string) => {
+                const d = new TextEncoder().encode(v.trim().toLowerCase());
+                const h = await crypto.subtle.digest("SHA-256", d);
+                return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2, "0")).join("");
+              };
+
+              let cleanPh = custPhone.replace(/\D/g, "");
+              if (cleanPh.length >= 10 && !cleanPh.startsWith("55")) cleanPh = "55" + cleanPh;
+
+              const [emHash, phHash] = await Promise.all([sha256(custEmail), sha256(cleanPh || "")]);
+
+              const capiPayload = {
+                data: [{
+                  event_name: "CompleteRegistration",
+                  event_time: Math.floor(Date.now() / 1000),
+                  event_id: session.id,
+                  event_source_url: "https://argosx.com.br/cadastro/sucesso",
+                  action_source: "website",
+                  user_data: {
+                    em: [emHash],
+                    ...(cleanPh ? { ph: [phHash] } : {}),
+                  },
+                  custom_data: { content_name: "Argos X Trial", currency: "BRL", value: 0 },
+                }],
+              };
+
+              await fetch(
+                `https://graph.facebook.com/v21.0/${internalWs.meta_pixel_id}/events?access_token=${internalWs.meta_conversions_token}`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(capiPayload) }
+              );
+              console.log("Meta CAPI CompleteRegistration sent for session:", session.id);
+            }
+          }
+        } catch (capiErr) {
+          console.warn("Meta CAPI CompleteRegistration error:", capiErr);
+        }
+
         // Handle lead pack checkout
         if (sessionMeta.type === "lead_pack" && sessionMeta.pack_size) {
           const packSize = parseInt(sessionMeta.pack_size, 10);
