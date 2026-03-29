@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, ArrowRight, LogIn, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -5,9 +6,51 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useSearchParams } from "react-router-dom";
 import argosLogoDark from "@/assets/argos-logo-dark.png";
 
+declare global {
+  interface Window {
+    fbq: any;
+    _fbq: any;
+  }
+}
+
+const PIXEL_ID = "1294031842786070";
+
 export default function CadastroSucesso() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "";
+  const sessionId = searchParams.get("session_id") || "";
+
+  useEffect(() => {
+    // Load Meta Pixel
+    if (!window.fbq) {
+      const n: any = (window.fbq = function () {
+        n.callMethod
+          ? n.callMethod.apply(n, arguments)
+          : n.queue.push(arguments);
+      });
+      if (!window._fbq) window._fbq = n;
+      n.push = n;
+      n.loaded = true;
+      n.version = "2.0";
+      n.queue = [];
+
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = "https://connect.facebook.net/en_US/fbevents.js";
+      document.head.appendChild(script);
+    }
+
+    window.fbq("init", PIXEL_ID);
+    window.fbq("track", "PageView");
+
+    // Fire CompleteRegistration with session_id as eventID for deduplication
+    const eventId = sessionId || `cr_${Date.now()}`;
+    window.fbq("track", "CompleteRegistration", {
+      content_name: "Argos X Trial",
+      currency: "BRL",
+      value: 0,
+    }, { eventID: eventId });
+  }, [sessionId]);
 
   return (
     <div className="min-h-screen bg-white">
