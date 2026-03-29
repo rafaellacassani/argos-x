@@ -1,54 +1,92 @@
 
+## Correção definitiva do `stripe-webhook` (erro 400 / “Invalid signature”)
 
-## Cadência Pré-Cobrança — Plano Revisado
+### Diagnóstico
+Revisei a função `supabase/functions/stripe-webhook/index.ts` e confirmei que ela **já lê o body bruto com `await req.text()` antes da validação**, então esse não é mais o problema.
 
-### Resumo
-Sistema separado de e-mails pré-cobrança (D-3, D-1, dia da cobrança) com painel admin e edge function de disparo via Resend. Sem alterar a cadência de reativação existente.
+O ponto mais provável é outro:
 
-### Nota sobre links de cancelamento
-O projeto **não tem** Stripe Customer Portal configurado. A edge function `process-pre-billing` vai gerar dinamicamente uma sessão do Stripe Billing Portal (`stripe.billingPortal.sessions.create()`) para cada cliente no momento do envio. Isso gera uma URL temporária onde o cliente pode cancelar ou gerenciar a assinatura. Tanto `{link_cancelamento}` quanto `{link_gerenciar_assinatura}` usarão essa URL. Se o workspace não tiver `stripe_customer_id`, usará a URL interna do app (`https://argos-x.lovable.app/settings`).
+1. A função usa `stripe.webhooks.constructEvent(...)` **síncrono**
+2. Em runtime Edge/Deno com Web Crypto, isso pode falhar e cair no mesmo `catch`
+3. O código então responde genericamente com:
+   ```json
+   { "error": "Invalid signature" }
+   ```
+4. Isso mascara a causa real e faz parecer que o secret está errado mesmo quando o problema pode ser o método de validação usado no runtime
 
-### Alterações
+Além disso, hoje a função:
+- não diferencia “secret ausente” de “assinatura inválida”
+- não registra contexto suficiente para depuração
+- provavelmente está recebendo eventos live corretamente, mas falhando na verificação dentro do runtime
 
-**1. Migration SQL** — Criar 2 tabelas + popular dados padrão
-- `pre_billing_cadence_config` (email_type, ativo, assunto, corpo, updated_at) com RLS admin
-- `pre_billing_email_logs` (workspace_id, user_id, tipo_email, timestamp_envio, status_entrega, resend_message_id, error_message) com RLS admin
-- INSERT dos 3 templates padrão (D-3, D-1, dia_cobranca)
+### O que vou alterar
+#### 1) Ajustar a validação do webhook para o padrão compatível com Edge runtime
+No arquivo `supabase/functions/stripe-webhook/index.ts`:
 
-**2. Componente `src/components/admin/PreBillingCadencePanel.tsx`**
-- Busca os 3 registros de config
-- Para cada: switch ativo/desativo, campo assunto, textarea corpo
-- Legenda de variáveis disponíveis
-- Botão "Salvar alterações"
-- Histórico recente de envios (últimos 20 logs)
+- manter `const rawBody = await req.text()`
+- manter `const signature = req.headers.get("stripe-signature")`
+- trocar:
+  ```ts
+  stripe.webhooks.constructEvent(...)
+  ```
+  por:
+  ```ts
+  await stripe.webhooks.constructEventAsync(...)
+  ```
+Isso é a correção mais importante para eliminar a falha recorrente em runtime Web Crypto.
 
-**3. `src/pages/AdminClients.tsx`**
-- Adicionar aba "Pré-Cobrança" com ícone Mail, renderizando `<PreBillingCadencePanel />`
+#### 2) Melhorar a robustez da validação
+Também vou:
+- validar explicitamente se `STRIPE_WEBHOOK_SECRET` existe
+- responder com erro claro se o secret não estiver carregado
+- separar melhor os cenários:
+  - assinatura ausente
+  - secret ausente
+  - validação Stripe falhou
+  - erro interno de processamento
 
-**4. Edge Function `supabase/functions/process-pre-billing/index.ts`**
-- Carrega configs ativas de `pre_billing_cadence_config`
-- Busca workspaces em trial com `trial_end` em D-3, D-1, hoje
-- Verifica se já enviou (consulta `pre_billing_email_logs`)
-- Para `{link_cancelamento}` e `{link_gerenciar_assinatura}`:
-  - Se workspace tem `stripe_customer_id`: cria sessão do Stripe Billing Portal via `stripe.billingPortal.sessions.create({ customer, return_url })` e usa a URL gerada
-  - Se não tem: usa `https://argos-x.lovable.app/settings`
-- Substitui variáveis nos templates e envia via Resend
-- Registra resultado em `pre_billing_email_logs`
+#### 3) Melhorar logs sem expor segredos
+Vou incluir logs seguros com:
+- tipo do evento quando validado
+- presença/ausência do header `stripe-signature`
+- tamanho do body
+- mensagem real do erro de verificação
 
-**5. Cron job** — Agendar via `pg_cron` + `pg_net` para rodar 1x/dia às 09:00 UTC
+Sem logar:
+- secret
+- payload sensível completo
+- assinatura completa
 
-### Arquivos
+Isso ajuda a distinguir:
+- secret incorreto
+- endpoint errado no Stripe
+- incompatibilidade do runtime
+- outro erro interno
 
-| Arquivo | Mudança |
-|---|---|
-| Migration SQL | Criar tabelas + dados padrão |
-| `src/components/admin/PreBillingCadencePanel.tsx` | Novo componente |
-| `src/pages/AdminClients.tsx` | Adicionar aba |
-| `supabase/functions/process-pre-billing/index.ts` | Nova edge function |
-| Insert SQL (cron) | Agendar execução diária |
+#### 4) Forçar novo deploy da função
+Como haverá mudança real no arquivo, o deploy será refeito automaticamente e a função passará a carregar:
+- o secret já atualizado
+- a nova lógica de validação assíncrona
 
-### O que NÃO será alterado
-- Cadência de reativação existente
-- Nenhuma edge function existente
-- Nenhum outro componente
+### Arquivo que será alterado
+- `supabase/functions/stripe-webhook/index.ts`
 
+### O que não será alterado
+- nenhuma tabela do banco
+- nenhum fluxo de checkout
+- nenhuma tela do app
+- nenhuma outra edge function
+
+### Resultado esperado
+Após a correção:
+- os webhooks do Stripe devem parar de retornar `400 Invalid signature` por erro do runtime
+- eventos como `customer.subscription.created`, `customer.subscription.updated` e `invoice.payment_succeeded` devem ser aceitos normalmente
+- se ainda houver falha, os logs passarão a mostrar a causa real com muito mais precisão
+
+### Observação importante
+Se mesmo após isso continuar dando 400, aí o problema remanescente passa a ser quase certamente externo ao código:
+- signing secret de outro endpoint no Stripe
+- endpoint live/test diferente
+- webhook apontando para URL diferente da função atual
+
+Mas hoje, pelo código lido, a correção mais forte e objetiva é migrar a verificação para `constructEventAsync(...)` e melhorar a telemetria do handler.
