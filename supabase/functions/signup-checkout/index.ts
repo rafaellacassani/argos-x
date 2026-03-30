@@ -284,7 +284,7 @@ serve(async (req) => {
     });
 
     // 6. Create Stripe Checkout Session with 7-day trial
-    const successUrl = `https://argosx.com.br/cadastro/sucesso?email=${encodeURIComponent(email)}&session_id={CHECKOUT_SESSION_ID}`;
+    const successUrl = `https://argosx.com.br/cadastro/sucesso?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(cleanPhone)}&name=${encodeURIComponent(name)}&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `https://argosx.com.br/cadastro?plan=${plan}`;
 
     const session = await stripe.checkout.sessions.create({
