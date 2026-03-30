@@ -32,73 +32,8 @@ ${bodyHtml}
 </html>`;
 }
 
-// Fallback templates used when no cadence_messages exist for a given day
-const fallbackWhatsappTemplates: Record<number, (name: string, link: string, days: number) => string> = {
-  [-2]: (name, link) => `Olá, ${name}! ⏳\n\nSeu trial no *Argos X* acaba em *2 dias*.\n\nAtive seu plano para não perder o acesso:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [-1]: (name, link) => `🚨 ${name}, *último dia* do seu trial no Argos X!\n\nAmanhã seu acesso será bloqueado.\n\nAtive agora:\n👉 ${link}`,
-  [0]: (name, link) => `🔒 ${name}, seu acesso ao *Argos X* foi bloqueado.\n\nMas seus dados estão salvos! Escolha um plano e continue de onde parou:\n👉 ${link}`,
-  [3]: (name, link) => `📊 ${name}, seus leads continuam esperando!\n\nReative sua conta no Argos X:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [7]: (name, link) => `⚠️ ${name}, última chance!\n\nSeu trial expirou há 7 dias. Reative agora antes que seus dados sejam removidos:\n👉 ${link}`,
-};
-
-const fallbackEmailTemplates: Record<number, { subject: string; body: (name: string, days: number, link: string) => string }> = {
-  [-2]: {
-    subject: "⏳ Seu trial acaba em 2 dias — ative seu plano!",
-    body: (name, _, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">Olá, ${name}!</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Seu período de teste no <strong>Argos X</strong> encerra em <strong>2 dias</strong>.</p>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Não perca o acesso ao seu funil de vendas, agente de IA e todas as conversas com seus leads.</p>
-      <div style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Ativar meu plano agora</a>
-      </div>
-      <p style="color:#94a3b8;font-size:13px">Planos a partir de R$ 47,90/mês.</p>`,
-  },
-  [-1]: {
-    subject: "🚨 Último dia do seu trial — ative agora!",
-    body: (name, _, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">Olá, ${name}!</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6"><strong>Hoje é o último dia</strong> do seu período de teste no Argos X.</p>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Amanhã seu acesso será bloqueado. Seus dados continuam salvos, mas você não conseguirá acessar o sistema.</p>
-      <div style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#DC2626;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Ativar antes que expire</a>
-      </div>`,
-  },
-  [0]: {
-    subject: "🔒 Seu acesso foi bloqueado — reative agora",
-    body: (name, _, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">Olá, ${name}!</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Seu período de teste no <strong>Argos X</strong> acabou e seu acesso foi bloqueado.</p>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Mas não se preocupe — <strong>seus dados continuam salvos</strong>! Escolha um plano e volte exatamente de onde parou.</p>
-      <div style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Escolher meu plano</a>
-      </div>`,
-  },
-  [3]: {
-    subject: "📊 Seus leads ainda estão aqui — não perca!",
-    body: (name, days, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">${name}, seus leads continuam esperando!</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Faz ${days} dias que seu trial expirou, mas <strong>seus leads e conversas continuam salvos</strong>.</p>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Reative agora e continue vendendo com:</p>
-      <ul style="color:#475569;font-size:15px;line-height:1.8">
-        <li>✅ Funil de vendas inteligente</li>
-        <li>✅ Agente de IA 24h no WhatsApp</li>
-        <li>✅ Campanhas automatizadas</li>
-      </ul>
-      <div style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Reativar agora</a>
-      </div>`,
-  },
-  [7]: {
-    subject: "⚠️ Última chance — seus dados serão removidos em breve",
-    body: (name, _, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">${name}, esta é a última notificação</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Seu trial expirou há 7 dias. Em breve seus dados poderão ser removidos.</p>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Reative agora a partir de <strong>R$ 47,90/mês</strong> e mantenha tudo funcionando.</p>
-      <div style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#DC2626;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Reativar minha conta</a>
-      </div>`,
-  },
-};
+// No hardcoded fallback templates — the system ONLY sends active cadence_messages from DB.
+// This ensures the admin has full control: activate/deactivate any day or channel at will.
 
 function replaceVars(text: string, vars: Record<string, string>): string {
   let result = text;
@@ -136,19 +71,19 @@ serve(async (req) => {
       });
     }
 
-    const cadenceDays: number[] = Array.isArray(config.cadence_days) ? config.cadence_days : [-2, -1, 0, 3, 7];
+    const cadenceDays: number[] = Array.isArray(config.cadence_days) ? config.cadence_days : [];
 
     // 1b. Fetch all cadence messages from DB
     const { data: allCadenceMessages } = await supabaseAdmin
       .from("cadence_messages")
       .select("*")
       .eq("config_id", config.id)
-      .eq("is_active", true)
       .order("position", { ascending: true });
 
-    // Group messages by day
+    // Group ACTIVE messages by day — only active messages will be sent
     const messagesByDay: Record<number, any[]> = {};
     for (const msg of allCadenceMessages || []) {
+      if (!msg.is_active) continue;
       if (!messagesByDay[msg.cadence_day]) messagesByDay[msg.cadence_day] = [];
       messagesByDay[msg.cadence_day].push(msg);
     }
@@ -159,9 +94,6 @@ serve(async (req) => {
       .select("id, name, trial_end, plan_type, created_by, blocked_at")
       .in("plan_type", ["trial_manual", "trialing", "blocked"])
       .not("trial_end", "is", null);
-
-    // Also fetch active trial workspaces for engagement messages (negative days)
-    // These are already included above since trial_manual/trialing covers active trials
 
     if (wsErr) throw wsErr;
 
@@ -230,8 +162,7 @@ serve(async (req) => {
         email: ownerEmail || "",
       };
 
-      const dayMessages = messagesByDay[matchingDay];
-      const hasCustomMessages = dayMessages && dayMessages.length > 0;
+      const dayMessages = messagesByDay[matchingDay] || [];
 
       // ── Send WhatsApp ──
       if (config.send_whatsapp && ownerPhone && config.whatsapp_instance_name) {
@@ -243,12 +174,9 @@ serve(async (req) => {
             }
 
             const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
-            const whatsappMsgs = hasCustomMessages
-              ? dayMessages.filter((m: any) => m.channel === "whatsapp")
-              : null;
+            const whatsappMsgs = dayMessages.filter((m: any) => m.channel === "whatsapp");
 
-            if (whatsappMsgs && whatsappMsgs.length > 0) {
-              // Send custom messages from DB
+            if (whatsappMsgs.length > 0) {
               for (let i = 0; i < whatsappMsgs.length; i++) {
                 const msg = whatsappMsgs[i];
                 let res: Response;
@@ -285,31 +213,10 @@ serve(async (req) => {
                   error_message: res.ok ? null : `HTTP ${res.status}`,
                 });
 
-                // Wait between messages
                 if (i < whatsappMsgs.length - 1) await sleep(2000);
               }
             } else {
-              // Fallback to hardcoded templates
-              const fallbackFn = fallbackWhatsappTemplates[matchingDay];
-              const message = fallbackFn
-                ? fallbackFn(ownerName, planLink, daysSinceExpiry)
-                : replaceVars(config.whatsapp_template || "", vars);
-
-              const res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-                body: JSON.stringify({ number: cleanPhone, text: message }),
-              });
-
-              await supabaseAdmin.from("reactivation_log").insert({
-                workspace_id: ws.id,
-                cadence_day: matchingDay,
-                channel: "whatsapp",
-                status: res.ok ? "sent" : "failed",
-                error_message: res.ok ? null : `HTTP ${res.status}`,
-              });
-
-              if (res.ok) sentCount++;
+              console.log(`[cadence] Day ${matchingDay}: no active WhatsApp messages, skipping`);
             }
           }
         } catch (e) {
@@ -327,12 +234,9 @@ serve(async (req) => {
       // ── Send Email ──
       if (config.send_email && ownerEmail && RESEND_API_KEY) {
         try {
-          const emailMsgs = hasCustomMessages
-            ? dayMessages.filter((m: any) => m.channel === "email" && m.message_type === "text")
-            : null;
+          const emailMsgs = dayMessages.filter((m: any) => m.channel === "email" && m.message_type === "text");
 
-          if (emailMsgs && emailMsgs.length > 0) {
-            // Use first email message content as body, with per-message subject
+          if (emailMsgs.length > 0) {
             const emailMsg = emailMsgs[0];
             const emailContent = replaceVars(emailMsg.content || "", vars);
             const emailSubject = replaceVars(
@@ -368,36 +272,7 @@ serve(async (req) => {
 
             if (res.ok) sentCount++;
           } else {
-            // Fallback to hardcoded email templates
-            const template = fallbackEmailTemplates[matchingDay];
-            if (template) {
-              const bodyHtml = template.body(ownerName, daysSinceExpiry, planLink);
-              const htmlEmail = buildHtmlEmail(template.subject, bodyHtml);
-
-              const res = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${RESEND_API_KEY}`,
-                },
-                body: JSON.stringify({
-                  from: "Argos X <noreply@argosx.com.br>",
-                  to: [ownerEmail],
-                  subject: template.subject,
-                  html: htmlEmail,
-                }),
-              });
-
-              await supabaseAdmin.from("reactivation_log").insert({
-                workspace_id: ws.id,
-                cadence_day: matchingDay,
-                channel: "email",
-                status: res.ok ? "sent" : "failed",
-                error_message: res.ok ? null : `HTTP ${res.status}`,
-              });
-
-              if (res.ok) sentCount++;
-            }
+            console.log(`[cadence] Day ${matchingDay}: no active email messages, skipping`);
           }
         } catch (e) {
           console.warn("Email send failed:", e);
