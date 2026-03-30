@@ -179,6 +179,7 @@ app.get("/", async (c) => {
       let instagramUsername = null;
       let platform: "facebook" | "instagram" | "both" = "facebook";
 
+      // Method 1: instagram_business_account (classic)
       if (page.instagram_business_account?.id) {
         instagramAccountId = page.instagram_business_account.id;
         
@@ -192,7 +193,53 @@ app.get("/", async (c) => {
         if (igData.username) {
           instagramUsername = igData.username;
           platform = "both";
-          console.log(`[Facebook OAuth] 📸 Instagram found: @${instagramUsername}`);
+          console.log(`[Facebook OAuth] 📸 Instagram found via business_account: @${instagramUsername}`);
+        }
+      }
+
+      // Method 2: connected_instagram_accounts (fallback — works even if not "business account")
+      if (!instagramAccountId) {
+        try {
+          const connIgUrl = new URL(`https://graph.facebook.com/v18.0/${page.id}`);
+          connIgUrl.searchParams.set("fields", "connected_instagram_accounts{id,username}");
+          connIgUrl.searchParams.set("access_token", page.access_token);
+
+          const connIgRes = await fetch(connIgUrl.toString());
+          const connIgData = await connIgRes.json();
+          const connIgs = connIgData?.connected_instagram_accounts?.data || [];
+
+          console.log(`[Facebook OAuth] connected_instagram_accounts for ${page.name}: ${connIgs.length} found`);
+
+          if (connIgs.length > 0) {
+            const firstIg = connIgs[0];
+            instagramAccountId = firstIg.id;
+            instagramUsername = firstIg.username || firstIg.id;
+            platform = "both";
+            console.log(`[Facebook OAuth] 📸 Instagram found via connected_instagram_accounts: @${instagramUsername}`);
+
+            // Save additional IGs as separate entries
+            for (let i = 1; i < connIgs.length; i++) {
+              const extraIg = connIgs[i];
+              if (!savedIgIds.has(extraIg.id)) {
+                const { error: extraErr } = await supabase.from("meta_pages").insert({
+                  meta_account_id: metaAccount.id,
+                  page_id: extraIg.id,
+                  page_name: `@${extraIg.username || extraIg.id}`,
+                  page_access_token: page.access_token,
+                  instagram_account_id: extraIg.id,
+                  instagram_username: extraIg.username || extraIg.id,
+                  platform: "instagram",
+                  workspace_id: workspaceId,
+                });
+                if (!extraErr) {
+                  savedIgIds.add(extraIg.id);
+                  console.log(`[Facebook OAuth] ✅ Extra IG saved: @${extraIg.username || extraIg.id}`);
+                }
+              }
+            }
+          }
+        } catch (connErr) {
+          console.error(`[Facebook OAuth] Error fetching connected_instagram_accounts for ${page.name}:`, connErr);
         }
       }
 
