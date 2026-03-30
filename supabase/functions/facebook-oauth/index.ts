@@ -173,12 +173,16 @@ app.get("/", async (c) => {
     const pages = pagesData.data || [];
     console.log(`[Facebook OAuth] Found ${pages.length} pages`);
 
+    // Track saved Instagram IDs to avoid duplicates across methods
+    const savedIgIds = new Set<string>();
+
     // Step 5: Save each page WITH workspace_id
     for (const page of pages) {
       let instagramAccountId = null;
       let instagramUsername = null;
       let platform: "facebook" | "instagram" | "both" = "facebook";
 
+      // Method 1: instagram_business_account (classic)
       if (page.instagram_business_account?.id) {
         instagramAccountId = page.instagram_business_account.id;
         
@@ -192,7 +196,53 @@ app.get("/", async (c) => {
         if (igData.username) {
           instagramUsername = igData.username;
           platform = "both";
-          console.log(`[Facebook OAuth] 📸 Instagram found: @${instagramUsername}`);
+          console.log(`[Facebook OAuth] 📸 Instagram found via business_account: @${instagramUsername}`);
+        }
+      }
+
+      // Method 2: connected_instagram_accounts (fallback — works even if not "business account")
+      if (!instagramAccountId) {
+        try {
+          const connIgUrl = new URL(`https://graph.facebook.com/v18.0/${page.id}`);
+          connIgUrl.searchParams.set("fields", "connected_instagram_accounts{id,username}");
+          connIgUrl.searchParams.set("access_token", page.access_token);
+
+          const connIgRes = await fetch(connIgUrl.toString());
+          const connIgData = await connIgRes.json();
+          const connIgs = connIgData?.connected_instagram_accounts?.data || [];
+
+          console.log(`[Facebook OAuth] connected_instagram_accounts for ${page.name}: ${connIgs.length} found`);
+
+          if (connIgs.length > 0) {
+            const firstIg = connIgs[0];
+            instagramAccountId = firstIg.id;
+            instagramUsername = firstIg.username || firstIg.id;
+            platform = "both";
+            console.log(`[Facebook OAuth] 📸 Instagram found via connected_instagram_accounts: @${instagramUsername}`);
+
+            // Save additional IGs as separate entries
+            for (let i = 1; i < connIgs.length; i++) {
+              const extraIg = connIgs[i];
+              if (!savedIgIds.has(extraIg.id)) {
+                const { error: extraErr } = await supabase.from("meta_pages").insert({
+                  meta_account_id: metaAccount.id,
+                  page_id: extraIg.id,
+                  page_name: `@${extraIg.username || extraIg.id}`,
+                  page_access_token: page.access_token,
+                  instagram_account_id: extraIg.id,
+                  instagram_username: extraIg.username || extraIg.id,
+                  platform: "instagram",
+                  workspace_id: workspaceId,
+                });
+                if (!extraErr) {
+                  savedIgIds.add(extraIg.id);
+                  console.log(`[Facebook OAuth] ✅ Extra IG saved: @${extraIg.username || extraIg.id}`);
+                }
+              }
+            }
+          }
+        } catch (connErr) {
+          console.error(`[Facebook OAuth] Error fetching connected_instagram_accounts for ${page.name}:`, connErr);
         }
       }
 
@@ -213,6 +263,7 @@ app.get("/", async (c) => {
         console.error(`[Facebook OAuth] Failed to save page ${page.name}:`, pageError);
       } else {
         console.log(`[Facebook OAuth] ✅ Page saved: ${page.name}`);
+        if (instagramAccountId) savedIgIds.add(instagramAccountId);
 
         // Subscribe page to webhook so Meta sends events to our endpoint
         try {
@@ -255,15 +306,7 @@ app.get("/", async (c) => {
       }
     }
 
-    // Step 6: Detect Instagram accounts via me/instagram_accounts (fallback)
-    const savedIgIds = new Set<string>();
-    // Collect IGs already saved via Page detection
-    for (const page of pages) {
-      if (page.instagram_business_account?.id) {
-        savedIgIds.add(page.instagram_business_account.id);
-      }
-    }
-
+    // Step 6: Detect Instagram accounts via me/instagram_accounts (additional fallback)
     console.log("[Facebook OAuth] Step 6: Fetching Instagram accounts via me/instagram_accounts...");
     try {
       const igAccountsUrl = new URL("https://graph.facebook.com/v18.0/me/instagram_accounts");
@@ -340,6 +383,7 @@ app.post("/url", async (c) => {
     "pages_messaging",
     "pages_manage_metadata",
     "pages_read_engagement",
+    "instagram_basic",
     "instagram_manage_messages",
     "instagram_manage_comments",
     "business_management",
