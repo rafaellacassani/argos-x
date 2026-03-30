@@ -219,6 +219,7 @@ async function createWorkspaceForCustomer(
   }
 
   // 2. Check if user already has a workspace (e.g. from trial signup) — upgrade it instead of creating new one
+  // First check workspace_members, then fallback to created_by (in case members insert failed previously)
   const { data: existingUserWs } = await supabaseAdmin
     .from("workspace_members")
     .select("workspace_id")
@@ -226,8 +227,29 @@ async function createWorkspaceForCustomer(
     .limit(1)
     .maybeSingle();
 
-  if (existingUserWs) {
-    console.log("User already has workspace, upgrading:", existingUserWs.workspace_id);
+  let existingWsId = existingUserWs?.workspace_id;
+
+  // Fallback: check if workspace exists by created_by (covers case where workspace_members insert failed)
+  if (!existingWsId) {
+    const { data: wsByCreator } = await supabaseAdmin
+      .from("workspaces")
+      .select("id")
+      .eq("created_by", userId)
+      .limit(1)
+      .maybeSingle();
+    if (wsByCreator) {
+      existingWsId = wsByCreator.id;
+      console.log("Found workspace by created_by (no member entry), repairing:", existingWsId);
+      // Repair: ensure user is a member
+      await supabaseAdmin.from("workspace_members").upsert(
+        { workspace_id: existingWsId, user_id: userId, role: "admin", accepted_at: new Date().toISOString() },
+        { onConflict: "workspace_id,user_id" }
+      );
+    }
+  }
+
+  if (existingWsId) {
+    console.log("User already has workspace, upgrading:", existingWsId);
     await supabaseAdmin
       .from("workspaces")
       .update({
@@ -244,11 +266,11 @@ async function createWorkspaceForCustomer(
         blocked_at: null,
         trial_end: null,
       })
-      .eq("id", existingUserWs.workspace_id);
+      .eq("id", existingWsId);
 
     // Move internal CRM lead
     await moveInternalLead(supabaseAdmin, email, STAGE_ACTIVE, TAG_ACTIVE, planConfig.plan_name);
-    console.log("Existing workspace upgraded for customer:", stripeCustomerId, "workspace:", existingUserWs.workspace_id);
+    console.log("Existing workspace upgraded for customer:", stripeCustomerId, "workspace:", existingWsId);
     return;
   }
 
@@ -287,13 +309,19 @@ async function createWorkspaceForCustomer(
 
   if (wsError) throw wsError;
 
-  // 4. Add user as admin member
-  await supabaseAdmin.from("workspace_members").insert({
-    workspace_id: workspace.id,
-    user_id: userId,
-    role: "admin",
-    accepted_at: new Date().toISOString(),
-  });
+  // 4. Add user as admin member (upsert to avoid silent failures)
+  const { error: memberError } = await supabaseAdmin.from("workspace_members").upsert(
+    {
+      workspace_id: workspace.id,
+      user_id: userId,
+      role: "admin",
+      accepted_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id,user_id" }
+  );
+  if (memberError) {
+    console.error("Failed to add workspace member:", memberError);
+  }
 
   // 5. Create default funnel + stages
   const { data: funnel } = await supabaseAdmin
@@ -608,10 +636,20 @@ serve(async (req) => {
             : null;
         }
 
-        await supabaseAdmin
+        // Also ensure stripe_subscription_id is stored
+        updates.stripe_subscription_id = subscription.id;
+
+        const { data: updatedRows, count } = await supabaseAdmin
           .from("workspaces")
           .update(updates)
-          .eq("stripe_customer_id", subscription.customer as string);
+          .eq("stripe_customer_id", subscription.customer as string)
+          .select("id");
+
+        if (!updatedRows || updatedRows.length === 0) {
+          console.warn(`[stripe-webhook] subscription.updated: no workspace found for customer ${subscription.customer}, attempting invoice.payment_succeeded will handle it`);
+        } else {
+          console.log(`[stripe-webhook] subscription.updated: workspace ${updatedRows[0].id} updated to ${status}`);
+        }
         break;
       }
 
