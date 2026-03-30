@@ -112,6 +112,11 @@ async function sendMetaConversionEvent(
       sha256(cleanPhone),
     ]);
 
+    // Hash name parts for fn/ln
+    const nameParts = (params.name || "").trim().toLowerCase().split(/\s+/);
+    const fnHash = nameParts[0] ? await sha256(nameParts[0]) : null;
+    const lnHash = nameParts.length > 1 ? await sha256(nameParts.slice(1).join(" ")) : null;
+
     const payload = {
       data: [{
         event_name: "InitiateCheckout",
@@ -119,7 +124,14 @@ async function sendMetaConversionEvent(
         event_id: params.eventId,
         event_source_url: "https://argosx.com.br/cadastro",
         action_source: "website",
-        user_data: { em: [emailHash], ph: [phoneHash], client_ip_address: params.ip, client_user_agent: params.userAgent },
+        user_data: {
+          em: [emailHash],
+          ph: [phoneHash],
+          ...(fnHash ? { fn: [fnHash] } : {}),
+          ...(lnHash ? { ln: [lnHash] } : {}),
+          client_ip_address: params.ip,
+          client_user_agent: params.userAgent,
+        },
         custom_data: { content_name: "Argos X Trial Checkout", currency: "BRL", value: 0 },
       }],
     };
