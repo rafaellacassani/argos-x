@@ -383,8 +383,8 @@ serve(async (req) => {
         line_items: [{ price: priceId, quantity: 1 }],
         mode: "subscription",
         subscription_data: {
-          trial_period_days: 7,
-          metadata: { plan, admin_created: "true" },
+          ...(plan !== "escala_semestral" ? { trial_period_days: 7 } : {}),
+          metadata: { plan: plan === "escala_semestral" ? "escala" : plan, admin_created: "true", billing_period: plan === "escala_semestral" ? "semestral" : "mensal" },
         },
         success_url:
           successUrl || "https://argosx.com.br/auth",
