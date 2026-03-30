@@ -305,15 +305,7 @@ app.get("/", async (c) => {
       }
     }
 
-    // Step 6: Detect Instagram accounts via me/instagram_accounts (fallback)
-    const savedIgIds = new Set<string>();
-    // Collect IGs already saved via Page detection
-    for (const page of pages) {
-      if (page.instagram_business_account?.id) {
-        savedIgIds.add(page.instagram_business_account.id);
-      }
-    }
-
+    // Step 6: Detect Instagram accounts via me/instagram_accounts (additional fallback)
     console.log("[Facebook OAuth] Step 6: Fetching Instagram accounts via me/instagram_accounts...");
     try {
       const igAccountsUrl = new URL("https://graph.facebook.com/v18.0/me/instagram_accounts");
