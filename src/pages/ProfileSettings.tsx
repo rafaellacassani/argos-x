@@ -437,6 +437,17 @@ export default function ProfileSettings() {
 
       {/* Danger Zone */}
       <DangerZone />
+
+      {/* Links legais */}
+      <div className="flex items-center justify-center gap-4 pt-4 text-xs text-muted-foreground">
+        <a href="/privacy-policy" target="_blank" className="hover:underline">
+          Política de Privacidade
+        </a>
+        <span>•</span>
+        <a href="/terms" target="_blank" className="hover:underline">
+          Termos de Serviço
+        </a>
+      </div>
     </div>
   );
 }
