@@ -245,9 +245,9 @@ serve(async (req) => {
             const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
             const whatsappMsgs = hasCustomMessages
               ? dayMessages.filter((m: any) => m.channel === "whatsapp")
-              : null;
+              : [];
 
-            if (whatsappMsgs && whatsappMsgs.length > 0) {
+            if (whatsappMsgs.length > 0) {
               // Send custom messages from DB
               for (let i = 0; i < whatsappMsgs.length; i++) {
                 const msg = whatsappMsgs[i];
@@ -289,27 +289,8 @@ serve(async (req) => {
                 if (i < whatsappMsgs.length - 1) await sleep(2000);
               }
             } else {
-              // Fallback to hardcoded templates
-              const fallbackFn = fallbackWhatsappTemplates[matchingDay];
-              const message = fallbackFn
-                ? fallbackFn(ownerName, planLink, daysSinceExpiry)
-                : replaceVars(config.whatsapp_template || "", vars);
-
-              const res = await fetch(`${apiUrl}/message/sendText/${config.whatsapp_instance_name}`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-                body: JSON.stringify({ number: cleanPhone, text: message }),
-              });
-
-              await supabaseAdmin.from("reactivation_log").insert({
-                workspace_id: ws.id,
-                cadence_day: matchingDay,
-                channel: "whatsapp",
-                status: res.ok ? "sent" : "failed",
-                error_message: res.ok ? null : `HTTP ${res.status}`,
-              });
-
-              if (res.ok) sentCount++;
+              // No active WhatsApp messages for this day — skip (do NOT fallback)
+              console.log(`[cadence] Day ${matchingDay}: no active WhatsApp messages, skipping`);
             }
           }
         } catch (e) {
