@@ -159,6 +159,12 @@ export default function Auth() {
               </a>
             )}
           </div>
+
+          <div className="mt-6 text-center">
+            <a href="/privacy-policy" target="_blank" className="text-xs text-muted-foreground hover:underline">
+              Política de Privacidade
+            </a>
+          </div>
         </div>
       </motion.div>
     </div>
