@@ -422,27 +422,70 @@ export function useDashboardData(period: string, userId: string | null = null) {
   const teamRanking: TeamMemberRanking[] = useMemo(() => {
     if (members.length < 2) return [];
 
+    // Identify win-stage IDs
+    const winStageIds = new Set(
+      stages.filter((s) => s.is_win_stage).map((s) => s.id)
+    );
+
     return members.map((member) => {
       const profile = profiles.find((p) => p.user_id === member.user_id);
       if (!profile) return null;
 
+      // Count active leads assigned to this member
       const memberActiveLeads = activeLeads.filter(
         (l: any) => l.responsible_user === profile.id
       ).length;
 
-      // Count sales in period for leads owned by this member
+      // Count "vendas" = leads in win stages for this member (period + all active)
       const memberLeadIds = new Set(
         leads.filter((l) => l.responsible_user === profile.id).map((l) => l.id)
       );
-      const allLeadIds = new Set(
+      const allMemberLeadIds = new Set(
         activeLeads.filter((l: any) => l.responsible_user === profile.id).map((l: any) => l.id)
       );
-      // Include both period leads and active leads for sales matching
-      const combinedIds = new Set([...memberLeadIds, ...allLeadIds]);
-      const memberSales = sales.filter((s) => combinedIds.has(s.lead_id)).length;
+      const combinedIds = new Set([...memberLeadIds, ...allMemberLeadIds]);
 
-      // Avg response time for this member's conversations - simplified
-      const memberAvgTime = "—";
+      // Sales from lead_sales table
+      const salesFromTable = sales.filter((s) => combinedIds.has(s.lead_id)).length;
+
+      // Sales from win-stage leads in period
+      const winsInPeriod = leads.filter(
+        (l) => l.responsible_user === profile.id && winStageIds.has(l.stage_id)
+      ).length;
+
+      // Use whichever is higher (lead_sales records OR win-stage leads)
+      const memberSales = Math.max(salesFromTable, winsInPeriod);
+
+      // Avg response time: filter WA messages by leads assigned to this member
+      const memberLeadPhones = new Set(
+        [...leads, ...activeLeads]
+          .filter((l: any) => l.responsible_user === profile.id && l.phone)
+          .map((l: any) => {
+            const digits = (l.phone || "").replace(/\D/g, "");
+            return digits.endsWith("@s.whatsapp.net") ? digits : digits;
+          })
+      );
+
+      // Build JIDs for matching
+      const memberJids = new Set<string>();
+      for (const phone of memberLeadPhones) {
+        memberJids.add(phone);
+        memberJids.add(`${phone}@s.whatsapp.net`);
+        // Also try without country code
+        if (phone.startsWith("55") && phone.length > 10) {
+          memberJids.add(phone.slice(2));
+          memberJids.add(`${phone.slice(2)}@s.whatsapp.net`);
+        }
+      }
+
+      // Filter messages for this member's leads
+      const memberMsgs = messages.filter((m) => {
+        const senderId = m.sender_id || m.remote_jid || "";
+        const senderDigits = senderId.replace(/\D/g, "").replace(/@.*$/, "");
+        return memberJids.has(senderId) || memberJids.has(senderDigits);
+      });
+
+      const memberAvgTime = memberMsgs.length > 0 ? calcAvgResponseTime(memberMsgs) : "—";
 
       const name = profile.full_name || "Sem nome";
       return {
@@ -454,8 +497,12 @@ export function useDashboardData(period: string, userId: string | null = null) {
         salesCount: memberSales,
         avgResponseTime: memberAvgTime,
       };
-    }).filter(Boolean).sort((a, b) => (b!.salesCount - a!.salesCount)) as TeamMemberRanking[];
-  }, [members, profiles, activeLeads, leads, sales]);
+    }).filter(Boolean).sort((a, b) => {
+      // Sort by sales desc, then by active leads desc
+      if (b!.salesCount !== a!.salesCount) return b!.salesCount - a!.salesCount;
+      return b!.activeLeads - a!.activeLeads;
+    }) as TeamMemberRanking[];
+  }, [members, profiles, activeLeads, leads, sales, stages, messages]);
 
   // Performance (kept for backward compat)
   const performanceMetrics: PerformanceMetric[] = useMemo(() => {
