@@ -33,17 +33,8 @@ ${bodyHtml}
 }
 
 // Fallback templates used when no cadence_messages exist for a given day
-const fallbackWhatsappTemplates: Record<number, (name: string, link: string, days: number) => string> = {
-  [-2]: (name, link) => `Olá, ${name}! ⏳\n\nSeu trial no *Argos X* acaba em *2 dias*.\n\nAtive seu plano para não perder o acesso:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [-1]: (name, link) => `🚨 ${name}, *último dia* do seu trial no Argos X!\n\nAmanhã seu acesso será bloqueado.\n\nAtive agora:\n👉 ${link}`,
-  [0]: (name, link) => `🔒 ${name}, seu acesso ao *Argos X* foi bloqueado.\n\nMas seus dados estão salvos! Escolha um plano e continue de onde parou:\n👉 ${link}`,
-  [3]: (name, link) => `📊 ${name}, seus leads continuam esperando!\n\nReative sua conta no Argos X:\n👉 ${link}\n\nPlanos a partir de R$ 47,90/mês.`,
-  [7]: (name, link) => `⚠️ ${name}, última chance!\n\nSeu trial expirou há 7 dias. Reative agora antes que seus dados sejam removidos:\n👉 ${link}`,
-};
-
-const fallbackEmailTemplates: Record<number, { subject: string; body: (name: string, days: number, link: string) => string }> = {
-  [-2]: {
-    subject: "⏳ Seu trial acaba em 2 dias — ative seu plano!",
+// Hardcoded fallback templates removed — system now ONLY sends active cadence_messages from DB.
+// This ensures the admin has full control over what is sent.
     body: (name, _, link) => `
       <h2 style="color:#0F172A;margin:0 0 16px">Olá, ${name}!</h2>
       <p style="color:#475569;font-size:15px;line-height:1.6">Seu período de teste no <strong>Argos X</strong> encerra em <strong>2 dias</strong>.</p>
