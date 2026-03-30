@@ -173,6 +173,9 @@ app.get("/", async (c) => {
     const pages = pagesData.data || [];
     console.log(`[Facebook OAuth] Found ${pages.length} pages`);
 
+    // Track saved Instagram IDs to avoid duplicates across methods
+    const savedIgIds = new Set<string>();
+
     // Step 5: Save each page WITH workspace_id
     for (const page of pages) {
       let instagramAccountId = null;
