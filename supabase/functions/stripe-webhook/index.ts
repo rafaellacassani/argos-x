@@ -636,10 +636,20 @@ serve(async (req) => {
             : null;
         }
 
-        await supabaseAdmin
+        // Also ensure stripe_subscription_id is stored
+        updates.stripe_subscription_id = subscription.id;
+
+        const { data: updatedRows, count } = await supabaseAdmin
           .from("workspaces")
           .update(updates)
-          .eq("stripe_customer_id", subscription.customer as string);
+          .eq("stripe_customer_id", subscription.customer as string)
+          .select("id");
+
+        if (!updatedRows || updatedRows.length === 0) {
+          console.warn(`[stripe-webhook] subscription.updated: no workspace found for customer ${subscription.customer}, attempting invoice.payment_succeeded will handle it`);
+        } else {
+          console.log(`[stripe-webhook] subscription.updated: workspace ${updatedRows[0].id} updated to ${status}`);
+        }
         break;
       }
 
