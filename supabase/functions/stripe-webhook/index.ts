@@ -503,6 +503,12 @@ serve(async (req) => {
 
               const [emHash, phHash] = await Promise.all([sha256(custEmail), sha256(cleanPh || "")]);
 
+              // Hash name parts for fn/ln
+              const custName = (customer as any).name || "";
+              const nameParts = custName.trim().toLowerCase().split(/\s+/);
+              const fnHash = nameParts[0] ? await sha256(nameParts[0]) : null;
+              const lnHash = nameParts.length > 1 ? await sha256(nameParts.slice(1).join(" ")) : null;
+
               const capiPayload = {
                 data: [{
                   event_name: "CompleteRegistration",
@@ -513,6 +519,8 @@ serve(async (req) => {
                   user_data: {
                     em: [emHash],
                     ...(cleanPh ? { ph: [phHash] } : {}),
+                    ...(fnHash ? { fn: [fnHash] } : {}),
+                    ...(lnHash ? { ln: [lnHash] } : {}),
                   },
                   custom_data: { content_name: "Argos X Trial", currency: "BRL", value: 0 },
                 }],

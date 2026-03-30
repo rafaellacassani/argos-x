@@ -64,7 +64,7 @@ export default function CadastroSucesso() {
       currency: "BRL",
       value: 0,
     }, { eventID: eventId });
-  }, [sessionId, email]);
+  }, [sessionId, email, phone, nameParam]);
 
   return (
     <div className="min-h-screen bg-white">

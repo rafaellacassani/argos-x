@@ -316,7 +316,7 @@ serve(async (req) => {
     // 7. Fire-and-forget: internal CRM lead + Meta CAPI
     createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(console.warn);
     if (eventId) {
-      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, eventId, ip, userAgent }).catch(console.warn);
+      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, name, eventId, ip, userAgent }).catch(console.warn);
     }
 
     // 8. Save attribution data

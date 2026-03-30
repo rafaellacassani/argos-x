@@ -169,9 +169,17 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao processar cadastro");
       }
 
-      // Fire Meta pixel
+      // Fire Meta pixel with full advanced matching
       const w = window as any;
       if (w.fbq) {
+        const nameParts = form.name.trim().toLowerCase().split(/\s+/);
+        const fullPhone = `${selectedCountry.code}${form.phone.replace(/\D/g, "")}`;
+        w.fbq("init", PIXEL_ID, {
+          em: form.email.trim().toLowerCase(),
+          ph: fullPhone,
+          fn: nameParts[0] || "",
+          ln: nameParts.length > 1 ? nameParts.slice(1).join(" ") : "",
+        });
         w.fbq("track", "InitiateCheckout", {
           content_name: `Argos X - ${selectedPlan}`,
           currency: "BRL",
