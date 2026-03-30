@@ -3208,20 +3208,29 @@ export default function Chats() {
                                   }
                                   const confirmed = window.confirm("Tem certeza que deseja bloquear este contato? Ele não poderá mais enviar mensagens para esta instância.");
                                   if (!confirmed) return;
-                                  const ok = await blockContact(instName, number, true);
-                                  if (ok) {
-                                    toast({ title: "Contato bloqueado com sucesso" });
-                                    try {
+                                  try {
+                                    const ok = await blockContact(instName, number, true);
+                                    if (ok) {
+                                      toast({ title: "Contato bloqueado com sucesso" });
+                                      // Also pause AI for this contact
                                       const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
                                       if (chatLead?.id) {
                                         await supabase
                                           .from("agent_memories")
                                           .update({ is_paused: true } as any)
                                           .eq("lead_id", chatLead.id);
+                                        // Also mark lead as opted out
+                                        await supabase
+                                          .from("leads")
+                                          .update({ is_opted_out: true } as any)
+                                          .eq("id", chatLead.id);
                                       }
-                                    } catch {}
-                                  } else {
-                                    toast({ title: "Erro ao bloquear contato", variant: "destructive" });
+                                    } else {
+                                      toast({ title: "Erro ao bloquear contato", description: "Verifique se a instância está conectada.", variant: "destructive" });
+                                    }
+                                  } catch (blockErr: any) {
+                                    console.error("[Chats] Block error:", blockErr);
+                                    toast({ title: "Erro ao bloquear contato", description: blockErr?.message || "Erro desconhecido", variant: "destructive" });
                                   }
                                 }}
                               >
