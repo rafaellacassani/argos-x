@@ -138,17 +138,17 @@ serve(async (req) => {
 
     const cadenceDays: number[] = Array.isArray(config.cadence_days) ? config.cadence_days : [-2, -1, 0, 3, 7];
 
-    // 1b. Fetch all cadence messages from DB
+    // 1b. Fetch all cadence messages from DB (both active and inactive for awareness)
     const { data: allCadenceMessages } = await supabaseAdmin
       .from("cadence_messages")
       .select("*")
       .eq("config_id", config.id)
-      .eq("is_active", true)
       .order("position", { ascending: true });
 
-    // Group messages by day
+    // Group ACTIVE messages by day — only active messages will be sent
     const messagesByDay: Record<number, any[]> = {};
     for (const msg of allCadenceMessages || []) {
+      if (!msg.is_active) continue; // Skip inactive messages
       if (!messagesByDay[msg.cadence_day]) messagesByDay[msg.cadence_day] = [];
       messagesByDay[msg.cadence_day].push(msg);
     }
