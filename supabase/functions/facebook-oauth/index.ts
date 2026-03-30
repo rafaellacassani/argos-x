@@ -263,6 +263,7 @@ app.get("/", async (c) => {
         console.error(`[Facebook OAuth] Failed to save page ${page.name}:`, pageError);
       } else {
         console.log(`[Facebook OAuth] ✅ Page saved: ${page.name}`);
+        if (instagramAccountId) savedIgIds.add(instagramAccountId);
 
         // Subscribe page to webhook so Meta sends events to our endpoint
         try {
