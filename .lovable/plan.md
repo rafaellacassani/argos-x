@@ -1,31 +1,43 @@
 
 
-## Correção: Instagram não detectado no OAuth do Facebook
+## Diagnóstico: Instagram não é detectado no OAuth
 
-### Problema
-A edge function `facebook-oauth` busca contas Instagram apenas via `page.instagram_business_account` no endpoint `me/accounts`. Mas quando o Instagram é selecionado no diálogo OAuth sem estar vinculado como "Instagram Business Account" da Page, esse campo vem vazio. Resultado: o Instagram nunca é salvo em `meta_pages`.
+### Evidência dos logs
 
-### Solução
-Após buscar as Pages, adicionar uma segunda consulta ao endpoint `me/instagram_accounts` (que retorna os Instagrams que o usuário autorizou, independente de estarem vinculados a uma Page). Para cada Instagram encontrado que ainda não foi detectado via Page, criar uma entrada separada em `meta_pages` com `platform = 'instagram'`.
+Os logs mostram claramente o problema:
 
-### Alterações
+```text
+Found 1 pages → "Argos X" (Facebook only)
+instagram_business_account → NOT present on page
+me/instagram_accounts → Found 0 accounts
+Result: ig=0, only Facebook page saved
+```
 
-**`supabase/functions/facebook-oauth/index.ts`**
-1. Após o loop de pages (Step 5), adicionar Step 6:
-   - Buscar `GET https://graph.facebook.com/v18.0/me/instagram_accounts?fields=id,username,profile_picture_url&access_token={token}`
-   - Para cada Instagram retornado, verificar se já foi salvo (comparando `instagram_account_id` nos registros já criados)
-   - Se não foi salvo, criar nova entrada em `meta_pages` com:
-     - `platform = 'instagram'`
-     - `instagram_account_id = ig.id`
-     - `instagram_username = ig.username`
-     - `page_id = ig.id` (usar o próprio IG ID como identificador)
-     - `page_name = @{username}`
-   - Inscrever no webhook de mensagens via a Page associada (se disponível)
+### Causa raiz
 
-2. Adicionar logs para rastrear quantos Instagrams foram encontrados por cada método
+Dois problemas:
 
-### O que NAO sera alterado
+1. **Escopo `instagram_basic` ausente** — O endpoint `me/instagram_accounts` requer o escopo `instagram_basic` para retornar contas. Nosso OAuth só solicita `instagram_manage_messages` e `instagram_manage_comments`, que dão permissão de interagir mas NÃO de listar as contas.
+
+2. **Falta buscar via endpoint da Page** — Mesmo com o escopo correto, existe um endpoint mais confiável: `GET /{page_id}?fields=connected_instagram_accounts{id,username}` que retorna os Instagrams conectados à Page independente de serem "business account".
+
+### Correção
+
+**Arquivo: `supabase/functions/facebook-oauth/index.ts`**
+
+1. Adicionar `instagram_basic` à lista de scopes no POST `/url` (linha 338-346)
+
+2. Após salvar cada Page (Step 5), adicionar uma busca extra:
+   - `GET /{page_id}?fields=connected_instagram_accounts{id,username}&access_token={page_token}`
+   - Se retornar Instagram(s) que não foram detectados via `instagram_business_account`, salvá-los como `platform: "instagram"` em `meta_pages`
+
+3. Manter o Step 6 (`me/instagram_accounts`) como fallback adicional
+
+### O que NÃO será alterado
 - Nenhuma tabela/migration
 - Nenhum componente frontend
-- A logica existente de deteccao via Page continua funcionando
+- A lógica existente de detecção continua funcionando
+
+### Nota
+Após o deploy, será necessário **reconectar o Meta OAuth** para que os novos escopos sejam solicitados ao usuário.
 
