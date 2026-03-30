@@ -19,6 +19,8 @@ export default function CadastroSucesso() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email") || "";
   const sessionId = searchParams.get("session_id") || "";
+  const phone = searchParams.get("phone") || "";
+  const nameParam = searchParams.get("name") || "";
 
   useEffect(() => {
     // Load Meta Pixel
@@ -40,11 +42,17 @@ export default function CadastroSucesso() {
       document.head.appendChild(script);
     }
 
-    // Advanced matching with email from URL
+    // Advanced matching with all available user data
     const advancedMatching: Record<string, string> = {};
-    if (email) {
-      advancedMatching.em = email;
+    if (email) advancedMatching.em = email.trim().toLowerCase();
+    if (phone) {
+      let cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) cleanPhone = "55" + cleanPhone;
+      advancedMatching.ph = cleanPhone;
     }
+    const nameParts = nameParam.trim().toLowerCase().split(/\s+/);
+    if (nameParts[0]) advancedMatching.fn = nameParts[0];
+    if (nameParts.length > 1) advancedMatching.ln = nameParts.slice(1).join(" ");
 
     window.fbq("init", PIXEL_ID, advancedMatching);
     window.fbq("track", "PageView");
