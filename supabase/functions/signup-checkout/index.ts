@@ -91,7 +91,7 @@ async function sha256(value: string): Promise<string> {
 
 async function sendMetaConversionEvent(
   supabaseAdmin: any,
-  params: { email: string; phone: string; eventId: string; ip: string; userAgent: string }
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string }
 ) {
   try {
     const { data: ws } = await supabaseAdmin
@@ -112,6 +112,11 @@ async function sendMetaConversionEvent(
       sha256(cleanPhone),
     ]);
 
+    // Hash name parts for fn/ln
+    const nameParts = (params.name || "").trim().toLowerCase().split(/\s+/);
+    const fnHash = nameParts[0] ? await sha256(nameParts[0]) : null;
+    const lnHash = nameParts.length > 1 ? await sha256(nameParts.slice(1).join(" ")) : null;
+
     const payload = {
       data: [{
         event_name: "InitiateCheckout",
@@ -119,7 +124,14 @@ async function sendMetaConversionEvent(
         event_id: params.eventId,
         event_source_url: "https://argosx.com.br/cadastro",
         action_source: "website",
-        user_data: { em: [emailHash], ph: [phoneHash], client_ip_address: params.ip, client_user_agent: params.userAgent },
+        user_data: {
+          em: [emailHash],
+          ph: [phoneHash],
+          ...(fnHash ? { fn: [fnHash] } : {}),
+          ...(lnHash ? { ln: [lnHash] } : {}),
+          client_ip_address: params.ip,
+          client_user_agent: params.userAgent,
+        },
         custom_data: { content_name: "Argos X Trial Checkout", currency: "BRL", value: 0 },
       }],
     };
@@ -284,7 +296,7 @@ serve(async (req) => {
     });
 
     // 6. Create Stripe Checkout Session with 7-day trial
-    const successUrl = `https://argosx.com.br/cadastro/sucesso?email=${encodeURIComponent(email)}&session_id={CHECKOUT_SESSION_ID}`;
+    const successUrl = `https://argosx.com.br/cadastro/sucesso?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(cleanPhone)}&name=${encodeURIComponent(name)}&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `https://argosx.com.br/cadastro?plan=${plan}`;
 
     const session = await stripe.checkout.sessions.create({
@@ -304,7 +316,7 @@ serve(async (req) => {
     // 7. Fire-and-forget: internal CRM lead + Meta CAPI
     createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(console.warn);
     if (eventId) {
-      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, eventId, ip, userAgent }).catch(console.warn);
+      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, name, eventId, ip, userAgent }).catch(console.warn);
     }
 
     // 8. Save attribution data
