@@ -94,6 +94,7 @@ function getPlanConfig(priceId: string, env: Record<string, string | undefined>)
   const priceEssencial = env.STRIPE_PRICE_ESSENCIAL;
   const priceNegocio = env.STRIPE_PRICE_NEGOCIO;
   const priceEscala = env.STRIPE_PRICE_ESCALA;
+  const priceEscalaSemestral = env.STRIPE_PRICE_ESCALA_SEMESTRAL;
 
   if (priceId === priceEssencial) {
     return { plan_name: "essencial", lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };
@@ -102,6 +103,9 @@ function getPlanConfig(priceId: string, env: Record<string, string | undefined>)
     return { plan_name: "negocio", lead_limit: 2000, whatsapp_limit: 3, user_limit: 1, ai_interactions_limit: 2000 };
   }
   if (priceId === priceEscala) {
+    return { plan_name: "escala", lead_limit: 999999, whatsapp_limit: 999, user_limit: 3, ai_interactions_limit: 10000 };
+  }
+  if (priceId === priceEscalaSemestral) {
     return { plan_name: "escala", lead_limit: 999999, whatsapp_limit: 999, user_limit: 3, ai_interactions_limit: 10000 };
   }
   return { plan_name: "essencial", lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };

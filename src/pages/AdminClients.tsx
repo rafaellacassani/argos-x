@@ -965,7 +965,7 @@ export default function AdminClients() {
                       .filter(([key]) => key !== 'gratuito')
                       .map(([key, plan]) => (
                       <SelectItem key={key} value={key}>
-                        {plan.name} — R$ {plan.price}/mês
+                        {plan.name} — R$ {plan.price}/{('billingPeriod' in plan && plan.billingPeriod) ? plan.billingPeriod : 'mês'}
                       </SelectItem>
                     ))}
                   </SelectContent>
