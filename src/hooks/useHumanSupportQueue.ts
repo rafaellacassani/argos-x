@@ -140,11 +140,20 @@ export function useHumanSupportQueue() {
     }
 
     // Resume AI agent if requested
-    if (resumeAI && item?.session_id) {
-      await supabase
-        .from("agent_memories")
-        .update({ is_paused: false })
-        .eq("session_id", item.session_id);
+    if (resumeAI && item) {
+      if (item.session_id) {
+        // Primary: resume by session_id
+        await supabase
+          .from("agent_memories")
+          .update({ is_paused: false })
+          .eq("session_id", item.session_id);
+      } else if (item.lead_id) {
+        // Fallback: resume by lead_id (for manual intercepts that may lack session_id)
+        await supabase
+          .from("agent_memories")
+          .update({ is_paused: false } as any)
+          .eq("lead_id", item.lead_id);
+      }
     }
 
     setQueue(prev => prev.filter(i => i.id !== itemId));

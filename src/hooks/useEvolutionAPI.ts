@@ -722,12 +722,20 @@ export function useEvolutionAPI() {
     setLoading(true);
     setError(null);
     try {
+      console.log(`[useEvolutionAPI] blockContact: instance=${instanceName}, number=${number}, block=${block}`);
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/block-contact/${instanceName}`, {
         method: "POST",
         body: { number, status: block ? "block" : "unblock" },
       });
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error) throw new Error(data.error);
+      if (fnError) {
+        console.error("[useEvolutionAPI] blockContact fnError:", fnError);
+        throw new Error(fnError.message);
+      }
+      if (data?.error) {
+        console.error("[useEvolutionAPI] blockContact data.error:", data.error);
+        throw new Error(data.error);
+      }
+      console.log("[useEvolutionAPI] blockContact success:", data);
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao bloquear/desbloquear contato";
