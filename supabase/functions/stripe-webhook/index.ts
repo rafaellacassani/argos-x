@@ -309,13 +309,19 @@ async function createWorkspaceForCustomer(
 
   if (wsError) throw wsError;
 
-  // 4. Add user as admin member
-  await supabaseAdmin.from("workspace_members").insert({
-    workspace_id: workspace.id,
-    user_id: userId,
-    role: "admin",
-    accepted_at: new Date().toISOString(),
-  });
+  // 4. Add user as admin member (upsert to avoid silent failures)
+  const { error: memberError } = await supabaseAdmin.from("workspace_members").upsert(
+    {
+      workspace_id: workspace.id,
+      user_id: userId,
+      role: "admin",
+      accepted_at: new Date().toISOString(),
+    },
+    { onConflict: "workspace_id,user_id" }
+  );
+  if (memberError) {
+    console.error("Failed to add workspace member:", memberError);
+  }
 
   // 5. Create default funnel + stages
   const { data: funnel } = await supabaseAdmin
