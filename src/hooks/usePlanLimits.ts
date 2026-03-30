@@ -45,6 +45,18 @@ export const PLAN_DEFINITIONS = {
     color: 'purple',
     description: 'Para times de vendas em crescimento',
   },
+  escala_semestral: {
+    name: 'Escala Semestral',
+    price: 1187.40,
+    billingPeriod: '6 meses',
+    extraUserPrice: 57,
+    leadLimit: 999999,
+    whatsappLimit: 999,
+    userLimit: 3,
+    aiLimit: 2000,
+    color: 'purple',
+    description: 'Plano Escala com cobrança semestral',
+  },
 } as const;
 
 export const LEAD_PACK_DEFINITIONS = [

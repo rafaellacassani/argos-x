@@ -352,6 +352,7 @@ serve(async (req) => {
         essencial: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
         negocio: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
         escala: Deno.env.get("STRIPE_PRICE_ESCALA"),
+        escala_semestral: Deno.env.get("STRIPE_PRICE_ESCALA_SEMESTRAL"),
       };
 
       const priceId = priceMap[plan];
