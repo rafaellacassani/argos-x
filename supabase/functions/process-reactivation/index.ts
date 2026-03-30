@@ -349,36 +349,8 @@ serve(async (req) => {
 
             if (res.ok) sentCount++;
           } else {
-            // Fallback to hardcoded email templates
-            const template = fallbackEmailTemplates[matchingDay];
-            if (template) {
-              const bodyHtml = template.body(ownerName, daysSinceExpiry, planLink);
-              const htmlEmail = buildHtmlEmail(template.subject, bodyHtml);
-
-              const res = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${RESEND_API_KEY}`,
-                },
-                body: JSON.stringify({
-                  from: "Argos X <noreply@argosx.com.br>",
-                  to: [ownerEmail],
-                  subject: template.subject,
-                  html: htmlEmail,
-                }),
-              });
-
-              await supabaseAdmin.from("reactivation_log").insert({
-                workspace_id: ws.id,
-                cadence_day: matchingDay,
-                channel: "email",
-                status: res.ok ? "sent" : "failed",
-                error_message: res.ok ? null : `HTTP ${res.status}`,
-              });
-
-              if (res.ok) sentCount++;
-            }
+            // No active email messages for this day — skip (do NOT fallback)
+            console.log(`[cadence] Day ${matchingDay}: no active email messages, skipping`);
           }
         } catch (e) {
           console.warn("Email send failed:", e);
