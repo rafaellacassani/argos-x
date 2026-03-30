@@ -255,8 +255,65 @@ app.get("/", async (c) => {
       }
     }
 
+    // Step 6: Detect Instagram accounts via me/instagram_accounts (fallback)
+    const savedIgIds = new Set<string>();
+    // Collect IGs already saved via Page detection
+    for (const page of pages) {
+      if (page.instagram_business_account?.id) {
+        savedIgIds.add(page.instagram_business_account.id);
+      }
+    }
+
+    console.log("[Facebook OAuth] Step 6: Fetching Instagram accounts via me/instagram_accounts...");
+    try {
+      const igAccountsUrl = new URL("https://graph.facebook.com/v18.0/me/instagram_accounts");
+      igAccountsUrl.searchParams.set("fields", "id,username,profile_picture_url");
+      igAccountsUrl.searchParams.set("access_token", finalUserToken);
+
+      const igAccountsRes = await fetch(igAccountsUrl.toString());
+      const igAccountsData = await igAccountsRes.json();
+      const igAccounts = igAccountsData.data || [];
+
+      console.log(`[Facebook OAuth] Found ${igAccounts.length} Instagram account(s) via me/instagram_accounts`);
+
+      for (const ig of igAccounts) {
+        if (!ig.id || savedIgIds.has(ig.id)) {
+          console.log(`[Facebook OAuth] Skipping IG ${ig.id} (already saved via Page)`);
+          continue;
+        }
+
+        const igUsername = ig.username || ig.id;
+        console.log(`[Facebook OAuth] 📸 New Instagram detected: @${igUsername} (${ig.id})`);
+
+        // Find a page_access_token to use for this IG (pick the first available page)
+        const fallbackPageToken = pages.length > 0 ? pages[0].access_token : finalUserToken;
+
+        const { error: igPageError } = await supabase
+          .from("meta_pages")
+          .insert({
+            meta_account_id: metaAccount.id,
+            page_id: ig.id,
+            page_name: `@${igUsername}`,
+            page_access_token: fallbackPageToken,
+            instagram_account_id: ig.id,
+            instagram_username: igUsername,
+            platform: "instagram",
+            workspace_id: workspaceId,
+          });
+
+        if (igPageError) {
+          console.error(`[Facebook OAuth] Failed to save IG @${igUsername}:`, igPageError);
+        } else {
+          console.log(`[Facebook OAuth] ✅ Instagram saved: @${igUsername}`);
+          savedIgIds.add(ig.id);
+        }
+      }
+    } catch (igErr) {
+      console.error("[Facebook OAuth] Error fetching me/instagram_accounts:", igErr);
+    }
+
     console.log("[Facebook OAuth] 🎉 OAuth flow completed successfully!");
-    return c.redirect(`${APP_URL}/settings?meta_connected=true&pages=${pages.length}`);
+    return c.redirect(`${APP_URL}/settings?meta_connected=true&pages=${pages.length}&ig=${savedIgIds.size}`);
     
   } catch (err) {
     console.error("[Facebook OAuth] Unexpected error:", err);
