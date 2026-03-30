@@ -35,9 +35,6 @@ ${bodyHtml}
 // Fallback templates used when no cadence_messages exist for a given day
 // Hardcoded fallback templates removed — system now ONLY sends active cadence_messages from DB.
 // This ensures the admin has full control over what is sent.
-    body: (name, _, link) => `
-      <h2 style="color:#0F172A;margin:0 0 16px">Olá, ${name}!</h2>
-      <p style="color:#475569;font-size:15px;line-height:1.6">Seu período de teste no <strong>Argos X</strong> encerra em <strong>2 dias</strong>.</p>
       <p style="color:#475569;font-size:15px;line-height:1.6">Não perca o acesso ao seu funil de vendas, agente de IA e todas as conversas com seus leads.</p>
       <div style="text-align:center;margin:28px 0">
         <a href="${link}" style="background:#0171C3;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;display:inline-block">Ativar meu plano agora</a>
