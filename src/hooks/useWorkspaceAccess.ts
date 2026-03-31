@@ -42,7 +42,7 @@ function computeLocalAccess(workspace: {
       return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
 
     case "trialing":
-      if (trialEnd && trialEnd > now) {
+      if (!trialEnd || trialEnd > now) {
         return { allowed: true, reason: "trialing", trialEnd: workspace.trial_end || null, daysRemaining };
       }
       return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };

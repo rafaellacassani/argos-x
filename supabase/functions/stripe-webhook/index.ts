@@ -307,6 +307,7 @@ async function createWorkspaceForCustomer(
       whatsapp_limit: planConfig.whatsapp_limit,
       user_limit: planConfig.user_limit,
       ai_interactions_limit: planConfig.ai_interactions_limit,
+      trial_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
     .select()
     .single();
