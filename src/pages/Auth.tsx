@@ -24,7 +24,7 @@ type AuthMode = "login" | "forgot";
 export default function Auth() {
   const { user, loading, signIn, signUp, resetPassword } = useAuth();
   const [searchParams] = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/";
+  const returnTo = searchParams.get("returnTo") || "/dashboard";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -48,6 +48,23 @@ export default function Cadastro() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Redirect logged-in users with workspace to dashboard
+  useEffect(() => {
+    import("@/integrations/supabase/client").then(({ supabase }) => {
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (!session) return;
+        const { data } = await supabase
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", session.user.id)
+          .not("accepted_at", "is", null)
+          .limit(1)
+          .maybeSingle();
+        if (data) navigate("/dashboard", { replace: true });
+      });
+    });
+  }, [navigate]);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [pixelReady, setPixelReady] = useState(false);
