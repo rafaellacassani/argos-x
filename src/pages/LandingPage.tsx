@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -141,12 +141,13 @@ const testimonials = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/dashboard", { replace: true });
+      if (session) setIsLoggedIn(true);
     });
-  }, [navigate]);
+  }, []);
 
   return (
     <>
@@ -172,12 +173,20 @@ export default function LandingPage() {
               <a href="#testimonials" className="hover:text-foreground transition-colors">Depoimentos</a>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth">Entrar</Link>
-              </Button>
-              <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
-                <Link to="/cadastro">Criar Conta Grátis</Link>
-              </Button>
+              {isLoggedIn ? (
+                <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
+                  <Link to="/dashboard">Ir para Dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/auth">Entrar</Link>
+                  </Button>
+                  <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
+                    <Link to="/cadastro">Criar Conta Grátis</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </nav>
