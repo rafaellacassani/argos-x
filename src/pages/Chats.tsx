@@ -3346,6 +3346,7 @@ export default function Chats() {
                                 },
                               });
                               if (error) throw error;
+                              await fetchQueue();
                               toast({ title: "✅ IA retomada", description: "O agente de IA voltará a responder nesta conversa." });
                             } catch (err: any) {
                               toast({ title: "Erro ao retornar IA", description: err.message, variant: "destructive" });
