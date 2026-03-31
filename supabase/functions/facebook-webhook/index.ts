@@ -508,6 +508,24 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
   }
 }
 
+// Helper: extract media references from AI text like [Vídeo anexo: URL]
+function extractMediaFromChunk(text: string) {
+  const mediaPattern = /\[(Vídeo anexo|Imagem anexa|PDF anexo|Anexo|Video anexo|Imagen anexa):\s*(https?:\/\/[^\]\s]+)\]/gi;
+  const medias: Array<{ url: string; type: string }> = [];
+  let match;
+  const regex = new RegExp(mediaPattern.source, "gi");
+  while ((match = regex.exec(text)) !== null) {
+    const label = match[1].toLowerCase();
+    let mediatype = "document";
+    if (label.includes("vídeo") || label.includes("video")) mediatype = "video";
+    else if (label.includes("imagem") || label.includes("imagen")) mediatype = "image";
+    else if (label.includes("pdf")) mediatype = "document";
+    medias.push({ url: match[2], type: mediatype });
+  }
+  const cleanText = text.replace(new RegExp(mediaPattern.source, "gi"), "").replace(/\n{3,}/g, "\n\n").trim();
+  return { medias, cleanText };
+}
+
 // Helper: send a text message via WhatsApp Cloud API
 async function sendWhatsAppCloudMessage(phoneNumberId: string, accessToken: string, to: string, text: string) {
   const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
@@ -523,6 +541,29 @@ async function sendWhatsAppCloudMessage(phoneNumberId: string, accessToken: stri
   if (!res.ok) {
     const errText = await res.text();
     console.error(`[Facebook Webhook] ❌ Cloud API send failed: ${res.status} ${errText}`);
+  }
+  return res;
+}
+
+// Helper: send media (video/image/document) via WhatsApp Cloud API
+async function sendWhatsAppCloudMedia(phoneNumberId: string, accessToken: string, to: string, mediaUrl: string, mediaType: string) {
+  const typeMap: Record<string, string> = { video: "video", image: "image", document: "document" };
+  const type = typeMap[mediaType] || "document";
+  const payload: Record<string, unknown> = {
+    messaging_product: "whatsapp",
+    to,
+    type,
+    [type]: { link: mediaUrl },
+  };
+  console.log(`[Facebook Webhook] 📎 Sending Cloud API media: ${type} → ${mediaUrl}`);
+  const res = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`[Facebook Webhook] ❌ Cloud API media send failed: ${res.status} ${errText}`);
   }
   return res;
 }
