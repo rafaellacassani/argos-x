@@ -661,6 +661,41 @@ serve(async (req) => {
         }
       }
 
+      // --- HUMAN SUPPORT QUEUE GUARD ---
+      // Check if there's an active human intercept for this session or lead
+      // This is the definitive source of truth, not just memory.is_paused
+      {
+        let humanQueueActive = false;
+        if (session_id) {
+          const { data: hsq } = await supabase
+            .from("human_support_queue")
+            .select("id")
+            .eq("session_id", session_id)
+            .in("status", ["waiting", "in_progress"])
+            .limit(1)
+            .maybeSingle();
+          if (hsq) humanQueueActive = true;
+        }
+        if (!humanQueueActive && lead_id) {
+          const { data: hsq } = await supabase
+            .from("human_support_queue")
+            .select("id")
+            .eq("lead_id", lead_id)
+            .in("status", ["waiting", "in_progress"])
+            .limit(1)
+            .maybeSingle();
+          if (hsq) humanQueueActive = true;
+        }
+        if (humanQueueActive) {
+          // Ensure memory is also paused for consistency
+          if (!memory.is_paused) {
+            await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+          }
+          console.log("[ai-agent-chat] ⏸️ Human support queue active — blocking AI response");
+          return new Response(JSON.stringify({ response: null, paused: true, message: "Conversa em atendimento humano." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
+
       if (memory.is_paused) {
         if (messageText.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
           await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);

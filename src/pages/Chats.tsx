@@ -3262,59 +3262,70 @@ export default function Chats() {
                       </DropdownMenu>
                     );
                   })()}
-                  {/* Manual intercept button - only show if chat is NOT already in queue */}
+                  {/* Intercept / Resume button — single source of truth */}
                   {(() => {
                     const chatPhone = cleanPhoneNumber(selectedChat.phone || "");
-                    const alreadyInQueue = queue.some(q => {
+                    const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                    const activeQueueItem = queue.find(q => {
                       if (q.status === "resolved") return false;
+                      if (chatLead && q.lead_id === chatLead.id) return true;
                       const qPhone = q.lead_phone?.replace(/[^0-9]/g, "") || "";
                       if (!qPhone || !chatPhone || qPhone.length < 8 || chatPhone.length < 8) return false;
                       return chatPhone.slice(-10) === qPhone.slice(-10);
                     });
-                    if (alreadyInQueue) return null;
+                    const isIntercepted = !!activeQueueItem;
+
+                    if (isIntercepted) {
+                      return (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
+                          onClick={async () => {
+                            try {
+                              const { error } = await supabase.functions.invoke("human-handoff", {
+                                body: {
+                                  action: "resume",
+                                  workspace_id: workspaceId,
+                                  lead_id: chatLead?.id || null,
+                                  session_id: activeQueueItem.session_id || null,
+                                  queue_item_id: activeQueueItem.id,
+                                },
+                              });
+                              if (error) throw error;
+                              toast({ title: "✅ IA retomada", description: "O agente de IA voltará a responder nesta conversa." });
+                            } catch (err: any) {
+                              toast({ title: "Erro ao retornar IA", description: err.message, variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <Zap className="w-3.5 h-3.5" />
+                          Retornar IA
+                        </Button>
+                      );
+                    }
+
                     return (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
                         onClick={async () => {
-                          const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                          
-                          // 1. Pause AI for this lead immediately
-                          if (chatLead?.id) {
-                            await supabase
-                              .from("agent_memories")
-                              .update({ is_paused: true } as any)
-                              .eq("lead_id", chatLead.id);
-                          }
-                          
-                          // 2. Find the session_id so "Finalizar" can resume AI later
-                          let sessionId: string | null = null;
-                          if (chatLead?.id) {
-                            const { data: memData } = await supabase
-                              .from("agent_memories")
-                              .select("session_id")
-                              .eq("lead_id", chatLead.id)
-                              .order("updated_at", { ascending: false })
-                              .limit(1);
-                            sessionId = memData?.[0]?.session_id || null;
-                          }
-
-                          // 3. Insert into human support queue with session_id
-                          const { error } = await supabase
-                            .from("human_support_queue" as any)
-                            .insert({
-                              workspace_id: workspaceId,
-                              lead_id: chatLead?.id || null,
-                              session_id: sessionId,
-                              reason: "manual",
-                              status: "waiting",
-                              instance_name: selectedChat.instanceName || selectedInstance || null,
+                          try {
+                            const { error } = await supabase.functions.invoke("human-handoff", {
+                              body: {
+                                action: "intercept",
+                                workspace_id: workspaceId,
+                                lead_id: chatLead?.id || null,
+                                session_id: null, // backend will resolve
+                                instance_name: selectedChat.instanceName || selectedInstance || null,
+                                reason: "manual",
+                              },
                             });
-                          if (error) {
-                            toast({ title: "Erro ao interceptar", description: error.message, variant: "destructive" });
-                          } else {
-                            toast({ title: "✅ IA pausada e conversa adicionada à fila de atendimento" });
+                            if (error) throw error;
+                            toast({ title: "✅ IA pausada e conversa interceptada", description: "Ticket de suporte criado automaticamente." });
+                          } catch (err: any) {
+                            toast({ title: "Erro ao interceptar", description: err.message, variant: "destructive" });
                           }
                         }}
                       >
@@ -3369,22 +3380,35 @@ export default function Chats() {
                         Assumir
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
-                      onClick={async () => {
-                        const ok = await resolveItem(queueItem.id, true);
-                        if (ok) toast({ title: "Atendimento finalizado", description: "A IA foi retomada automaticamente." });
-                      }}
-                    >
-                      <CheckCircle2 className="w-3 h-3" />
-                      Finalizar
-                    </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase.functions.invoke("human-handoff", {
+                              body: {
+                                action: "resume",
+                                workspace_id: workspaceId,
+                                lead_id: chatLead?.id || null,
+                                session_id: queueItem.session_id || null,
+                                queue_item_id: queueItem.id,
+                              },
+                            });
+                            if (error) throw error;
+                            toast({ title: "✅ Atendimento finalizado", description: "A IA foi retomada automaticamente." });
+                          } catch (err: any) {
+                            toast({ title: "Erro", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        Finalizar & Retornar IA
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
             <div 
               className="flex-1 overflow-y-auto p-4 min-h-0 w-full chat-pattern scrollbar-thin"
