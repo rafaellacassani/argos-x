@@ -223,7 +223,7 @@ export default function Cadastro() {
       <header className="border-b border-gray-100 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <img src={argosLogoDark} alt="Argos X" className="h-8" />
-          <a href="/auth" className="text-sm text-[#1a1a6e] hover:underline font-medium">
+          <a href="/auth?returnTo=/dashboard" className="text-sm text-[#1a1a6e] hover:underline font-medium">
             Já tenho conta
           </a>
         </div>
