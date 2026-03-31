@@ -3263,6 +3263,45 @@ export default function Chats() {
                               </DropdownMenuItem>
                             </>
                           )}
+                          {/* Ignorar contato — universal (Meta + Evolution) */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                              if (!chatLead?.id) {
+                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                return;
+                              }
+                              const confirmed = window.confirm("Ignorar este contato? Ele será removido da lista de chats e a IA será pausada.");
+                              if (!confirmed) return;
+                              try {
+                                // Mark lead as ignored
+                                await supabase
+                                  .from("leads")
+                                  .update({ is_ignored: true } as any)
+                                  .eq("id", chatLead.id);
+                                // Pause AI for this lead
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("lead_id", chatLead.id);
+                                // Cancel pending followups
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("status", "pending");
+                                toast({ title: "✅ Contato ignorado e IA pausada" });
+                                // Deselect chat to go back to list
+                                setSelectedChatId(null);
+                              } catch (err: any) {
+                                console.error("[Chats] Ignore error:", err);
+                                toast({ title: "Erro ao ignorar contato", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <EyeOff className="w-4 h-4 mr-2" />
+                            Ignorar contato
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     );
