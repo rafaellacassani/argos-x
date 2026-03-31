@@ -112,12 +112,20 @@ const App = () => (
                   } />
                   
                   {/* Protected app pages with layout */}
+                  <Route path="/home" element={
+                    <ProtectedRoute>
+                      <AppLayout>
+                        <Suspense fallback={<PageLoader />}>
+                          <Index />
+                        </Suspense>
+                      </AppLayout>
+                    </ProtectedRoute>
+                  } />
                   <Route path="/*" element={
                     <ProtectedRoute>
                       <AppLayout>
                         <Suspense fallback={<PageLoader />}>
                           <Routes>
-                            <Route path="/home" element={<Index />} />
                             <Route path="/dashboard" element={<PageAccessGuard path="/dashboard"><Dashboard /></PageAccessGuard>} />
                             <Route path="/leads" element={<PageAccessGuard path="/leads"><Leads /></PageAccessGuard>} />
                             <Route path="/chats" element={<PageAccessGuard path="/chats"><Chats /></PageAccessGuard>} />
