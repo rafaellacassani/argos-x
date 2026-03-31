@@ -196,45 +196,31 @@ function NotificationCard({ notification, side }: { notification: Notification; 
 }
 
 function NotificationColumn({ items, side, stagger }: { items: Notification[]; side: "left" | "right"; stagger: number }) {
-  const [visibleIds, setVisibleIds] = useState<number[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(-1);
 
   useEffect(() => {
     const initialDelay = setTimeout(() => {
-      setVisibleIds([items[0].id]);
-      setCurrentIndex(1);
+      setCurrentIndex(0);
     }, stagger);
-
     return () => clearTimeout(initialDelay);
-  }, [items, stagger]);
+  }, [stagger]);
 
   useEffect(() => {
-    if (currentIndex === 0) return;
-
+    if (currentIndex < 0) return;
     const interval = setInterval(() => {
-      setVisibleIds((prev) => {
-        const nextIndex = currentIndex % items.length;
-        const nextId = items[nextIndex].id;
-
-        const updated = prev.length >= 3 ? [...prev.slice(1), nextId] : [...prev, nextId];
-        return updated;
-      });
-      setCurrentIndex((prev) => prev + 1);
-    }, 4000);
-
+      setCurrentIndex((prev) => (prev + 1) % items.length);
+    }, 5000);
     return () => clearInterval(interval);
   }, [currentIndex, items]);
 
-  const visibleNotifications = visibleIds
-    .map((id) => items.find((n) => n.id === id))
-    .filter(Boolean) as Notification[];
+  const current = currentIndex >= 0 ? items[currentIndex] : null;
 
   return (
     <div className={`flex flex-col gap-3 ${side === "left" ? "items-end" : "items-start"}`}>
-      <AnimatePresence mode="popLayout">
-        {visibleNotifications.map((notification) => (
-          <NotificationCard key={`${notification.id}-${visibleIds.indexOf(notification.id)}`} notification={notification} side={side} />
-        ))}
+      <AnimatePresence mode="wait">
+        {current && (
+          <NotificationCard key={`${current.id}-${currentIndex}`} notification={current} side={side} />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -300,13 +286,13 @@ export function FloatingNotifications() {
         <MobileNotificationCarousel />
       </div>
 
-      {/* Desktop: dual columns */}
-      <div className="hidden lg:flex absolute inset-0 pointer-events-none z-10">
-        <div className="absolute left-4 xl:left-8 top-8 pointer-events-auto">
+      {/* Desktop: fixed side notifications that persist while scrolling */}
+      <div className="hidden lg:block fixed inset-0 pointer-events-none z-40">
+        <div className="absolute left-4 xl:left-8 top-24 pointer-events-auto">
           <NotificationColumn items={leftNotifications} side="left" stagger={1500} />
         </div>
-        <div className="absolute right-4 xl:right-8 top-8 pointer-events-auto">
-          <NotificationColumn items={rightNotifications} side="right" stagger={3500} />
+        <div className="absolute right-4 xl:right-8 top-24 pointer-events-auto">
+          <NotificationColumn items={rightNotifications} side="right" stagger={4000} />
         </div>
       </div>
     </>
