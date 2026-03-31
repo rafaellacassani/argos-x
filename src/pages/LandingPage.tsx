@@ -173,12 +173,20 @@ export default function LandingPage() {
               <a href="#testimonials" className="hover:text-foreground transition-colors">Depoimentos</a>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth">Entrar</Link>
-              </Button>
-              <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
-                <Link to="/cadastro">Criar Conta Grátis</Link>
-              </Button>
+              {isLoggedIn ? (
+                <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
+                  <Link to="/dashboard">Ir para Dashboard</Link>
+                </Button>
+              ) : (
+                <>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link to="/auth">Entrar</Link>
+                  </Button>
+                  <Button size="sm" asChild className="bg-secondary hover:bg-secondary/90">
+                    <Link to="/cadastro">Criar Conta Grátis</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </nav>
