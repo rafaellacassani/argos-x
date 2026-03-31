@@ -3380,22 +3380,35 @@ export default function Chats() {
                         Assumir
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
-                      onClick={async () => {
-                        const ok = await resolveItem(queueItem.id, true);
-                        if (ok) toast({ title: "Atendimento finalizado", description: "A IA foi retomada automaticamente." });
-                      }}
-                    >
-                      <CheckCircle2 className="w-3 h-3" />
-                      Finalizar
-                    </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 border-green-500/50 text-green-700 hover:bg-green-500/10"
+                        onClick={async () => {
+                          try {
+                            const { error } = await supabase.functions.invoke("human-handoff", {
+                              body: {
+                                action: "resume",
+                                workspace_id: workspaceId,
+                                lead_id: chatLead?.id || null,
+                                session_id: queueItem.session_id || null,
+                                queue_item_id: queueItem.id,
+                              },
+                            });
+                            if (error) throw error;
+                            toast({ title: "✅ Atendimento finalizado", description: "A IA foi retomada automaticamente." });
+                          } catch (err: any) {
+                            toast({ title: "Erro", description: err.message, variant: "destructive" });
+                          }
+                        }}
+                      >
+                        <CheckCircle2 className="w-3 h-3" />
+                        Finalizar & Retornar IA
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
 
             <div 
               className="flex-1 overflow-y-auto p-4 min-h-0 w-full chat-pattern scrollbar-thin"
