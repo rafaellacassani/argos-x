@@ -167,28 +167,34 @@ const notifications: Notification[] = [
 const leftNotifications = notifications.filter((_, i) => i % 2 === 0);
 const rightNotifications = notifications.filter((_, i) => i % 2 === 1);
 
-function NotificationCard({ notification, side }: { notification: Notification; side: "left" | "right" }) {
+function WhatsAppBanner({ notification, side }: { notification: Notification; side: "left" | "right" }) {
   return (
     <motion.div
-      initial={{ opacity: 0, x: side === "left" ? -60 : 60, scale: 0.9 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: side === "left" ? -40 : 40, scale: 0.95 }}
-      transition={{ duration: 0.8, ease: [0.23, 1, 0.32, 1] }}
-      className="w-[300px] bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-border/40 p-3.5 cursor-default hover:shadow-xl transition-shadow duration-300"
+      initial={{ opacity: 0, y: -30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+      className="w-[340px] bg-white/[0.97] backdrop-blur-2xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] p-3 cursor-default"
+      style={{ boxShadow: "0 2px 20px rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.06)" }}
     >
-      <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-lg ${notification.iconBg} flex items-center justify-center flex-shrink-0`}>
-          <notification.icon className={`w-4.5 h-4.5 ${notification.iconColor}`} />
+      {/* Top bar — app icon + name + time */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className="w-5 h-5 rounded-md bg-[#25D366] flex items-center justify-center flex-shrink-0">
+          <MessageCircle className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">WhatsApp</span>
+        <span className="text-[10px] text-muted-foreground/50 ml-auto">{notification.time}</span>
+      </div>
+      {/* Content */}
+      <div className="flex items-start gap-2.5">
+        <div className={`w-10 h-10 rounded-full ${notification.iconBg} flex items-center justify-center flex-shrink-0`}>
+          <notification.icon className={`w-5 h-5 ${notification.iconColor}`} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${notification.nichoColor}`}>
-              {notification.nicho}
-            </span>
-            <span className="text-[10px] text-muted-foreground flex-shrink-0">{notification.time}</span>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[13px] font-semibold text-foreground truncate">Argos X · {notification.nicho}</p>
           </div>
-          <p className="text-xs font-semibold text-foreground leading-snug">{notification.title}</p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5 line-clamp-2">{notification.message}</p>
+          <p className="text-[12px] text-muted-foreground leading-snug mt-0.5 line-clamp-2">{notification.message}</p>
         </div>
       </div>
     </motion.div>
