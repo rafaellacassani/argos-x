@@ -40,6 +40,32 @@ async function sendWhatsApp(instanceName: string, phone: string, text: string): 
   }
 }
 
+async function sendWhatsAppMedia(instanceName: string, phone: string, endpoint: string, payload: Record<string, unknown>): Promise<boolean> {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !phone || !instanceName) return false;
+  try {
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone) return false;
+    if ((cleanPhone.length === 10 || cleanPhone.length === 11) && !cleanPhone.startsWith("55")) {
+      cleanPhone = "55" + cleanPhone;
+    }
+    const res = await fetch(`${EVOLUTION_API_URL}/message/${endpoint}/${instanceName}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+      body: JSON.stringify({ ...payload, number: cleanPhone }),
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`[no-response-alerts] Media send failed: ${err}`);
+      return false;
+    }
+    await res.text();
+    return true;
+  } catch (e) {
+    console.error("[no-response-alerts] Media send error:", e);
+    return false;
+  }
+}
+
 function getFollowupDelayMs(value: number, unit: string): number {
   switch (unit) {
     case "minutes": return value * 60 * 1000;
