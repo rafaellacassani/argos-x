@@ -148,9 +148,24 @@ export default function SupportAdmin() {
     if (!selected) return;
     await supabase.from("support_tickets").update({
       status,
-      ...(status === "resolved" ? { resolved_at: new Date().toISOString() } : {}),
+      ...(status === "resolved" || status === "closed" ? { resolved_at: new Date().toISOString() } : {}),
     }).eq("id", selected.id);
     setSelected(prev => prev ? { ...prev, status } : null);
+
+    // If resolving/closing, also resume AI via handoff function
+    if (status === "resolved" || status === "closed") {
+      try {
+        await supabase.functions.invoke("human-handoff", {
+          body: {
+            action: "resume",
+            workspace_id: selected.workspace_id,
+          },
+        });
+      } catch (err) {
+        console.warn("[SupportAdmin] Failed to resume AI via handoff:", err);
+      }
+    }
+
     loadTickets();
     toast({ title: `Ticket ${statusLabels[status]?.toLowerCase() || status}` });
   };
