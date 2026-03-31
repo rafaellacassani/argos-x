@@ -117,7 +117,6 @@ const App = () => (
                       <AppLayout>
                         <Suspense fallback={<PageLoader />}>
                           <Routes>
-                            <Route path="/" element={<Index />} />
                             <Route path="/home" element={<Index />} />
                             <Route path="/dashboard" element={<PageAccessGuard path="/dashboard"><Dashboard /></PageAccessGuard>} />
                             <Route path="/leads" element={<PageAccessGuard path="/leads"><Leads /></PageAccessGuard>} />
