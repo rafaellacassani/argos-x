@@ -3376,6 +3376,7 @@ export default function Chats() {
                               },
                             });
                             if (error) throw error;
+                            await fetchQueue();
                             toast({ title: "✅ IA pausada e conversa interceptada", description: "Ticket de suporte criado automaticamente." });
                           } catch (err: any) {
                             toast({ title: "Erro ao interceptar", description: err.message, variant: "destructive" });
