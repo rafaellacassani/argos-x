@@ -98,6 +98,20 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Gibberish detection: block nonsensical AI output ---
+function isGibberish(text: string): boolean {
+  if (!text || text.length < 20) return false;
+  const nonLatinPattern = /[\u0400-\u04FF\u0500-\u052F\u1100-\u11FF\u3000-\u9FFF\uAC00-\uD7AF\u0600-\u06FF\u0E00-\u0E7F\u10A0-\u10FF\uA000-\uA4CF]/g;
+  const nonLatinMatches = text.match(nonLatinPattern) || [];
+  const nonLatinRatio = nonLatinMatches.length / text.length;
+  if (nonLatinRatio > 0.15) return true;
+  const alphaNumPattern = /[a-zA-ZÀ-ÿ0-9\s.,!?;:()'"@#\-\/]/g;
+  const alphaMatches = text.match(alphaNumPattern) || [];
+  const alphaRatio = alphaMatches.length / text.length;
+  if (alphaRatio < 0.5) return true;
+  return false;
+}
+
 // --- AI Loop detection (IA-vs-IA) ---
 function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string | null {
   if (!messages || messages.length < 6) return null;
