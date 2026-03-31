@@ -10,6 +10,10 @@ function getSupabase() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 }
 
+function stripMarkdownLinks(text: string): string {
+  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+
 function jidToNumber(jid: string): string {
   return jid.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 }
@@ -262,9 +266,10 @@ Deno.serve(async (req) => {
           if (agentData.chunks && Array.isArray(agentData.chunks)) {
             for (const chunk of agentData.chunks) {
               if (chunk && chunk.trim()) {
+                const sanitizedChunk = stripMarkdownLinks(chunk);
                 let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                   number: sendToNumber,
-                  text: chunk,
+                  text: sanitizedChunk,
                   delay: 0,
                   linkPreview: false,
                 });
@@ -272,7 +277,7 @@ Deno.serve(async (req) => {
                 if (!sendResult && sendToNumber !== remoteJid) {
                   sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                     number: remoteJid,
-                    text: chunk,
+                    text: sanitizedChunk,
                     delay: 0,
                     linkPreview: false,
                   });
@@ -284,16 +289,17 @@ Deno.serve(async (req) => {
             }
             console.log(`[check-missed] ✅ Response sent to ${sendToNumber}`);
           } else if (agentData.response) {
+            const sanitizedResponse = stripMarkdownLinks(agentData.response);
             let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
               number: sendToNumber,
-              text: agentData.response,
+              text: sanitizedResponse,
               delay: 0,
               linkPreview: false,
             });
             if (!sendResult && sendToNumber !== remoteJid) {
               await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                 number: remoteJid,
-                text: agentData.response,
+                text: sanitizedResponse,
                 delay: 0,
                 linkPreview: false,
               });

@@ -19,6 +19,10 @@ function getSupabase() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 }
 
+function stripMarkdownLinks(text: string): string {
+  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+
 // --- Evolution API helper ---
 async function evolutionFetch(endpoint: string, method: string, body?: Record<string, unknown>) {
   const url = `${EVOLUTION_API_URL}${endpoint}`;
@@ -1212,9 +1216,10 @@ app.post("/", async (c) => {
 
                   // Send clean text first (if any)
                   if (cleanText) {
+                    const sanitizedText = stripMarkdownLinks(cleanText);
                     const sendResult = await sendWithFallback("sendText", {
                       number: sendToNumber,
-                      text: cleanText,
+                      text: sanitizedText,
                       delay: 0,
                       linkPreview: false,
                     });
@@ -1274,9 +1279,10 @@ app.post("/", async (c) => {
               const { medias: singleMedias, cleanText: singleCleanText } = extractMediaFromChunk(agentData.response);
 
               if (singleCleanText) {
+                const sanitizedSingleText = stripMarkdownLinks(singleCleanText);
                 const sendResult = await sendWithFallback("sendText", {
                   number: sendToNumber,
-                  text: singleCleanText,
+                  text: sanitizedSingleText,
                   delay: 0,
                   linkPreview: false,
                 });

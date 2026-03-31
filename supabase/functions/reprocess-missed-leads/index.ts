@@ -19,6 +19,10 @@ function getSupabase() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 }
 
+function stripMarkdownLinks(text: string): string {
+  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+
 async function evolutionFetch(endpoint: string, method: string, body?: Record<string, unknown>) {
   const url = `${EVOLUTION_API_URL}${endpoint}`;
   const headers: Record<string, string> = { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY };
@@ -239,9 +243,10 @@ app.post("/", async (c) => {
           const chunks = agentData.chunks || [responseText];
           for (const chunk of chunks) {
             if (!chunk?.trim()) continue;
+            const sanitizedChunk = stripMarkdownLinks(chunk);
             const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
               number: sessionPhone,
-              text: chunk,
+              text: sanitizedChunk,
               delay: 0,
               linkPreview: false,
             });
