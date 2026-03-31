@@ -212,14 +212,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       setInitialLoadDone(true);
     }
-  }, [user]);
+  }, [user, initialLoadDone, lastUserId, workspace]);
 
   useEffect(() => {
     loadWorkspace();
   }, [loadWorkspace]);
 
   const refreshWorkspace = useCallback(() => {
-    loadWorkspace();
+    loadWorkspace(true);
   }, [loadWorkspace]);
 
   const createWorkspace = useCallback(async (name: string): Promise<Workspace | null> => {
