@@ -304,6 +304,11 @@ serve(async (req) => {
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
+      payment_method_options: {
+        card: {
+          request_three_d_secure: 'any',
+        },
+      },
       subscription_data: {
         trial_period_days: 7,
         metadata: { workspace_id: "pending", plan, user_id: userId, company_name: companyName },
