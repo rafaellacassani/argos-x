@@ -140,6 +140,14 @@ const testimonials = [
 ];
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) navigate("/dashboard", { replace: true });
+    });
+  }, [navigate]);
+
   return (
     <>
       <Helmet>
