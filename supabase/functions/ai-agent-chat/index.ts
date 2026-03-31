@@ -98,41 +98,56 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Gibberish detection: block nonsensical AI output ---
+function isGibberish(text: string): boolean {
+  if (!text || text.length < 20) return false;
+  const nonLatinPattern = /[\u0400-\u04FF\u0500-\u052F\u1100-\u11FF\u3000-\u9FFF\uAC00-\uD7AF\u0600-\u06FF\u0E00-\u0E7F\u10A0-\u10FF\uA000-\uA4CF]/g;
+  const nonLatinMatches = text.match(nonLatinPattern) || [];
+  const nonLatinRatio = nonLatinMatches.length / text.length;
+  if (nonLatinRatio > 0.15) return true;
+  const alphaNumPattern = /[a-zA-ZÀ-ÿ0-9\s.,!?;:()'"@#\-\/]/g;
+  const alphaMatches = text.match(alphaNumPattern) || [];
+  const alphaRatio = alphaMatches.length / text.length;
+  if (alphaRatio < 0.5) return true;
+  return false;
+}
+
 // --- AI Loop detection (IA-vs-IA) ---
 function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string | null {
-  if (!messages || messages.length < 6) return null;
+  if (!messages || messages.length < 8) return null;
 
   const now = Date.now();
   const fiveMinAgo = now - 5 * 60 * 1000;
 
-  // Signal 1: Excessive frequency — more than 10 exchanges in 5 minutes
+  // Signal 1: Excessive frequency — more than 14 exchanges in 5 minutes (tuned up from 10)
   const recentMessages = messages.filter(m => {
     if (!m.timestamp) return false;
     return new Date(m.timestamp).getTime() > fiveMinAgo;
   });
-  if (recentMessages.length > 10) {
+  if (recentMessages.length > 14) {
     return `excessive_frequency: ${recentMessages.length} messages in 5min`;
   }
 
-  // Signal 2: Repetitive content — last 4 user messages very similar
-  const lastUserMsgs = messages.filter(m => m.role === "user").slice(-4);
-  if (lastUserMsgs.length >= 4) {
-    const contents = lastUserMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
+  // Signal 2: Repetitive content — last 5 user messages very similar (tuned from 4)
+  // Exclude short messages (< 15 chars) like "ok", "sim", "fiz" to avoid false positives
+  const lastUserMsgs = messages.filter(m => m.role === "user").slice(-5);
+  const substantiveUserMsgs = lastUserMsgs.filter(m => (m.content || "").trim().length >= 15);
+  if (substantiveUserMsgs.length >= 4) {
+    const contents = substantiveUserMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
     const unique = new Set(contents);
     if (unique.size <= 1) {
-      return `user_repetition: identical messages x${lastUserMsgs.length}`;
+      return `user_repetition: identical messages x${substantiveUserMsgs.length}`;
     }
-    // Check similarity: if 3 out of 4 are the same
     const freq = new Map<string, number>();
     for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
     for (const [, count] of freq) {
-      if (count >= 3) return `user_repetition: ${count}/4 similar messages`;
+      if (count >= 4) return `user_repetition: ${count}/${substantiveUserMsgs.length} similar messages`;
     }
   }
 
-  // Signal 3: Last 4 assistant messages very similar
-  const lastAssistantMsgs = messages.filter(m => m.role === "assistant").slice(-4);
-  if (lastAssistantMsgs.length >= 4) {
+  // Signal 3: Last 5 assistant messages very similar (tuned from 4)
+  const lastAssistantMsgs = messages.filter(m => m.role === "assistant").slice(-5);
+  if (lastAssistantMsgs.length >= 5) {
     const contents = lastAssistantMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
     const unique = new Set(contents);
     if (unique.size <= 1) {
@@ -141,20 +156,20 @@ function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string
     const freq = new Map<string, number>();
     for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
     for (const [, count] of freq) {
-      if (count >= 3) return `assistant_repetition: ${count}/4 similar responses`;
+      if (count >= 4) return `assistant_repetition: ${count}/5 similar responses`;
     }
   }
 
-  // Signal 4: Rapid-fire user messages (< 3s apart = bot behavior)
-  const lastFiveUser = messages.filter(m => m.role === "user" && m.timestamp).slice(-5);
+  // Signal 4: Rapid-fire user messages (< 2s apart = bot behavior, tuned from 3s)
+  const lastFiveUser = messages.filter(m => m.role === "user" && m.timestamp).slice(-6);
   if (lastFiveUser.length >= 5) {
     let rapidCount = 0;
     for (let i = 1; i < lastFiveUser.length; i++) {
       const diff = new Date(lastFiveUser[i].timestamp!).getTime() - new Date(lastFiveUser[i - 1].timestamp!).getTime();
-      if (diff >= 0 && diff < 3000) rapidCount++;
+      if (diff >= 0 && diff < 2000) rapidCount++;
     }
-    if (rapidCount >= 3) {
-      return `rapid_fire: ${rapidCount} messages with <3s interval`;
+    if (rapidCount >= 4) {
+      return `rapid_fire: ${rapidCount} messages with <2s interval`;
     }
   }
 
@@ -1632,6 +1647,20 @@ serve(async (req) => {
         qualification_data: qualificationData,
         consecutive_fallbacks: newConsecutiveFallbacks,
       };
+
+      // --- GIBBERISH GUARD: block nonsensical AI output ---
+      if (isGibberish(responseContent)) {
+        console.warn(`[ai-agent-chat] 🚫 Gibberish detected in response for session ${session_id}, using fallback`);
+        responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: "[GIBBERISH_BLOCKED]",
+          status: "gibberish_blocked",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+      }
 
       // --- TRAINER MODE: wrap response in proposal ---
       let finalResponse = responseContent;
