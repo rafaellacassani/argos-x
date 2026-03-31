@@ -466,7 +466,7 @@ export default function Chats() {
   const { isSeller, userProfileId } = useUserRole();
   const { workspaceId } = useWorkspace();
   const isMobile = useIsMobile();
-  const { queue, waitingCount, claimItem, resolveItem } = useHumanSupportQueue();
+  const { queue, waitingCount, claimItem, resolveItem, fetchQueue } = useHumanSupportQueue();
   const [showQueueOnly, setShowQueueOnly] = useState(false);
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
@@ -3177,31 +3177,7 @@ export default function Chats() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {isMeta ? (
-                            <DropdownMenuItem
-                              onClick={async () => {
-                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                if (!chatLead?.id) {
-                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
-                                  return;
-                                }
-                                const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
-                                if (!confirmed) return;
-                                try {
-                                  await supabase
-                                    .from("agent_memories")
-                                    .update({ is_paused: true } as any)
-                                    .eq("lead_id", chatLead.id);
-                                  toast({ title: "✅ IA pausada para este contato" });
-                                } catch {
-                                  toast({ title: "Erro ao pausar IA", variant: "destructive" });
-                                }
-                              }}
-                            >
-                              <Ban className="w-4 h-4 mr-2" />
-                              Pausar IA para este contato
-                            </DropdownMenuItem>
-                          ) : (
+                          {!isMeta && (
                             <>
                               <DropdownMenuItem
                                 onClick={async () => {
@@ -3263,6 +3239,37 @@ export default function Chats() {
                               </DropdownMenuItem>
                             </>
                           )}
+                          {/* Pausar IA — universal (Meta + Evolution) */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                              if (!chatLead?.id) {
+                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                return;
+                              }
+                              const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
+                              if (!confirmed) return;
+                              try {
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId);
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
+                                toast({ title: "✅ IA pausada para este contato" });
+                              } catch {
+                                toast({ title: "Erro ao pausar IA", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Ban className="w-4 h-4 mr-2" />
+                            Pausar IA
+                          </DropdownMenuItem>
                           {/* Ignorar contato — universal (Meta + Evolution) */}
                           <DropdownMenuItem
                             onClick={async () => {
@@ -3337,6 +3344,7 @@ export default function Chats() {
                                 },
                               });
                               if (error) throw error;
+                              await fetchQueue();
                               toast({ title: "✅ IA retomada", description: "O agente de IA voltará a responder nesta conversa." });
                             } catch (err: any) {
                               toast({ title: "Erro ao retornar IA", description: err.message, variant: "destructive" });
@@ -3367,6 +3375,7 @@ export default function Chats() {
                               },
                             });
                             if (error) throw error;
+                            await fetchQueue();
                             toast({ title: "✅ IA pausada e conversa interceptada", description: "Ticket de suporte criado automaticamente." });
                           } catch (err: any) {
                             toast({ title: "Erro ao interceptar", description: err.message, variant: "destructive" });
