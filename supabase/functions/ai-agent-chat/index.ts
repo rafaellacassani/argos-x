@@ -114,33 +114,34 @@ function isGibberish(text: string): boolean {
 
 // --- AI Loop detection (IA-vs-IA) ---
 function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string | null {
-  if (!messages || messages.length < 6) return null;
+  if (!messages || messages.length < 8) return null;
 
   const now = Date.now();
   const fiveMinAgo = now - 5 * 60 * 1000;
 
-  // Signal 1: Excessive frequency — more than 10 exchanges in 5 minutes
+  // Signal 1: Excessive frequency — more than 14 exchanges in 5 minutes (tuned up from 10)
   const recentMessages = messages.filter(m => {
     if (!m.timestamp) return false;
     return new Date(m.timestamp).getTime() > fiveMinAgo;
   });
-  if (recentMessages.length > 10) {
+  if (recentMessages.length > 14) {
     return `excessive_frequency: ${recentMessages.length} messages in 5min`;
   }
 
-  // Signal 2: Repetitive content — last 4 user messages very similar
-  const lastUserMsgs = messages.filter(m => m.role === "user").slice(-4);
-  if (lastUserMsgs.length >= 4) {
-    const contents = lastUserMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
+  // Signal 2: Repetitive content — last 5 user messages very similar (tuned from 4)
+  // Exclude short messages (< 15 chars) like "ok", "sim", "fiz" to avoid false positives
+  const lastUserMsgs = messages.filter(m => m.role === "user").slice(-5);
+  const substantiveUserMsgs = lastUserMsgs.filter(m => (m.content || "").trim().length >= 15);
+  if (substantiveUserMsgs.length >= 4) {
+    const contents = substantiveUserMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
     const unique = new Set(contents);
     if (unique.size <= 1) {
-      return `user_repetition: identical messages x${lastUserMsgs.length}`;
+      return `user_repetition: identical messages x${substantiveUserMsgs.length}`;
     }
-    // Check similarity: if 3 out of 4 are the same
     const freq = new Map<string, number>();
     for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
     for (const [, count] of freq) {
-      if (count >= 3) return `user_repetition: ${count}/4 similar messages`;
+      if (count >= 4) return `user_repetition: ${count}/${substantiveUserMsgs.length} similar messages`;
     }
   }
 
