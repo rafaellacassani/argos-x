@@ -225,7 +225,7 @@ function NotificationColumn({ items, side, stagger }: { items: Notification[]; s
     <div className={`flex flex-col gap-3 ${side === "left" ? "items-end" : "items-start"}`}>
       <AnimatePresence mode="wait">
         {current && (
-          <NotificationCard key={`${current.id}-${currentIndex}`} notification={current} side={side} />
+          <WhatsAppBanner key={`${current.id}-${currentIndex}`} notification={current} side={side} />
         )}
       </AnimatePresence>
     </div>
