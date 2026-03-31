@@ -3188,10 +3188,19 @@ export default function Chats() {
                                 const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
                                 if (!confirmed) return;
                                 try {
+                                  // Pause all memories for this lead in this workspace
                                   await supabase
                                     .from("agent_memories")
                                     .update({ is_paused: true } as any)
-                                    .eq("lead_id", chatLead.id);
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                  // Also cancel pending followups
+                                  await supabase
+                                    .from("agent_followup_queue")
+                                    .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId)
+                                    .eq("status", "pending");
                                   toast({ title: "✅ IA pausada para este contato" });
                                 } catch {
                                   toast({ title: "Erro ao pausar IA", variant: "destructive" });
