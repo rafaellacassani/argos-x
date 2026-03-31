@@ -16,6 +16,7 @@ import { Loader2 } from "lucide-react";
 
 // Lazy-loaded pages
 const Auth = lazy(() => import("./pages/Auth"));
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 const Index = lazy(() => import("./pages/Index"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Leads = lazy(() => import("./pages/Leads"));
@@ -82,6 +83,7 @@ const App = () => (
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public pages */}
+                  <Route path="/" element={<LandingPage />} />
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/auth/reset-password" element={<ResetPassword />} />
                   <Route path="/admin/mindmap" element={
@@ -116,6 +118,7 @@ const App = () => (
                         <Suspense fallback={<PageLoader />}>
                           <Routes>
                             <Route path="/" element={<Index />} />
+                            <Route path="/home" element={<Index />} />
                             <Route path="/dashboard" element={<PageAccessGuard path="/dashboard"><Dashboard /></PageAccessGuard>} />
                             <Route path="/leads" element={<PageAccessGuard path="/leads"><Leads /></PageAccessGuard>} />
                             <Route path="/chats" element={<PageAccessGuard path="/chats"><Chats /></PageAccessGuard>} />
