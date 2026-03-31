@@ -2665,7 +2665,7 @@ export default function Chats() {
     }
 
     return result;
-  }, [chats, searchTerm, activeFilters, showQueueOnly, queue]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
