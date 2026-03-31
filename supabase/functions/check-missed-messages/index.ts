@@ -266,9 +266,10 @@ Deno.serve(async (req) => {
           if (agentData.chunks && Array.isArray(agentData.chunks)) {
             for (const chunk of agentData.chunks) {
               if (chunk && chunk.trim()) {
+                const sanitizedChunk = stripMarkdownLinks(chunk);
                 let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                   number: sendToNumber,
-                  text: chunk,
+                  text: sanitizedChunk,
                   delay: 0,
                   linkPreview: false,
                 });
@@ -276,7 +277,7 @@ Deno.serve(async (req) => {
                 if (!sendResult && sendToNumber !== remoteJid) {
                   sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                     number: remoteJid,
-                    text: chunk,
+                    text: sanitizedChunk,
                     delay: 0,
                     linkPreview: false,
                   });
