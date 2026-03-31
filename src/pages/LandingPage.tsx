@@ -231,14 +231,10 @@ export default function LandingPage() {
                 asChild
                 className="h-14 px-8 text-lg border-secondary/30 text-secondary hover:bg-secondary/5"
               >
-                <a
-                  href="https://wa.me/5511921539991?text=Olá,%20quero%20saber%20mais%20sobre%20o%20Argos%20X!"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <Link to="/cadastro">
                   <MessageCircle className="mr-2 w-5 h-5" />
                   Falar com Consultor
-                </a>
+                </Link>
               </Button>
             </div>
           </motion.div>
