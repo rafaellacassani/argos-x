@@ -1,34 +1,26 @@
 
 
-## Correção: Links duplicados nas respostas da IA no WhatsApp
+## Correção: Rota /login inexistente redireciona para /cadastro
 
 ### Problema
-A IA responde com links em formato Markdown (`[texto](url)`), mas o WhatsApp não renderiza Markdown de links. O resultado é o usuário ver algo como:
-
-> Acesse www.site.com.br/pagina www.site.com.br/pagina
-
-### Causa
-Não existe nenhuma sanitização de Markdown antes de enviar o texto via Evolution API. O texto sai direto da IA para o WhatsApp.
+A rota `/login` não existe no app. Quando clientes acessam `/login`:
+1. Caem no wildcard `/*` protegido por `ProtectedRoute`
+2. Como não estão logados, são redirecionados para `/auth?returnTo=/login`
+3. Ou, se o workspace não carrega a tempo, vão direto para `/cadastro`
 
 ### Solução
-Adicionar uma função `stripMarkdownLinks(text)` que converte `[texto](url)` → `url` (mantém apenas a URL) em **2 arquivos**:
+Adicionar `/login` como rota pública que renderiza a mesma página `Auth`.
 
-1. **`supabase/functions/whatsapp-webhook/index.ts`** — aplicar antes de enviar cada chunk/response (linhas ~1214 e ~1276)
-2. **`supabase/functions/check-missed-messages/index.ts`** — aplicar antes de enviar cada chunk/response (linhas ~265-267 e ~287-289)
-
-### Função de sanitização
-```typescript
-function stripMarkdownLinks(text: string): string {
-  // [texto](url) → url
-  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
-}
+### Alteração
+**`src/App.tsx`** -- adicionar uma linha junto às rotas públicas:
+```tsx
+<Route path="/login" element={<Auth />} />
 ```
 
-### Onde aplicar
-- Em `whatsapp-webhook`: antes de `sendWithFallback("sendText", { text: cleanText })` — aplicar `stripMarkdownLinks(cleanText)`
-- Em `check-missed-messages`: antes de cada `evolutionFetch(.../sendText/...)` — aplicar `stripMarkdownLinks(chunk)` e `stripMarkdownLinks(agentData.response)`
+Logo abaixo da rota existente `<Route path="/auth" element={<Auth />} />`.
 
 ### Impacto
-- Correção pontual, sem efeito colateral
-- Afeta apenas o texto enviado ao WhatsApp, não a memória/banco
+- Correção de 1 linha
+- Clientes que acessam `/login` veem a tela de login normalmente
+- Sem efeito colateral
 
