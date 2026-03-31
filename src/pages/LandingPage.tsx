@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle,
   Zap,
