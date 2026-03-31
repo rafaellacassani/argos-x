@@ -253,29 +253,31 @@ function MobileNotificationCarousel() {
   const current = notifications[currentIndex];
 
   return (
-    <div className="flex justify-center pointer-events-auto">
+    <div className="flex justify-center pointer-events-auto px-4">
       <AnimatePresence mode="wait">
         <motion.div
           key={current.id}
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
-          className="w-full max-w-[340px] bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-border/40 p-3.5"
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+          className="w-full max-w-[360px] bg-white/[0.97] backdrop-blur-2xl rounded-2xl p-3"
+          style={{ boxShadow: "0 2px 20px rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.06)" }}
         >
-          <div className="flex items-start gap-3">
-            <div className={`w-9 h-9 rounded-lg ${current.iconBg} flex items-center justify-center flex-shrink-0`}>
-              <current.icon className={`w-4.5 h-4.5 ${current.iconColor}`} />
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="w-5 h-5 rounded-md bg-[#25D366] flex items-center justify-center flex-shrink-0">
+              <MessageCircle className="w-3 h-3 text-white" />
+            </div>
+            <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wide">WhatsApp</span>
+            <span className="text-[10px] text-muted-foreground/50 ml-auto">{current.time}</span>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <div className={`w-10 h-10 rounded-full ${current.iconBg} flex items-center justify-center flex-shrink-0`}>
+              <current.icon className={`w-5 h-5 ${current.iconColor}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2 mb-0.5">
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${current.nichoColor}`}>
-                  {current.nicho}
-                </span>
-                <span className="text-[10px] text-muted-foreground flex-shrink-0">{current.time}</span>
-              </div>
-              <p className="text-xs font-semibold text-foreground leading-snug">{current.title}</p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{current.message}</p>
+              <p className="text-[13px] font-semibold text-foreground truncate">Argos X · {current.nicho}</p>
+              <p className="text-[12px] text-muted-foreground leading-snug mt-0.5 line-clamp-2">{current.message}</p>
             </div>
           </div>
         </motion.div>
