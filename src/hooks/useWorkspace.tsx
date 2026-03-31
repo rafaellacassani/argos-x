@@ -62,18 +62,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [isAdminViewing, setIsAdminViewing] = useState(false);
+  const [lastUserId, setLastUserId] = useState<string | null>(null);
 
-  const loadWorkspace = useCallback(async () => {
+  const loadWorkspace = useCallback(async (forceReload = false) => {
     if (!user) {
       setWorkspace(null);
       setMembership(null);
       setUserProfileId(null);
       setLoading(false);
       setIsAdminViewing(false);
+      setLastUserId(null);
+      return;
+    }
+
+    // Skip reload if same user and already loaded (token refresh only)
+    if (initialLoadDone && !forceReload && lastUserId === user.id && workspace) {
       return;
     }
 
     setLoading(true);
+    setLastUserId(user.id);
     try {
       // Check for admin workspace override via URL param
       const urlParams = new URLSearchParams(window.location.search);
