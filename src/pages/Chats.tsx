@@ -3201,8 +3201,33 @@ export default function Chats() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          {!isMeta && (
-                            <>
+                          {!isMeta && (() => {
+                            const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                            const isOptedOut = chatLead && (chatLead as any).is_opted_out === true;
+                            return isOptedOut ? (
+                              <DropdownMenuItem
+                                onClick={async () => {
+                                  const instName = selectedChat.instanceName || selectedInstance || "";
+                                  const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
+                                  if (!instName || !number) {
+                                    toast({ title: "Dados insuficientes para desbloquear", variant: "destructive" });
+                                    return;
+                                  }
+                                  try {
+                                    await blockContact(instName, number, false);
+                                    if (chatLead?.id) {
+                                      await supabase.from("leads").update({ is_opted_out: false } as any).eq("id", chatLead.id);
+                                    }
+                                    toast({ title: "Contato desbloqueado com sucesso" });
+                                  } catch {
+                                    toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
+                                  }
+                                }}
+                              >
+                                <ShieldOff className="w-4 h-4 mr-2" />
+                                Desbloquear contato
+                              </DropdownMenuItem>
+                            ) : (
                               <DropdownMenuItem
                                 onClick={async () => {
                                   const instName = selectedChat.instanceName || selectedInstance || "";
@@ -3214,24 +3239,12 @@ export default function Chats() {
                                   const confirmed = window.confirm("Tem certeza que deseja bloquear este contato? Ele não poderá mais enviar mensagens para esta instância.");
                                   if (!confirmed) return;
                                   try {
-                                    const ok = await blockContact(instName, number, true);
-                                    if (ok) {
-                                      toast({ title: "Contato bloqueado com sucesso" });
-                                      // Also pause AI for this contact
-                                      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                      if (chatLead?.id) {
-                                        await supabase
-                                          .from("agent_memories")
-                                          .update({ is_paused: true } as any)
-                                          .eq("lead_id", chatLead.id);
-                                        // Also mark lead as opted out
-                                        await supabase
-                                          .from("leads")
-                                          .update({ is_opted_out: true } as any)
-                                          .eq("id", chatLead.id);
-                                      }
-                                    } else {
-                                      toast({ title: "Erro ao bloquear contato", description: "Verifique se a instância está conectada.", variant: "destructive" });
+                                    await blockContact(instName, number, true);
+                                    toast({ title: "Contato bloqueado com sucesso" });
+                                    if (chatLead?.id) {
+                                      await supabase.from("agent_memories").update({ is_paused: true } as any).eq("lead_id", chatLead.id);
+                                      await supabase.from("leads").update({ is_opted_out: true } as any).eq("id", chatLead.id);
+                                      setSelectedChatAiPaused(true);
                                     }
                                   } catch (blockErr: any) {
                                     console.error("[Chats] Block error:", blockErr);
@@ -3242,58 +3255,66 @@ export default function Chats() {
                                 <Ban className="w-4 h-4 mr-2" />
                                 Bloquear contato
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={async () => {
-                                  const instName = selectedChat.instanceName || selectedInstance || "";
-                                  const number = selectedChat.phone?.replace(/\D/g, "") || selectedChat.remoteJid?.replace(/@.*/, "");
-                                  if (!instName || !number) {
-                                    toast({ title: "Dados insuficientes para desbloquear", variant: "destructive" });
-                                    return;
-                                  }
-                                  const ok = await blockContact(instName, number, false);
-                                  if (ok) {
-                                    toast({ title: "Contato desbloqueado com sucesso" });
-                                  } else {
-                                    toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
-                                  }
-                                }}
-                              >
-                                <ShieldOff className="w-4 h-4 mr-2" />
-                                Desbloquear contato
-                              </DropdownMenuItem>
-                            </>
+                            );
+                          })()}
+                          {/* Pausar / Retomar IA — universal (Meta + Evolution) */}
+                          {selectedChatAiPaused ? (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                if (!chatLead?.id) {
+                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                  return;
+                                }
+                                try {
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: false } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                  setSelectedChatAiPaused(false);
+                                  toast({ title: "✅ IA retomada para este contato" });
+                                } catch {
+                                  toast({ title: "Erro ao retomar IA", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              <Zap className="w-4 h-4 mr-2" />
+                              Retomar IA
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                if (!chatLead?.id) {
+                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                  return;
+                                }
+                                const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
+                                if (!confirmed) return;
+                                try {
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: true } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                  await supabase
+                                    .from("agent_followup_queue")
+                                    .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId)
+                                    .eq("status", "pending");
+                                  setSelectedChatAiPaused(true);
+                                  toast({ title: "✅ IA pausada para este contato" });
+                                } catch {
+                                  toast({ title: "Erro ao pausar IA", variant: "destructive" });
+                                }
+                              }}
+                            >
+                              <Ban className="w-4 h-4 mr-2" />
+                              Pausar IA
+                            </DropdownMenuItem>
                           )}
-                          {/* Pausar IA — universal (Meta + Evolution) */}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                              if (!chatLead?.id) {
-                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
-                                return;
-                              }
-                              const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
-                              if (!confirmed) return;
-                              try {
-                                await supabase
-                                  .from("agent_memories")
-                                  .update({ is_paused: true } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("workspace_id", workspaceId);
-                                await supabase
-                                  .from("agent_followup_queue")
-                                  .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("workspace_id", workspaceId)
-                                  .eq("status", "pending");
-                                toast({ title: "✅ IA pausada para este contato" });
-                              } catch {
-                                toast({ title: "Erro ao pausar IA", variant: "destructive" });
-                              }
-                            }}
-                          >
-                            <Ban className="w-4 h-4 mr-2" />
-                            Pausar IA
-                          </DropdownMenuItem>
                           {/* Ignorar contato — universal (Meta + Evolution) */}
                           <DropdownMenuItem
                             onClick={async () => {
