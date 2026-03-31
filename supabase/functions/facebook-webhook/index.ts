@@ -438,23 +438,39 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
     const agentData = await agentRes.json();
     console.log(`[Facebook Webhook] 📤 Agent response status: ${agentRes.status}, skipped: ${agentData.skipped || false}`);
 
-    // Send response via WhatsApp Cloud API
-    if (agentData.chunks && Array.isArray(agentData.chunks)) {
-      for (const chunk of agentData.chunks) {
-        if (!chunk?.trim()) continue;
-        await sendWhatsAppCloudMessage(phoneNumberId, accessToken, senderPhone, chunk);
-        if (agentData.chunks.length > 1) await new Promise(r => setTimeout(r, 1000));
+    // Send response via WhatsApp Cloud API (with media extraction)
+    const allChunks = agentData.chunks && Array.isArray(agentData.chunks)
+      ? agentData.chunks
+      : agentData.response ? [agentData.response] : [];
+
+    const sentContents: string[] = [];
+    for (const chunk of allChunks) {
+      if (!chunk?.trim()) continue;
+      const { medias, cleanText } = extractMediaFromChunk(chunk);
+
+      // Send clean text first
+      if (cleanText) {
+        await sendWhatsAppCloudMessage(phoneNumberId, accessToken, senderPhone, cleanText);
+        sentContents.push(cleanText);
       }
-      console.log(`[Facebook Webhook] ✅ Agent response sent via Cloud API`);
-    } else if (agentData.response) {
-      await sendWhatsAppCloudMessage(phoneNumberId, accessToken, senderPhone, agentData.response);
-      console.log(`[Facebook Webhook] ✅ Agent single response sent via Cloud API`);
+
+      // Send each extracted media
+      for (const media of medias) {
+        await new Promise(r => setTimeout(r, 500));
+        await sendWhatsAppCloudMedia(phoneNumberId, accessToken, senderPhone, media.url, media.type);
+        sentContents.push(`[${media.type}: ${media.url}]`);
+      }
+
+      if (allChunks.length > 1) await new Promise(r => setTimeout(r, 1000));
+    }
+
+    if (sentContents.length > 0) {
+      console.log(`[Facebook Webhook] ✅ Agent response sent via Cloud API (${sentContents.length} parts)`);
     }
 
     // Save outbound messages to meta_conversations
-    const responseText = agentData.response || (agentData.chunks ? agentData.chunks.join(" ") : null);
+    const responseText = sentContents.join(" ") || null;
     if (responseText) {
-      // Find meta_page for this phone_number_id
       const { data: metaPage } = await supabase
         .from("meta_pages")
         .select("id")
