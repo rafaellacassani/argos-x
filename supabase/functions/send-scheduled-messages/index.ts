@@ -54,7 +54,50 @@ Deno.serve(async (req) => {
 
         if (msg.channel_type === "whatsapp") {
           // Send via Evolution API
-          let number = (msg.phone_number || msg.remote_jid?.replace(/@s\.whatsapp\.net$/, "") || "").replace(/\D/g, "");
+          let number = "";
+          const rawJid = msg.remote_jid || "";
+          const isLid = rawJid.includes("@lid");
+
+          if (msg.phone_number) {
+            number = msg.phone_number.replace(/\D/g, "");
+          } else if (!isLid && rawJid) {
+            number = rawJid.replace(/@s\.whatsapp\.net$/, "").replace(/\D/g, "");
+          }
+
+          // If we still don't have a number (e.g. @lid without phone_number), resolve from lead
+          if (!number && rawJid && msg.workspace_id) {
+            console.log(`[send-scheduled] Resolving phone for @lid JID: ${rawJid}`);
+            const { data: lead } = await supabase
+              .from("leads")
+              .select("phone")
+              .eq("whatsapp_jid", rawJid)
+              .eq("workspace_id", msg.workspace_id)
+              .limit(1)
+              .maybeSingle();
+
+            if (lead?.phone) {
+              number = lead.phone.replace(/\D/g, "");
+              console.log(`[send-scheduled] Resolved from leads: ${number}`);
+            } else if (msg.instance_name) {
+              // Fallback: find phone from whatsapp_messages
+              const { data: lastMsg } = await supabase
+                .from("whatsapp_messages")
+                .select("remote_jid")
+                .eq("workspace_id", msg.workspace_id)
+                .eq("instance_name", msg.instance_name)
+                .like("remote_jid", "%@s.whatsapp.net")
+                .eq("from_me", false)
+                .order("timestamp", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              if (lastMsg?.remote_jid) {
+                number = lastMsg.remote_jid.replace(/@s\.whatsapp\.net$/, "").replace(/\D/g, "");
+                console.log(`[send-scheduled] Resolved from messages: ${number}`);
+              }
+            }
+          }
+
           // Normalize Brazilian numbers
           if ((number.length === 10 || number.length === 11) && !number.startsWith("55")) {
             number = "55" + number;
