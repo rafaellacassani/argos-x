@@ -10,6 +10,10 @@ function getSupabase() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 }
 
+function stripMarkdownLinks(text: string): string {
+  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+
 function jidToNumber(jid: string): string {
   return jid.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 }
