@@ -141,12 +141,13 @@ const testimonials = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/dashboard", { replace: true });
+      if (session) setIsLoggedIn(true);
     });
-  }, [navigate]);
+  }, []);
 
   return (
     <>
