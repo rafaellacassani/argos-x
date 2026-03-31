@@ -243,9 +243,10 @@ app.post("/", async (c) => {
           const chunks = agentData.chunks || [responseText];
           for (const chunk of chunks) {
             if (!chunk?.trim()) continue;
+            const sanitizedChunk = stripMarkdownLinks(chunk);
             const sendResult = await evolutionFetch(`/message/sendText/${agent.instance_name}`, "POST", {
               number: sessionPhone,
-              text: chunk,
+              text: sanitizedChunk,
               delay: 0,
               linkPreview: false,
             });
