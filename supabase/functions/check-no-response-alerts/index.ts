@@ -284,6 +284,27 @@ Deno.serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // ========================================
+    // BLOQUEAR TRIALS EXPIRADOS AUTOMATICAMENTE
+    // ========================================
+    try {
+      const { data: expiredTrials, error: blockErr } = await supabase
+        .from("workspaces")
+        .update({ blocked_at: new Date().toISOString() })
+        .in("plan_type", ["trialing", "trial_manual"])
+        .lt("trial_end", new Date().toISOString())
+        .is("blocked_at", null)
+        .select("id");
+
+      if (blockErr) {
+        console.error("[auto-block] Error blocking expired trials:", blockErr);
+      } else if (expiredTrials?.length) {
+        console.log(`[auto-block] Blocked ${expiredTrials.length} expired trial workspaces`);
+      }
+    } catch (e) {
+      console.error("[auto-block] Exception:", e);
+    }
+
+    // ========================================
     // PROCESSAR FILA DE WAIT DO SALESBOT
     // ========================================
     let waitQueueProcessed = 0;

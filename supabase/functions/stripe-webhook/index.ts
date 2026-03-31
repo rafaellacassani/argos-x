@@ -659,7 +659,68 @@ serve(async (req) => {
           .select("id");
 
         if (!updatedRows || updatedRows.length === 0) {
-          console.warn(`[stripe-webhook] subscription.updated: no workspace found for customer ${subscription.customer}, attempting invoice.payment_succeeded will handle it`);
+          console.warn(`[stripe-webhook] subscription.updated: no workspace found for customer ${subscription.customer}, trying fallback by email`);
+
+          // FALLBACK: buscar workspace pelo email do customer
+          try {
+            const customer = await stripe.customers.retrieve(subscription.customer as string) as Stripe.Customer;
+            const custEmail = customer.email;
+
+            if (custEmail) {
+              // Buscar user_profile pelo email
+              const { data: profile } = await supabaseAdmin
+                .from("user_profiles")
+                .select("user_id")
+                .eq("email", custEmail)
+                .limit(1)
+                .maybeSingle();
+
+              if (profile?.user_id) {
+                // Buscar workspace via workspace_members
+                const { data: member } = await supabaseAdmin
+                  .from("workspace_members")
+                  .select("workspace_id")
+                  .eq("user_id", profile.user_id)
+                  .limit(1)
+                  .maybeSingle();
+
+                if (member?.workspace_id) {
+                  // Vincular stripe_customer_id e aplicar updates
+                  updates.stripe_customer_id = subscription.customer as string;
+                  const { data: fallbackRows } = await supabaseAdmin
+                    .from("workspaces")
+                    .update(updates)
+                    .eq("id", member.workspace_id)
+                    .select("id");
+
+                  if (fallbackRows?.length) {
+                    console.log(`[stripe-webhook] subscription.updated FALLBACK SUCCESS: workspace ${fallbackRows[0].id} linked to customer ${subscription.customer} via email ${custEmail}`);
+
+                    // Move internal CRM lead if status is active
+                    if (status === "active") {
+                      const env2 = {
+                        STRIPE_PRICE_ESSENCIAL: Deno.env.get("STRIPE_PRICE_ESSENCIAL"),
+                        STRIPE_PRICE_NEGOCIO: Deno.env.get("STRIPE_PRICE_NEGOCIO"),
+                        STRIPE_PRICE_ESCALA: Deno.env.get("STRIPE_PRICE_ESCALA"),
+                      };
+                      const planConfig2 = getPlanConfig(updates.stripe_price_id || "", env2);
+                      await moveInternalLead(supabaseAdmin, custEmail, STAGE_ACTIVE, TAG_ACTIVE, planConfig2.plan_name);
+                    }
+                  } else {
+                    console.warn(`[stripe-webhook] subscription.updated FALLBACK: found workspace ${member.workspace_id} but update failed`);
+                  }
+                } else {
+                  console.warn(`[stripe-webhook] subscription.updated FALLBACK: user ${profile.user_id} has no workspace_members entry`);
+                }
+              } else {
+                console.warn(`[stripe-webhook] subscription.updated FALLBACK: no user_profile found for email ${custEmail}`);
+              }
+            } else {
+              console.warn(`[stripe-webhook] subscription.updated FALLBACK: customer ${subscription.customer} has no email`);
+            }
+          } catch (fallbackErr) {
+            console.error(`[stripe-webhook] subscription.updated FALLBACK error:`, fallbackErr);
+          }
         } else {
           console.log(`[stripe-webhook] subscription.updated: workspace ${updatedRows[0].id} updated to ${status}`);
         }
