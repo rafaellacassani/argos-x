@@ -471,6 +471,7 @@ export default function Chats() {
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
+  const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
   
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
