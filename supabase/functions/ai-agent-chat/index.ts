@@ -145,9 +145,9 @@ function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string
     }
   }
 
-  // Signal 3: Last 4 assistant messages very similar
-  const lastAssistantMsgs = messages.filter(m => m.role === "assistant").slice(-4);
-  if (lastAssistantMsgs.length >= 4) {
+  // Signal 3: Last 5 assistant messages very similar (tuned from 4)
+  const lastAssistantMsgs = messages.filter(m => m.role === "assistant").slice(-5);
+  if (lastAssistantMsgs.length >= 5) {
     const contents = lastAssistantMsgs.map(m => (m.content || "").trim().toLowerCase().substring(0, 100));
     const unique = new Set(contents);
     if (unique.size <= 1) {
@@ -156,20 +156,20 @@ function detectAILoop(messages: ChatMessage[], memoryUpdatedAt?: string): string
     const freq = new Map<string, number>();
     for (const c of contents) { freq.set(c, (freq.get(c) || 0) + 1); }
     for (const [, count] of freq) {
-      if (count >= 3) return `assistant_repetition: ${count}/4 similar responses`;
+      if (count >= 4) return `assistant_repetition: ${count}/5 similar responses`;
     }
   }
 
-  // Signal 4: Rapid-fire user messages (< 3s apart = bot behavior)
-  const lastFiveUser = messages.filter(m => m.role === "user" && m.timestamp).slice(-5);
+  // Signal 4: Rapid-fire user messages (< 2s apart = bot behavior, tuned from 3s)
+  const lastFiveUser = messages.filter(m => m.role === "user" && m.timestamp).slice(-6);
   if (lastFiveUser.length >= 5) {
     let rapidCount = 0;
     for (let i = 1; i < lastFiveUser.length; i++) {
       const diff = new Date(lastFiveUser[i].timestamp!).getTime() - new Date(lastFiveUser[i - 1].timestamp!).getTime();
-      if (diff >= 0 && diff < 3000) rapidCount++;
+      if (diff >= 0 && diff < 2000) rapidCount++;
     }
-    if (rapidCount >= 3) {
-      return `rapid_fire: ${rapidCount} messages with <3s interval`;
+    if (rapidCount >= 4) {
+      return `rapid_fire: ${rapidCount} messages with <2s interval`;
     }
   }
 
