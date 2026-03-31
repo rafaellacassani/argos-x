@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
+import { FloatingNotifications } from "@/components/landing/FloatingNotifications";
 import {
   MessageCircle,
   Zap,
@@ -192,7 +193,8 @@ export default function LandingPage() {
         </nav>
 
         {/* Hero */}
-        <section className="container mx-auto px-4 pt-20 pb-24 text-center">
+        <section className="container mx-auto px-4 pt-20 pb-24 text-center relative overflow-visible min-h-[600px]">
+          <FloatingNotifications />
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
