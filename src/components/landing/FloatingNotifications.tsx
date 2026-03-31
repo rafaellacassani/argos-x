@@ -286,13 +286,13 @@ export function FloatingNotifications() {
         <MobileNotificationCarousel />
       </div>
 
-      {/* Desktop: dual columns */}
-      <div className="hidden lg:flex absolute inset-0 pointer-events-none z-10">
-        <div className="absolute left-4 xl:left-8 top-8 pointer-events-auto">
+      {/* Desktop: fixed side notifications that persist while scrolling */}
+      <div className="hidden lg:block fixed inset-0 pointer-events-none z-40">
+        <div className="absolute left-4 xl:left-8 top-24 pointer-events-auto">
           <NotificationColumn items={leftNotifications} side="left" stagger={1500} />
         </div>
-        <div className="absolute right-4 xl:right-8 top-8 pointer-events-auto">
-          <NotificationColumn items={rightNotifications} side="right" stagger={3500} />
+        <div className="absolute right-4 xl:right-8 top-24 pointer-events-auto">
+          <NotificationColumn items={rightNotifications} side="right" stagger={4000} />
         </div>
       </div>
     </>
