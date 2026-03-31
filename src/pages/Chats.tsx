@@ -473,6 +473,29 @@ export default function Chats() {
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
   
+  // Query AI pause state when selected chat changes
+  useEffect(() => {
+    if (!selectedChat || !workspaceId) {
+      setSelectedChatAiPaused(false);
+      return;
+    }
+    const checkPauseState = async () => {
+      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+      if (!chatLead?.id) {
+        setSelectedChatAiPaused(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("agent_memories")
+        .select("is_paused")
+        .eq("lead_id", chatLead.id)
+        .eq("workspace_id", workspaceId)
+        .limit(1);
+      setSelectedChatAiPaused(data?.[0]?.is_paused === true);
+    };
+    checkPauseState();
+  }, [selectedChat?.id, workspaceId]);
+
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
 
