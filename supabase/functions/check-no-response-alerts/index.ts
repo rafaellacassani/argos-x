@@ -135,12 +135,32 @@ async function resumeFlowFromNode(
       switch (nodeType) {
         case "send_message": {
           const rawText = currentNode.data?.message || currentNode.data?.text || "";
-          if (rawText) {
-            const nodeInstance = currentNode.data?.instanceName || "";
-            const effectiveInstance = instanceName || nodeInstance;
-            const text = replaceVars(rawText, lead, effectiveInstance);
-            const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
-            if (number && effectiveInstance) {
+          const nodeMediaUrl = currentNode.data?.mediaUrl as string || "";
+          const nodeMediaType = currentNode.data?.mediaType as string || "";
+          const nodeInstance = currentNode.data?.instanceName || "";
+          const effectiveInstance = instanceName || nodeInstance;
+          const number = jidToNumber(lead.whatsapp_jid || lead.phone || "");
+
+          if (number && effectiveInstance) {
+            if (nodeMediaUrl && nodeMediaType) {
+              // Send media (audio, image, video, document)
+              const text = rawText ? replaceVars(rawText, lead, effectiveInstance) : "";
+              if (nodeMediaType === "audio") {
+                await sendWhatsAppMedia(effectiveInstance, number, "sendWhatsAppAudio", {
+                  audio: nodeMediaUrl, delay: 0,
+                });
+              } else {
+                await sendWhatsAppMedia(effectiveInstance, number, "sendMedia", {
+                  mediatype: nodeMediaType, media: nodeMediaUrl,
+                  caption: text || undefined, delay: 0,
+                });
+              }
+              await supabase.from("bot_execution_logs").insert({
+                bot_id: botId, lead_id: lead.id, node_id: currentNode.id,
+                status: "success", message: `[${nodeMediaType}] ${(text || nodeMediaUrl).substring(0, 150)}`, workspace_id: workspaceId,
+              });
+            } else if (rawText) {
+              const text = replaceVars(rawText, lead, effectiveInstance);
               await sendWhatsApp(effectiveInstance, number, text);
               await supabase.from("bot_execution_logs").insert({
                 bot_id: botId, lead_id: lead.id, node_id: currentNode.id,
