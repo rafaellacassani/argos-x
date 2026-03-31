@@ -2576,6 +2576,10 @@ export default function Chats() {
   const filteredChats = useMemo(() => {
     const normalizedSearchDigits = normalizeDigits(searchTerm);
     let result = chats.filter((chat) => {
+      // Hide ignored leads from main chat list
+      const chatLead = findLeadByChat(chat.remoteJid, chat.remoteJidAlt, chat.phone);
+      if (chatLead && (chatLead as any).is_ignored) return false;
+
       if (!searchTerm) return true;
       return (
         chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
