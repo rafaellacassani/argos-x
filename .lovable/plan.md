@@ -1,30 +1,34 @@
 
 
-## Fix: Redirect to /cadastro during session refresh
+## Correção: Links duplicados nas respostas da IA no WhatsApp
 
-### Problem
-When idle for a while, Supabase auto-refreshes the auth token. This triggers `onAuthStateChange` → `user` changes → `loadWorkspace()` re-runs. During this re-run, `workspace` is momentarily `null` while `loading` stays `false` (because `initialLoadDone` is already `true`). `ProtectedRoute` sees `hasWorkspace = false` and redirects to `/cadastro`.
+### Problema
+A IA responde com links em formato Markdown (`[texto](url)`), mas o WhatsApp não renderiza Markdown de links. O resultado é o usuário ver algo como:
 
-### Root cause
-In `useWorkspace.tsx` line 76-78, loading is only set to `true` on the **first** load. Subsequent `loadWorkspace` calls skip setting loading, so `ProtectedRoute` sees `hasWorkspace = false` + `loading = false` = redirect.
+> Acesse www.site.com.br/pagina www.site.com.br/pagina
 
-### Fix (1 file)
+### Causa
+Não existe nenhuma sanitização de Markdown antes de enviar o texto via Evolution API. O texto sai direto da IA para o WhatsApp.
 
-**`src/hooks/useWorkspace.tsx`** — Always set loading during workspace reload, OR preserve the previous workspace value during refresh:
+### Solução
+Adicionar uma função `stripMarkdownLinks(text)` que converte `[texto](url)` → `url` (mantém apenas a URL) em **2 arquivos**:
 
-Option (safest): Do NOT clear `workspace` to `null` during reloads. Only update if new data arrives or if there's a confirmed "no workspace" state. Specifically:
-- Remove the `setWorkspace(null)` / `setMembership(null)` at lines 198-199 and 203-204 when `initialLoadDone` is already `true`
-- Or simpler: always set `loading = true` in `loadWorkspace` (remove the `if (!initialLoadDone)` guard at line 76), so `ProtectedRoute` shows a spinner instead of redirecting
+1. **`supabase/functions/whatsapp-webhook/index.ts`** — aplicar antes de enviar cada chunk/response (linhas ~1214 e ~1276)
+2. **`supabase/functions/check-missed-messages/index.ts`** — aplicar antes de enviar cada chunk/response (linhas ~265-267 e ~287-289)
 
-The recommended approach: keep the previous workspace data during reloads, only clear on sign-out (`!user` at line 67). This avoids flicker and false redirects.
+### Função de sanitização
+```typescript
+function stripMarkdownLinks(text: string): string {
+  // [texto](url) → url
+  return text.replace(/\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '$2');
+}
+```
 
-### Technical detail
-- Lines 76-78: change `if (!initialLoadDone) { setLoading(true); }` to always `setLoading(true)`
-- This ensures `ProtectedRoute` shows the spinner during workspace refresh instead of redirecting
-- Alternative: keep workspace state intact during re-fetches by not calling `setWorkspace(null)` in catch/else blocks after initial load
+### Onde aplicar
+- Em `whatsapp-webhook`: antes de `sendWithFallback("sendText", { text: cleanText })` — aplicar `stripMarkdownLinks(cleanText)`
+- Em `check-missed-messages`: antes de cada `evolutionFetch(.../sendText/...)` — aplicar `stripMarkdownLinks(chunk)` e `stripMarkdownLinks(agentData.response)`
 
-### Impact
-- No visual change for normal usage
-- Eliminates the false redirect to `/cadastro` during token refresh
-- No other files need changes
+### Impacto
+- Correção pontual, sem efeito colateral
+- Afeta apenas o texto enviado ao WhatsApp, não a memória/banco
 
