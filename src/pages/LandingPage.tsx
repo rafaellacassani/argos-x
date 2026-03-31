@@ -463,7 +463,7 @@ export default function LandingPage() {
 
         {/* WhatsApp float */}
         <a
-          href="https://wa.me/5511921539991?text=Olá,%20quero%20saber%20mais%20sobre%20o%20Argos%20X!"
+          href="https://wa.me/5513954753979?text=Olá,%20quero%20saber%20mais%20sobre%20o%20Argos%20X!"
           target="_blank"
           rel="noopener noreferrer"
           className="fixed bottom-6 right-6 z-50 bg-[#25D366] hover:bg-[#20BA5A] text-white rounded-full p-4 shadow-lg hover:shadow-xl transition-all group"
