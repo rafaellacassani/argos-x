@@ -73,9 +73,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!initialLoadDone) {
-      setLoading(true);
-    }
+    setLoading(true);
     try {
       // Check for admin workspace override via URL param
       const urlParams = new URLSearchParams(window.location.search);
