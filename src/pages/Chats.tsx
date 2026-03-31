@@ -3292,7 +3292,7 @@ export default function Chats() {
                                   .eq("status", "pending");
                                 toast({ title: "✅ Contato ignorado e IA pausada" });
                                 // Deselect chat to go back to list
-                                setSelectedChatId(null);
+                                setSelectedChat(null);
                               } catch (err: any) {
                                 console.error("[Chats] Ignore error:", err);
                                 toast({ title: "Erro ao ignorar contato", variant: "destructive" });
