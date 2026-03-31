@@ -83,6 +83,7 @@ const App = () => (
               <Suspense fallback={<PageLoader />}>
                 <Routes>
                   {/* Public pages */}
+                  <Route path="/" element={<LandingPage />} />
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/auth/reset-password" element={<ResetPassword />} />
                   <Route path="/admin/mindmap" element={
