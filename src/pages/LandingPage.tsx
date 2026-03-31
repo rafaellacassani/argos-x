@@ -144,7 +144,7 @@ export default function LandingPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/home", { replace: true });
+      if (session) navigate("/dashboard", { replace: true });
     });
   }, [navigate]);
 
