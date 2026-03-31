@@ -1279,9 +1279,10 @@ app.post("/", async (c) => {
               const { medias: singleMedias, cleanText: singleCleanText } = extractMediaFromChunk(agentData.response);
 
               if (singleCleanText) {
+                const sanitizedSingleText = stripMarkdownLinks(singleCleanText);
                 const sendResult = await sendWithFallback("sendText", {
                   number: sendToNumber,
-                  text: singleCleanText,
+                  text: sanitizedSingleText,
                   delay: 0,
                   linkPreview: false,
                 });

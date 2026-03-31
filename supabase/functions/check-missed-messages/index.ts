@@ -289,16 +289,17 @@ Deno.serve(async (req) => {
             }
             console.log(`[check-missed] ✅ Response sent to ${sendToNumber}`);
           } else if (agentData.response) {
+            const sanitizedResponse = stripMarkdownLinks(agentData.response);
             let sendResult = await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
               number: sendToNumber,
-              text: agentData.response,
+              text: sanitizedResponse,
               delay: 0,
               linkPreview: false,
             });
             if (!sendResult && sendToNumber !== remoteJid) {
               await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
                 number: remoteJid,
-                text: agentData.response,
+                text: sanitizedResponse,
                 delay: 0,
                 linkPreview: false,
               });
