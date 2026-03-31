@@ -3272,6 +3272,37 @@ export default function Chats() {
                               </DropdownMenuItem>
                             </>
                           )}
+                          {/* Pausar IA — universal (Meta + Evolution) */}
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                              if (!chatLead?.id) {
+                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                return;
+                              }
+                              const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
+                              if (!confirmed) return;
+                              try {
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId);
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
+                                toast({ title: "✅ IA pausada para este contato" });
+                              } catch {
+                                toast({ title: "Erro ao pausar IA", variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Ban className="w-4 h-4 mr-2" />
+                            Pausar IA
+                          </DropdownMenuItem>
                           {/* Ignorar contato — universal (Meta + Evolution) */}
                           <DropdownMenuItem
                             onClick={async () => {
