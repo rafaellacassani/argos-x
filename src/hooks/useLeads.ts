@@ -216,6 +216,8 @@ export interface Lead {
   ai_score?: number | null;
   ai_score_label?: string | null;
   ai_scored_at?: string | null;
+  is_ignored?: boolean;
+  is_opted_out?: boolean;
 }
 
 export interface Funnel {
