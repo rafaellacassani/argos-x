@@ -18,6 +18,7 @@ import {
   Ban,
   ShieldOff,
   Zap,
+  EyeOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
