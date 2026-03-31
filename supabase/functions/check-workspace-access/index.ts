@@ -88,7 +88,8 @@ serve(async (req) => {
         break;
 
       case "trialing":
-        if (trialEnd && trialEnd > now) {
+        if (!trialEnd || trialEnd > now) {
+          // If trial_end is null, treat as valid trial (webhook may not have set it yet)
           allowed = true;
           reason = "trialing";
         } else {
