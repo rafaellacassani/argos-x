@@ -193,7 +193,7 @@ export default function LandingPage() {
         </nav>
 
         {/* Hero */}
-        <section className="container mx-auto px-4 pt-20 pb-24 text-center">
+        <section className="container mx-auto px-4 pt-20 pb-24 text-center relative overflow-hidden">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
