@@ -1647,6 +1647,20 @@ serve(async (req) => {
         consecutive_fallbacks: newConsecutiveFallbacks,
       };
 
+      // --- GIBBERISH GUARD: block nonsensical AI output ---
+      if (isGibberish(responseContent)) {
+        console.warn(`[ai-agent-chat] 🚫 Gibberish detected in response for session ${session_id}, using fallback`);
+        responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: "[GIBBERISH_BLOCKED]",
+          status: "gibberish_blocked",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id
+        });
+      }
+
       // --- TRAINER MODE: wrap response in proposal ---
       let finalResponse = responseContent;
       let finalStatus = "success";
