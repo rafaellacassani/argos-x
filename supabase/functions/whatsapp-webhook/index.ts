@@ -1216,9 +1216,10 @@ app.post("/", async (c) => {
 
                   // Send clean text first (if any)
                   if (cleanText) {
+                    const sanitizedText = stripMarkdownLinks(cleanText);
                     const sendResult = await sendWithFallback("sendText", {
                       number: sendToNumber,
-                      text: cleanText,
+                      text: sanitizedText,
                       delay: 0,
                       linkPreview: false,
                     });
