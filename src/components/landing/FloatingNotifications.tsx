@@ -240,16 +240,75 @@ function NotificationColumn({ items, side, stagger }: { items: Notification[]; s
   );
 }
 
+function MobileNotificationCarousel() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentIndex(0);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (currentIndex < 0) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % notifications.length);
+    }, 5000); // 5s per notification for comfortable reading
+    return () => clearInterval(interval);
+  }, [currentIndex]);
+
+  const current = notifications[currentIndex];
+
+  return (
+    <div className="flex justify-center pointer-events-auto">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={current.id}
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+          className="w-full max-w-[340px] bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-border/40 p-3.5"
+        >
+          <div className="flex items-start gap-3">
+            <div className={`w-9 h-9 rounded-lg ${current.iconBg} flex items-center justify-center flex-shrink-0`}>
+              <current.icon className={`w-4.5 h-4.5 ${current.iconColor}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-0.5">
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${current.nichoColor}`}>
+                  {current.nicho}
+                </span>
+                <span className="text-[10px] text-muted-foreground flex-shrink-0">{current.time}</span>
+              </div>
+              <p className="text-xs font-semibold text-foreground leading-snug">{current.title}</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed mt-0.5">{current.message}</p>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export function FloatingNotifications() {
   return (
-    <div className="hidden lg:flex absolute inset-0 pointer-events-none z-10">
-      <div className="absolute left-4 xl:left-8 top-8 pointer-events-auto">
-        <NotificationColumn items={leftNotifications} side="left" stagger={1500} />
+    <>
+      {/* Mobile: single centered notification */}
+      <div className="lg:hidden pointer-events-none z-10 mb-6">
+        <MobileNotificationCarousel />
       </div>
 
-      <div className="absolute right-4 xl:right-8 top-8 pointer-events-auto">
-        <NotificationColumn items={rightNotifications} side="right" stagger={3500} />
+      {/* Desktop: dual columns */}
+      <div className="hidden lg:flex absolute inset-0 pointer-events-none z-10">
+        <div className="absolute left-4 xl:left-8 top-8 pointer-events-auto">
+          <NotificationColumn items={leftNotifications} side="left" stagger={1500} />
+        </div>
+        <div className="absolute right-4 xl:right-8 top-8 pointer-events-auto">
+          <NotificationColumn items={rightNotifications} side="right" stagger={3500} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
