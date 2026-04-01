@@ -282,7 +282,7 @@ export default function Cadastro() {
         throw new Error(data.error || "Erro ao processar cadastro");
       }
 
-      // Fire Meta pixel
+      // Fire Meta pixel — InitiateCheckout
       const w = window as any;
       if (w.fbq) {
         const nameParts = form.name.trim().toLowerCase().split(/\s+/);
@@ -297,6 +297,15 @@ export default function Cadastro() {
           content_name: `Argos X - ${selectedPlan}`,
           currency: "BRL",
         }, { eventID: eventId });
+
+        // Fire Purchase event (deduplicado com CAPI via purchaseEventId)
+        if (data.purchaseEventId) {
+          w.fbq("track", "Purchase", {
+            value: data.planValue || currentPlan.priceNum?.replace(",", "."),
+            currency: "BRL",
+            content_name: `Argos X - ${currentPlan.name}`,
+          }, { eventID: data.purchaseEventId });
+        }
       }
 
       // Auto-login the user after successful checkout
