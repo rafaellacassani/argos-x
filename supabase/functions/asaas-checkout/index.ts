@@ -499,7 +499,7 @@ serve(async (req) => {
     if (workspaceCreated) {
       const purchaseEventId = `purchase_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
       sendMetaPurchaseEvent(supabaseAdmin, {
-        email, phone: cleanPhone, name, eventId: purchaseEventId, ip, userAgent, value: planInfo.value,
+        email, phone: cleanPhone, name, eventId: purchaseEventId, ip, userAgent, value: planInfo.value, fbp, fbc,
       }).catch(console.warn);
       // Return purchaseEventId so frontend can deduplicate
       return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id, workspaceCreated, purchaseEventId, planValue: planInfo.value }), {
