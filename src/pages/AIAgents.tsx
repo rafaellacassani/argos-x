@@ -166,10 +166,8 @@ export default function AIAgents() {
         onOpenChange={setCreateDialogOpen}
         onSubmit={(data: CreateAgentWizardData) => {
           createAgent.mutate(data as any, {
-            onSuccess: (newAgent) => {
+            onSuccess: () => {
               setCreateDialogOpen(false);
-              setDetailInitialTab("knowledge");
-              setSelectedAgent(newAgent as AIAgent);
             },
           });
         }}

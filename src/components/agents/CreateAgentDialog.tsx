@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -44,16 +45,21 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  Zap,
-  Clock,
-  Dice5,
   Loader2,
-  X,
   TrendingUp,
+  Plus,
+  Trash2,
+  Wifi,
+  BookOpen,
+  HandHeart,
+  Bell,
+  Smartphone,
+  Shield,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 
 export interface CreateAgentWizardData {
   name: string;
@@ -73,7 +79,16 @@ export interface CreateAgentWizardData {
   qualification_fields: any[];
   is_active: boolean;
   system_prompt: string;
-  // defaults kept from old
+  // Knowledge fields
+  knowledge_products: string;
+  knowledge_rules: string;
+  knowledge_extra: string;
+  // Greeting
+  on_start_actions: any[];
+  // Follow-up
+  followup_enabled: boolean;
+  followup_sequence: any[];
+  // defaults
   model: string;
   temperature: number;
   max_tokens: number;
@@ -91,7 +106,7 @@ interface CreateAgentDialogProps {
   isLoading?: boolean;
 }
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 8;
 
 const objectives = [
   { id: "atendimento", icon: MessageCircle, label: "Atendimento geral", desc: "Responde dúvidas e qualifica leads", type: "sdr" },
@@ -139,13 +154,16 @@ const defaultQualificationFields = [
 
 export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: CreateAgentDialogProps) {
   const { workspaceId } = useWorkspace();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [activateOnCreate, setActivateOnCreate] = useState(false);
+  const [connectionModalOpen, setConnectionModalOpen] = useState(false);
 
-  // Form state
+  // Step 1 — Objetivo e Nome
   const [selectedObjective, setSelectedObjective] = useState<string | null>(null);
   const [agentName, setAgentName] = useState("");
+
+  // Step 2 — Empresa
   const [companyName, setCompanyName] = useState("");
   const [niche, setNiche] = useState("");
   const [site, setSite] = useState("");
@@ -154,16 +172,39 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
   const [email, setEmail] = useState("");
   const [isDigital, setIsDigital] = useState(true);
   const [address, setAddress] = useState("");
+
+  // Step 3 — Comportamento
   const [agentRole, setAgentRole] = useState("");
   const [tone, setTone] = useState("consultivo");
   const [useEmojis, setUseEmojis] = useState(true);
   const [responseLength, setResponseLength] = useState("medium");
   const [responseDelay, setResponseDelay] = useState(-1);
-  const [respondTo, setRespondTo] = useState("all");
-  const [respondToStages, setRespondToStages] = useState<string[]>([]);
+
+  // Step 4 — Conhecimento
+  const [knowledgeProducts, setKnowledgeProducts] = useState("");
+  const [knowledgeRules, setKnowledgeRules] = useState("");
+  const [knowledgeExtra, setKnowledgeExtra] = useState("");
+
+  // Step 5 — Boas-vindas
+  const [greetingMessage, setGreetingMessage] = useState("");
+
+  // Step 6 — Follow-up
+  const [followupEnabled, setFollowupEnabled] = useState(false);
+  const [followupSequence, setFollowupSequence] = useState<{ delay_hours: number; message: string }[]>([
+    { delay_hours: 2, message: "Oi! Vi que ficou alguma dúvida, posso ajudar? 😊" },
+  ]);
+
+  // Step 7 — Conexão
   const [instanceName, setInstanceName] = useState("__all__");
+
+  // Step 8 — Ativação
+  const [activateOnCreate, setActivateOnCreate] = useState(true);
+
+  // Qualification (part of step 3 / collapsed)
   const [qualificationEnabled, setQualificationEnabled] = useState(false);
   const [qualificationFields, setQualificationFields] = useState(defaultQualificationFields);
+  const [respondTo, setRespondTo] = useState("all");
+  const [respondToStages, setRespondToStages] = useState<string[]>([]);
 
   // Fetch funnel stages
   const { data: stages = [] } = useQuery({
@@ -226,8 +267,14 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
     setInstanceName("__all__");
     setQualificationEnabled(false);
     setQualificationFields(defaultQualificationFields);
-    setActivateOnCreate(false);
+    setActivateOnCreate(true);
     setCancelDialogOpen(false);
+    setKnowledgeProducts("");
+    setKnowledgeRules("");
+    setKnowledgeExtra("");
+    setGreetingMessage("");
+    setFollowupEnabled(false);
+    setFollowupSequence([{ delay_hours: 2, message: "Oi! Vi que ficou alguma dúvida, posso ajudar? 😊" }]);
     onOpenChange(false);
   };
 
@@ -238,6 +285,9 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       case 3: return true;
       case 4: return true;
       case 5: return true;
+      case 6: return true;
+      case 7: return true;
+      case 8: return true;
       default: return false;
     }
   }, [step, selectedObjective, agentName, companyName, niche]);
@@ -287,10 +337,25 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
     } else if (address) {
       prompt += `- Endereço: ${address}\n`;
     }
+
+    if (knowledgeProducts.trim()) {
+      prompt += `\n## PRODUTOS E SERVIÇOS\n${knowledgeProducts}\n`;
+    }
+    if (knowledgeRules.trim()) {
+      prompt += `\n## REGRAS IMPORTANTES\n${knowledgeRules}\n`;
+    }
+    if (knowledgeExtra.trim()) {
+      prompt += `\n## INFORMAÇÕES ADICIONAIS\n${knowledgeExtra}\n`;
+    }
+
     return prompt;
-  }, [agentName, agentRole, companyName, niche, tone, useEmojis, instagram, site, phone, email, isDigital, address, objectiveData, selectedObjective]);
+  }, [agentName, agentRole, companyName, niche, tone, useEmojis, instagram, site, phone, email, isDigital, address, objectiveData, selectedObjective, knowledgeProducts, knowledgeRules, knowledgeExtra]);
 
   const handleCreate = () => {
+    const onStartActions = greetingMessage.trim()
+      ? [{ type: "send_message", message: greetingMessage.trim() }]
+      : [];
+
     const data: CreateAgentWizardData = {
       name: agentName,
       type: objectiveData?.type || "custom",
@@ -309,6 +374,12 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
       qualification_fields: qualificationFields.filter(f => f.active),
       is_active: activateOnCreate,
       system_prompt: generatedPrompt,
+      knowledge_products: knowledgeProducts,
+      knowledge_rules: knowledgeRules,
+      knowledge_extra: knowledgeExtra,
+      on_start_actions: onStartActions,
+      followup_enabled: followupEnabled,
+      followup_sequence: followupEnabled ? followupSequence : [],
       model: "openai/gpt-4o-mini",
       temperature: 0.7,
       max_tokens: 2048,
@@ -338,6 +409,19 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
   const lengthLabel = responseLengths.find(r => r.id === responseLength)?.label || responseLength;
   const activeQualFields = qualificationFields.filter(f => f.active);
 
+  const stepTitles = [
+    "O que sua IA vai fazer?",
+    "Sobre sua empresa",
+    "Como a IA deve se comportar?",
+    "O que a IA precisa saber?",
+    "Mensagem de boas-vindas",
+    "Reengajar quem não respondeu",
+    "Conectar ao WhatsApp",
+    "Tudo pronto!",
+  ];
+
+  const stepIcons = [Target, BookOpen, HandHeart, BookOpen, MessageCircle, Bell, Smartphone, Shield];
+
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
@@ -351,15 +435,94 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
               <span className="text-xs text-muted-foreground whitespace-nowrap">Etapa {step} de {TOTAL_STEPS}</span>
               <Progress value={(step / TOTAL_STEPS) * 100} className="h-2 flex-1" />
             </div>
+            <p className="text-xs text-muted-foreground mt-2">{stepTitles[step - 1]}</p>
           </div>
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {step === 1 && <Step1 selectedObjective={selectedObjective} setSelectedObjective={setSelectedObjective} agentName={agentName} setAgentName={setAgentName} />}
-            {step === 2 && <Step2 companyName={companyName} setCompanyName={setCompanyName} niche={niche} setNiche={setNiche} site={site} setSite={setSite} instagram={instagram} setInstagram={setInstagram} phone={phone} setPhone={setPhone} email={email} setEmail={setEmail} isDigital={isDigital} setIsDigital={setIsDigital} address={address} setAddress={setAddress} />}
-            {step === 3 && <Step3 agentRole={agentRole} setAgentRole={setAgentRole} tone={tone} setTone={setTone} useEmojis={useEmojis} setUseEmojis={setUseEmojis} responseLength={responseLength} setResponseLength={setResponseLength} responseDelay={responseDelay} setResponseDelay={setResponseDelay} />}
-            {step === 4 && <Step4 respondTo={respondTo} setRespondTo={setRespondTo} respondToStages={respondToStages} toggleStage={toggleStage} stages={stages} instanceName={instanceName} setInstanceName={setInstanceName} instances={instances} qualificationEnabled={qualificationEnabled} setQualificationEnabled={setQualificationEnabled} qualificationFields={qualificationFields} toggleQualField={toggleQualField} />}
-            {step === 5 && <Step5 agentName={agentName} objectiveLabel={objectiveData?.label || ""} companyName={companyName} niche={niche} toneLabel={toneLabel} lengthLabel={lengthLabel} delayLabel={delayLabel} instanceName={instanceName} respondTo={respondTo} qualificationEnabled={qualificationEnabled} activeQualFields={activeQualFields} generatedPrompt={generatedPrompt} activateOnCreate={activateOnCreate} setActivateOnCreate={setActivateOnCreate} />}
+            {step === 1 && (
+              <StepObjective
+                selectedObjective={selectedObjective}
+                setSelectedObjective={setSelectedObjective}
+                agentName={agentName}
+                setAgentName={setAgentName}
+              />
+            )}
+            {step === 2 && (
+              <StepCompany
+                companyName={companyName} setCompanyName={setCompanyName}
+                niche={niche} setNiche={setNiche}
+                site={site} setSite={setSite}
+                instagram={instagram} setInstagram={setInstagram}
+                phone={phone} setPhone={setPhone}
+                email={email} setEmail={setEmail}
+                isDigital={isDigital} setIsDigital={setIsDigital}
+                address={address} setAddress={setAddress}
+              />
+            )}
+            {step === 3 && (
+              <StepBehavior
+                agentRole={agentRole} setAgentRole={setAgentRole}
+                tone={tone} setTone={setTone}
+                useEmojis={useEmojis} setUseEmojis={setUseEmojis}
+                responseLength={responseLength} setResponseLength={setResponseLength}
+                responseDelay={responseDelay} setResponseDelay={setResponseDelay}
+                respondTo={respondTo} setRespondTo={setRespondTo}
+                respondToStages={respondToStages} toggleStage={toggleStage}
+                stages={stages}
+                qualificationEnabled={qualificationEnabled} setQualificationEnabled={setQualificationEnabled}
+                qualificationFields={qualificationFields} toggleQualField={toggleQualField}
+              />
+            )}
+            {step === 4 && (
+              <StepKnowledge
+                knowledgeProducts={knowledgeProducts} setKnowledgeProducts={setKnowledgeProducts}
+                knowledgeRules={knowledgeRules} setKnowledgeRules={setKnowledgeRules}
+                knowledgeExtra={knowledgeExtra} setKnowledgeExtra={setKnowledgeExtra}
+              />
+            )}
+            {step === 5 && (
+              <StepGreeting
+                greetingMessage={greetingMessage}
+                setGreetingMessage={setGreetingMessage}
+              />
+            )}
+            {step === 6 && (
+              <StepFollowup
+                followupEnabled={followupEnabled} setFollowupEnabled={setFollowupEnabled}
+                followupSequence={followupSequence} setFollowupSequence={setFollowupSequence}
+              />
+            )}
+            {step === 7 && (
+              <StepConnection
+                instanceName={instanceName} setInstanceName={setInstanceName}
+                instances={instances}
+                onConnectNew={() => setConnectionModalOpen(true)}
+              />
+            )}
+            {step === 8 && (
+              <StepReview
+                agentName={agentName}
+                objectiveLabel={objectiveData?.label || ""}
+                companyName={companyName}
+                niche={niche}
+                toneLabel={toneLabel}
+                lengthLabel={lengthLabel}
+                delayLabel={delayLabel}
+                instanceName={instanceName}
+                instances={instances}
+                respondTo={respondTo}
+                qualificationEnabled={qualificationEnabled}
+                activeQualFields={activeQualFields}
+                greetingMessage={greetingMessage}
+                followupEnabled={followupEnabled}
+                followupSequence={followupSequence}
+                knowledgeProducts={knowledgeProducts}
+                generatedPrompt={generatedPrompt}
+                activateOnCreate={activateOnCreate}
+                setActivateOnCreate={setActivateOnCreate}
+              />
+            )}
           </div>
 
           {/* Footer */}
@@ -376,7 +539,7 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
             ) : (
               <Button onClick={handleCreate} disabled={isLoading} className="gap-2">
                 {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {isLoading ? "Criando..." : "Criar Agente"}
+                {isLoading ? "Criando..." : activateOnCreate ? "Criar e Ativar" : "Criar Agente"}
               </Button>
             )}
           </div>
@@ -396,17 +559,27 @@ export function CreateAgentDialog({ open, onOpenChange, onSubmit, isLoading }: C
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Connection Modal for step 7 */}
+      <ConnectionModal
+        open={connectionModalOpen}
+        onOpenChange={setConnectionModalOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["whatsapp-instances-wizard"] });
+          setConnectionModalOpen(false);
+        }}
+      />
     </>
   );
 }
 
-/* ──────────────── STEP 1 ──────────────── */
-function Step1({ selectedObjective, setSelectedObjective, agentName, setAgentName }: any) {
+/* ──────────────── STEP 1: Objetivo e Nome ──────────────── */
+function StepObjective({ selectedObjective, setSelectedObjective, agentName, setAgentName }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-display font-semibold text-lg mb-1">Qual é o objetivo principal desta agente?</h3>
-        <p className="text-sm text-muted-foreground">Selecione o tipo de atendimento que ela fará</p>
+        <h3 className="font-display font-semibold text-lg mb-1">Qual é o objetivo principal desta IA?</h3>
+        <p className="text-sm text-muted-foreground">Escolha o que ela vai fazer por você</p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {objectives.map(obj => {
@@ -437,20 +610,21 @@ function Step1({ selectedObjective, setSelectedObjective, agentName, setAgentNam
         })}
       </div>
       <div className="space-y-2">
-        <Label>Nome desta agente</Label>
-        <Input placeholder="Ex: Sofia, Assistente Virtual, Atendente ECX" value={agentName} onChange={e => setAgentName(e.target.value)} />
+        <Label>Dê um nome para sua IA</Label>
+        <Input placeholder="Ex: Sofia, Atendente Virtual, Assistente" value={agentName} onChange={e => setAgentName(e.target.value)} />
+        <p className="text-xs text-muted-foreground">Esse é o nome que os clientes vão ver nas conversas</p>
       </div>
     </div>
   );
 }
 
-/* ──────────────── STEP 2 ──────────────── */
-function Step2({ companyName, setCompanyName, niche, setNiche, site, setSite, instagram, setInstagram, phone, setPhone, email, setEmail, isDigital, setIsDigital, address, setAddress }: any) {
+/* ──────────────── STEP 2: Empresa ──────────────── */
+function StepCompany({ companyName, setCompanyName, niche, setNiche, site, setSite, instagram, setInstagram, phone, setPhone, email, setEmail, isDigital, setIsDigital, address, setAddress }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-display font-semibold text-lg mb-1">Vamos apresentar sua empresa para a agente</h3>
-        <p className="text-sm text-muted-foreground">Ela usará estas informações automaticamente nas conversas</p>
+        <h3 className="font-display font-semibold text-lg mb-1">Conte sobre sua empresa</h3>
+        <p className="text-sm text-muted-foreground">A IA vai usar essas informações para responder melhor</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -458,7 +632,7 @@ function Step2({ companyName, setCompanyName, niche, setNiche, site, setSite, in
           <Input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Sua empresa" />
         </div>
         <div className="space-y-2">
-          <Label>Nicho/Segmento *</Label>
+          <Label>Tipo de negócio *</Label>
           <Input value={niche} onChange={e => setNiche(e.target.value)} placeholder="Ex: Clínica odontológica" list="niche-suggestions" />
           <datalist id="niche-suggestions">
             {nicheSuggestions.map(n => <option key={n} value={n} />)}
@@ -473,7 +647,7 @@ function Step2({ companyName, setCompanyName, niche, setNiche, site, setSite, in
           <Input value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@suaempresa" />
         </div>
         <div className="space-y-2">
-          <Label>Telefone de contato</Label>
+          <Label>Telefone</Label>
           <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
         </div>
         <div className="space-y-2">
@@ -497,17 +671,19 @@ function Step2({ companyName, setCompanyName, niche, setNiche, site, setSite, in
   );
 }
 
-/* ──────────────── STEP 3 ──────────────── */
-function Step3({ agentRole, setAgentRole, tone, setTone, useEmojis, setUseEmojis, responseLength, setResponseLength, responseDelay, setResponseDelay }: any) {
+/* ──────────────── STEP 3: Comportamento ──────────────── */
+function StepBehavior({ agentRole, setAgentRole, tone, setTone, useEmojis, setUseEmojis, responseLength, setResponseLength, responseDelay, setResponseDelay, respondTo, setRespondTo, respondToStages, toggleStage, stages, qualificationEnabled, setQualificationEnabled, qualificationFields, toggleQualField }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-display font-semibold text-lg mb-1">Como sua agente deve se comportar?</h3>
+        <h3 className="font-display font-semibold text-lg mb-1">Como a IA deve se comportar?</h3>
+        <p className="text-sm text-muted-foreground">Defina a personalidade e o jeito de responder</p>
       </div>
 
       <div className="space-y-2">
-        <Label>Cargo/função</Label>
-        <Input value={agentRole} onChange={e => setAgentRole(e.target.value)} placeholder="Ex: Consultora de Vendas, Atendente, Especialista" />
+        <Label>Qual o cargo da IA?</Label>
+        <Input value={agentRole} onChange={e => setAgentRole(e.target.value)} placeholder="Ex: Consultora de Vendas, Atendente" />
+        <p className="text-xs text-muted-foreground">Isso aparece no perfil da IA</p>
       </div>
 
       {/* Tone */}
@@ -553,8 +729,8 @@ function Step3({ agentRole, setAgentRole, tone, setTone, useEmojis, setUseEmojis
 
       {/* Response Delay */}
       <div className="space-y-2">
-        <Label>Tempo de resposta</Label>
-        <p className="text-xs text-muted-foreground">Respostas com pequeno atraso parecem mais naturais</p>
+        <Label>Velocidade de resposta</Label>
+        <p className="text-xs text-muted-foreground">Um pequeno atraso faz parecer mais humano</p>
         <RadioGroup value={String(responseDelay)} onValueChange={v => setResponseDelay(Number(v))} className="space-y-1">
           {delays.map(d => (
             <label key={d.value} className={cn("flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all",
@@ -568,25 +744,14 @@ function Step3({ agentRole, setAgentRole, tone, setTone, useEmojis, setUseEmojis
           ))}
         </RadioGroup>
       </div>
-    </div>
-  );
-}
 
-/* ──────────────── STEP 4 ──────────────── */
-function Step4({ respondTo, setRespondTo, respondToStages, toggleStage, stages, instanceName, setInstanceName, instances, qualificationEnabled, setQualificationEnabled, qualificationFields, toggleQualField }: any) {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-display font-semibold text-lg mb-1">Quando e para quem ela deve responder?</h3>
-      </div>
-
-      {/* Respond to */}
+      {/* Respond To */}
       <div className="space-y-2">
-        <Label>Quem ela responde</Label>
+        <Label>Quem a IA deve responder?</Label>
         <RadioGroup value={respondTo} onValueChange={setRespondTo} className="space-y-1">
           {[
             { value: "all", emoji: "👥", label: "Todos os contatos" },
-            { value: "new_leads", emoji: "🆕", label: "Apenas novos leads (primeiro contato)" },
+            { value: "new_leads", emoji: "🆕", label: "Apenas novos (primeiro contato)" },
             { value: "specific_stages", emoji: "🎯", label: "Leads em etapas específicas" },
           ].map(opt => (
             <label key={opt.value} className={cn("flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all",
@@ -611,34 +776,17 @@ function Step4({ respondTo, setRespondTo, respondToStages, toggleStage, stages, 
         )}
       </div>
 
-      {/* WhatsApp Instance */}
-      <div className="space-y-2">
-        <Label>Em qual número ela vai atender?</Label>
-        <Select value={instanceName} onValueChange={setInstanceName}>
-          <SelectTrigger><SelectValue placeholder="Todas as instâncias" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todas as instâncias</SelectItem>
-            {instances.map((i: any) => (
-              <SelectItem key={i.instance_name} value={i.instance_name}>
-                {i.display_name || i.instance_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Qualification */}
       <div className="space-y-3 rounded-lg border border-border p-4">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm font-medium">Qualificação inicial</Label>
-            <p className="text-xs text-muted-foreground">Fazer perguntas antes de responder livremente?</p>
+            <Label className="text-sm font-medium">Fazer perguntas antes de atender</Label>
+            <p className="text-xs text-muted-foreground">A IA coleta dados antes de responder livremente</p>
           </div>
           <Switch checked={qualificationEnabled} onCheckedChange={setQualificationEnabled} />
         </div>
         {qualificationEnabled && (
           <div className="space-y-2 mt-2">
-            <p className="text-xs text-muted-foreground">A agente coletará esses dados em sequência antes de entrar no atendimento livre</p>
             {qualificationFields.map((f: any) => (
               <label key={f.id} className="flex items-center gap-3 text-sm cursor-pointer p-2 rounded border border-border">
                 <Checkbox checked={f.active} onCheckedChange={() => toggleQualField(f.id)} />
@@ -655,32 +803,266 @@ function Step4({ respondTo, setRespondTo, respondToStages, toggleStage, stages, 
   );
 }
 
-/* ──────────────── STEP 5 ──────────────── */
-function Step5({ agentName, objectiveLabel, companyName, niche, toneLabel, lengthLabel, delayLabel, instanceName, respondTo, qualificationEnabled, activeQualFields, generatedPrompt, activateOnCreate, setActivateOnCreate }: any) {
-  const [promptOpen, setPromptOpen] = useState(false);
+/* ──────────────── STEP 4: Conhecimento ──────────────── */
+function StepKnowledge({ knowledgeProducts, setKnowledgeProducts, knowledgeRules, setKnowledgeRules, knowledgeExtra, setKnowledgeExtra }: any) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-display font-semibold text-lg mb-1">O que a IA precisa saber?</h3>
+        <p className="text-sm text-muted-foreground">
+          Quanto mais informação você colocar aqui, melhor ela vai responder seus clientes.
+          Pode preencher depois também.
+        </p>
+      </div>
 
-  const respondToLabel = respondTo === "all" ? "Todos" : respondTo === "new_leads" ? "Apenas novos leads" : "Etapas específicas";
+      <div className="space-y-2">
+        <Label>📦 Produtos e serviços</Label>
+        <Textarea
+          value={knowledgeProducts}
+          onChange={e => setKnowledgeProducts(e.target.value)}
+          placeholder={"Cole aqui seus produtos, preços e descrições.\n\nExemplo:\n- Limpeza dental: R$ 150\n- Clareamento: R$ 800\n- Implante: a partir de R$ 2.500\n- Consulta de avaliação: grátis"}
+          className="min-h-[120px]"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>📋 Regras da IA</Label>
+        <Textarea
+          value={knowledgeRules}
+          onChange={e => setKnowledgeRules(e.target.value)}
+          placeholder={"O que a IA pode e não pode fazer?\n\nExemplo:\n- Nunca dar desconto acima de 10%\n- Sempre pedir o nome antes de agendar\n- Não falar sobre concorrentes\n- Horário de atendimento: seg a sex, 8h às 18h"}
+          className="min-h-[100px]"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>💡 Informações extras</Label>
+        <Textarea
+          value={knowledgeExtra}
+          onChange={e => setKnowledgeExtra(e.target.value)}
+          placeholder={"Qualquer informação adicional importante.\n\nExemplo:\n- Aceitamos cartão, pix e boleto\n- Temos estacionamento gratuito\n- Trabalhamos com convênios X, Y e Z"}
+          className="min-h-[100px]"
+        />
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────── STEP 5: Boas-vindas ──────────────── */
+function StepGreeting({ greetingMessage, setGreetingMessage }: any) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-display font-semibold text-lg mb-1">Mensagem de boas-vindas</h3>
+        <p className="text-sm text-muted-foreground">
+          Quando alguém mandar a primeira mensagem, a IA envia essa saudação antes de tudo.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Mensagem inicial (opcional)</Label>
+        <Textarea
+          value={greetingMessage}
+          onChange={e => setGreetingMessage(e.target.value)}
+          placeholder={"Olá! 👋 Bem-vindo à [sua empresa]!\nComo posso te ajudar hoje?"}
+          className="min-h-[100px]"
+        />
+        <p className="text-xs text-muted-foreground">
+          💡 Se deixar em branco, a IA vai cumprimentar automaticamente de acordo com as informações da empresa.
+        </p>
+      </div>
+
+      <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground mb-1">Como funciona?</p>
+        <p>Essa mensagem é enviada assim que o cliente manda a primeira mensagem. Depois disso, a IA segue a conversa normalmente.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────── STEP 6: Follow-up ──────────────── */
+function StepFollowup({ followupEnabled, setFollowupEnabled, followupSequence, setFollowupSequence }: any) {
+  const addStep = () => {
+    setFollowupSequence((prev: any[]) => [
+      ...prev,
+      { delay_hours: 24, message: "" },
+    ]);
+  };
+
+  const removeStep = (index: number) => {
+    setFollowupSequence((prev: any[]) => prev.filter((_: any, i: number) => i !== index));
+  };
+
+  const updateStep = (index: number, field: string, value: any) => {
+    setFollowupSequence((prev: any[]) =>
+      prev.map((item: any, i: number) => i === index ? { ...item, [field]: value } : item)
+    );
+  };
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-display font-semibold text-lg mb-1">Tudo certo! Revise antes de criar</h3>
+        <h3 className="font-display font-semibold text-lg mb-1">Reengajar quem não respondeu</h3>
+        <p className="text-sm text-muted-foreground">
+          Se o cliente parar de responder, a IA pode enviar mensagens automáticas para tentar retomar a conversa.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-border p-4">
+        <div>
+          <Label className="text-sm font-medium">Ativar reengajamento automático</Label>
+          <p className="text-xs text-muted-foreground">A IA manda mensagens se o cliente sumir</p>
+        </div>
+        <Switch checked={followupEnabled} onCheckedChange={setFollowupEnabled} />
+      </div>
+
+      {followupEnabled && (
+        <div className="space-y-4">
+          <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+            <p>📌 <strong>Como funciona:</strong> Se o cliente não responder, a IA espera o tempo que você definir e manda a mensagem. Se ele continuar sem responder, manda a próxima, e assim por diante.</p>
+          </div>
+
+          {followupSequence.map((item: any, index: number) => (
+            <div key={index} className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Mensagem {index + 1}</span>
+                {followupSequence.length > 1 && (
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeStep(index)}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">Esperar quanto tempo?</Label>
+                <Select value={String(item.delay_hours)} onValueChange={v => updateStep(index, "delay_hours", Number(v))}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 hora</SelectItem>
+                    <SelectItem value="2">2 horas</SelectItem>
+                    <SelectItem value="4">4 horas</SelectItem>
+                    <SelectItem value="8">8 horas</SelectItem>
+                    <SelectItem value="12">12 horas</SelectItem>
+                    <SelectItem value="24">1 dia</SelectItem>
+                    <SelectItem value="48">2 dias</SelectItem>
+                    <SelectItem value="72">3 dias</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs">O que a IA vai mandar?</Label>
+                <Textarea
+                  value={item.message}
+                  onChange={e => updateStep(index, "message", e.target.value)}
+                  placeholder="Ex: Oi! Vi que ficou alguma dúvida, posso ajudar? 😊"
+                  className="min-h-[60px]"
+                />
+              </div>
+            </div>
+          ))}
+
+          {followupSequence.length < 5 && (
+            <Button variant="outline" size="sm" className="gap-2 w-full" onClick={addStep}>
+              <Plus className="w-4 h-4" />
+              Adicionar outra mensagem
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ──────────────── STEP 7: Conexão ──────────────── */
+function StepConnection({ instanceName, setInstanceName, instances, onConnectNew }: any) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-display font-semibold text-lg mb-1">Conectar ao WhatsApp</h3>
+        <p className="text-sm text-muted-foreground">
+          Escolha em qual número de WhatsApp essa IA vai atender.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Número de WhatsApp</Label>
+        <Select value={instanceName} onValueChange={setInstanceName}>
+          <SelectTrigger>
+            <SelectValue placeholder="Escolha um número" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">✅ Atender em todos os números</SelectItem>
+            {instances.map((i: any) => (
+              <SelectItem key={i.instance_name} value={i.instance_name}>
+                {i.display_name || i.instance_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {instances.length === 0 && (
+        <div className="rounded-lg bg-muted/50 border border-border p-4 text-center space-y-3">
+          <Wifi className="w-8 h-8 text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            Você ainda não tem nenhum WhatsApp conectado.
+          </p>
+        </div>
+      )}
+
+      <Button variant="outline" className="w-full gap-2" onClick={onConnectNew}>
+        <Plus className="w-4 h-4" />
+        Conectar novo número de WhatsApp
+      </Button>
+
+      <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+        <p>💡 Se preferir, pode pular essa etapa e conectar depois em <strong>Configurações → Conexões</strong>.</p>
+      </div>
+    </div>
+  );
+}
+
+/* ──────────────── STEP 8: Revisão e Ativação ──────────────── */
+function StepReview({
+  agentName, objectiveLabel, companyName, niche, toneLabel, lengthLabel, delayLabel,
+  instanceName, instances, respondTo, qualificationEnabled, activeQualFields,
+  greetingMessage, followupEnabled, followupSequence, knowledgeProducts,
+  generatedPrompt, activateOnCreate, setActivateOnCreate,
+}: any) {
+  const [promptOpen, setPromptOpen] = useState(false);
+
+  const respondToLabel = respondTo === "all" ? "Todos" : respondTo === "new_leads" ? "Apenas novos leads" : "Etapas específicas";
+  const instanceLabel = instanceName === "__all__"
+    ? "Todos os números"
+    : (instances.find((i: any) => i.instance_name === instanceName)?.display_name || instanceName);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-display font-semibold text-lg mb-1">Tudo pronto! Confira o resumo</h3>
+        <p className="text-sm text-muted-foreground">Revise as informações e ative sua IA</p>
       </div>
 
       <div className="rounded-xl border border-border p-5 space-y-3 text-sm">
         <div className="flex items-start gap-2"><span>🤖</span><span><strong>{agentName}</strong> — {objectiveLabel}</span></div>
         <div className="flex items-start gap-2"><span>🏢</span><span>{companyName} ({niche})</span></div>
         <div className="flex items-start gap-2"><span>🎭</span><span>Tom: {toneLabel} — Respostas: {lengthLabel} — Delay: {delayLabel}</span></div>
-        <div className="flex items-start gap-2"><span>📱</span><span>Instância: {instanceName || "Todas"}</span></div>
+        <div className="flex items-start gap-2"><span>📱</span><span>WhatsApp: {instanceLabel}</span></div>
         <div className="flex items-start gap-2"><span>👥</span><span>Responde para: {respondToLabel}</span></div>
-        <div className="flex items-start gap-2"><span>📋</span><span>Qualificação: {qualificationEnabled ? `Ativa — ${activeQualFields.length} campo(s)` : "Inativa"}</span></div>
+        <div className="flex items-start gap-2"><span>📋</span><span>Perguntas iniciais: {qualificationEnabled ? `Sim — ${activeQualFields.length} campo(s)` : "Não"}</span></div>
+        <div className="flex items-start gap-2"><span>📦</span><span>Base de conhecimento: {knowledgeProducts.trim() ? "Preenchida ✅" : "Em branco (pode editar depois)"}</span></div>
+        <div className="flex items-start gap-2"><span>👋</span><span>Boas-vindas: {greetingMessage.trim() ? "Definida ✅" : "Automática"}</span></div>
+        <div className="flex items-start gap-2"><span>🔔</span><span>Reengajamento: {followupEnabled ? `Ativo — ${followupSequence.length} mensagem(ns)` : "Desativado"}</span></div>
       </div>
 
       <Collapsible open={promptOpen} onOpenChange={setPromptOpen}>
         <CollapsibleTrigger asChild>
           <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground w-full justify-start">
             <ChevronDown className={cn("w-4 h-4 transition-transform", promptOpen && "rotate-180")} />
-            Ver prompt gerado automaticamente
+            Ver instruções geradas automaticamente
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
@@ -690,10 +1072,17 @@ function Step5({ agentName, objectiveLabel, companyName, niche, toneLabel, lengt
         </CollapsibleContent>
       </Collapsible>
 
-      <label className="flex items-center gap-2 text-sm cursor-pointer">
-        <Checkbox checked={activateOnCreate} onCheckedChange={(v) => setActivateOnCreate(!!v)} />
-        Ativar agente imediatamente após criar
-      </label>
+      <div className="flex items-center justify-between rounded-lg border-2 border-primary/20 bg-primary/5 p-4">
+        <div>
+          <Label className="text-sm font-semibold">Ativar IA agora</Label>
+          <p className="text-xs text-muted-foreground">Ela começa a responder automaticamente</p>
+        </div>
+        <Switch checked={activateOnCreate} onCheckedChange={setActivateOnCreate} />
+      </div>
+
+      <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground text-center">
+        💡 Você pode <strong>pausar, editar ou testar</strong> sua IA a qualquer momento no painel.
+      </div>
     </div>
   );
 }
