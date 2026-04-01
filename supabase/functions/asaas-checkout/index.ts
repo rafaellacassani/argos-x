@@ -107,7 +107,7 @@ async function sha256(value: string): Promise<string> {
 
 async function sendMetaConversionEvent(
   supabaseAdmin: any,
-  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string }
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; fbp?: string; fbc?: string }
 ) {
   try {
     const { data: ws } = await supabaseAdmin
