@@ -53,7 +53,7 @@ export interface CreateAgentData {
   resume_keyword?: string;
   message_split_enabled?: boolean;
   message_split_length?: number;
-  // New wizard fields
+  // Wizard fields
   main_objective?: string;
   company_info?: Record<string, any>;
   niche?: string;
@@ -69,6 +69,14 @@ export interface CreateAgentData {
   qualification_fields?: any[];
   is_active?: boolean;
   cloud_24h_window_only?: boolean;
+  // Knowledge
+  knowledge_products?: string;
+  knowledge_rules?: string;
+  knowledge_extra?: string;
+  // Greeting & Follow-up
+  on_start_actions?: any[];
+  followup_enabled?: boolean;
+  followup_sequence?: any[];
 }
 
 export function useAIAgents() {
