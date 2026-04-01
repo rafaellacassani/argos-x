@@ -469,7 +469,7 @@ serve(async (req) => {
     }
 
     // 8. Return success (no redirect needed)
-    return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id }), {
+    return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id, workspaceCreated }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
