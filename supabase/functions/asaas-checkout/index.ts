@@ -118,19 +118,7 @@ async function sendMetaConversionEvent(
 
     if (!ws?.meta_pixel_id || !ws?.meta_conversions_token) return;
 
-    let cleanPhone = params.phone.replace(/\D/g, "");
-    if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
-      cleanPhone = "55" + cleanPhone;
-    }
-
-    const [emailHash, phoneHash] = await Promise.all([
-      sha256(params.email),
-      sha256(cleanPhone),
-    ]);
-
-    const nameParts = (params.name || "").trim().toLowerCase().split(/\s+/);
-    const fnHash = nameParts[0] ? await sha256(nameParts[0]) : null;
-    const lnHash = nameParts.length > 1 ? await sha256(nameParts.slice(1).join(" ")) : null;
+    const userData = await buildMetaUserData(params);
 
     const payload = {
       data: [{
@@ -139,14 +127,7 @@ async function sendMetaConversionEvent(
         event_id: params.eventId,
         event_source_url: "https://argosx.com.br/cadastro",
         action_source: "website",
-        user_data: {
-          em: [emailHash],
-          ph: [phoneHash],
-          ...(fnHash ? { fn: [fnHash] } : {}),
-          ...(lnHash ? { ln: [lnHash] } : {}),
-          client_ip_address: params.ip,
-          client_user_agent: params.userAgent,
-        },
+        user_data: userData,
         custom_data: { content_name: "Argos X Trial Checkout (Asaas)", currency: "BRL", value: 0 },
       }],
     };
@@ -158,6 +139,68 @@ async function sendMetaConversionEvent(
   } catch (e) {
     console.warn("Meta CAPI event failed:", e);
   }
+}
+
+async function sendMetaPurchaseEvent(
+  supabaseAdmin: any,
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; value: number }
+) {
+  try {
+    const { data: ws } = await supabaseAdmin
+      .from("workspaces")
+      .select("meta_pixel_id, meta_conversions_token")
+      .eq("id", INTERNAL_WS)
+      .single();
+
+    if (!ws?.meta_pixel_id || !ws?.meta_conversions_token) return;
+
+    const userData = await buildMetaUserData(params);
+
+    const payload = {
+      data: [{
+        event_name: "Purchase",
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: params.eventId,
+        event_source_url: "https://argosx.com.br/cadastro",
+        action_source: "website",
+        user_data: userData,
+        custom_data: { content_name: "Argos X Trial", currency: "BRL", value: params.value },
+      }],
+    };
+
+    await fetch(
+      `https://graph.facebook.com/v21.0/${ws.meta_pixel_id}/events?access_token=${ws.meta_conversions_token}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+    );
+    console.log("Meta CAPI Purchase event sent:", params.eventId);
+  } catch (e) {
+    console.warn("Meta CAPI Purchase event failed:", e);
+  }
+}
+
+async function buildMetaUserData(params: { email: string; phone: string; name: string; ip: string; userAgent: string }) {
+  let cleanPhone = params.phone.replace(/\D/g, "");
+  if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+    cleanPhone = "55" + cleanPhone;
+  }
+
+  const [emailHash, phoneHash] = await Promise.all([
+    sha256(params.email),
+    sha256(cleanPhone),
+  ]);
+
+  const nameParts = (params.name || "").trim().toLowerCase().split(/\s+/);
+  const fnHash = nameParts[0] ? await sha256(nameParts[0]) : null;
+  const lnHash = nameParts.length > 1 ? await sha256(nameParts.slice(1).join(" ")) : null;
+
+  return {
+    em: [emailHash],
+    ph: [phoneHash],
+    ...(fnHash ? { fn: [fnHash] } : {}),
+    ...(lnHash ? { ln: [lnHash] } : {}),
+    client_ip_address: params.ip,
+    client_user_agent: params.userAgent,
+  };
 }
 
 serve(async (req) => {
