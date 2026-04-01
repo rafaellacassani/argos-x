@@ -27,7 +27,7 @@ export function ProtectedRoute({ children, skipWorkspaceCheck }: ProtectedRouteP
   }
 
   if (!skipWorkspaceCheck && !hasWorkspace) {
-    return <Navigate to="/cadastro" replace />;
+    return <Navigate to="/aguardando-ativacao" replace />;
   }
 
   return <>{children}</>;

@@ -299,7 +299,21 @@ export default function Cadastro() {
         }, { eventID: eventId });
       }
 
-      setStep("success");
+      // Auto-login the user after successful checkout
+      const { supabase: sb } = await import("@/integrations/supabase/client");
+      const { error: loginError } = await sb.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      });
+
+      if (loginError) {
+        // If auto-login fails, show success and let user login manually
+        setStep("success");
+      } else {
+        // Redirect to activation waiting page
+        navigate("/aguardando-ativacao", { replace: true });
+        return;
+      }
     } catch (err: any) {
       toast({ title: err.message || "Erro ao criar conta", variant: "destructive" });
     } finally {
