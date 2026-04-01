@@ -451,11 +451,13 @@ serve(async (req) => {
     const asaasCustomerId = subscription.customer || payment.customer;
     const planName = meta.plan || "essencial";
 
-    // Get customer email for CRM updates
+    // Get customer details for CRM updates and Meta CAPI
     let customerEmail = "";
+    let customerPhone = "";
     try {
       const customer = await asaasFetch(`/customers/${asaasCustomerId}`);
       customerEmail = customer.email || "";
+      customerPhone = customer.mobilePhone || customer.phone || "";
     } catch (e) {
       console.warn("[asaas-webhook] Could not fetch customer:", e);
     }
