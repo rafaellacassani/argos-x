@@ -182,11 +182,18 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, sourceUrl } = body;
+    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, creditCard, creditCardHolderInfo } = body;
 
     if (!name || !phone || !email || !companyName || !password || !plan || !cpfCnpj) {
       return new Response(
         JSON.stringify({ error: "Todos os campos são obrigatórios." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!creditCard?.number || !creditCard?.holderName || !creditCard?.expiryMonth || !creditCard?.expiryYear || !creditCard?.ccv) {
+      return new Response(
+        JSON.stringify({ error: "Dados do cartão são obrigatórios." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -206,7 +213,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate CPF/CNPJ (basic: 11 or 14 digits)
     const cpfCnpjClean = cpfCnpj.replace(/\D/g, "");
     if (cpfCnpjClean.length !== 11 && cpfCnpjClean.length !== 14) {
       return new Response(
@@ -295,10 +301,10 @@ serve(async (req) => {
 
     console.log("Asaas customer created:", asaasCustomer.id);
 
-    // 4. Create Asaas subscription with nextDueDate = today + 7 days (trial)
+    // 4. Create Asaas subscription with creditCard (transparent checkout)
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 7);
-    const nextDueDate = trialEnd.toISOString().split("T")[0]; // YYYY-MM-DD
+    const nextDueDate = trialEnd.toISOString().split("T")[0];
 
     const externalReference = JSON.stringify({
       user_id: userId,
@@ -308,17 +314,43 @@ serve(async (req) => {
       signup_phone: cleanPhone,
     });
 
+    // Prepare creditCardHolderInfo with required fields
+    const holderPhone = creditCardHolderInfo?.phone?.replace(/\D/g, "") || cleanPhone;
+    let holderMobilePhone = holderPhone;
+    if (holderMobilePhone.length >= 10 && !holderMobilePhone.startsWith("55")) {
+      holderMobilePhone = "55" + holderMobilePhone;
+    }
+
+    const subscriptionPayload: Record<string, any> = {
+      customer: asaasCustomer.id,
+      billingType: "UNDEFINED",
+      value: planInfo.value,
+      cycle: "MONTHLY",
+      nextDueDate,
+      description: `Argos X - Plano ${planInfo.display}`,
+      externalReference,
+      creditCard: {
+        holderName: creditCard.holderName,
+        number: creditCard.number,
+        expiryMonth: creditCard.expiryMonth,
+        expiryYear: creditCard.expiryYear,
+        ccv: creditCard.ccv,
+      },
+      creditCardHolderInfo: {
+        name: creditCardHolderInfo?.name || name,
+        email: creditCardHolderInfo?.email || email,
+        cpfCnpj: creditCardHolderInfo?.cpfCnpj || cpfCnpjClean,
+        mobilePhone: holderMobilePhone,
+        postalCode: creditCardHolderInfo?.postalCode || "00000000",
+        addressNumber: creditCardHolderInfo?.addressNumber || "0",
+        phone: holderMobilePhone,
+      },
+      remoteIp: ip,
+    };
+
     const asaasSubscription = await asaasFetch("/subscriptions", {
       method: "POST",
-      body: JSON.stringify({
-        customer: asaasCustomer.id,
-        billingType: "CREDIT_CARD",
-        value: planInfo.value,
-        cycle: "MONTHLY",
-        nextDueDate,
-        description: `Argos X - Plano ${planInfo.display}`,
-        externalReference,
-      }),
+      body: JSON.stringify(subscriptionPayload),
     });
 
     console.log("Asaas subscription created:", asaasSubscription.id);
@@ -362,28 +394,8 @@ serve(async (req) => {
       }
     }
 
-    // 8. Get the invoiceUrl from the first payment of the subscription
-    // Asaas creates a payment automatically — we need to fetch it
-    let invoiceUrl = "";
-
-    // Try to get the first payment's invoiceUrl
-    const payments = await asaasFetch(`/payments?subscription=${asaasSubscription.id}&limit=1`);
-    if (payments.data?.length > 0 && payments.data[0].invoiceUrl) {
-      invoiceUrl = payments.data[0].invoiceUrl;
-    } else {
-      // Fallback: use the subscription's payment link if available
-      invoiceUrl = asaasSubscription.invoiceUrl || asaasSubscription.bankSlipUrl || "";
-    }
-
-    if (!invoiceUrl) {
-      console.warn("No invoiceUrl found, falling back to Asaas checkout page");
-      // Ultimate fallback: direct to Asaas payment page
-      invoiceUrl = `https://www.asaas.com/c/${asaasSubscription.id}`;
-    }
-
-    console.log("Redirecting to Asaas invoice:", invoiceUrl);
-
-    return new Response(JSON.stringify({ url: invoiceUrl }), {
+    // 8. Return success (no redirect needed)
+    return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
