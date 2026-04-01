@@ -369,7 +369,80 @@ serve(async (req) => {
 
     console.log("Asaas subscription created:", asaasSubscription.id);
 
-    // 5. (client_invite already saved above before subscription creation)
+    // 5. Create workspace immediately (don't wait for webhook)
+    let workspaceCreated = false;
+    try {
+      const planConfig = {
+        essencial: { lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 },
+        negocio: { lead_limit: 2000, whatsapp_limit: 3, user_limit: 1, ai_interactions_limit: 2000 },
+        escala: { lead_limit: 999999, whatsapp_limit: 999, user_limit: 3, ai_interactions_limit: 10000 },
+      }[plan] || { lead_limit: 300, whatsapp_limit: 1, user_limit: 1, ai_interactions_limit: 500 };
+
+      const slug = companyName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      const { data: workspace, error: wsError } = await supabaseAdmin
+        .from("workspaces")
+        .insert({
+          name: companyName,
+          slug: `${slug}-${Date.now()}`,
+          created_by: userId,
+          plan_name: plan,
+          plan_type: "trialing",
+          subscription_status: "trialing",
+          asaas_customer_id: asaasCustomer.id,
+          asaas_subscription_id: asaasSubscription.id,
+          payment_provider: "asaas",
+          lead_limit: planConfig.lead_limit,
+          whatsapp_limit: planConfig.whatsapp_limit,
+          user_limit: planConfig.user_limit,
+          ai_interactions_limit: planConfig.ai_interactions_limit,
+          trial_end: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .select()
+        .single();
+
+      if (wsError) throw wsError;
+
+      // Add user as admin
+      await supabaseAdmin.from("workspace_members").upsert(
+        { workspace_id: workspace.id, user_id: userId, role: "admin", accepted_at: new Date().toISOString() },
+        { onConflict: "workspace_id,user_id" }
+      );
+
+      // Create default funnel + stages
+      const { data: funnel } = await supabaseAdmin
+        .from("funnels")
+        .insert({ name: "Funil de Vendas", workspace_id: workspace.id, is_default: true })
+        .select()
+        .single();
+
+      if (funnel) {
+        const defaultStages = [
+          { name: "Leads de Entrada", color: "#6B7280", position: 0 },
+          { name: "Em Qualificação", color: "#0171C3", position: 1 },
+          { name: "Lixo", color: "#EF4444", position: 2, is_loss_stage: true },
+          { name: "Reunião Agendada", color: "#F59E0B", position: 3 },
+          { name: "Venda Realizada", color: "#22C55E", position: 4, is_win_stage: true },
+          { name: "No Show", color: "#8B5CF6", position: 5 },
+        ];
+        for (const stage of defaultStages) {
+          await supabaseAdmin.from("funnel_stages").insert({
+            funnel_id: funnel.id,
+            workspace_id: workspace.id,
+            ...stage,
+          });
+        }
+      }
+
+      workspaceCreated = true;
+      console.log("Workspace created inline:", workspace.id);
+    } catch (e) {
+      console.error("Workspace creation failed (webhook will retry):", e);
+    }
 
     // 6. Fire-and-forget: internal CRM lead + Meta CAPI
     createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(console.warn);
