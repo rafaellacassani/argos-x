@@ -333,6 +333,17 @@ export default function Cadastro() {
                   />
                 </div>
                 <div>
+                  <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
+                  <Input
+                    id="cpfCnpj"
+                    value={form.cpfCnpj}
+                    onChange={(e) => setForm((p) => ({ ...p, cpfCnpj: applyCpfCnpjMask(e.target.value) }))}
+                    placeholder="000.000.000-00"
+                    required
+                    maxLength={18}
+                  />
+                </div>
+                <div>
                   <Label htmlFor="password">Senha</Label>
                   <div className="relative">
                     <Input
