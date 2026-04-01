@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +42,59 @@ async function asaasFetch(path: string) {
     headers: { "Content-Type": "application/json", access_token: apiKey },
   });
   return res.json();
+}
+
+const META_PIXEL_ID = "1294031842786070";
+const META_ACCESS_TOKEN_KEY = "META_CONVERSION_TOKEN";
+
+async function sha256Hash(value: string): Promise<string> {
+  const data = new TextEncoder().encode(value.trim().toLowerCase());
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sendMetaPurchaseEvent(email: string, phone: string, paymentValue: number, paymentId: string, planName: string) {
+  try {
+    const accessToken = Deno.env.get(META_ACCESS_TOKEN_KEY);
+    if (!accessToken) {
+      console.warn("[asaas-webhook] META_CONVERSION_TOKEN not set, skipping CAPI");
+      return;
+    }
+
+    const userData: Record<string, string[]> = {};
+    if (email) userData.em = [await sha256Hash(email)];
+    if (phone) {
+      let clean = phone.replace(/\D/g, "");
+      if (clean.length >= 10 && !clean.startsWith("55")) clean = "55" + clean;
+      userData.ph = [await sha256Hash(clean)];
+    }
+
+    const eventId = `asaas_pay_${paymentId}`;
+    const payload = {
+      data: [{
+        event_name: "Purchase",
+        event_time: Math.floor(Date.now() / 1000),
+        event_id: eventId,
+        event_source_url: "https://argosx.com.br/cadastro",
+        action_source: "website",
+        user_data: userData,
+        custom_data: {
+          currency: "BRL",
+          value: paymentValue,
+          content_name: `Plano ${planName}`,
+        },
+      }],
+    };
+
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${META_PIXEL_ID}/events?access_token=${accessToken}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+    );
+    const result = await res.json();
+    console.log("[asaas-webhook] Meta CAPI Purchase sent:", JSON.stringify(result));
+  } catch (e) {
+    console.warn("[asaas-webhook] Meta CAPI Purchase failed:", e);
+  }
 }
 
 async function moveInternalLead(
@@ -397,11 +451,13 @@ serve(async (req) => {
     const asaasCustomerId = subscription.customer || payment.customer;
     const planName = meta.plan || "essencial";
 
-    // Get customer email for CRM updates
+    // Get customer details for CRM updates and Meta CAPI
     let customerEmail = "";
+    let customerPhone = "";
     try {
       const customer = await asaasFetch(`/customers/${asaasCustomerId}`);
       customerEmail = customer.email || "";
+      customerPhone = customer.mobilePhone || customer.phone || "";
     } catch (e) {
       console.warn("[asaas-webhook] Could not fetch customer:", e);
     }
@@ -448,6 +504,11 @@ serve(async (req) => {
             await moveInternalLead(supabaseAdmin, customerEmail, STAGE_ACTIVE, TAG_ACTIVE, planName);
           }
         }
+
+        // Send Meta CAPI Purchase event
+        const paymentValue = payment.value || 0;
+        sendMetaPurchaseEvent(customerEmail, customerPhone, paymentValue, payment.id, planName).catch(console.warn);
+
         break;
       }
 
