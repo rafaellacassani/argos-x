@@ -450,6 +450,18 @@ serve(async (req) => {
       sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, name, eventId, ip, userAgent }).catch(console.warn);
     }
 
+    // 6b. Fire Purchase event via CAPI after workspace creation
+    if (workspaceCreated) {
+      const purchaseEventId = `purchase_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+      sendMetaPurchaseEvent(supabaseAdmin, {
+        email, phone: cleanPhone, name, eventId: purchaseEventId, ip, userAgent, value: planInfo.value,
+      }).catch(console.warn);
+      // Return purchaseEventId so frontend can deduplicate
+      return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id, workspaceCreated, purchaseEventId, planValue: planInfo.value }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // 7. Save attribution data
     const attribution = body.attribution;
     if (attribution && typeof attribution === 'object' && Object.keys(attribution).length > 0) {
