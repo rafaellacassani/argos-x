@@ -151,7 +151,7 @@ export default function Cadastro() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.email || !form.companyName || !form.password) {
+    if (!form.name || !form.phone || !form.email || !form.companyName || !form.cpfCnpj || !form.password) {
       toast({ title: "Preencha todos os campos", variant: "destructive" });
       return;
     }
