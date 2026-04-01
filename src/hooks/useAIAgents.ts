@@ -135,6 +135,12 @@ export function useAIAgents() {
           qualification_fields: agentData.qualification_fields || [],
           is_active: agentData.is_active ?? false,
           cloud_24h_window_only: agentData.cloud_24h_window_only ?? true,
+          knowledge_products: agentData.knowledge_products || '',
+          knowledge_rules: agentData.knowledge_rules || '',
+          knowledge_extra: agentData.knowledge_extra || '',
+          on_start_actions: agentData.on_start_actions || [],
+          followup_enabled: agentData.followup_enabled ?? false,
+          followup_sequence: agentData.followup_sequence || [],
         })
         .select()
         .single();
