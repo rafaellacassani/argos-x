@@ -368,20 +368,7 @@ serve(async (req) => {
 
     console.log("Asaas subscription created:", asaasSubscription.id);
 
-    // 5. Save client_invite record
-    await supabaseAdmin.from("client_invites").insert({
-      email,
-      full_name: name,
-      phone: cleanPhone || null,
-      plan,
-      invite_type: "asaas_checkout",
-      status: "pending_payment",
-      created_by: userId,
-      terms_accepted_at: new Date().toISOString(),
-      terms_accepted_ip: ip,
-      terms_accepted_user_agent: userAgent,
-      terms_version: "v1.0-2026-04-01",
-    });
+    // 5. (client_invite already saved above before subscription creation)
 
     // 6. Fire-and-forget: internal CRM lead + Meta CAPI
     createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(console.warn);
