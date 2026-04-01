@@ -77,52 +77,69 @@ serve(async (req) => {
     if (isAdmin) {
       // ── Full workspace deletion (same logic as admin-clients delete-workspace) ──
 
-      // 1. Cancel Stripe subscription
+      // 1. Cancel payment provider subscription
       const { data: wsData } = await supabaseAdmin
         .from("workspaces")
-        .select("stripe_customer_id, stripe_subscription_id")
+        .select("stripe_customer_id, stripe_subscription_id, payment_provider, asaas_subscription_id")
         .eq("id", workspaceId)
         .single();
 
       if (wsData) {
-        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-        if (stripeKey && (wsData.stripe_subscription_id || wsData.stripe_customer_id)) {
+        if (wsData.payment_provider === "asaas" && wsData.asaas_subscription_id) {
+          // Cancel Asaas subscription
           try {
-            const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-
-            if (wsData.stripe_subscription_id) {
-              try {
-                await stripe.subscriptions.cancel(wsData.stripe_subscription_id);
-                console.log("Stripe subscription canceled:", wsData.stripe_subscription_id);
-              } catch (e) {
-                console.warn("Failed to cancel subscription:", e);
-              }
-            }
-
-            if (wsData.stripe_customer_id) {
-              try {
-                const subs = await stripe.subscriptions.list({
-                  customer: wsData.stripe_customer_id,
-                  status: "active",
-                  limit: 10,
-                });
-                for (const sub of subs.data) {
-                  await stripe.subscriptions.cancel(sub.id);
-                }
-                const trialSubs = await stripe.subscriptions.list({
-                  customer: wsData.stripe_customer_id,
-                  status: "trialing",
-                  limit: 10,
-                });
-                for (const sub of trialSubs.data) {
-                  await stripe.subscriptions.cancel(sub.id);
-                }
-              } catch (e) {
-                console.warn("Failed to cancel customer subscriptions:", e);
-              }
+            const asaasKey = Deno.env.get("ASAAS_API_KEY");
+            if (asaasKey) {
+              await fetch(`https://api.asaas.com/v3/subscriptions/${wsData.asaas_subscription_id}`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", access_token: asaasKey },
+              });
+              console.log("Asaas subscription canceled:", wsData.asaas_subscription_id);
             }
           } catch (e) {
-            console.warn("Stripe cleanup failed:", e);
+            console.warn("Failed to cancel Asaas subscription:", e);
+          }
+        } else {
+          // Cancel Stripe subscription (existing logic)
+          const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+          if (stripeKey && (wsData.stripe_subscription_id || wsData.stripe_customer_id)) {
+            try {
+              const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
+
+              if (wsData.stripe_subscription_id) {
+                try {
+                  await stripe.subscriptions.cancel(wsData.stripe_subscription_id);
+                  console.log("Stripe subscription canceled:", wsData.stripe_subscription_id);
+                } catch (e) {
+                  console.warn("Failed to cancel subscription:", e);
+                }
+              }
+
+              if (wsData.stripe_customer_id) {
+                try {
+                  const subs = await stripe.subscriptions.list({
+                    customer: wsData.stripe_customer_id,
+                    status: "active",
+                    limit: 10,
+                  });
+                  for (const sub of subs.data) {
+                    await stripe.subscriptions.cancel(sub.id);
+                  }
+                  const trialSubs = await stripe.subscriptions.list({
+                    customer: wsData.stripe_customer_id,
+                    status: "trialing",
+                    limit: 10,
+                  });
+                  for (const sub of trialSubs.data) {
+                    await stripe.subscriptions.cancel(sub.id);
+                  }
+                } catch (e) {
+                  console.warn("Failed to cancel customer subscriptions:", e);
+                }
+              }
+            } catch (e) {
+              console.warn("Stripe cleanup failed:", e);
+            }
           }
         }
       }

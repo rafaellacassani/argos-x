@@ -3609,6 +3609,8 @@ export type Database = {
           ai_interactions_used: number | null
           ai_reset_at: string | null
           alert_instance_name: string | null
+          asaas_customer_id: string | null
+          asaas_subscription_id: string | null
           blocked_at: string | null
           created_at: string
           created_by: string
@@ -3624,6 +3626,7 @@ export type Database = {
           name: string
           onboarding_completed: boolean | null
           onboarding_step: number | null
+          payment_provider: string | null
           plan_name: string | null
           plan_type: string
           slug: string
@@ -3642,6 +3645,8 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
           blocked_at?: string | null
           created_at?: string
           created_by: string
@@ -3657,6 +3662,7 @@ export type Database = {
           name: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
+          payment_provider?: string | null
           plan_name?: string | null
           plan_type?: string
           slug: string
@@ -3675,6 +3681,8 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
           blocked_at?: string | null
           created_at?: string
           created_by?: string
@@ -3690,6 +3698,7 @@ export type Database = {
           name?: string
           onboarding_completed?: boolean | null
           onboarding_step?: number | null
+          payment_provider?: string | null
           plan_name?: string | null
           plan_type?: string
           slug?: string

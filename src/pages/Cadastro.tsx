@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Eye, EyeOff, ChevronDown, Lock, Check } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,6 +33,16 @@ function applyPhoneMask(value: string): string {
   if (digits.length <= 2) return `(${digits}`;
   if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function applyCpfCnpjMask(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  if (digits.length <= 11) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
 }
 
 const PIXEL_ID = "1294031842786070";
@@ -119,6 +129,7 @@ export default function Cadastro() {
     phone: "",
     email: "",
     companyName: "",
+    cpfCnpj: "",
     password: "",
     confirmPassword: "",
   });
@@ -140,7 +151,7 @@ export default function Cadastro() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.email || !form.companyName || !form.password) {
+    if (!form.name || !form.phone || !form.email || !form.companyName || !form.cpfCnpj || !form.password) {
       toast({ title: "Preencha todos os campos", variant: "destructive" });
       return;
     }
@@ -163,7 +174,7 @@ export default function Cadastro() {
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/signup-checkout`,
+        `https://${projectId}.supabase.co/functions/v1/asaas-checkout`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -172,6 +183,7 @@ export default function Cadastro() {
             phone: `${selectedCountry.code}${form.phone.replace(/\D/g, "")}`,
             email: form.email,
             companyName: form.companyName,
+            cpfCnpj: form.cpfCnpj.replace(/\D/g, ""),
             password: form.password,
             plan: selectedPlan,
             eventId,
@@ -318,6 +330,17 @@ export default function Cadastro() {
                     placeholder="Sua empresa"
                     required
                     maxLength={100}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="cpfCnpj">CPF ou CNPJ</Label>
+                  <Input
+                    id="cpfCnpj"
+                    value={form.cpfCnpj}
+                    onChange={(e) => setForm((p) => ({ ...p, cpfCnpj: applyCpfCnpjMask(e.target.value) }))}
+                    placeholder="000.000.000-00"
+                    required
+                    maxLength={18}
                   />
                 </div>
                 <div>
