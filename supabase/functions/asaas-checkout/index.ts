@@ -227,7 +227,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, creditCard, creditCardHolderInfo } = body;
+    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, creditCard, creditCardHolderInfo, fbp, fbc } = body;
 
     if (!name || !phone || !email || !companyName || !password || !plan || !cpfCnpj) {
       return new Response(
