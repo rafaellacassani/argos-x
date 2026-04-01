@@ -172,7 +172,7 @@ export default function ProfileSettings() {
   const handleEnrollMfa = async () => {
     setEnrollingMfa(true);
     try {
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", issuer: "Argos X" });
       if (error) throw error;
       setMfaQr(data.totp.qr_code);
       setMfaSecret(data.totp.secret);
