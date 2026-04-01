@@ -178,7 +178,7 @@ async function sendMetaPurchaseEvent(
   }
 }
 
-async function buildMetaUserData(params: { email: string; phone: string; name: string; ip: string; userAgent: string }) {
+async function buildMetaUserData(params: { email: string; phone: string; name: string; ip: string; userAgent: string; fbp?: string; fbc?: string }) {
   let cleanPhone = params.phone.replace(/\D/g, "");
   if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
     cleanPhone = "55" + cleanPhone;
@@ -200,6 +200,8 @@ async function buildMetaUserData(params: { email: string; phone: string; name: s
     ...(lnHash ? { ln: [lnHash] } : {}),
     client_ip_address: params.ip,
     client_user_agent: params.userAgent,
+    ...(params.fbp ? { fbp: params.fbp } : {}),
+    ...(params.fbc ? { fbc: params.fbc } : {}),
   };
 }
 
