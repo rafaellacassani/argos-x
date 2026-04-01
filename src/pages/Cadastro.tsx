@@ -174,7 +174,7 @@ export default function Cadastro() {
 
       const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
       const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/signup-checkout`,
+        `https://${projectId}.supabase.co/functions/v1/asaas-checkout`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -183,6 +183,7 @@ export default function Cadastro() {
             phone: `${selectedCountry.code}${form.phone.replace(/\D/g, "")}`,
             email: form.email,
             companyName: form.companyName,
+            cpfCnpj: form.cpfCnpj.replace(/\D/g, ""),
             password: form.password,
             plan: selectedPlan,
             eventId,
