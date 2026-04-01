@@ -36,6 +36,7 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const CreateWorkspace = lazy(() => import("./pages/CreateWorkspace"));
+const AguardandoAtivacao = lazy(() => import("./pages/AguardandoAtivacao"));
 const AdminMindMap = lazy(() => import("./pages/AdminMindMap"));
 const ProjectDocs = lazy(() => import("./pages/ProjectDocs"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
