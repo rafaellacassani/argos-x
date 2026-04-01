@@ -504,6 +504,11 @@ serve(async (req) => {
             await moveInternalLead(supabaseAdmin, customerEmail, STAGE_ACTIVE, TAG_ACTIVE, planName);
           }
         }
+
+        // Send Meta CAPI Purchase event
+        const paymentValue = payment.value || 0;
+        sendMetaPurchaseEvent(customerEmail, customerPhone, paymentValue, payment.id, planName).catch(console.warn);
+
         break;
       }
 
