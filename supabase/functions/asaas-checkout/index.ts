@@ -306,13 +306,26 @@ serve(async (req) => {
     trialEnd.setDate(trialEnd.getDate() + 7);
     const nextDueDate = trialEnd.toISOString().split("T")[0];
 
-    const externalReference = JSON.stringify({
-      user_id: userId,
-      workspace_id: "pending",
-      plan,
-      company_name: companyName,
-      signup_phone: cleanPhone,
-    });
+    // Asaas limits externalReference to 100 chars — use compact format
+    const externalReference = `${userId}|${plan}|${companyName.slice(0, 20)}|${cleanPhone}`;
+
+    // Save full reference data in client_invites metadata for later retrieval
+    await supabaseAdmin.from("client_invites").upsert(
+      {
+        email,
+        full_name: name,
+        phone: cleanPhone || null,
+        plan,
+        invite_type: "asaas_checkout",
+        status: "pending_payment",
+        created_by: userId,
+        terms_accepted_at: new Date().toISOString(),
+        terms_accepted_ip: ip,
+        terms_accepted_user_agent: userAgent,
+        terms_version: "v1.0-2026-04-01",
+      },
+      { onConflict: "email" }
+    ).catch(console.warn);
 
     // Prepare creditCardHolderInfo with required fields
     const holderPhone = creditCardHolderInfo?.phone?.replace(/\D/g, "") || cleanPhone;
