@@ -107,7 +107,7 @@ async function sha256(value: string): Promise<string> {
 
 async function sendMetaConversionEvent(
   supabaseAdmin: any,
-  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string }
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; fbp?: string; fbc?: string }
 ) {
   try {
     const { data: ws } = await supabaseAdmin
@@ -143,7 +143,7 @@ async function sendMetaConversionEvent(
 
 async function sendMetaPurchaseEvent(
   supabaseAdmin: any,
-  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; value: number }
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; value: number; fbp?: string; fbc?: string }
 ) {
   try {
     const { data: ws } = await supabaseAdmin
@@ -178,7 +178,7 @@ async function sendMetaPurchaseEvent(
   }
 }
 
-async function buildMetaUserData(params: { email: string; phone: string; name: string; ip: string; userAgent: string }) {
+async function buildMetaUserData(params: { email: string; phone: string; name: string; ip: string; userAgent: string; fbp?: string; fbc?: string }) {
   let cleanPhone = params.phone.replace(/\D/g, "");
   if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
     cleanPhone = "55" + cleanPhone;
@@ -200,6 +200,8 @@ async function buildMetaUserData(params: { email: string; phone: string; name: s
     ...(lnHash ? { ln: [lnHash] } : {}),
     client_ip_address: params.ip,
     client_user_agent: params.userAgent,
+    ...(params.fbp ? { fbp: params.fbp } : {}),
+    ...(params.fbc ? { fbc: params.fbc } : {}),
   };
 }
 
@@ -225,7 +227,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, creditCard, creditCardHolderInfo } = body;
+    const { name, phone, email, companyName, password, plan, cpfCnpj, eventId, creditCard, creditCardHolderInfo, fbp, fbc } = body;
 
     if (!name || !phone || !email || !companyName || !password || !plan || !cpfCnpj) {
       return new Response(
@@ -490,14 +492,14 @@ serve(async (req) => {
     // 6. Fire-and-forget: internal CRM lead + Meta CAPI
     createInternalLead(supabaseAdmin, { name, email, phone: cleanPhone }).catch(console.warn);
     if (eventId) {
-      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, name, eventId, ip, userAgent }).catch(console.warn);
+      sendMetaConversionEvent(supabaseAdmin, { email, phone: cleanPhone, name, eventId, ip, userAgent, fbp, fbc }).catch(console.warn);
     }
 
     // 6b. Fire Purchase event via CAPI after workspace creation
     if (workspaceCreated) {
       const purchaseEventId = `purchase_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
       sendMetaPurchaseEvent(supabaseAdmin, {
-        email, phone: cleanPhone, name, eventId: purchaseEventId, ip, userAgent, value: planInfo.value,
+        email, phone: cleanPhone, name, eventId: purchaseEventId, ip, userAgent, value: planInfo.value, fbp, fbc,
       }).catch(console.warn);
       // Return purchaseEventId so frontend can deduplicate
       return new Response(JSON.stringify({ success: true, subscriptionId: asaasSubscription.id, workspaceCreated, purchaseEventId, planValue: planInfo.value }), {

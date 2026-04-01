@@ -259,6 +259,8 @@ export default function Cadastro() {
             plan: selectedPlan,
             eventId,
             sourceUrl: PRODUCTION_URL,
+            fbp: document.cookie.split('; ').find(r => r.startsWith('_fbp='))?.split('=')[1] || undefined,
+            fbc: (() => { const fbclid = new URLSearchParams(window.location.search).get('fbclid'); return fbclid ? `fb.1.${Date.now()}.${fbclid}` : undefined; })(),
             ...(hasAttribution ? { attribution: storedAttribution } : {}),
             creditCard: {
               holderName: cardForm.holderName.trim(),
