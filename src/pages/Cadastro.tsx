@@ -129,6 +129,7 @@ export default function Cadastro() {
     phone: "",
     email: "",
     companyName: "",
+    cpfCnpj: "",
     password: "",
     confirmPassword: "",
   });
