@@ -143,7 +143,7 @@ async function sendMetaConversionEvent(
 
 async function sendMetaPurchaseEvent(
   supabaseAdmin: any,
-  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; value: number }
+  params: { email: string; phone: string; name: string; eventId: string; ip: string; userAgent: string; value: number; fbp?: string; fbc?: string }
 ) {
   try {
     const { data: ws } = await supabaseAdmin
