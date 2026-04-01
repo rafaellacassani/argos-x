@@ -309,9 +309,9 @@ serve(async (req) => {
     // Asaas limits externalReference to 100 chars — use compact format
     const externalReference = `${userId}|${plan}|${companyName.slice(0, 20)}|${cleanPhone}`;
 
-    // Save full reference data in client_invites metadata for later retrieval
-    await supabaseAdmin.from("client_invites").upsert(
-      {
+    // Save full reference data in client_invites
+    try {
+      await supabaseAdmin.from("client_invites").insert({
         email,
         full_name: name,
         phone: cleanPhone || null,
@@ -323,9 +323,10 @@ serve(async (req) => {
         terms_accepted_ip: ip,
         terms_accepted_user_agent: userAgent,
         terms_version: "v1.0-2026-04-01",
-      },
-      { onConflict: "email" }
-    ).catch(console.warn);
+      });
+    } catch (e) {
+      console.warn("client_invites insert error:", e);
+    }
 
     // Prepare creditCardHolderInfo with required fields
     const holderPhone = creditCardHolderInfo?.phone?.replace(/\D/g, "") || cleanPhone;
