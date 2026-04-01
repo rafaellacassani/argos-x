@@ -307,11 +307,14 @@ export default function Cadastro() {
       });
 
       if (loginError) {
-        // If auto-login fails, show success and let user login manually
         setStep("success");
       } else {
-        // Redirect to activation waiting page
-        navigate("/aguardando-ativacao", { replace: true });
+        // If workspace was created inline, go straight to dashboard
+        if (data.workspaceCreated) {
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate("/aguardando-ativacao", { replace: true });
+        }
         return;
       }
     } catch (err: any) {
