@@ -112,6 +112,11 @@ const App = () => (
                       <CreateWorkspace />
                     </ProtectedRoute>
                   } />
+                  <Route path="/aguardando-ativacao" element={
+                    <ProtectedRoute skipWorkspaceCheck>
+                      <AguardandoAtivacao />
+                    </ProtectedRoute>
+                  } />
                   
                   {/* Protected app pages with layout */}
                   <Route path="/home" element={
