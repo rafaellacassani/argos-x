@@ -1,37 +1,70 @@
 
 
-## Ativar workspace Fellipe Magnago Costa — Plano Escala 6 meses
+## Corrigir: Mensagens WABA não chegam no chat (webhook não subscrito)
 
-### O que já foi feito (agora)
-1. **Workspace criado** via `create-free-workspace`: `bc7bfbe5-07cc-409c-9a85-5ce46f94b9b3`
-2. **Usuário criado** no auth: `99ac5dd2-0f6b-42eb-8ad0-afe09a304421`
-3. **Limites atualizados** via `update-limits`: 30.000 leads, 10 WhatsApp, 30 usuários, 30.000 IA
-4. **Link de recuperação enviado** por WhatsApp ao Fellipe
+### Problema raiz
 
-### O que falta (precisa de migração)
-O workspace foi criado com `plan_name: "gratuito"` e sem `stripe_customer_id`. A edge function `update-workspace` não aceita esses campos. Precisamos de uma migração SQL para:
+O OAuth flow (`facebook-oauth/index.ts`) faz subscription de webhooks apenas para **Pages** (`subscribed_fields: messages, messaging_postbacks, feed, leadgen`). Isso cobre Facebook Messenger, Instagram DMs e Lead Ads.
 
-```sql
-UPDATE workspaces 
-SET plan_name = 'escala',
-    stripe_customer_id = 'cus_UFFjO2y2ckcEb3'
-WHERE id = 'bc7bfbe5-07cc-409c-9a85-5ce46f94b9b3';
+Porém, **mensagens WABA (WhatsApp Cloud API)** são eventos do objeto `whatsapp_business_account`, que requer uma subscription separada na Graph API:
+
+```
+POST https://graph.facebook.com/v18.0/{WABA_ID}/subscribed_apps
 ```
 
-Também atualizar o `client_invites` para marcar como ativado:
+Sem isso, a Meta nunca envia eventos de mensagens WhatsApp para o nosso webhook. Por isso o Fellipe não recebe nada — o webhook simplesmente não está inscrito para o WABA dele.
 
-```sql
-UPDATE client_invites 
-SET status = 'activated',
-    workspace_id = 'bc7bfbe5-07cc-409c-9a85-5ce46f94b9b3'
-WHERE email = 'fellipe.magnagoc@gmail.com';
+Os seus eventos WABA (`980377115162609`) funcionam porque foram configurados manualmente no Meta Dashboard.
+
+### Solução
+
+Adicionar a subscription do WABA **automaticamente** no fluxo OAuth e no fluxo de conexão CloudAPI.
+
+### Alterações
+
+**Arquivo: `supabase/functions/facebook-oauth/index.ts`**
+
+Após salvar o `whatsapp_cloud_connections` e o `meta_pages` com platform `whatsapp_business`, adicionar chamada:
+
+```typescript
+// Subscribe WABA to webhook
+const wabaId = waba.id; // WABA ID from Graph API
+const subscribeRes = await fetch(
+  `https://graph.facebook.com/v18.0/${wabaId}/subscribed_apps`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      access_token: finalUserToken,
+    }),
+  }
+);
 ```
+
+Isso inscreve o WABA no webhook do nosso app, fazendo a Meta enviar eventos `whatsapp_business_account` para o endpoint `facebook-webhook`.
+
+**Investigação adicional necessária**: O OAuth flow atual detecta WABAs? Preciso verificar se o código já itera por WABAs para saber onde inserir a subscription.
+
+**Arquivo: `supabase/functions/facebook-oauth/index.ts`** — verificar o trecho que processa WABAs (provavelmente entre linhas 100-240 que ainda não li).
+
+### Ação imediata para o Fellipe
+
+Enquanto o fix automático não é implementado, posso fazer uma chamada manual via Graph API para subscribir o WABA dele:
+
+```
+POST https://graph.facebook.com/v18.0/{WABA_ID}/subscribed_apps
+```
+
+Mas preciso do WABA ID dele (não é o `phone_number_id`). Posso buscar isso via Graph API se tivermos o access_token.
 
 ### Resumo
-Uma migração com 2 UPDATEs simples para finalizar a ativação do workspace.
 
-### Arquivos
 | Arquivo | Alteração |
 |---|---|
-| Nova migração SQL | UPDATE `workspaces` (plan_name, stripe_customer_id) + UPDATE `client_invites` (status, workspace_id) |
+| `supabase/functions/facebook-oauth/index.ts` | Após detectar/salvar WABA, chamar `POST /{wabaId}/subscribed_apps` para inscrever webhook |
+
+### O que NÃO muda
+- Handler de eventos WABA no `facebook-webhook/index.ts` (já funciona)
+- Fluxo de mensagens Facebook/Instagram (já funciona)
+- Lead Ads (já funciona)
 
