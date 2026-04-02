@@ -772,6 +772,64 @@ serve(async (req) => {
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- MEDIA HANDOFF (image/video → human support) ---
+      if (agent.media_handoff_enabled && (media_type === "image" || media_type === "video")) {
+        console.log(`[ai-agent-chat] 📎 Media handoff triggered: type=${media_type}, session=${session_id}`);
+
+        const mediaLabel = media_type === "image" ? "Imagem" : "Vídeo";
+        const handoffReply = "Recebi seu arquivo! 📎 Vou encaminhar para nossa equipe analisar com atenção. Um atendente vai te responder em breve — fique tranquilo(a)! 😊";
+
+        // Save user message + handoff reply to memory
+        const existingMsgs: ChatMessage[] = memory.messages || [];
+        existingMsgs.push({ role: "user", content: `[${mediaLabel} recebido]`, timestamp: new Date().toISOString() });
+        existingMsgs.push({ role: "assistant", content: handoffReply, timestamp: new Date().toISOString() });
+
+        // Pause session
+        await supabase.from("agent_memories").update({
+          messages: existingMsgs,
+          is_paused: true,
+          is_processing: false,
+          processing_started_at: null,
+          last_message_id: message_id || memory.last_message_id,
+        }).eq("id", memory.id);
+        lockAcquired = false;
+
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "media_handoff" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+
+        // Insert into human support queue
+        await supabase.from("human_support_queue").insert({
+          workspace_id: agent.workspace_id,
+          lead_id: lead_id || null,
+          agent_id: agent.id,
+          session_id,
+          instance_name: agent.instance_name || reqInstanceName || null,
+          reason: `Mídia recebida (${mediaLabel.toLowerCase()})`,
+          status: "waiting",
+        });
+
+        // Log execution
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: `[${mediaLabel}]`,
+          output_message: handoffReply,
+          status: "media_handoff",
+          tokens_used: 0,
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+        });
+
+        console.log(`[ai-agent-chat] ✅ Media handoff complete — session paused, support ticket created`);
+        return new Response(JSON.stringify({
+          response: handoffReply,
+          chunks: [handoffReply],
+          media_handoff: true,
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- TRAINER MODE DETECTION ---
       const isTrainer = !!(phone_number && agent.trainer_phone && isTrainerPhone(phone_number, agent.trainer_phone));
       if (isTrainer) {

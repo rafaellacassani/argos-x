@@ -82,6 +82,18 @@ export function AdvancedTab({ formData, updateField }: Props) {
 
       <div className="space-y-3">
         <div className="flex items-center gap-3">
+          <Switch checked={formData.media_handoff_enabled ?? false} onCheckedChange={(v) => updateField("media_handoff_enabled", v)} />
+          <div>
+            <Label>Encaminhar imagens e vídeos para suporte</Label>
+            <p className="text-xs text-muted-foreground">Quando alguém enviar foto ou vídeo, a IA para e encaminha para atendimento humano (economiza tokens)</p>
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
           <Switch checked={formData.message_split_enabled ?? true} onCheckedChange={(v) => updateField("message_split_enabled", v)} />
           <div>
             <Label>Dividir mensagens longas</Label>

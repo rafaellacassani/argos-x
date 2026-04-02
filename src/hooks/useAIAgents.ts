@@ -69,6 +69,7 @@ export interface CreateAgentData {
   qualification_fields?: any[];
   is_active?: boolean;
   cloud_24h_window_only?: boolean;
+  media_handoff_enabled?: boolean;
   // Knowledge
   knowledge_products?: string;
   knowledge_rules?: string;
