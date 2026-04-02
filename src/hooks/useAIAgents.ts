@@ -69,6 +69,7 @@ export interface CreateAgentData {
   qualification_fields?: any[];
   is_active?: boolean;
   cloud_24h_window_only?: boolean;
+  media_handoff_enabled?: boolean;
   // Knowledge
   knowledge_products?: string;
   knowledge_rules?: string;
@@ -135,6 +136,7 @@ export function useAIAgents() {
           qualification_fields: agentData.qualification_fields || [],
           is_active: agentData.is_active ?? false,
           cloud_24h_window_only: agentData.cloud_24h_window_only ?? true,
+          media_handoff_enabled: agentData.media_handoff_enabled ?? false,
           knowledge_products: agentData.knowledge_products || '',
           knowledge_rules: agentData.knowledge_rules || '',
           knowledge_extra: agentData.knowledge_extra || '',
