@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Check, Crown, Zap, Rocket, Package, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,8 @@ import { usePlanLimits, PLAN_DEFINITIONS, LEAD_PACK_DEFINITIONS } from "@/hooks/
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
-
-const PLAN_PRICE_ENV_MAP: Record<string, string> = {
-  essencial: "STRIPE_PRICE_ESSENCIAL",
-  negocio: "STRIPE_PRICE_NEGOCIO",
-  escala: "STRIPE_PRICE_ESCALA",
-};
+import ActivePlanCard from "@/components/billing/ActivePlanCard";
+import PaymentHistoryTable from "@/components/billing/PaymentHistoryTable";
 
 const planIcons: Record<string, React.ReactNode> = {
   essencial: <Zap className="w-6 h-6" />,
@@ -66,10 +62,15 @@ const planColorClasses: Record<string, { border: string; bg: string; text: strin
 };
 
 export default function Planos() {
-  const { planName, currentLeadCount, totalLeadLimit, leadUsagePercent } = usePlanLimits();
-  const { workspaceId } = useWorkspace();
+  const planLimits = usePlanLimits();
+  const { workspace, workspaceId } = useWorkspace();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingPack, setLoadingPack] = useState<number | null>(null);
+  const plansRef = useRef<HTMLDivElement>(null);
+
+  const handleScrollToPlans = () => {
+    plansRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
@@ -83,7 +84,6 @@ export default function Planos() {
           cancelUrl: window.location.origin + "/planos",
         },
       });
-
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
@@ -92,11 +92,7 @@ export default function Planos() {
       }
     } catch (err: any) {
       console.error("Checkout error:", err);
-      toast({
-        title: "Erro ao iniciar checkout",
-        description: err.message || "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao iniciar checkout", description: err.message || "Tente novamente.", variant: "destructive" });
     } finally {
       setLoadingPlan(null);
     }
@@ -115,7 +111,6 @@ export default function Planos() {
           cancelUrl: window.location.origin + "/planos",
         },
       });
-
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
@@ -124,35 +119,39 @@ export default function Planos() {
       }
     } catch (err: any) {
       console.error("Pack checkout error:", err);
-      toast({
-        title: "Erro ao iniciar checkout do pacote",
-        description: err.message || "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao iniciar checkout do pacote", description: err.message || "Tente novamente.", variant: "destructive" });
     } finally {
       setLoadingPack(null);
     }
   };
 
   return (
-    <div className="space-y-10">
-      {/* Header */}
+    <div className="space-y-8">
       <div>
-        <h1 className="font-display text-2xl font-bold text-foreground">Planos e Preços</h1>
-        <p className="text-muted-foreground">
-          Você está usando {currentLeadCount.toLocaleString("pt-BR")} de{" "}
-          {totalLeadLimit.toLocaleString("pt-BR")} leads ({leadUsagePercent}%)
-        </p>
+        <h1 className="font-display text-2xl font-bold text-foreground">Plano e Faturamento</h1>
+        <p className="text-muted-foreground">Gerencie seu plano, uso e pagamentos</p>
       </div>
 
-      {/* SECTION 1 — Plans */}
-      <section>
+      {/* SECTION 1 — Active Plan Summary */}
+      {workspace && (
+        <ActivePlanCard
+          workspace={workspace}
+          planLimits={planLimits}
+          onChangePlan={handleScrollToPlans}
+        />
+      )}
+
+      {/* SECTION 2 — Payment History */}
+      {workspaceId && <PaymentHistoryTable workspaceId={workspaceId} />}
+
+      {/* SECTION 3 — Available Plans */}
+      <section ref={plansRef}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Escolha seu plano</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {(Object.entries(PLAN_DEFINITIONS) as [string, typeof PLAN_DEFINITIONS[keyof typeof PLAN_DEFINITIONS]][]).map(
             ([key, plan], index) => {
-              if (key === "gratuito") return null;
-              const isCurrent = planName === key;
+              if (key === "gratuito" || key === "escala_semestral") return null;
+              const isCurrent = planLimits.planName === key;
               const colors = planColorClasses[key];
               const isLoading = loadingPlan === key;
 
@@ -224,7 +223,7 @@ export default function Planos() {
         </div>
       </section>
 
-      {/* SECTION 2 — Lead packs */}
+      {/* Lead Packs */}
       <section>
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-foreground">
@@ -234,7 +233,6 @@ export default function Planos() {
             Os pacotes são cobrados mensalmente junto com seu plano.
           </p>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {LEAD_PACK_DEFINITIONS.map((pack, index) => {
             const isPackLoading = loadingPack === pack.size;
