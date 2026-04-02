@@ -387,6 +387,7 @@ app.post("/url", async (c) => {
     "instagram_manage_messages",
     "instagram_manage_comments",
     "business_management",
+    "leads_retrieval",
   ];
 
   const state = await generateState(workspaceId);
