@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_agents ADD COLUMN media_handoff_enabled boolean DEFAULT false;

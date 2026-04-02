@@ -293,6 +293,7 @@ export type Database = {
           knowledge_rules: string | null
           main_objective: string | null
           max_tokens: number | null
+          media_handoff_enabled: boolean | null
           message_split_enabled: boolean | null
           message_split_length: number | null
           model: string
@@ -340,6 +341,7 @@ export type Database = {
           knowledge_rules?: string | null
           main_objective?: string | null
           max_tokens?: number | null
+          media_handoff_enabled?: boolean | null
           message_split_enabled?: boolean | null
           message_split_length?: number | null
           model?: string
@@ -387,6 +389,7 @@ export type Database = {
           knowledge_rules?: string | null
           main_objective?: string | null
           max_tokens?: number | null
+          media_handoff_enabled?: boolean | null
           message_split_enabled?: boolean | null
           message_split_length?: number | null
           model?: string
