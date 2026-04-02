@@ -3217,6 +3217,12 @@ export default function Chats() {
                                     await blockContact(instName, number, false);
                                     if (chatLead?.id) {
                                       await supabase.from("leads").update({ is_opted_out: false } as any).eq("id", chatLead.id);
+                                      await supabase
+                                        .from("agent_memories")
+                                        .update({ is_paused: false })
+                                        .eq("lead_id", chatLead.id)
+                                        .eq("workspace_id", workspaceId);
+                                      setSelectedChatAiPaused(false);
                                     }
                                     toast({ title: "Contato desbloqueado com sucesso" });
                                   } catch {
