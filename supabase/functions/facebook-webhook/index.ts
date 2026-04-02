@@ -699,6 +699,180 @@ async function processWhatsAppBusinessEvent(entry: any) {
   }
 }
 
+// Process Meta Lead Ads (leadgen) events
+async function processLeadgenEvent(pageId: string, eventValue: any) {
+  const leadgenId = eventValue?.leadgen_id;
+  if (!leadgenId) {
+    console.warn("[Facebook Webhook] leadgen event without leadgen_id");
+    return;
+  }
+
+  console.log(`[Facebook Webhook] 📋 Processing leadgen event: ${leadgenId} for page ${pageId}`);
+
+  // Find the meta_page to get access token and workspace
+  const metaPage = await findMetaPage(pageId);
+  if (!metaPage) {
+    console.warn("[Facebook Webhook] No active meta_page for leadgen page_id:", pageId);
+    return;
+  }
+
+  try {
+    // Fetch lead data from Graph API
+    const leadUrl = `https://graph.facebook.com/v21.0/${leadgenId}?fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id,form_name&access_token=${metaPage.page_access_token}`;
+    const leadRes = await fetch(leadUrl);
+    if (!leadRes.ok) {
+      const errText = await leadRes.text();
+      console.error(`[Facebook Webhook] ❌ Failed to fetch leadgen data: ${leadRes.status} ${errText}`);
+      return;
+    }
+
+    const leadData = await leadRes.json();
+    const fieldData = leadData.field_data || [];
+
+    // Extract common fields
+    let name = "";
+    let phone = "";
+    let email = "";
+    for (const field of fieldData) {
+      const key = (field.name || "").toLowerCase();
+      const val = field.values?.[0] || "";
+      if (key.includes("name") || key.includes("nome")) name = name || val;
+      if (key.includes("phone") || key.includes("telefone") || key.includes("cel")) phone = phone || val;
+      if (key.includes("email") || key.includes("e-mail")) email = email || val;
+    }
+
+    // Fallback name
+    if (!name) name = email || phone || "Lead Meta Ads";
+
+    // Clean phone: keep only digits, add 55 if needed
+    if (phone) {
+      phone = phone.replace(/\D/g, "");
+      if (phone.length <= 11) phone = "55" + phone;
+    }
+
+    console.log(`[Facebook Webhook] 📋 Leadgen data: name=${name}, phone=${phone}, email=${email}, campaign=${leadData.campaign_name || "N/A"}`);
+
+    const workspaceId = metaPage.workspace_id;
+
+    // Check for duplicate lead by phone or email
+    if (phone) {
+      const phoneSuffix = phone.length >= 10 ? phone.slice(-10) : phone;
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id")
+        .eq("workspace_id", workspaceId)
+        .like("phone", `%${phoneSuffix}`)
+        .limit(1)
+        .single();
+
+      if (existing) {
+        console.log(`[Facebook Webhook] ℹ️ Lead already exists for phone ${phone}, skipping creation`);
+        return;
+      }
+    }
+
+    // Get default funnel's first stage
+    const { data: defaultFunnel } = await supabase
+      .from("funnels")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("is_default", true)
+      .limit(1)
+      .single();
+
+    if (!defaultFunnel) {
+      console.error("[Facebook Webhook] ❌ No default funnel for workspace:", workspaceId);
+      return;
+    }
+
+    const { data: firstStage } = await supabase
+      .from("funnel_stages")
+      .select("id")
+      .eq("funnel_id", defaultFunnel.id)
+      .order("position", { ascending: true })
+      .limit(1)
+      .single();
+
+    if (!firstStage) {
+      console.error("[Facebook Webhook] ❌ No stages in default funnel");
+      return;
+    }
+
+    // Create the lead
+    const { data: newLead, error: leadError } = await supabase
+      .from("leads")
+      .insert({
+        name,
+        phone: phone || `meta-lead-${leadgenId}`,
+        email: email || null,
+        source: "meta-leadgen",
+        stage_id: firstStage.id,
+        workspace_id: workspaceId,
+        notes: [
+          leadData.campaign_name ? `Campanha: ${leadData.campaign_name}` : null,
+          leadData.ad_name ? `Anúncio: ${leadData.ad_name}` : null,
+          leadData.form_name ? `Formulário: ${leadData.form_name}` : null,
+          fieldData.map((f: any) => `${f.name}: ${f.values?.[0] || ""}`).join("\n"),
+        ].filter(Boolean).join("\n"),
+      })
+      .select("id")
+      .single();
+
+    if (leadError) {
+      console.error("[Facebook Webhook] ❌ Failed to create leadgen lead:", leadError);
+      return;
+    }
+
+    console.log(`[Facebook Webhook] ✅ Lead created from Meta Lead Ad: ${newLead.id}`);
+
+    // Create/find tag "Meta Lead Ad" and apply it
+    let tagId: string;
+    const { data: existingTag } = await supabase
+      .from("lead_tags")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("name", "Meta Lead Ad")
+      .limit(1)
+      .single();
+
+    if (existingTag) {
+      tagId = existingTag.id;
+    } else {
+      const { data: newTag } = await supabase
+        .from("lead_tags")
+        .insert({ workspace_id: workspaceId, name: "Meta Lead Ad", color: "#8B5CF6" })
+        .select("id")
+        .single();
+      tagId = newTag?.id;
+    }
+
+    if (tagId) {
+      await supabase
+        .from("lead_tag_assignments")
+        .insert({ lead_id: newLead.id, tag_id: tagId, workspace_id: workspaceId })
+        .single();
+      console.log(`[Facebook Webhook] 🏷️ Tag "Meta Lead Ad" applied`);
+    }
+
+    // Save lead history
+    await supabase.from("lead_history").insert({
+      lead_id: newLead.id,
+      workspace_id: workspaceId,
+      action: "created",
+      performed_by: "meta-leadgen",
+      metadata: {
+        source: "meta-leadgen",
+        campaign_name: leadData.campaign_name || null,
+        ad_name: leadData.ad_name || null,
+        form_name: leadData.form_name || null,
+      },
+    });
+
+  } catch (err) {
+    console.error("[Facebook Webhook] ❌ Leadgen processing error:", err);
+  }
+}
+
 // POST - Receive real-time events
 app.post("/", async (c) => {
   try {
@@ -735,6 +909,13 @@ app.post("/", async (c) => {
         const standby = entry.standby || [];
         for (const event of standby) {
           await processMessengerEvent(pageId, event);
+        }
+        // Handle leadgen events (Meta Lead Ads forms)
+        const changes = entry.changes || [];
+        for (const change of changes) {
+          if (change.field === "leadgen") {
+            await processLeadgenEvent(pageId, change.value);
+          }
         }
       } else if (object === "instagram") {
         // Instagram DM events

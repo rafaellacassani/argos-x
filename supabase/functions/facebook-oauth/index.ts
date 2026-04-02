@@ -273,7 +273,7 @@ app.get("/", async (c) => {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({
-                subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed",
+                subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed,leadgen",
                 access_token: page.access_token,
               }),
             }
@@ -387,6 +387,7 @@ app.post("/url", async (c) => {
     "instagram_manage_messages",
     "instagram_manage_comments",
     "business_management",
+    "leads_retrieval",
   ];
 
   const state = await generateState(workspaceId);
