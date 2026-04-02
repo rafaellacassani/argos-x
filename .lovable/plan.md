@@ -1,38 +1,75 @@
 
 
-## Corrigir telefone enviado ao Asaas (remover código do país)
+## Receber Leads de Formulários Meta Ads no CRM
 
-### Problema
-O Asaas espera o telefone no formato brasileiro **sem** código do país: `DDD + número` (ex: `35991442125`). O código atual faz o contrário — adiciona o prefixo `55` antes de enviar, resultando em `5535991442125`. Como o campo `mobilePhone` do Asaas não suporta código de país, o `55` é interpretado como DDD e o número fica truncado/errado.
+### Situação atual
 
-### Correção
+O sistema Meta OAuth conecta páginas e Instagram para **mensagens** (DMs do Messenger/Instagram). Porém, **não suporta Lead Ads (formulários de campanha)**. Faltam 3 peças:
 
-**Arquivo:** `supabase/functions/asaas-checkout/index.ts`
+1. **Escopo OAuth** — `leads_retrieval` não está na lista de permissões solicitadas
+2. **Webhook subscription** — o campo `leadgen` não está nos `subscribed_fields` da página
+3. **Handler no webhook** — o `facebook-webhook` não processa eventos `leadgen`
 
-**3 pontos de correção:**
+### O que será construído
 
-1. **Linha 331-334** — `mobilePhone` para criação do customer Asaas:
-   - Inverter a lógica: em vez de adicionar `55`, **remover** o `55` se já existir
-   ```typescript
-   let mobilePhone = cleanPhone;
-   if (mobilePhone.startsWith("55") && mobilePhone.length > 11) {
-     mobilePhone = mobilePhone.substring(2);
-   }
-   ```
+**1. Adicionar escopo `leads_retrieval` no OAuth** (`facebook-oauth/index.ts`)
+- Adicionar `"leads_retrieval"` ao array `scopes` (linha 381-389)
 
-2. **Linha 377-381** — `holderMobilePhone` para creditCardHolderInfo:
-   - Mesma lógica: remover `55` em vez de adicionar
-   ```typescript
-   if (holderMobilePhone.startsWith("55") && holderMobilePhone.length > 11) {
-     holderMobilePhone = holderMobilePhone.substring(2);
-   }
-   ```
+**2. Adicionar `leadgen` na subscription do webhook** (`facebook-oauth/index.ts`)
+- No `subscribed_fields` da chamada `subscribed_apps` (linha ~271), adicionar `"leadgen"`
 
-3. O `cleanPhone` usado para salvar no banco (`user_profiles`, `client_invites`, lead interno, Meta CAPI) continua com `55` — isso é correto para o CRM e WhatsApp. Apenas o valor enviado ao Asaas perde o prefixo.
+**3. Criar handler de leadgen no webhook** (`facebook-webhook/index.ts`)
+- Nova função `processLeadgenEvent(pageId, event)`:
+  a. Recebe o `leadgen_id` do evento
+  b. Faz GET na Graph API: `/{leadgen_id}?fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id,form_name` usando o `page_access_token`
+  c. Extrai `name`, `phone`, `email` dos `field_data`
+  d. Busca o `meta_page` pelo `page_id` para obter `workspace_id`
+  e. Cria lead no funil (primeira etapa do funil default) com `source: "meta-leadgen"`
+  f. Cria tag automática (ex: `Meta Lead Ad` com cor roxa) se não existir, e aplica ao lead
+  g. Salva a campanha/formulário de origem como metadado
+
+- No handler POST (linha ~726), adicionar:
+  ```
+  // Handle leadgen events
+  const changes = entry.changes || [];
+  for (const change of changes) {
+    if (change.field === "leadgen") {
+      await processLeadgenEvent(entry.id, change.value);
+    }
+  }
+  ```
+
+### Fluxo completo
+
+```text
+Meta Ads → Formulário preenchido → Meta envia webhook "leadgen"
+→ facebook-webhook recebe → processLeadgenEvent()
+→ GET Graph API /{leadgen_id} (busca dados do formulário)
+→ Extrai nome/telefone/email
+→ Cria lead na 1ª etapa do funil default
+→ Cria/aplica tag "Meta Lead Ad"
+→ Lead aparece como card no Kanban
+```
+
+### Sobre a conexão do cliente
+
+Depois de implementado, o fluxo para configurar o workspace do cliente é:
+
+1. Logar no workspace dele (via admin)
+2. Ir em Configurações → Integrações → Conectar Meta
+3. O OAuth agora pedirá a permissão `leads_retrieval` além das atuais
+4. Selecionar a página vinculada às campanhas
+5. Pronto — leads dos formulários Meta chegarão automaticamente
+
+### Arquivos alterados
+
+| Arquivo | Alteração |
+|---|---|
+| `supabase/functions/facebook-oauth/index.ts` | Adicionar escopo `leads_retrieval` + campo `leadgen` no webhook subscription |
+| `supabase/functions/facebook-webhook/index.ts` | Nova função `processLeadgenEvent` + handler no POST |
 
 ### O que NÃO muda
-- Telefone salvo no banco de dados (mantém com `55`)
-- Telefone enviado ao Meta CAPI (mantém com `55`)
-- Qualquer outra edge function
-- Frontend (`Cadastro.tsx`)
+- Fluxo de mensagens (DMs Facebook/Instagram) — continua igual
+- Tabela `leads` — usa os campos existentes
+- Frontend — sem alterações necessárias
 
