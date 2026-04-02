@@ -355,8 +355,111 @@ app.get("/", async (c) => {
       console.error("[Facebook OAuth] Error fetching me/instagram_accounts:", igErr);
     }
 
+    // Step 7: Detect and subscribe WABAs (WhatsApp Business Accounts)
+    let wabaCount = 0;
+    console.log("[Facebook OAuth] Step 7: Detecting WABAs...");
+    try {
+      // Get all businesses the user manages
+      const bizUrl = new URL("https://graph.facebook.com/v18.0/me/businesses");
+      bizUrl.searchParams.set("access_token", finalUserToken);
+      bizUrl.searchParams.set("fields", "id,name");
+
+      const bizRes = await fetch(bizUrl.toString());
+      const bizData = await bizRes.json();
+      const businesses = bizData.data || [];
+
+      console.log(`[Facebook OAuth] Found ${businesses.length} business(es)`);
+
+      for (const biz of businesses) {
+        // Get WABAs owned by this business
+        const wabaUrl = new URL(`https://graph.facebook.com/v18.0/${biz.id}/owned_whatsapp_business_accounts`);
+        wabaUrl.searchParams.set("access_token", finalUserToken);
+        wabaUrl.searchParams.set("fields", "id,name,phone_numbers{id,display_phone_number,verified_name}");
+
+        const wabaRes = await fetch(wabaUrl.toString());
+        const wabaData = await wabaRes.json();
+        const wabas = wabaData.data || [];
+
+        console.log(`[Facebook OAuth] Business "${biz.name}" has ${wabas.length} WABA(s)`);
+
+        for (const waba of wabas) {
+          // Subscribe WABA to our app's webhook
+          try {
+            const subscribeRes = await fetch(
+              `https://graph.facebook.com/v18.0/${waba.id}/subscribed_apps`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ access_token: finalUserToken }),
+              }
+            );
+            const subscribeData = await subscribeRes.json();
+            if (subscribeData.success) {
+              console.log(`[Facebook OAuth] ✅ WABA ${waba.id} (${waba.name}) subscribed to webhook`);
+              wabaCount++;
+            } else {
+              console.error(`[Facebook OAuth] ❌ WABA subscription failed for ${waba.id}:`, subscribeData);
+            }
+          } catch (subErr) {
+            console.error(`[Facebook OAuth] Error subscribing WABA ${waba.id}:`, subErr);
+          }
+
+          // Save phone numbers as whatsapp_cloud_connections
+          const phoneNumbers = waba.phone_numbers?.data || [];
+          for (const phone of phoneNumbers) {
+            // Use the first page token as fallback for API calls
+            const fallbackToken = pages.length > 0 ? pages[0].access_token : finalUserToken;
+
+            const { error: connErr } = await supabase
+              .from("whatsapp_cloud_connections")
+              .upsert(
+                {
+                  workspace_id: workspaceId,
+                  waba_id: waba.id,
+                  phone_number_id: phone.id,
+                  phone_number: phone.display_phone_number || phone.id,
+                  inbox_name: phone.verified_name || waba.name || "WhatsApp Cloud",
+                  access_token: finalUserToken,
+                  status: "active",
+                  is_active: true,
+                },
+                { onConflict: "workspace_id,phone_number_id", ignoreDuplicates: false }
+              );
+
+            if (connErr) {
+              console.error(`[Facebook OAuth] Failed to save WABA connection ${phone.display_phone_number}:`, connErr);
+
+              // Fallback: try insert without upsert
+              const { error: insertErr } = await supabase
+                .from("whatsapp_cloud_connections")
+                .insert({
+                  workspace_id: workspaceId,
+                  waba_id: waba.id,
+                  phone_number_id: phone.id,
+                  phone_number: phone.display_phone_number || phone.id,
+                  inbox_name: phone.verified_name || waba.name || "WhatsApp Cloud",
+                  access_token: finalUserToken,
+                  status: "active",
+                  is_active: true,
+                });
+
+              if (insertErr) {
+                console.error(`[Facebook OAuth] Insert fallback also failed:`, insertErr);
+              } else {
+                console.log(`[Facebook OAuth] ✅ WABA phone saved (insert fallback): ${phone.display_phone_number}`);
+              }
+            } else {
+              console.log(`[Facebook OAuth] ✅ WABA phone saved: ${phone.display_phone_number}`);
+            }
+          }
+        }
+      }
+    } catch (wabaErr) {
+      console.error("[Facebook OAuth] Error detecting WABAs:", wabaErr);
+    }
+
     console.log("[Facebook OAuth] 🎉 OAuth flow completed successfully!");
-    return c.redirect(`${APP_URL}/settings?meta_connected=true&pages=${pages.length}&ig=${savedIgIds.size}`);
+    return c.redirect(`${APP_URL}/settings?meta_connected=true&pages=${pages.length}&ig=${savedIgIds.size}&waba=${wabaCount}`);
     
   } catch (err) {
     console.error("[Facebook OAuth] Unexpected error:", err);
