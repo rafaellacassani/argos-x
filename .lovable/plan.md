@@ -1,51 +1,62 @@
 
 
-## Diagnóstico: Problema de Desbloqueio do Contato 553591442125
+## Página "Plano & Faturamento" — Reformulação
 
-### O que encontrei
+### Situação atual
+A página `/planos` mostra apenas os cards de planos disponíveis para assinar e pacotes de leads. Não mostra:
+- Qual plano está ativo e seu status (trial, ativo, vencido)
+- Data do trial / próxima cobrança
+- Provedor de pagamento (Asaas ou Stripe)
+- Histórico de pagamentos
+- Uso atual (leads, IA, WhatsApp, usuários)
 
-**Lead:** `4d5f3ad1` — nome "IA", phone `553591442125`, workspace do Clayton (`77f518f4`)
+### O que será construído
 
-**Estado atual no banco:**
-- `leads.is_opted_out = false` (já foi desbloqueado no lead)
-- `agent_memories` sessão `553591442125@s.whatsapp.net` → **`is_paused = true`** (112 mensagens)
-- `agent_memories` sessão `553591442125` → `is_paused = false` (2 mensagens, sessão antiga)
-- `human_support_queue` → nenhum ticket ativo para esse lead
+A página será reorganizada em **3 seções**:
 
-**O problema:** A IA continua parada porque `is_paused = true` na memória principal (sessão com `@s.whatsapp.net`). O contato foi "desbloqueado" visualmente, mas a IA nunca retomou.
+**Seção 1 — Resumo do plano ativo** (card no topo)
+- Nome do plano (Essencial, Negócio, Escala)
+- Status: Trial (X dias restantes), Ativo, Vencido, Cancelado
+- Data de início / fim do trial
+- Barras de uso: leads, interações IA, conexões WhatsApp, usuários
+- Botão "Trocar plano" que rola para a seção de planos
 
-### Bug encontrado — afeta TODOS os clientes
+**Seção 2 — Histórico de pagamentos** (tabela)
+- Consultado via nova action na edge function `admin-clients` (ou query direta na tabela de workspaces + Asaas API)
+- Como não existe tabela de histórico de pagamentos no banco, e o Asaas/Stripe guardam isso externamente, a abordagem mais prática é:
+  - Mostrar dados disponíveis localmente: `plan_type`, `plan_name`, `trial_end`, `created_at`, `payment_provider`
+  - Para histórico real de faturas, criar uma **nova edge function** `billing-portal` que consulta a API do Asaas (`/payments?subscription=`) ou Stripe (`listInvoices`) e retorna as faturas ao frontend
+- Colunas: Data, Descrição, Valor, Status (pago/pendente/falhou)
 
-No arquivo `src/pages/Chats.tsx`, o botão **"Desbloquear contato"** (linhas 3207-3229) faz:
-1. Chama `blockContact(instName, number, false)` na Evolution API
-2. Atualiza `leads.is_opted_out = false`
-3. **NÃO atualiza `agent_memories.is_paused = false`**
+**Seção 3 — Planos disponíveis e Pacotes de leads** (o conteúdo atual, mantido abaixo)
 
-Ou seja, quando alguém bloqueia um contato (que seta `is_paused = true` + `is_opted_out = true`) e depois desbloqueia, a IA fica pausada para sempre.
+### Arquivos
 
-### Correção
-
-**Arquivo:** `src/pages/Chats.tsx` — bloco do "Desbloquear contato" (linhas 3216-3224)
-
-Após setar `is_opted_out: false` no lead, adicionar:
-```typescript
-await supabase
-  .from("agent_memories")
-  .update({ is_paused: false })
-  .eq("lead_id", chatLead.id)
-  .eq("workspace_id", workspaceId);
-setSelectedChatAiPaused(false);
-```
-
-### Correção imediata para o Clayton
-
-Além do fix no código, a memória do lead `4d5f3ad1` precisa ser despausada. Isso acontecerá automaticamente quando ele clicar em "Retomar IA" no menu de 3 pontos (esse botão já funciona corretamente pois filtra por `lead_id`). Mas com o fix, o "Desbloquear" também fará isso corretamente.
-
-### Resumo das alterações
-
-| Arquivo | O que muda |
+| Arquivo | Alteração |
 |---|---|
-| `src/pages/Chats.tsx` | No handler de "Desbloquear contato", adicionar update de `agent_memories.is_paused = false` e `setSelectedChatAiPaused(false)` |
+| `src/pages/Planos.tsx` | Adicionar seção de resumo do plano + seção de histórico + reorganizar layout |
+| `src/hooks/usePlanLimits.ts` | Já fornece os dados de uso — sem mudança |
+| `src/hooks/useWorkspace.tsx` | Já expõe `workspace.plan_type`, `trial_end`, etc — sem mudança |
+| `supabase/functions/billing-portal/index.ts` | **Nova edge function** que consulta faturas no Asaas (ou Stripe conforme `payment_provider`) e retorna ao frontend |
 
-Nenhuma alteração no banco, edge functions, ou outros arquivos.
+### Detalhes técnicos
+
+**Edge function `billing-portal`**:
+- Recebe `{ workspaceId }` no body
+- Autentica o usuário via token JWT
+- Busca o workspace para pegar `payment_provider`, `asaas_customer_id` ou `stripe_customer_id`
+- Se Asaas: `GET /payments?customer={asaas_customer_id}` com header `access_token`
+- Se Stripe: `GET /v1/invoices?customer={stripe_customer_id}` com `STRIPE_SECRET_KEY`
+- Retorna array de `{ date, description, amount, status, invoiceUrl? }`
+
+**Resumo do plano** (dados do workspace já disponíveis no frontend):
+- `workspace.plan_name` → nome
+- `workspace.plan_type` → status (trialing, active, canceled, past_due)
+- `workspace.trial_end` → data fim trial
+- `usePlanLimits()` → uso de leads, IA, limites
+
+### O que NÃO muda
+- Fluxo de checkout (Asaas/Stripe)
+- Edge functions existentes
+- Tabelas do banco
 
