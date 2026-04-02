@@ -1,51 +1,51 @@
 
 
-## Cut-off inteligente para conversas sem propósito / abusivas
+## Diagnóstico: Problema de Desbloqueio do Contato 553591442125
 
-### Problema
-Leads "trolls" ou mensagens sem sentido consomem centenas de milhares de tokens sem nenhum valor. A sessão de 44 mensagens do troll custou 532K tokens. Não existe mecanismo para a IA encerrar proativamente.
+### O que encontrei
 
-### Solução
-Adicionar função `detectAbusiveSession()` no `ai-agent-chat/index.ts` que analisa o histórico **antes** de chamar a IA. Se detectar padrão abusivo, encerra a conversa sem gastar tokens.
+**Lead:** `4d5f3ad1` — nome "IA", phone `553591442125`, workspace do Clayton (`77f518f4`)
 
-### Detecção (3 sinais)
+**Estado atual no banco:**
+- `leads.is_opted_out = false` (já foi desbloqueado no lead)
+- `agent_memories` sessão `553591442125@s.whatsapp.net` → **`is_paused = true`** (112 mensagens)
+- `agent_memories` sessão `553591442125` → `is_paused = false` (2 mensagens, sessão antiga)
+- `human_support_queue` → nenhum ticket ativo para esse lead
 
-1. **Spam de mensagens curtas**: 8+ mensagens do usuário com menos de 6 caracteres nas últimas 25 (ex: "kk", "?", "oi", "kkkkk")
-2. **Volume improdutivo**: mais de N mensagens do usuário (configurável, default 20) sem dados de qualificação coletados (nome/email/empresa não aparecem no histórico)
-3. **Ofensas repetidas**: 3+ mensagens com palavrões/ofensas (lista em português)
+**O problema:** A IA continua parada porque `is_paused = true` na memória principal (sessão com `@s.whatsapp.net`). O contato foi "desbloqueado" visualmente, mas a IA nunca retomou.
 
-### Ação ao detectar
-- Envia mensagem educada: *"Percebi que não consegui te ajudar como deveria. 😊 Se precisar de algo, é só mandar mensagem novamente! Até mais!"*
-- Pausa sessão (`is_paused: true`)
-- Cancela follow-ups pendentes
-- Registra `agent_executions` com status `abusive_cutoff`
-- **0 tokens gastos**
+### Bug encontrado — afeta TODOS os clientes
 
-### Configuração por agente
-- Nova coluna `max_unproductive_messages` (integer, default 20) na tabela `ai_agents`
-- Toggle/campo na aba Avançado do agente
+No arquivo `src/pages/Chats.tsx`, o botão **"Desbloquear contato"** (linhas 3207-3229) faz:
+1. Chama `blockContact(instName, number, false)` na Evolution API
+2. Atualiza `leads.is_opted_out = false`
+3. **NÃO atualiza `agent_memories.is_paused = false`**
 
-### Arquivos alterados
+Ou seja, quando alguém bloqueia um contato (que seta `is_paused = true` + `is_opted_out = true`) e depois desbloqueia, a IA fica pausada para sempre.
 
-| Arquivo | Alteração |
-|---|---|
-| Migration SQL | `ALTER TABLE ai_agents ADD COLUMN max_unproductive_messages integer DEFAULT 20` |
-| `supabase/functions/ai-agent-chat/index.ts` | Adicionar `detectAbusiveSession()` + check logo após media handoff e antes do trainer mode (linha ~833) |
-| `src/components/agents/tabs/AdvancedTab.tsx` | Adicionar campo numérico "Limite de mensagens sem progresso" |
+### Correção
 
-### Posição no fluxo
+**Arquivo:** `src/pages/Chats.tsx` — bloco do "Desbloquear contato" (linhas 3216-3224)
 
-```text
-... opt-out check ...
-... media handoff check ...
-→ NEW: abusive session check ← (aqui, antes de chamar a IA)
-... trainer mode ...
-... AI call ...
+Após setar `is_opted_out: false` no lead, adicionar:
+```typescript
+await supabase
+  .from("agent_memories")
+  .update({ is_paused: false })
+  .eq("lead_id", chatLead.id)
+  .eq("workspace_id", workspaceId);
+setSelectedChatAiPaused(false);
 ```
 
-### O que NÃO muda
-- Loop detection existente (detecta IA-vs-IA, diferente deste que detecta humano abusivo)
-- Opt-out detection existente
-- Media handoff existente
-- Agentes existentes (default 20 = comportamento conservador)
+### Correção imediata para o Clayton
+
+Além do fix no código, a memória do lead `4d5f3ad1` precisa ser despausada. Isso acontecerá automaticamente quando ele clicar em "Retomar IA" no menu de 3 pontos (esse botão já funciona corretamente pois filtra por `lead_id`). Mas com o fix, o "Desbloquear" também fará isso corretamente.
+
+### Resumo das alterações
+
+| Arquivo | O que muda |
+|---|---|
+| `src/pages/Chats.tsx` | No handler de "Desbloquear contato", adicionar update de `agent_memories.is_paused = false` e `setSelectedChatAiPaused(false)` |
+
+Nenhuma alteração no banco, edge functions, ou outros arquivos.
 
