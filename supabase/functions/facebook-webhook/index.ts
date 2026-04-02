@@ -736,6 +736,13 @@ app.post("/", async (c) => {
         for (const event of standby) {
           await processMessengerEvent(pageId, event);
         }
+        // Handle leadgen events (Meta Lead Ads forms)
+        const changes = entry.changes || [];
+        for (const change of changes) {
+          if (change.field === "leadgen") {
+            await processLeadgenEvent(pageId, change.value);
+          }
+        }
       } else if (object === "instagram") {
         // Instagram DM events
         const igUserId = entry.id;

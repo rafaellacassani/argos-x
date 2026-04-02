@@ -273,7 +273,7 @@ app.get("/", async (c) => {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
               body: new URLSearchParams({
-                subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed",
+                subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed,leadgen",
                 access_token: page.access_token,
               }),
             }
