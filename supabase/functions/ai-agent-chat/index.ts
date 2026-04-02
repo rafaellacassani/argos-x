@@ -886,6 +886,55 @@ serve(async (req) => {
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
+      // --- ABUSIVE SESSION DETECTION ---
+      const maxUnproductive = agent.max_unproductive_messages ?? 20;
+      const existingMsgsForAbuse: ChatMessage[] = memory.messages || [];
+      // Add current message to check
+      const msgsWithCurrent = [...existingMsgsForAbuse, { role: "user" as const, content: messageText }];
+      const abuseResult = detectAbusiveSession(msgsWithCurrent, maxUnproductive);
+      if (abuseResult.detected) {
+        console.log(`[ai-agent-chat] 🛑 Abusive session detected: ${abuseResult.reason}`);
+        
+        const cutoffReply = "Percebi que não consegui te ajudar como deveria. 😊 Se precisar de algo, é só mandar mensagem novamente! Até mais!";
+        
+        // Save messages + pause
+        existingMsgsForAbuse.push({ role: "user", content: messageText, timestamp: new Date().toISOString() });
+        existingMsgsForAbuse.push({ role: "assistant", content: cutoffReply, timestamp: new Date().toISOString() });
+        await supabase.from("agent_memories").update({
+          messages: existingMsgsForAbuse,
+          is_paused: true,
+          is_processing: false,
+          processing_started_at: null,
+          last_message_id: message_id || memory.last_message_id,
+        }).eq("id", memory.id);
+        lockAcquired = false;
+
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "abusive_cutoff" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+
+        // Log execution
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText,
+          output_message: cutoffReply,
+          status: "abusive_cutoff",
+          tokens_used: 0,
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+          error_message: abuseResult.reason,
+        });
+
+        console.log(`[ai-agent-chat] ✅ Abusive cutoff complete — session paused`);
+        return new Response(JSON.stringify({
+          response: cutoffReply,
+          chunks: [cutoffReply],
+          abusive_cutoff: true,
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // --- TRAINER MODE DETECTION ---
       const isTrainer = !!(phone_number && agent.trainer_phone && isTrainerPhone(phone_number, agent.trainer_phone));
       if (isTrainer) {
