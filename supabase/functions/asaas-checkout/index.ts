@@ -329,8 +329,8 @@ serve(async (req) => {
 
     // 3. Create Asaas customer
     let mobilePhone = cleanPhone;
-    if (mobilePhone.length >= 10 && !mobilePhone.startsWith("55")) {
-      mobilePhone = "55" + mobilePhone;
+    if (mobilePhone.startsWith("55") && mobilePhone.length > 11) {
+      mobilePhone = mobilePhone.substring(2);
     }
 
     const asaasCustomer = await asaasFetch("/customers", {
@@ -376,8 +376,8 @@ serve(async (req) => {
     // Prepare creditCardHolderInfo with required fields
     const holderPhone = creditCardHolderInfo?.phone?.replace(/\D/g, "") || cleanPhone;
     let holderMobilePhone = holderPhone;
-    if (holderMobilePhone.length >= 10 && !holderMobilePhone.startsWith("55")) {
-      holderMobilePhone = "55" + holderMobilePhone;
+    if (holderMobilePhone.startsWith("55") && holderMobilePhone.length > 11) {
+      holderMobilePhone = holderMobilePhone.substring(2);
     }
 
     const subscriptionPayload: Record<string, any> = {
