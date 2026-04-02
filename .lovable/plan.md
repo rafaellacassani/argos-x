@@ -1,47 +1,51 @@
 
 
-## Auto-handoff para mídias visuais (imagem/vídeo)
+## Cut-off inteligente para conversas sem propósito / abusivas
 
 ### Problema
-Quando um lead envia imagem ou vídeo, a IA processa via vision gastando 80-188K tokens por chamada. Isso é caro e geralmente desnecessário.
+Leads "trolls" ou mensagens sem sentido consomem centenas de milhares de tokens sem nenhum valor. A sessão de 44 mensagens do troll custou 532K tokens. Não existe mecanismo para a IA encerrar proativamente.
 
 ### Solução
-Interceptar imagens e vídeos **antes** de chamar a IA. O agente responde automaticamente com uma mensagem educada, pausa a sessão, cancela follow-ups e abre um ticket na fila de suporte humano.
+Adicionar função `detectAbusiveSession()` no `ai-agent-chat/index.ts` que analisa o histórico **antes** de chamar a IA. Se detectar padrão abusivo, encerra a conversa sem gastar tokens.
 
-### Mensagem automática
-> "Recebi seu arquivo! 📎 Vou encaminhar para nossa equipe analisar com atenção. Um atendente vai te responder em breve — fique tranquilo(a)! 😊"
+### Detecção (3 sinais)
+
+1. **Spam de mensagens curtas**: 8+ mensagens do usuário com menos de 6 caracteres nas últimas 25 (ex: "kk", "?", "oi", "kkkkk")
+2. **Volume improdutivo**: mais de N mensagens do usuário (configurável, default 20) sem dados de qualificação coletados (nome/email/empresa não aparecem no histórico)
+3. **Ofensas repetidas**: 3+ mensagens com palavrões/ofensas (lista em português)
+
+### Ação ao detectar
+- Envia mensagem educada: *"Percebi que não consegui te ajudar como deveria. 😊 Se precisar de algo, é só mandar mensagem novamente! Até mais!"*
+- Pausa sessão (`is_paused: true`)
+- Cancela follow-ups pendentes
+- Registra `agent_executions` com status `abusive_cutoff`
+- **0 tokens gastos**
 
 ### Configuração por agente
-Adicionar um toggle na aba Avançado: **"Encaminhar imagens e vídeos para suporte"** (`media_handoff_enabled`, default `false`). Quando ativado, imagens e vídeos disparam o handoff automático. Áudios continuam sendo transcritos normalmente.
+- Nova coluna `max_unproductive_messages` (integer, default 20) na tabela `ai_agents`
+- Toggle/campo na aba Avançado do agente
 
 ### Arquivos alterados
 
-| Arquivo | O que muda |
+| Arquivo | Alteração |
 |---|---|
-| **Migration SQL** | Adicionar coluna `media_handoff_enabled` (boolean, default false) na tabela `ai_agents` |
-| **`supabase/functions/ai-agent-chat/index.ts`** | Após carregar o agente e a memória (antes da chamada à IA), checar se `media_type` é `image` ou `video` e `agent.media_handoff_enabled === true`. Se sim: salvar mensagem do user na memória, responder com a mensagem padrão, pausar sessão (`is_paused: true`), cancelar follow-ups pendentes, inserir na `human_support_queue` com reason "Mídia recebida (imagem/vídeo)", registrar `agent_executions` com status `media_handoff`, retornar resposta sem chamar a IA |
-| **`src/components/agents/tabs/AdvancedTab.tsx`** | Adicionar Switch "Encaminhar imagens e vídeos para suporte humano" com descrição explicativa |
-| **`src/hooks/useAIAgents.ts`** | Incluir `media_handoff_enabled` no `CreateAgentData` e no insert do `createAgent` |
+| Migration SQL | `ALTER TABLE ai_agents ADD COLUMN max_unproductive_messages integer DEFAULT 20` |
+| `supabase/functions/ai-agent-chat/index.ts` | Adicionar `detectAbusiveSession()` + check logo após media handoff e antes do trainer mode (linha ~833) |
+| `src/components/agents/tabs/AdvancedTab.tsx` | Adicionar campo numérico "Limite de mensagens sem progresso" |
 
-### Fluxo no ai-agent-chat
+### Posição no fluxo
 
 ```text
-1. Recebe mensagem com media_type = "image" ou "video"
-2. Carrega agent, verifica agent.media_handoff_enabled
-3. Se false → fluxo normal (processa imagem/vídeo com IA)
-4. Se true →
-   a. Salva mensagem "[Imagem/Vídeo]" na memória
-   b. Gera resposta fixa (sem chamar IA = 0 tokens)
-   c. Pausa sessão (is_paused = true)
-   d. Cancela follow-ups pendentes
-   e. Insere na human_support_queue
-   f. Registra agent_executions (status: media_handoff)
-   g. Retorna resposta para o webhook enviar ao lead
+... opt-out check ...
+... media handoff check ...
+→ NEW: abusive session check ← (aqui, antes de chamar a IA)
+... trainer mode ...
+... AI call ...
 ```
 
 ### O que NÃO muda
-- Processamento de áudio (continua transcrevendo normalmente)
-- Agentes existentes (default `false`, comportamento atual preservado)
-- Lógica de human-handoff existente
-- Interface de fila de suporte
+- Loop detection existente (detecta IA-vs-IA, diferente deste que detecta humano abusivo)
+- Opt-out detection existente
+- Media handoff existente
+- Agentes existentes (default 20 = comportamento conservador)
 
