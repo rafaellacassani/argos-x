@@ -98,6 +98,62 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Abusive session detection ---
+const OFFENSIVE_KEYWORDS = [
+  "porra", "caralho", "puta", "fdp", "filha da puta", "filho da puta",
+  "vai se foder", "vai tomar no cu", "vsf", "vtnc", "otario", "otária",
+  "idiota", "imbecil", "babaca", "cuzao", "cuzão", "merda", "bosta",
+  "arrombado", "arrombada", "desgraçado", "desgraçada", "lixo", "vagabundo",
+  "vagabunda", "piranha", "viado", "retardado", "retardada",
+];
+
+interface AbusiveResult {
+  detected: boolean;
+  reason: string;
+}
+
+function detectAbusiveSession(messages: ChatMessage[], maxUnproductive: number): AbusiveResult {
+  const userMsgs = messages.filter(m => m.role === "user");
+  if (userMsgs.length < 5) return { detected: false, reason: "" };
+
+  const last25 = userMsgs.slice(-25);
+
+  // Signal 1: Spam of short messages (8+ messages < 6 chars in last 25)
+  const shortCount = last25.filter(m => (m.content || "").trim().length < 6).length;
+  if (shortCount >= 8) {
+    return { detected: true, reason: `spam_short_messages (${shortCount} short msgs in last 25)` };
+  }
+
+  // Signal 2: Unproductive volume
+  if (userMsgs.length >= maxUnproductive) {
+    const allText = messages.map(m => (m.content || "").toLowerCase()).join(" ");
+    const hasEmail = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/.test(allText);
+    const hasPhone = /\d{8,}/.test(allText.replace(/\D/g, ""));
+    const hasName = messages.some(m => m.role === "assistant" && /(?:prazer|obrigad[oa]|entendi),?\s+\w+/i.test(m.content || ""));
+    if (!hasEmail && !hasPhone && !hasName) {
+      return { detected: true, reason: `unproductive_volume (${userMsgs.length} msgs, no qualification)` };
+    }
+  }
+
+  // Signal 3: Repeated offenses (3+ offensive messages)
+  let offenseCount = 0;
+  for (const msg of last25) {
+    const normalized = (msg.content || "").toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (OFFENSIVE_KEYWORDS.some(kw => {
+      const nkw = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalized.includes(nkw);
+    })) {
+      offenseCount++;
+    }
+  }
+  if (offenseCount >= 3) {
+    return { detected: true, reason: `offensive_messages (${offenseCount} offensive msgs)` };
+  }
+
+  return { detected: false, reason: "" };
+}
+
 // --- Gibberish detection: block nonsensical AI output ---
 function isGibberish(text: string): boolean {
   if (!text || text.length < 20) return false;
