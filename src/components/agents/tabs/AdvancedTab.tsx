@@ -90,6 +90,22 @@ export function AdvancedTab({ formData, updateField }: Props) {
         </div>
       </div>
 
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <div>
+            <Label>Limite de mensagens sem progresso</Label>
+            <p className="text-xs text-muted-foreground">Se o lead enviar muitas mensagens sem informar dados úteis (nome, email, telefone), a IA encerra a conversa automaticamente para economizar tokens. Também detecta spam e ofensas repetidas.</p>
+          </div>
+        </div>
+        <Input
+          type="number"
+          value={formData.max_unproductive_messages ?? 20}
+          onChange={(e) => updateField("max_unproductive_messages", parseInt(e.target.value) || 20)}
+          min={10} max={100}
+          className="w-32"
+        />
+      </div>
+
       <Separator />
 
       <div className="space-y-3">

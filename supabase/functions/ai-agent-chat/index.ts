@@ -98,6 +98,62 @@ function detectRejection(text: string): boolean {
   });
 }
 
+// --- Abusive session detection ---
+const OFFENSIVE_KEYWORDS = [
+  "porra", "caralho", "puta", "fdp", "filha da puta", "filho da puta",
+  "vai se foder", "vai tomar no cu", "vsf", "vtnc", "otario", "otária",
+  "idiota", "imbecil", "babaca", "cuzao", "cuzão", "merda", "bosta",
+  "arrombado", "arrombada", "desgraçado", "desgraçada", "lixo", "vagabundo",
+  "vagabunda", "piranha", "viado", "retardado", "retardada",
+];
+
+interface AbusiveResult {
+  detected: boolean;
+  reason: string;
+}
+
+function detectAbusiveSession(messages: ChatMessage[], maxUnproductive: number): AbusiveResult {
+  const userMsgs = messages.filter(m => m.role === "user");
+  if (userMsgs.length < 5) return { detected: false, reason: "" };
+
+  const last25 = userMsgs.slice(-25);
+
+  // Signal 1: Spam of short messages (8+ messages < 6 chars in last 25)
+  const shortCount = last25.filter(m => (m.content || "").trim().length < 6).length;
+  if (shortCount >= 8) {
+    return { detected: true, reason: `spam_short_messages (${shortCount} short msgs in last 25)` };
+  }
+
+  // Signal 2: Unproductive volume
+  if (userMsgs.length >= maxUnproductive) {
+    const allText = messages.map(m => (m.content || "").toLowerCase()).join(" ");
+    const hasEmail = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/.test(allText);
+    const hasPhone = /\d{8,}/.test(allText.replace(/\D/g, ""));
+    const hasName = messages.some(m => m.role === "assistant" && /(?:prazer|obrigad[oa]|entendi),?\s+\w+/i.test(m.content || ""));
+    if (!hasEmail && !hasPhone && !hasName) {
+      return { detected: true, reason: `unproductive_volume (${userMsgs.length} msgs, no qualification)` };
+    }
+  }
+
+  // Signal 3: Repeated offenses (3+ offensive messages)
+  let offenseCount = 0;
+  for (const msg of last25) {
+    const normalized = (msg.content || "").toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (OFFENSIVE_KEYWORDS.some(kw => {
+      const nkw = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalized.includes(nkw);
+    })) {
+      offenseCount++;
+    }
+  }
+  if (offenseCount >= 3) {
+    return { detected: true, reason: `offensive_messages (${offenseCount} offensive msgs)` };
+  }
+
+  return { detected: false, reason: "" };
+}
+
 // --- Gibberish detection: block nonsensical AI output ---
 function isGibberish(text: string): boolean {
   if (!text || text.length < 20) return false;
@@ -827,6 +883,55 @@ serve(async (req) => {
           response: handoffReply,
           chunks: [handoffReply],
           media_handoff: true,
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // --- ABUSIVE SESSION DETECTION ---
+      const maxUnproductive = agent.max_unproductive_messages ?? 20;
+      const existingMsgsForAbuse: ChatMessage[] = memory.messages || [];
+      // Add current message to check
+      const msgsWithCurrent = [...existingMsgsForAbuse, { role: "user" as const, content: messageText }];
+      const abuseResult = detectAbusiveSession(msgsWithCurrent, maxUnproductive);
+      if (abuseResult.detected) {
+        console.log(`[ai-agent-chat] 🛑 Abusive session detected: ${abuseResult.reason}`);
+        
+        const cutoffReply = "Percebi que não consegui te ajudar como deveria. 😊 Se precisar de algo, é só mandar mensagem novamente! Até mais!";
+        
+        // Save messages + pause
+        existingMsgsForAbuse.push({ role: "user", content: messageText, timestamp: new Date().toISOString() });
+        existingMsgsForAbuse.push({ role: "assistant", content: cutoffReply, timestamp: new Date().toISOString() });
+        await supabase.from("agent_memories").update({
+          messages: existingMsgsForAbuse,
+          is_paused: true,
+          is_processing: false,
+          processing_started_at: null,
+          last_message_id: message_id || memory.last_message_id,
+        }).eq("id", memory.id);
+        lockAcquired = false;
+
+        // Cancel pending follow-ups
+        await supabase.from("agent_followup_queue")
+          .update({ status: "canceled", canceled_reason: "abusive_cutoff" })
+          .eq("session_id", session_id)
+          .eq("status", "pending");
+
+        // Log execution
+        await supabase.from("agent_executions").insert({
+          agent_id, lead_id, session_id,
+          input_message: messageText,
+          output_message: cutoffReply,
+          status: "abusive_cutoff",
+          tokens_used: 0,
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+          error_message: abuseResult.reason,
+        });
+
+        console.log(`[ai-agent-chat] ✅ Abusive cutoff complete — session paused`);
+        return new Response(JSON.stringify({
+          response: cutoffReply,
+          chunks: [cutoffReply],
+          abusive_cutoff: true,
         }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 

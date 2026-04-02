@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_agents ADD COLUMN max_unproductive_messages integer DEFAULT 20;
