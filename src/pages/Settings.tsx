@@ -240,7 +240,8 @@ export default function Settings() {
         .from("whatsapp_cloud_connections")
         .select("id, inbox_name, phone_number, is_active, status, webhook_verify_token, meta_page_id, created_at, last_webhook_at")
         .eq("workspace_id", workspaceId)
-        .eq("is_active", true);
+        .order("is_active", { ascending: false })
+        .order("created_at", { ascending: false });
       setCloudConnections(data || []);
     } catch (err) {
       console.error("Error fetching cloud connections:", err);
