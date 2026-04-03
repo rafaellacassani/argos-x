@@ -105,6 +105,14 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
           .eq("id", conn.meta_page_id);
       }
 
+      // Audit log
+      await supabase.from("connection_audit_log" as any).insert({
+        connection_id: conn.id,
+        workspace_id: workspaceId,
+        event_type: "deactivated",
+        details: { inbox_name: conn.inbox_name },
+      });
+
       toast({ title: "Conexão desativada", description: `"${conn.inbox_name}" foi desativada.` });
       setShowDeactivateDialog(false);
       onRefresh();
@@ -114,7 +122,38 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
     }
   };
 
+  const handleReactivate = async () => {
+    try {
+      await supabase
+        .from("whatsapp_cloud_connections")
+        .update({ is_active: true })
+        .eq("id", conn.id);
+
+      if (conn.meta_page_id) {
+        await supabase
+          .from("meta_pages")
+          .update({ is_active: true })
+          .eq("id", conn.meta_page_id);
+      }
+
+      // Audit log
+      await supabase.from("connection_audit_log" as any).insert({
+        connection_id: conn.id,
+        workspace_id: workspaceId,
+        event_type: "reactivated",
+        details: { inbox_name: conn.inbox_name },
+      });
+
+      toast({ title: "Conexão reativada!", description: `"${conn.inbox_name}" está ativa novamente.` });
+      onRefresh();
+    } catch (err) {
+      console.error("Error reactivating:", err);
+      toast({ title: "Erro ao reativar", variant: "destructive" });
+    }
+  };
+
   const isActive = conn.status === "active";
+  const isEnabled = conn.is_active !== false;
 
   return (
     <>
