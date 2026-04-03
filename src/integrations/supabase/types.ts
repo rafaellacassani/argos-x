@@ -1150,6 +1150,44 @@ export type Database = {
           },
         ]
       }
+      connection_audit_log: {
+        Row: {
+          connection_id: string | null
+          created_at: string
+          details: Json | null
+          event_type: string
+          id: string
+          performed_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          connection_id?: string | null
+          created_at?: string
+          details?: Json | null
+          event_type: string
+          id?: string
+          performed_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          connection_id?: string | null
+          created_at?: string
+          details?: Json | null
+          event_type?: string
+          id?: string
+          performed_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_audit_log_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_cloud_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_accounts: {
         Row: {
           access_token: string
