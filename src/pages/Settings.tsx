@@ -1032,9 +1032,14 @@ export default function Settings() {
               <h2 className="font-display font-semibold text-lg">WhatsApp API Oficial (Cloud)</h2>
               <p className="text-muted-foreground text-sm">Conexões via API oficial da Meta</p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Nova Conexão
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => setShowEmbeddedSignup(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Conectar WhatsApp
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
+                <Wrench className="w-4 h-4 mr-1" /> Conexão Manual
+              </Button>
+            </div>
           </div>
 
           {cloudConnections.length === 0 ? (
