@@ -43,6 +43,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
+import { WhatsAppEmbeddedSignup } from "@/components/whatsapp/WhatsAppEmbeddedSignup";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
