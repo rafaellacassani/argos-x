@@ -50,11 +50,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Get access token from meta_pages
+    // Don't filter by is_active - we need to download media even from inactive pages
+    // since the media was already received while the page was active
     const { data: metaPage, error: pageError } = await supabase
       .from("meta_pages")
       .select("id, page_access_token, page_id, workspace_id")
       .eq("id", metaPageId)
-      .eq("is_active", true)
       .single();
 
     if (pageError || !metaPage) {
