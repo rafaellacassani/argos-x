@@ -404,12 +404,37 @@ app.get("/", async (c) => {
             console.error(`[Facebook OAuth] Error subscribing WABA ${waba.id}:`, subErr);
           }
 
-          // Save phone numbers as whatsapp_cloud_connections
+          // Save phone numbers as whatsapp_cloud_connections AND meta_pages
           const phoneNumbers = waba.phone_numbers?.data || [];
           for (const phone of phoneNumbers) {
-            // Use the first page token as fallback for API calls
-            const fallbackToken = pages.length > 0 ? pages[0].access_token : finalUserToken;
+            const phoneName = phone.verified_name || waba.name || "WhatsApp Cloud";
+            const phoneDisplay = phone.display_phone_number || phone.id;
 
+            // Step A: Create/update meta_pages entry (required for webhook routing)
+            const { data: metaPageEntry, error: metaPageErr } = await supabase
+              .from("meta_pages")
+              .upsert(
+                {
+                  meta_account_id: metaAccount.id,
+                  page_id: phone.id,
+                  page_name: `WhatsApp - ${phoneDisplay}`,
+                  page_access_token: finalUserToken,
+                  platform: "whatsapp_business",
+                  workspace_id: workspaceId,
+                  is_active: true,
+                },
+                { onConflict: "page_id", ignoreDuplicates: false }
+              )
+              .select("id")
+              .single();
+
+            if (metaPageErr) {
+              console.error(`[Facebook OAuth] Failed to save meta_page for WABA ${phoneDisplay}:`, metaPageErr);
+            } else {
+              console.log(`[Facebook OAuth] ✅ meta_page created for WABA: ${phoneDisplay} (${metaPageEntry?.id})`);
+            }
+
+            // Step B: Create/update whatsapp_cloud_connections with meta_page_id link
             const { error: connErr } = await supabase
               .from("whatsapp_cloud_connections")
               .upsert(
@@ -417,17 +442,18 @@ app.get("/", async (c) => {
                   workspace_id: workspaceId,
                   waba_id: waba.id,
                   phone_number_id: phone.id,
-                  phone_number: phone.display_phone_number || phone.id,
-                  inbox_name: phone.verified_name || waba.name || "WhatsApp Cloud",
+                  phone_number: phoneDisplay,
+                  inbox_name: phoneName,
                   access_token: finalUserToken,
                   status: "active",
                   is_active: true,
+                  meta_page_id: metaPageEntry?.id || null,
                 },
                 { onConflict: "workspace_id,phone_number_id", ignoreDuplicates: false }
               );
 
             if (connErr) {
-              console.error(`[Facebook OAuth] Failed to save WABA connection ${phone.display_phone_number}:`, connErr);
+              console.error(`[Facebook OAuth] Failed to save WABA connection ${phoneDisplay}:`, connErr);
 
               // Fallback: try insert without upsert
               const { error: insertErr } = await supabase
@@ -436,20 +462,21 @@ app.get("/", async (c) => {
                   workspace_id: workspaceId,
                   waba_id: waba.id,
                   phone_number_id: phone.id,
-                  phone_number: phone.display_phone_number || phone.id,
-                  inbox_name: phone.verified_name || waba.name || "WhatsApp Cloud",
+                  phone_number: phoneDisplay,
+                  inbox_name: phoneName,
                   access_token: finalUserToken,
                   status: "active",
                   is_active: true,
+                  meta_page_id: metaPageEntry?.id || null,
                 });
 
               if (insertErr) {
                 console.error(`[Facebook OAuth] Insert fallback also failed:`, insertErr);
               } else {
-                console.log(`[Facebook OAuth] ✅ WABA phone saved (insert fallback): ${phone.display_phone_number}`);
+                console.log(`[Facebook OAuth] ✅ WABA phone saved (insert fallback): ${phoneDisplay}`);
               }
             } else {
-              console.log(`[Facebook OAuth] ✅ WABA phone saved: ${phone.display_phone_number}`);
+              console.log(`[Facebook OAuth] ✅ WABA phone saved: ${phoneDisplay}`);
             }
           }
         }
@@ -491,6 +518,8 @@ app.post("/url", async (c) => {
     "instagram_manage_comments",
     "business_management",
     "leads_retrieval",
+    "whatsapp_business_management",
+    "whatsapp_business_messaging",
   ];
 
   const state = await generateState(workspaceId);
