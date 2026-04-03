@@ -1,70 +1,75 @@
 
 
-## Corrigir: Mensagens WABA não chegam no chat (webhook não subscrito)
+## Conexão automática de WhatsApp (WABA) via OAuth Meta — é possível e já está quase pronto
 
-### Problema raiz
+### Resposta direta
 
-O OAuth flow (`facebook-oauth/index.ts`) faz subscription de webhooks apenas para **Pages** (`subscribed_fields: messages, messaging_postbacks, feed, leadgen`). Isso cobre Facebook Messenger, Instagram DMs e Lead Ads.
+**Sim, é totalmente possível.** O OAuth da Meta já suporta isso. Na verdade, o código atual **já detecta WABAs e números automaticamente** (Step 7 do `facebook-oauth/index.ts`). O problema é que faltam 2 coisas para funcionar de ponta a ponta:
 
-Porém, **mensagens WABA (WhatsApp Cloud API)** são eventos do objeto `whatsapp_business_account`, que requer uma subscription separada na Graph API:
+1. **Escopo OAuth `whatsapp_business_management`** — não está na lista de scopes solicitados, então a Meta não dá acesso às WABAs do usuário
+2. **Registro em `meta_pages`** — o OAuth salva o WABA em `whatsapp_cloud_connections` mas não cria o registro correspondente em `meta_pages` com `platform = "whatsapp_business"`, que é onde o webhook procura para rotear mensagens
 
-```
-POST https://graph.facebook.com/v18.0/{WABA_ID}/subscribed_apps
-```
+### O que precisa ser feito
 
-Sem isso, a Meta nunca envia eventos de mensagens WhatsApp para o nosso webhook. Por isso o Fellipe não recebe nada — o webhook simplesmente não está inscrito para o WABA dele.
+**1. Adicionar escopo no OAuth** (`facebook-oauth/index.ts`)
 
-Os seus eventos WABA (`980377115162609`) funcionam porque foram configurados manualmente no Meta Dashboard.
+Adicionar `whatsapp_business_management` e `whatsapp_business_messaging` à lista de scopes:
 
-### Solução
+```text
+Scopes atuais:
+  pages_show_list, pages_messaging, pages_manage_metadata,
+  pages_read_engagement, instagram_basic, instagram_manage_messages,
+  instagram_manage_comments, business_management, leads_retrieval
 
-Adicionar a subscription do WABA **automaticamente** no fluxo OAuth e no fluxo de conexão CloudAPI.
-
-### Alterações
-
-**Arquivo: `supabase/functions/facebook-oauth/index.ts`**
-
-Após salvar o `whatsapp_cloud_connections` e o `meta_pages` com platform `whatsapp_business`, adicionar chamada:
-
-```typescript
-// Subscribe WABA to webhook
-const wabaId = waba.id; // WABA ID from Graph API
-const subscribeRes = await fetch(
-  `https://graph.facebook.com/v18.0/${wabaId}/subscribed_apps`,
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      access_token: finalUserToken,
-    }),
-  }
-);
+Adicionar:
+  whatsapp_business_management
+  whatsapp_business_messaging
 ```
 
-Isso inscreve o WABA no webhook do nosso app, fazendo a Meta enviar eventos `whatsapp_business_account` para o endpoint `facebook-webhook`.
+**2. Criar `meta_pages` para cada número WABA** (`facebook-oauth/index.ts`)
 
-**Investigação adicional necessária**: O OAuth flow atual detecta WABAs? Preciso verificar se o código já itera por WABAs para saber onde inserir a subscription.
+No Step 7, após salvar em `whatsapp_cloud_connections`, criar também um registro em `meta_pages`:
 
-**Arquivo: `supabase/functions/facebook-oauth/index.ts`** — verificar o trecho que processa WABAs (provavelmente entre linhas 100-240 que ainda não li).
-
-### Ação imediata para o Fellipe
-
-Enquanto o fix automático não é implementado, posso fazer uma chamada manual via Graph API para subscribir o WABA dele:
-
+```text
+meta_pages:
+  page_id = phone_number_id
+  page_name = "WhatsApp - {display_phone_number}"
+  page_access_token = finalUserToken
+  platform = "whatsapp_business"
+  workspace_id = workspaceId
+  meta_account_id = metaAccount.id
+  is_active = true
 ```
-POST https://graph.facebook.com/v18.0/{WABA_ID}/subscribed_apps
-```
 
-Mas preciso do WABA ID dele (não é o `phone_number_id`). Posso buscar isso via Graph API se tivermos o access_token.
+E vincular o `meta_page_id` no `whatsapp_cloud_connections`.
 
-### Resumo
+**3. Fallback no webhook** (`facebook-webhook/index.ts`)
+
+Adicionar fallback para quando o webhook receber evento WABA e não encontrar `meta_pages`: buscar direto em `whatsapp_cloud_connections` por `phone_number_id`.
+
+### Resultado
+
+Depois dessas 3 alterações:
+- Cliente clica em "Conectar Facebook" no Settings
+- Faz login no Meta
+- O sistema detecta automaticamente: páginas Facebook, contas Instagram **E números WhatsApp**
+- Tudo fica conectado e funcional sem configuração manual adicional
+- Mensagens WABA chegam no Chat automaticamente
+
+### Arquivos alterados
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/facebook-oauth/index.ts` | Após detectar/salvar WABA, chamar `POST /{wabaId}/subscribed_apps` para inscrever webhook |
+| `supabase/functions/facebook-oauth/index.ts` | Adicionar 2 scopes WABA + criar `meta_pages` para cada número WABA detectado |
+| `supabase/functions/facebook-webhook/index.ts` | Fallback de resolução por `whatsapp_cloud_connections` quando `meta_pages` não encontra |
+
+### Pré-requisito no Meta Developers
+
+Os escopos `whatsapp_business_management` e `whatsapp_business_messaging` precisam estar aprovados no app Meta (no painel de Use Cases). Se já estiverem como "Ready to use" ou "Advanced Access", basta adicionar no código.
 
 ### O que NÃO muda
-- Handler de eventos WABA no `facebook-webhook/index.ts` (já funciona)
-- Fluxo de mensagens Facebook/Instagram (já funciona)
-- Lead Ads (já funciona)
+- Fluxo manual de conexão WABA (`CloudAPIConnectionModal`) — continua funcionando
+- Mensagens Facebook/Instagram — sem alteração
+- Lead Ads — sem alteração
+- Tabelas do banco — sem alteração de schema
 
