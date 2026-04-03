@@ -43,6 +43,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionModal } from "@/components/whatsapp/ConnectionModal";
 import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectionModal";
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
+import { WhatsAppEmbeddedSignup } from "@/components/whatsapp/WhatsAppEmbeddedSignup";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
@@ -131,6 +132,7 @@ export default function Settings() {
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
   const [showCloudAPIModal, setShowCloudAPIModal] = useState(false);
+  const [showEmbeddedSignup, setShowEmbeddedSignup] = useState(false);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
   const { templates, loading: templatesLoading, syncing, fetchTemplates, syncTemplates } = useWhatsAppTemplates();
@@ -1030,9 +1032,14 @@ export default function Settings() {
               <h2 className="font-display font-semibold text-lg">WhatsApp API Oficial (Cloud)</h2>
               <p className="text-muted-foreground text-sm">Conexões via API oficial da Meta</p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
-              <Plus className="w-4 h-4 mr-1" /> Nova Conexão
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => setShowEmbeddedSignup(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Conectar WhatsApp
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowCloudAPIModal(true)}>
+                <Wrench className="w-4 h-4 mr-1" /> Conexão Manual
+              </Button>
+            </div>
           </div>
 
           {cloudConnections.length === 0 ? (
@@ -1250,6 +1257,13 @@ export default function Settings() {
       <CloudAPIConnectionModal
         open={showCloudAPIModal}
         onOpenChange={setShowCloudAPIModal}
+        onSuccess={() => { fetchCloudConnections(); }}
+      />
+
+      {/* Embedded Signup Modal */}
+      <WhatsAppEmbeddedSignup
+        open={showEmbeddedSignup}
+        onOpenChange={setShowEmbeddedSignup}
         onSuccess={() => { fetchCloudConnections(); }}
       />
     </div>
