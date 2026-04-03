@@ -178,7 +178,7 @@ export function WhatsAppEmbeddedSignup({
         }
       },
       {
-        config_id: "", // Will be set when Configuration ID is created
+        config_id: "1720617639391234",
         response_type: "code",
         override_default_response_type: true,
         extras: {
