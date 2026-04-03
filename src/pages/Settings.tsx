@@ -1052,7 +1052,7 @@ export default function Settings() {
             </div>
           ) : (
             <div className="space-y-4">
-              {cloudConnections.map((conn: any, index: number) => (
+              {cloudConnections.filter((c: any) => c.is_active).map((conn: any, index: number) => (
                 <WABAConnectionCard
                   key={conn.id}
                   conn={conn}
@@ -1061,6 +1061,22 @@ export default function Settings() {
                   onRefresh={fetchCloudConnections}
                 />
               ))}
+
+              {cloudConnections.filter((c: any) => !c.is_active).length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <h4 className="text-sm font-medium text-muted-foreground">Conexões Desativadas</h4>
+                  {cloudConnections.filter((c: any) => !c.is_active).map((conn: any, index: number) => (
+                    <WABAConnectionCard
+                      key={conn.id}
+                      conn={conn}
+                      index={index}
+                      workspaceId={workspaceId}
+                      onRefresh={fetchCloudConnections}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           )}
 
