@@ -602,7 +602,9 @@ async function processWhatsAppBusinessEvent(entry: any) {
     const displayPhone = value.metadata?.display_phone_number;
 
     // Find meta_page by phone_number_id stored in page_id field
-    const { data: metaPage, error } = await supabase
+    let metaPage: { id: string; page_access_token: string; workspace_id: string } | null = null;
+    
+    const { data: mp, error } = await supabase
       .from("meta_pages")
       .select("id, page_access_token, workspace_id")
       .eq("page_id", phoneNumberId)
@@ -610,8 +612,31 @@ async function processWhatsAppBusinessEvent(entry: any) {
       .limit(1)
       .single();
 
-    if (error || !metaPage) {
-      console.warn("[Facebook Webhook] No meta_page for WABA phone_number_id:", phoneNumberId);
+    if (mp) {
+      metaPage = mp;
+    } else {
+      // Fallback: look up via whatsapp_cloud_connections
+      console.log("[Facebook Webhook] meta_pages miss for", phoneNumberId, "— trying whatsapp_cloud_connections fallback");
+      const { data: conn } = await supabase
+        .from("whatsapp_cloud_connections")
+        .select("id, access_token, workspace_id, meta_page_id")
+        .eq("phone_number_id", phoneNumberId)
+        .eq("is_active", true)
+        .limit(1)
+        .single();
+
+      if (conn) {
+        metaPage = {
+          id: conn.meta_page_id || conn.id,
+          page_access_token: conn.access_token,
+          workspace_id: conn.workspace_id,
+        };
+        console.log("[Facebook Webhook] ✅ Fallback resolved via whatsapp_cloud_connections:", conn.id);
+      }
+    }
+
+    if (!metaPage) {
+      console.warn("[Facebook Webhook] No meta_page or cloud_connection for WABA phone_number_id:", phoneNumberId);
       continue;
     }
 
