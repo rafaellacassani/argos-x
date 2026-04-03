@@ -1,75 +1,67 @@
 
+## Implementar WhatsApp Embedded Signup
 
-## Conexão automática de WhatsApp (WABA) via OAuth Meta — é possível e já está quase pronto
+### O que é
+O Embedded Signup da Meta permite que clientes conectem sua WABA direto pelo Argos X, sem sair da plataforma. O cliente clica em "Conectar WhatsApp", faz login no Facebook num popup, seleciona/cria sua conta de negócios e número, e tudo é salvo automaticamente.
 
-### Resposta direta
+### Pré-requisitos no Meta Developers (manual, feito por você)
+1. No app Meta, ir em **WhatsApp > Embedded Signup** e criar um **Configuration ID**
+2. Em **Facebook Login for Business > Settings**, adicionar o domínio do Argos X em "Allowed Domains for JavaScript SDK"
+3. Garantir que os escopos `whatsapp_business_management` e `whatsapp_business_messaging` estão aprovados
 
-**Sim, é totalmente possível.** O OAuth da Meta já suporta isso. Na verdade, o código atual **já detecta WABAs e números automaticamente** (Step 7 do `facebook-oauth/index.ts`). O problema é que faltam 2 coisas para funcionar de ponta a ponta:
+### Implementação
 
-1. **Escopo OAuth `whatsapp_business_management`** — não está na lista de scopes solicitados, então a Meta não dá acesso às WABAs do usuário
-2. **Registro em `meta_pages`** — o OAuth salva o WABA em `whatsapp_cloud_connections` mas não cria o registro correspondente em `meta_pages` com `platform = "whatsapp_business"`, que é onde o webhook procura para rotear mensagens
+#### 1. Adicionar secret `FACEBOOK_CONFIG_ID`
+- O Configuration ID do Embedded Signup precisa estar disponível no frontend e backend
 
-### O que precisa ser feito
+#### 2. Novo componente: `WhatsAppEmbeddedSignup.tsx`
+- Carrega o Facebook JavaScript SDK (`connect.facebook.net/en_US/sdk.js`)
+- Botão "Conectar WhatsApp" que chama `FB.login()` com:
+  ```js
+  FB.login(callback, {
+    config_id: FACEBOOK_CONFIG_ID,
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {
+      feature: 'whatsapp_embedded_signup',
+      version: 2,
+      sessionInfoVersion: '3',
+    }
+  });
+  ```
+- Escuta `window.addEventListener('message')` para capturar o evento `WA_EMBEDDED_SIGNUP` com `phone_number_id` e `waba_id`
+- Envia `code` + `phone_number_id` + `waba_id` + `workspace_id` para a edge function
 
-**1. Adicionar escopo no OAuth** (`facebook-oauth/index.ts`)
+#### 3. Nova edge function: `whatsapp-embedded-signup/index.ts`
+- Recebe: `code`, `phone_number_id`, `waba_id`, `workspace_id`
+- Troca o `code` por access token via Graph API (`/oauth/access_token`)
+- Busca detalhes do número via `GET /{phone_number_id}?fields=display_phone_number,verified_name`
+- Cria `meta_accounts`, `meta_pages` (platform=whatsapp_business), `whatsapp_cloud_connections`
+- Inscreve WABA no webhook: `POST /{waba_id}/subscribed_apps`
+- Retorna sucesso com dados da conexão
 
-Adicionar `whatsapp_business_management` e `whatsapp_business_messaging` à lista de scopes:
+#### 4. Atualizar Settings.tsx
+- Na aba "WhatsApp API Cloud", substituir/adicionar o botão "Nova Conexão" para abrir o Embedded Signup
+- Manter o modal manual como opção avançada (fallback)
 
-```text
-Scopes atuais:
-  pages_show_list, pages_messaging, pages_manage_metadata,
-  pages_read_engagement, instagram_basic, instagram_manage_messages,
-  instagram_manage_comments, business_management, leads_retrieval
+### Fluxo do cliente
+1. Vai em Configurações > WhatsApp API Cloud
+2. Clica "Conectar WhatsApp"
+3. Popup do Facebook abre → login → seleciona conta de negócios → seleciona/cria número
+4. Popup fecha → sistema salva tudo automaticamente
+5. Conexão aparece ativa na lista ✅
 
-Adicionar:
-  whatsapp_business_management
-  whatsapp_business_messaging
-```
-
-**2. Criar `meta_pages` para cada número WABA** (`facebook-oauth/index.ts`)
-
-No Step 7, após salvar em `whatsapp_cloud_connections`, criar também um registro em `meta_pages`:
-
-```text
-meta_pages:
-  page_id = phone_number_id
-  page_name = "WhatsApp - {display_phone_number}"
-  page_access_token = finalUserToken
-  platform = "whatsapp_business"
-  workspace_id = workspaceId
-  meta_account_id = metaAccount.id
-  is_active = true
-```
-
-E vincular o `meta_page_id` no `whatsapp_cloud_connections`.
-
-**3. Fallback no webhook** (`facebook-webhook/index.ts`)
-
-Adicionar fallback para quando o webhook receber evento WABA e não encontrar `meta_pages`: buscar direto em `whatsapp_cloud_connections` por `phone_number_id`.
-
-### Resultado
-
-Depois dessas 3 alterações:
-- Cliente clica em "Conectar Facebook" no Settings
-- Faz login no Meta
-- O sistema detecta automaticamente: páginas Facebook, contas Instagram **E números WhatsApp**
-- Tudo fica conectado e funcional sem configuração manual adicional
-- Mensagens WABA chegam no Chat automaticamente
-
-### Arquivos alterados
+### Arquivos
 
 | Arquivo | Alteração |
 |---|---|
-| `supabase/functions/facebook-oauth/index.ts` | Adicionar 2 scopes WABA + criar `meta_pages` para cada número WABA detectado |
-| `supabase/functions/facebook-webhook/index.ts` | Fallback de resolução por `whatsapp_cloud_connections` quando `meta_pages` não encontra |
-
-### Pré-requisito no Meta Developers
-
-Os escopos `whatsapp_business_management` e `whatsapp_business_messaging` precisam estar aprovados no app Meta (no painel de Use Cases). Se já estiverem como "Ready to use" ou "Advanced Access", basta adicionar no código.
+| `src/components/whatsapp/WhatsAppEmbeddedSignup.tsx` | **Novo** — componente com Facebook SDK + botão |
+| `supabase/functions/whatsapp-embedded-signup/index.ts` | **Novo** — processa callback do Embedded Signup |
+| `src/pages/Settings.tsx` | Adicionar botão Embedded Signup na aba Cloud API |
+| `index.html` | Nenhuma alteração (SDK carregado dinamicamente) |
 
 ### O que NÃO muda
-- Fluxo manual de conexão WABA (`CloudAPIConnectionModal`) — continua funcionando
-- Mensagens Facebook/Instagram — sem alteração
-- Lead Ads — sem alteração
-- Tabelas do banco — sem alteração de schema
-
+- Fluxo OAuth de Facebook/Instagram para mensagens (continua igual)
+- Modal manual de conexão WABA (mantido como fallback)
+- Webhook `facebook-webhook` (já processa mensagens WABA)
+- Lead Ads (já funciona)
