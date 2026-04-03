@@ -132,6 +132,7 @@ export default function Settings() {
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
   const [showCloudAPIModal, setShowCloudAPIModal] = useState(false);
+  const [showEmbeddedSignup, setShowEmbeddedSignup] = useState(false);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
   const { templates, loading: templatesLoading, syncing, fetchTemplates, syncTemplates } = useWhatsAppTemplates();
