@@ -198,30 +198,42 @@ Deno.serve(async (req) => {
       console.error("[Embedded Signup] Failed to save meta_page:", pageErr);
     }
 
-    // Step 6: Create whatsapp_cloud_connection
-    const { data: connection, error: connErr } = await supabase
+    // Step 6: Upsert whatsapp_cloud_connection (reactivate if exists)
+    // First check if connection exists for this workspace+phone
+    const { data: existingConn } = await supabase
       .from("whatsapp_cloud_connections")
-      .upsert(
-        {
-          workspace_id: workspace_id,
+      .select("id, is_active")
+      .eq("workspace_id", workspace_id)
+      .eq("phone_number_id", finalPhoneNumberId)
+      .maybeSingle();
+
+    let connectionId: string | null = null;
+
+    if (existingConn) {
+      // Reactivate and update existing connection
+      const { error: updateErr } = await supabase
+        .from("whatsapp_cloud_connections")
+        .update({
           waba_id: finalWabaId,
-          phone_number_id: finalPhoneNumberId,
           phone_number: phoneDisplay,
           inbox_name: verifiedName,
           access_token: accessToken,
           status: "active",
           is_active: true,
           meta_page_id: metaPage?.id || null,
-        },
-        { onConflict: "workspace_id,phone_number_id" }
-      )
-      .select("id, phone_number, inbox_name")
-      .single();
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingConn.id);
 
-    if (connErr) {
-      console.error("[Embedded Signup] Failed to save connection:", connErr);
-      // Fallback: try insert
-      const { error: insertErr } = await supabase
+      if (updateErr) {
+        console.error("[Embedded Signup] Failed to update connection:", updateErr);
+      } else {
+        connectionId = existingConn.id;
+        console.log(`[Embedded Signup] ✅ Reactivated existing connection ${existingConn.id}`);
+      }
+    } else {
+      // Create new connection
+      const { data: newConn, error: connErr } = await supabase
         .from("whatsapp_cloud_connections")
         .insert({
           workspace_id: workspace_id,
@@ -233,10 +245,25 @@ Deno.serve(async (req) => {
           status: "active",
           is_active: true,
           meta_page_id: metaPage?.id || null,
-        });
-      if (insertErr) {
-        console.error("[Embedded Signup] Insert fallback failed:", insertErr);
+        })
+        .select("id")
+        .single();
+
+      if (connErr) {
+        console.error("[Embedded Signup] Failed to create connection:", connErr);
+      } else {
+        connectionId = newConn?.id || null;
       }
+    }
+
+    // Audit log
+    if (connectionId) {
+      await supabase.from("connection_audit_log").insert({
+        connection_id: connectionId,
+        workspace_id: workspace_id,
+        event_type: existingConn ? "reactivated" : "connected",
+        details: { phone_number: phoneDisplay, inbox_name: verifiedName, via: "embedded_signup" },
+      });
     }
 
     console.log("[Embedded Signup] 🎉 Embedded Signup completed successfully!");
