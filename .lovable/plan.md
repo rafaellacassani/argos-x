@@ -1,67 +1,78 @@
 
-## Implementar WhatsApp Embedded Signup
+Objetivo: corrigir definitivamente o sumiço da sua WABA no workspace Argos X e impedir que isso volte a acontecer.
 
-### O que é
-O Embedded Signup da Meta permite que clientes conectem sua WABA direto pelo Argos X, sem sair da plataforma. O cliente clica em "Conectar WhatsApp", faz login no Facebook num popup, seleciona/cria sua conta de negócios e número, e tudo é salvo automaticamente.
+Diagnóstico confirmado
+- A sua WABA não foi movida para outro workspace.
+- Os registros encontrados continuam no workspace Argos X (`41efdc6d-d4ba-4589-9761-7438a5911d57`).
+- O que aconteceu é que ela foi desativada no backend/UI:
+  - existem 2 registros da mesma WABA em `whatsapp_cloud_connections` no Argos X, ambos com `is_active = false`
+  - o `meta_page` vinculado também está com `is_active = false`
+- Por isso ela “sumiu” do painel: a tela de Conexões só lista conexões com `is_active = true`.
 
-### Pré-requisitos no Meta Developers (manual, feito por você)
-1. No app Meta, ir em **WhatsApp > Embedded Signup** e criar um **Configuration ID**
-2. Em **Facebook Login for Business > Settings**, adicionar o domínio do Argos X em "Allowed Domains for JavaScript SDK"
-3. Garantir que os escopos `whatsapp_business_management` e `whatsapp_business_messaging` estão aprovados
+O que no código explica isso
+- `src/pages/Settings.tsx`
+  - busca conexões com:
+    - `workspace_id = workspaceId`
+    - `is_active = true`
+  - então qualquer conexão desativada desaparece da UI.
+- `src/components/whatsapp/WABAConnectionCard.tsx`
+  - a ação de desativar faz:
+    - `whatsapp_cloud_connections.is_active = false`
+    - `meta_pages.is_active = false`
+- Não encontrei, no código lido, nenhuma lógica de “mover WABA para outro workspace”.
+- Então o problema real é: desativação + ocultação da conexão, não migração.
 
-### Implementação
+Plano de correção
+1. Recuperação imediata
+- Reativar a conexão mais recente da sua WABA no Argos X.
+- Reativar também o `meta_page` vinculado.
+- Manter apenas 1 registro principal ativo para essa WABA.
 
-#### 1. Adicionar secret `FACEBOOK_CONFIG_ID`
-- O Configuration ID do Embedded Signup precisa estar disponível no frontend e backend
+2. Limpeza de duplicidade
+- Corrigir o estado duplicado da mesma `phone_number_id`.
+- Deixar o registro antigo arquivado/inativo e o atual como fonte única.
+- Isso evita comportamento confuso na tela e no roteamento de webhook.
 
-#### 2. Novo componente: `WhatsAppEmbeddedSignup.tsx`
-- Carrega o Facebook JavaScript SDK (`connect.facebook.net/en_US/sdk.js`)
-- Botão "Conectar WhatsApp" que chama `FB.login()` com:
-  ```js
-  FB.login(callback, {
-    config_id: FACEBOOK_CONFIG_ID,
-    response_type: 'code',
-    override_default_response_type: true,
-    extras: {
-      feature: 'whatsapp_embedded_signup',
-      version: 2,
-      sessionInfoVersion: '3',
-    }
-  });
-  ```
-- Escuta `window.addEventListener('message')` para capturar o evento `WA_EMBEDDED_SIGNUP` com `phone_number_id` e `waba_id`
-- Envia `code` + `phone_number_id` + `waba_id` + `workspace_id` para a edge function
+3. Correção estrutural no banco
+- Adicionar restrição única para impedir duplicatas por workspace + número:
+  - `whatsapp_cloud_connections (workspace_id, phone_number_id)`
+- Hoje os fluxos OAuth/Embedded Signup usam upsert com esse conflito, mas a tabela não mostra uma unique constraint correspondente; isso ajuda a explicar duplicidade.
 
-#### 3. Nova edge function: `whatsapp-embedded-signup/index.ts`
-- Recebe: `code`, `phone_number_id`, `waba_id`, `workspace_id`
-- Troca o `code` por access token via Graph API (`/oauth/access_token`)
-- Busca detalhes do número via `GET /{phone_number_id}?fields=display_phone_number,verified_name`
-- Cria `meta_accounts`, `meta_pages` (platform=whatsapp_business), `whatsapp_cloud_connections`
-- Inscreve WABA no webhook: `POST /{waba_id}/subscribed_apps`
-- Retorna sucesso com dados da conexão
+4. Correção de UX na tela de Conexões
+- Parar de “sumir” com conexões desativadas.
+- Mostrar uma seção de:
+  - Ativas
+  - Inativas
+- Adicionar botão “Reativar” direto no card.
+- Exibir status real: ativa, inativa, pendente, sem webhook.
 
-#### 4. Atualizar Settings.tsx
-- Na aba "WhatsApp API Cloud", substituir/adicionar o botão "Nova Conexão" para abrir o Embedded Signup
-- Manter o modal manual como opção avançada (fallback)
+5. Hardening do fluxo de conexão
+- Ajustar `facebook-oauth` e `whatsapp-embedded-signup` para:
+  - reaproveitar/reativar conexão existente
+  - religar `meta_page_id` se estiver quebrado
+  - evitar criar novo registro quando a mesma WABA já existe no mesmo workspace
 
-### Fluxo do cliente
-1. Vai em Configurações > WhatsApp API Cloud
-2. Clica "Conectar WhatsApp"
-3. Popup do Facebook abre → login → seleciona conta de negócios → seleciona/cria número
-4. Popup fecha → sistema salva tudo automaticamente
-5. Conexão aparece ativa na lista ✅
+6. Prevenção de novo susto
+- Adicionar trilha de auditoria simples para eventos de conexão:
+  - conectada
+  - desativada
+  - reativada
+  - token atualizado
+- Assim dá para saber exatamente “quem/quando” mudou o estado.
 
-### Arquivos
+7. Validação final
+- Confirmar que a WABA reaparece no Argos X em Conexões.
+- Confirmar que ela volta a aparecer nas telas que dependem de `is_active = true`.
+- Confirmar envio/recebimento e visibilidade no Chat e nos Agentes.
 
-| Arquivo | Alteração |
-|---|---|
-| `src/components/whatsapp/WhatsAppEmbeddedSignup.tsx` | **Novo** — componente com Facebook SDK + botão |
-| `supabase/functions/whatsapp-embedded-signup/index.ts` | **Novo** — processa callback do Embedded Signup |
-| `src/pages/Settings.tsx` | Adicionar botão Embedded Signup na aba Cloud API |
-| `index.html` | Nenhuma alteração (SDK carregado dinamicamente) |
+Detalhes técnicos
+- Registros localizados no Argos X para a mesma `phone_number_id = 980377115162609`.
+- Ambos estão `status = active`, mas `is_active = false`, o que mostra estado inconsistente.
+- O `meta_pages.page_id = 980377115162609` vinculado também está `is_active = false`.
+- Há um ponto extra a endurecer no app: `useWorkspace.tsx` pega apenas um `workspace_members` com `.limit(1).maybeSingle()` sem ordenação explícita; isso não parece ser a causa deste caso, mas é um risco para usuários com múltiplos workspaces e vale entrar no pacote de correção.
 
-### O que NÃO muda
-- Fluxo OAuth de Facebook/Instagram para mensagens (continua igual)
-- Modal manual de conexão WABA (mantido como fallback)
-- Webhook `facebook-webhook` (já processa mensagens WABA)
-- Lead Ads (já funciona)
+Resultado esperado após implementação
+- Sua WABA volta a aparecer no Argos X.
+- Ela não “some” mais apenas por estar inativa.
+- O sistema deixa de criar/aceitar duplicatas da mesma WABA no mesmo workspace.
+- Fica claro se a conexão foi desativada, por quem e quando.
