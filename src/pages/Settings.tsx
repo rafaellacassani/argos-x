@@ -1259,6 +1259,13 @@ export default function Settings() {
         onOpenChange={setShowCloudAPIModal}
         onSuccess={() => { fetchCloudConnections(); }}
       />
+
+      {/* Embedded Signup Modal */}
+      <WhatsAppEmbeddedSignup
+        open={showEmbeddedSignup}
+        onOpenChange={setShowEmbeddedSignup}
+        onSuccess={() => { fetchCloudConnections(); }}
+      />
     </div>
   );
 }
