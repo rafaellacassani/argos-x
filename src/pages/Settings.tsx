@@ -240,7 +240,8 @@ export default function Settings() {
         .from("whatsapp_cloud_connections")
         .select("id, inbox_name, phone_number, is_active, status, webhook_verify_token, meta_page_id, created_at, last_webhook_at")
         .eq("workspace_id", workspaceId)
-        .eq("is_active", true);
+        .order("is_active", { ascending: false })
+        .order("created_at", { ascending: false });
       setCloudConnections(data || []);
     } catch (err) {
       console.error("Error fetching cloud connections:", err);
@@ -661,17 +662,17 @@ export default function Settings() {
                           )}
                         </div>
                       )}
-                      {integration.id === "whatsapp-api" && cloudConnections.length > 0 && (
+                      {integration.id === "whatsapp-api" && cloudConnections.filter(c => c.is_active).length > 0 && (
                         <div className="mb-4 space-y-1">
-                          {cloudConnections.filter(c => c.status === "active").slice(0, 2).map((conn: any) => (
+                          {cloudConnections.filter(c => c.is_active && c.status === "active").slice(0, 2).map((conn: any) => (
                             <p key={conn.id} className="text-sm font-medium text-foreground flex items-center gap-2">
                               <Phone className="w-4 h-4 text-success" />
                               {conn.inbox_name} · {conn.phone_number}
                             </p>
                           ))}
-                          {cloudConnections.filter(c => c.status === "active").length > 2 && (
+                          {cloudConnections.filter(c => c.is_active && c.status === "active").length > 2 && (
                             <p className="text-xs text-muted-foreground">
-                              +{cloudConnections.filter(c => c.status === "active").length - 2} mais
+                              +{cloudConnections.filter(c => c.is_active && c.status === "active").length - 2} mais
                             </p>
                           )}
                         </div>
@@ -1051,7 +1052,7 @@ export default function Settings() {
             </div>
           ) : (
             <div className="space-y-4">
-              {cloudConnections.map((conn: any, index: number) => (
+              {cloudConnections.filter((c: any) => c.is_active).map((conn: any, index: number) => (
                 <WABAConnectionCard
                   key={conn.id}
                   conn={conn}
@@ -1060,6 +1061,22 @@ export default function Settings() {
                   onRefresh={fetchCloudConnections}
                 />
               ))}
+
+              {cloudConnections.filter((c: any) => !c.is_active).length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <h4 className="text-sm font-medium text-muted-foreground">Conexões Desativadas</h4>
+                  {cloudConnections.filter((c: any) => !c.is_active).map((conn: any, index: number) => (
+                    <WABAConnectionCard
+                      key={conn.id}
+                      conn={conn}
+                      index={index}
+                      workspaceId={workspaceId}
+                      onRefresh={fetchCloudConnections}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           )}
 

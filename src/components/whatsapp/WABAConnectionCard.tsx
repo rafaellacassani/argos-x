@@ -9,6 +9,7 @@ import {
   Power,
   Wifi,
   AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -105,6 +106,14 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
           .eq("id", conn.meta_page_id);
       }
 
+      // Audit log
+      await supabase.from("connection_audit_log" as any).insert({
+        connection_id: conn.id,
+        workspace_id: workspaceId,
+        event_type: "deactivated",
+        details: { inbox_name: conn.inbox_name },
+      });
+
       toast({ title: "Conexão desativada", description: `"${conn.inbox_name}" foi desativada.` });
       setShowDeactivateDialog(false);
       onRefresh();
@@ -114,7 +123,38 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
     }
   };
 
+  const handleReactivate = async () => {
+    try {
+      await supabase
+        .from("whatsapp_cloud_connections")
+        .update({ is_active: true })
+        .eq("id", conn.id);
+
+      if (conn.meta_page_id) {
+        await supabase
+          .from("meta_pages")
+          .update({ is_active: true })
+          .eq("id", conn.meta_page_id);
+      }
+
+      // Audit log
+      await supabase.from("connection_audit_log" as any).insert({
+        connection_id: conn.id,
+        workspace_id: workspaceId,
+        event_type: "reactivated",
+        details: { inbox_name: conn.inbox_name },
+      });
+
+      toast({ title: "Conexão reativada!", description: `"${conn.inbox_name}" está ativa novamente.` });
+      onRefresh();
+    } catch (err) {
+      console.error("Error reactivating:", err);
+      toast({ title: "Erro ao reativar", variant: "destructive" });
+    }
+  };
+
   const isActive = conn.status === "active";
+  const isEnabled = conn.is_active !== false;
 
   return (
     <>
@@ -122,23 +162,29 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
-        className="inboxia-card p-6"
+        className={`inboxia-card p-6 ${!isEnabled ? "opacity-60" : ""}`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isActive ? "bg-success/10" : "bg-yellow-500/10"}`}>
-              <Phone className={`w-6 h-6 ${isActive ? "text-success" : "text-yellow-600"}`} />
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${!isEnabled ? "bg-muted" : isActive ? "bg-success/10" : "bg-yellow-500/10"}`}>
+              <Phone className={`w-6 h-6 ${!isEnabled ? "text-muted-foreground" : isActive ? "text-success" : "text-yellow-600"}`} />
             </div>
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold">{conn.inbox_name}</h3>
                 <Badge variant="outline" className="text-xs">Cloud API</Badge>
-                <Badge
-                  variant="outline"
-                  className={isActive ? "bg-success/10 text-success border-success/20" : "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"}
-                >
-                  {isActive ? "Ativa" : "Pendente"}
-                </Badge>
+                {!isEnabled ? (
+                  <Badge variant="outline" className="bg-muted text-muted-foreground border-muted">
+                    Desativada
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className={isActive ? "bg-success/10 text-success border-success/20" : "bg-yellow-500/10 text-yellow-600 border-yellow-500/20"}
+                  >
+                    {isActive ? "Ativa" : "Pendente"}
+                  </Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5" />
@@ -157,25 +203,33 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowEditTokenModal(true)} title="Editar token de acesso">
-              <KeyRound className="w-4 h-4 mr-1" /> Token
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowWebhookModal(true)} title="Ver configuração do webhook">
-              <Eye className="w-4 h-4 mr-1" /> Webhook
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setShowDeactivateDialog(true)}
-              title="Desativar conexão"
-            >
-              <Power className="w-4 h-4" />
-            </Button>
+            {!isEnabled ? (
+              <Button variant="outline" size="sm" onClick={handleReactivate} className="text-success hover:text-success">
+                <RotateCcw className="w-4 h-4 mr-1" /> Reativar
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setShowEditTokenModal(true)} title="Editar token de acesso">
+                  <KeyRound className="w-4 h-4 mr-1" /> Token
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowWebhookModal(true)} title="Ver configuração do webhook">
+                  <Eye className="w-4 h-4 mr-1" /> Webhook
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setShowDeactivateDialog(true)}
+                  title="Desativar conexão"
+                >
+                  <Power className="w-4 h-4" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-        {!isActive && (
+        {isEnabled && !isActive && (
           <div className="mt-4 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20 flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-yellow-600" />
             <p className="text-sm text-yellow-600">
