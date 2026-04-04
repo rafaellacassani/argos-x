@@ -220,10 +220,10 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button size="lg" asChild className="bg-secondary hover:bg-secondary/90 h-14 px-8 text-lg">
-                <Link to="/cadastro">
+                <a href="https://argosx.com.br/cadastro">
                   Começar Agora — Grátis
                   <ArrowRight className="ml-2 w-5 h-5" />
-                </Link>
+                </a>
               </Button>
               <Button
                 size="lg"
