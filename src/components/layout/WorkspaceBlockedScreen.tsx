@@ -210,7 +210,7 @@ export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) 
           <div className="mt-6 text-center">
             <Button variant="ghost" size="sm" asChild>
               <a
-                href="https://wa.me/5511999999999?text=Preciso%20de%20ajuda%20com%20meu%20plano"
+                href="https://wa.me/5513954753979?text=Preciso%20de%20ajuda%20com%20meu%20plano"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground"
