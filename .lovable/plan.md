@@ -1,39 +1,43 @@
 
 
-## Corrigir cobrança para usar Asaas quando workspace é Asaas
+## Corrigir roteamento de pagamento: Stripe apenas para assinaturas ativas existentes
 
-### O que muda
+### Diagnóstico
 
-**Problema**: Clientes que vieram pelo Asaas, ao fazerem upgrade/pacotes/reativação, são redirecionados ao Stripe — causando cobrança dupla.
+O campo `payment_provider` em workspaces criados pelo painel admin está definido como `"stripe"` mesmo sem ter `stripe_customer_id`. Quando esses clientes tentam contratar, são enviados ao Stripe ao invés do Asaas.
 
-**Solução**: Rotear automaticamente com base no `payment_provider` do workspace.
+Dados encontrados no banco:
+- Workspaces com `payment_provider: "stripe"` + `stripe_customer_id: null` (ex: Tvlar Motos, LEGIS) → são redirecionados incorretamente ao Stripe
+- Workspaces com `payment_provider: "stripe"` + `stripe_customer_id` preenchido + `subscription_status: active` → devem continuar no Stripe
+- Workspaces com `payment_provider: "asaas"` → já funcionam corretamente
 
-### Arquivos
+### Regra correta
 
-| Arquivo | Ação |
+Usar Stripe **somente** quando o workspace já tem um `stripe_customer_id` preenchido (indicando que já existe um cliente Stripe vinculado). Caso contrário, sempre usar Asaas.
+
+### Arquivos a editar
+
+| Arquivo | Mudança |
 |---|---|
-| `supabase/functions/asaas-manage-subscription/index.ts` | **Criar** — nova edge function para upgrade e pacotes via API Asaas |
-| `src/pages/Planos.tsx` | **Editar** — rotear por `payment_provider` |
-| `src/components/layout/WorkspaceBlockedScreen.tsx` | **Editar** — rotear por `payment_provider` |
-| `supabase/functions/asaas-webhook/index.ts` | **Editar** — suporte a `lead_packs` via Asaas |
+| `src/pages/Planos.tsx` (linha 75) | Mudar lógica de `isAsaas` para: usar Asaas quando **não** tem `stripe_customer_id` |
+| `src/components/layout/WorkspaceBlockedScreen.tsx` (linha 85) | Mesma lógica |
 
-### Nova Edge Function: `asaas-manage-subscription`
+### Lógica nova (ambos os arquivos)
 
-- **Upgrade**: Atualiza assinatura existente no Asaas (`PUT /subscriptions/{id}`), atualiza limites no workspace imediatamente.
-- **Pacote de leads**: Cria nova assinatura mensal no Asaas para o pacote (1000→R$17, 5000→R$47, 20000→R$97, 50000→R$197), insere em `lead_packs`.
+```typescript
+// Antes:
+const isAsaas = workspace?.payment_provider === "asaas";
 
-### Frontend (Planos + WorkspaceBlockedScreen)
+// Depois: usar Stripe SOMENTE se já tem cliente Stripe vinculado
+const useStripe = !!workspace?.stripe_customer_id;
+```
 
-- Se `workspace.payment_provider === "asaas"` → chama `asaas-manage-subscription` (sem redirect, resposta direta, toast de sucesso)
-- Senão → mantém fluxo Stripe via `create-checkout-session`
+Então inverter as condições: `if (!useStripe)` → Asaas, `else` → Stripe.
 
-### Webhook Asaas
+### Impacto
 
-- Adiciona detecção de `type=lead_pack` no `externalReference` para inserir automaticamente em `lead_packs` quando pagamento confirmado.
-
-### Resultado
-
-- Clientes Asaas fazem tudo pelo Asaas
-- Clientes Stripe legados continuam pelo Stripe
-- Zero risco de cobrança dupla
+- Assinaturas Stripe ativas (com `stripe_customer_id`) continuam no Stripe sem alteração
+- Workspaces gratuitos/admin sem `stripe_customer_id` agora vão para Asaas
+- Workspaces Asaas continuam no Asaas (não têm `stripe_customer_id`)
+- Zero risco de quebrar assinaturas existentes
 
