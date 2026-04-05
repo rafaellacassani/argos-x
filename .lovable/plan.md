@@ -1,43 +1,49 @@
 
 
-## Corrigir roteamento de pagamento: Stripe apenas para assinaturas ativas existentes
+## Tornar os cards do Dashboard Executivo clicáveis com drill-down
 
-### Diagnóstico
+### O que muda
 
-O campo `payment_provider` em workspaces criados pelo painel admin está definido como `"stripe"` mesmo sem ter `stripe_customer_id`. Quando esses clientes tentam contratar, são enviados ao Stripe ao invés do Asaas.
+Adicionar modais/sheets de drill-down ao clicar nos KPIs e seções do Dashboard Executivo. O backend já retorna os dados necessarios na resposta — só precisa expandir o payload para incluir listas detalhadas onde falta, e adicionar interatividade no frontend.
 
-Dados encontrados no banco:
-- Workspaces com `payment_provider: "stripe"` + `stripe_customer_id: null` (ex: Tvlar Motos, LEGIS) → são redirecionados incorretamente ao Stripe
-- Workspaces com `payment_provider: "stripe"` + `stripe_customer_id` preenchido + `subscription_status: active` → devem continuar no Stripe
-- Workspaces com `payment_provider: "asaas"` → já funcionam corretamente
+### Backend (`supabase/functions/admin-clients/index.ts`)
 
-### Regra correta
+Expandir o retorno do `executive-dashboard` para incluir listas detalhadas:
 
-Usar Stripe **somente** quando o workspace já tem um `stripe_customer_id` preenchido (indicando que já existe um cliente Stripe vinculado). Caso contrário, sempre usar Asaas.
+- **`active_clients_list`**: Lista de workspaces ativos pagos com `id, name, plan_name, email, phone, subscription_status, created_at`
+- **`active_trials_list`**: Lista de trials ativos (todos, não só os expirando em 7 dias) com `id, name, plan_name, email, phone, trial_end, days_left`
+- **`churn_list`**: Lista dos churns do mês com `id, name, plan_name, email, phone, blocked_at`
+- **`past_due_list`**: Lista de inadimplentes com `id, name, plan_name, email, phone`
+- **`lead_packs_list`**: Lista de pacotes ativos com `workspace_name, pack_size, price_paid`
+- **`provider_clients`**: Listas por provedor (`stripe_list`, `asaas_list`, `none_list`) com `id, name, plan_name, email`
 
-### Arquivos a editar
+Usar dados que já estão carregados (workspaces, profileMap, leadPacks) — sem queries extras.
 
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/Planos.tsx` (linha 75) | Mudar lógica de `isAsaas` para: usar Asaas quando **não** tem `stripe_customer_id` |
-| `src/components/layout/WorkspaceBlockedScreen.tsx` (linha 85) | Mesma lógica |
+### Frontend (`src/components/admin/ExecutiveDashboardTab.tsx`)
 
-### Lógica nova (ambos os arquivos)
+1. **Adicionar estado** para controlar qual drill-down está aberto:
+   ```typescript
+   const [drilldown, setDrilldown] = useState<string | null>(null);
+   ```
 
-```typescript
-// Antes:
-const isAsaas = workspace?.payment_provider === "asaas";
+2. **Tornar clicáveis** (com `cursor-pointer` e `onClick`):
+   - Card "MRR Atual" → abre lista de clientes pagos com plano e valor
+   - Card "Clientes Ativos" → abre lista de clientes ativos
+   - Card "Trials Ativos" → abre lista de todos os trials
+   - Card "Churn do Mês" → abre lista dos churns
+   - Seção "Distribuição por Plano" → badges "X pagos", "X trial", "X inadimplente" clicáveis, filtram a lista pelo plano
+   - Card "Pacotes de Leads" → abre lista de pacotes ativos por workspace
+   - Card "Distribuição por Provedor" → cada linha clicável mostra a lista de clientes daquele provedor
 
-// Depois: usar Stripe SOMENTE se já tem cliente Stripe vinculado
-const useStripe = !!workspace?.stripe_customer_id;
-```
+3. **Componente Sheet/Dialog** reutilizável dentro do mesmo arquivo:
+   - Usa `Sheet` (lateral) com título dinâmico
+   - Tabela interna com colunas: Nome, Plano, E-mail, Telefone, Status
+   - Botão de WhatsApp em cada linha (já existe o helper `openChatWithPhone`)
 
-Então inverter as condições: `if (!useStripe)` → Asaas, `else` → Stripe.
+### Detalhes técnicos
 
-### Impacto
-
-- Assinaturas Stripe ativas (com `stripe_customer_id`) continuam no Stripe sem alteração
-- Workspaces gratuitos/admin sem `stripe_customer_id` agora vão para Asaas
-- Workspaces Asaas continuam no Asaas (não têm `stripe_customer_id`)
-- Zero risco de quebrar assinaturas existentes
+- Apenas 2 arquivos editados: `admin-clients/index.ts` e `ExecutiveDashboardTab.tsx`
+- Os dados extras vêm das mesmas variáveis já computadas no backend (zero queries adicionais)
+- Sheet do shadcn/ui já existe no projeto
+- Tipos `DashboardData` expandidos para incluir as novas listas
 
