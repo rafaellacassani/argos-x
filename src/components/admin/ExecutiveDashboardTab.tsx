@@ -56,6 +56,7 @@ interface DashboardData {
   mrr_variation: number;
   active_clients: number;
   active_trials: number;
+  past_due_count: number;
   churn_count: number;
   churn_value: number;
   trials_expiring: {
@@ -65,6 +66,7 @@ interface DashboardData {
     phone: string;
     days_left: number;
     trial_end: string;
+    plan_name?: string;
   }[];
   at_limit: {
     id: string;
@@ -78,7 +80,9 @@ interface DashboardData {
     ai_limit: number;
   }[];
   mrr_history: { month: string; mrr: number; clients: number }[];
-  plan_distribution: { plan: string; count: number; mrr: number }[];
+  plan_distribution: { plan: string; count: number; active: number; trialing: number; past_due: number; mrr: number }[];
+  provider_distribution: { stripe: number; asaas: number; none: number };
+  lead_packs: { total_active: number; total_extra_leads: number; total_mrr: number };
   funnel: {
     signups: number;
     trials: number;
@@ -93,7 +97,9 @@ interface DashboardData {
     status: string;
     email: string;
     phone: string;
+    payment_provider?: string;
   }[];
+  total_workspaces: number;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -101,6 +107,8 @@ const PLAN_LABELS: Record<string, string> = {
   essencial: "Essencial",
   negocio: "Negócio",
   escala: "Escala",
+  semente: "Semente",
+  trial: "Trial",
 };
 
 const PLAN_COLORS: Record<string, string> = {
@@ -429,10 +437,10 @@ export default function ExecutiveDashboardTab() {
         </Card>
       </div>
 
-      {/* Plan Distribution */}
+      {/* Plan Distribution — detailed */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-semibold">Distribuição por Plano</CardTitle>
+          <CardTitle className="text-sm font-semibold">Distribuição por Plano (Total: {data.total_workspaces} workspaces)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
@@ -457,17 +465,36 @@ export default function ExecutiveDashboardTab() {
             </ResponsiveContainer>
             <div className="space-y-3">
               {data.plan_distribution.map((p) => (
-                <div key={p.plan} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: PLAN_COLORS[p.plan] || "#6B7280" }}
-                    />
-                    <span className="font-medium text-sm">{PLAN_LABELS[p.plan] || p.plan}</span>
+                <div key={p.plan} className="p-3 rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: PLAN_COLORS[p.plan] || "#6B7280" }}
+                      />
+                      <span className="font-medium text-sm">{PLAN_LABELS[p.plan] || p.plan}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-sm">{p.count} total</p>
+                      <p className="text-xs text-muted-foreground">{formatCurrency(p.mrr)}/mês</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-sm">{p.count} clientes</p>
-                    <p className="text-xs text-muted-foreground">{formatCurrency(p.mrr)}/mês</p>
+                  <div className="flex gap-2 mt-1.5">
+                    {p.active > 0 && (
+                      <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+                        {p.active} pagos
+                      </Badge>
+                    )}
+                    {p.trialing > 0 && (
+                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-700 border-amber-500/30">
+                        {p.trialing} trial
+                      </Badge>
+                    )}
+                    {p.past_due > 0 && (
+                      <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                        {p.past_due} inadimplente
+                      </Badge>
+                    )}
                   </div>
                 </div>
               ))}
@@ -475,6 +502,59 @@ export default function ExecutiveDashboardTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Lead Packs + Provider Distribution */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Pacotes de Leads</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Pacotes ativos</span>
+                <span className="font-bold">{data.lead_packs?.total_active || 0}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Leads extras totais</span>
+                <span className="font-bold">{(data.lead_packs?.total_extra_leads || 0).toLocaleString("pt-BR")}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">MRR pacotes</span>
+                <span className="font-bold">{formatCurrency(data.lead_packs?.total_mrr || 0)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">Distribuição por Provedor</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Stripe (legado)</span>
+                <Badge variant="outline">{data.provider_distribution?.stripe || 0}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Asaas</span>
+                <Badge variant="outline">{data.provider_distribution?.asaas || 0}</Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Sem provedor</span>
+                <Badge variant="outline">{data.provider_distribution?.none || 0}</Badge>
+              </div>
+              {data.past_due_count > 0 && (
+                <div className="flex items-center justify-between pt-2 border-t border-border">
+                  <span className="text-sm text-destructive font-medium">Inadimplentes</span>
+                  <Badge variant="destructive">{data.past_due_count}</Badge>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ── Tables ── */}
       {/* New clients this month */}
