@@ -1,0 +1,1 @@
+ALTER TABLE public.lead_packs ADD COLUMN IF NOT EXISTS asaas_subscription_id text;
