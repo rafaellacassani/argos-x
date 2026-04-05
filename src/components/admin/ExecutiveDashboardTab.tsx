@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -14,12 +13,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DollarSign,
   Users,
@@ -33,6 +31,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
+  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -48,8 +47,24 @@ import {
   Cell,
   PieChart,
   Pie,
-  Legend,
 } from "recharts";
+
+interface DrilldownItem {
+  id?: string;
+  name?: string;
+  workspace_name?: string;
+  plan_name?: string;
+  email?: string;
+  phone?: string;
+  subscription_status?: string;
+  created_at?: string;
+  trial_end?: string;
+  days_left?: number;
+  blocked_at?: string;
+  pack_size?: number;
+  price_paid?: number;
+  payment_provider?: string;
+}
 
 interface DashboardData {
   current_mrr: number;
@@ -60,74 +75,43 @@ interface DashboardData {
   churn_count: number;
   churn_value: number;
   trials_expiring: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    days_left: number;
-    trial_end: string;
-    plan_name?: string;
+    id: string; name: string; email: string; phone: string; days_left: number; trial_end: string; plan_name?: string;
   }[];
   at_limit: {
-    id: string;
-    name: string;
-    plan: string;
-    email: string;
-    phone: string;
-    leads_used: number;
-    lead_limit: number;
-    ai_used: number;
-    ai_limit: number;
+    id: string; name: string; plan: string; email: string; phone: string; leads_used: number; lead_limit: number; ai_used: number; ai_limit: number;
   }[];
   mrr_history: { month: string; mrr: number; clients: number }[];
   plan_distribution: { plan: string; count: number; active: number; trialing: number; past_due: number; mrr: number }[];
   provider_distribution: { stripe: number; asaas: number; none: number };
   lead_packs: { total_active: number; total_extra_leads: number; total_mrr: number };
-  funnel: {
-    signups: number;
-    trials: number;
-    converted: number;
-    conversion_rate: number;
-  };
-  new_clients: {
-    id: string;
-    name: string;
-    created_at: string;
-    plan: string;
-    status: string;
-    email: string;
-    phone: string;
-    payment_provider?: string;
-  }[];
+  funnel: { signups: number; trials: number; converted: number; conversion_rate: number };
+  new_clients: { id: string; name: string; created_at: string; plan: string; status: string; email: string; phone: string; payment_provider?: string }[];
   total_workspaces: number;
+  // Drill-down lists
+  active_clients_list?: DrilldownItem[];
+  active_trials_list?: DrilldownItem[];
+  churn_list?: DrilldownItem[];
+  past_due_list?: DrilldownItem[];
+  lead_packs_list?: DrilldownItem[];
+  provider_clients?: { stripe_list: DrilldownItem[]; asaas_list: DrilldownItem[]; none_list: DrilldownItem[] };
+  plan_clients?: Record<string, { active_list: DrilldownItem[]; trial_list: DrilldownItem[]; past_due_list: DrilldownItem[] }>;
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  gratuito: "Gratuito",
-  essencial: "Essencial",
-  negocio: "Negócio",
-  escala: "Escala",
-  semente: "Semente",
-  trial: "Trial",
+  gratuito: "Gratuito", essencial: "Essencial", negocio: "Negócio", escala: "Escala", semente: "Semente", trial: "Trial",
 };
 
 const PLAN_COLORS: Record<string, string> = {
-  gratuito: "#6B7280",
-  essencial: "#10B981",
-  negocio: "#3B82F6",
-  escala: "#8B5CF6",
+  gratuito: "#6B7280", essencial: "#10B981", negocio: "#3B82F6", escala: "#8B5CF6",
 };
 
 const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  }).format(value);
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 }).format(value);
 
-const openChatWithPhone = (phone: string, navigate: ReturnType<typeof useNavigate>) => {
-  const cleanPhone = phone.replace(/\D/g, "");
-  navigate(`/chats?search=${encodeURIComponent(cleanPhone)}`);
+const openWhatsApp = (phone: string) => {
+  const clean = phone.replace(/\D/g, "");
+  const num = clean.startsWith("55") ? clean : `55${clean}`;
+  window.open(`https://wa.me/${num}`, "_blank");
 };
 
 export default function ExecutiveDashboardTab() {
@@ -136,23 +120,17 @@ export default function ExecutiveDashboardTab() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [drilldown, setDrilldown] = useState<{ title: string; items: DrilldownItem[]; type: string } | null>(null);
 
   const fetchDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: result, error } = await supabase.functions.invoke(
-        "admin-clients",
-        { body: { action: "executive-dashboard" } }
-      );
+      const { data: result, error } = await supabase.functions.invoke("admin-clients", { body: { action: "executive-dashboard" } });
       if (error) throw error;
       setData(result as DashboardData);
       setLastUpdated(new Date());
     } catch (err: any) {
-      toast({
-        title: "Erro",
-        description: err.message || "Erro ao carregar dashboard",
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: err.message || "Erro ao carregar dashboard", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -177,6 +155,10 @@ export default function ExecutiveDashboardTab() {
 
   const mrrUp = data.mrr_variation >= 0;
 
+  const openDrilldown = (title: string, items: DrilldownItem[], type: string) => {
+    setDrilldown({ title, items, type });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -198,7 +180,10 @@ export default function ExecutiveDashboardTab() {
       {/* ── Row 1: KPI Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* MRR */}
-        <Card className="border-none bg-gradient-to-br from-primary/10 to-primary/5">
+        <Card
+          className="border-none bg-gradient-to-br from-primary/10 to-primary/5 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+          onClick={() => data.active_clients_list && openDrilldown("MRR Atual — Clientes Pagos", data.active_clients_list, "clients")}
+        >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -218,7 +203,10 @@ export default function ExecutiveDashboardTab() {
         </Card>
 
         {/* Active Clients */}
-        <Card className="border-none bg-gradient-to-br from-emerald-500/10 to-emerald-500/5">
+        <Card
+          className="border-none bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 cursor-pointer hover:ring-2 hover:ring-emerald-500/30 transition-all"
+          onClick={() => data.active_clients_list && openDrilldown("Clientes Ativos", data.active_clients_list, "clients")}
+        >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -229,12 +217,15 @@ export default function ExecutiveDashboardTab() {
                 <Users className="w-5 h-5 text-emerald-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Com plano pago ativo</p>
+            <p className="text-xs text-muted-foreground mt-2">Com plano pago ativo · Clique para ver</p>
           </CardContent>
         </Card>
 
         {/* Active Trials */}
-        <Card className="border-none bg-gradient-to-br from-amber-500/10 to-amber-500/5">
+        <Card
+          className="border-none bg-gradient-to-br from-amber-500/10 to-amber-500/5 cursor-pointer hover:ring-2 hover:ring-amber-500/30 transition-all"
+          onClick={() => data.active_trials_list && openDrilldown("Trials Ativos", data.active_trials_list, "trials")}
+        >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -245,12 +236,15 @@ export default function ExecutiveDashboardTab() {
                 <Clock className="w-5 h-5 text-amber-600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Em período de teste</p>
+            <p className="text-xs text-muted-foreground mt-2">Em período de teste · Clique para ver</p>
           </CardContent>
         </Card>
 
         {/* Churn */}
-        <Card className="border-none bg-gradient-to-br from-destructive/10 to-destructive/5">
+        <Card
+          className="border-none bg-gradient-to-br from-destructive/10 to-destructive/5 cursor-pointer hover:ring-2 hover:ring-destructive/30 transition-all"
+          onClick={() => data.churn_list && openDrilldown("Churn do Mês", data.churn_list, "churn")}
+        >
           <CardContent className="p-5">
             <div className="flex items-start justify-between">
               <div>
@@ -290,14 +284,8 @@ export default function ExecutiveDashboardTab() {
                       <p className="text-xs text-muted-foreground">{t.email} · {t.days_left} dia(s) restante(s)</p>
                     </div>
                     {t.phone && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 text-xs"
-                        onClick={() => openChatWithPhone(t.phone, navigate)}
-                      >
-                        <MessageSquare className="w-3 h-3" />
-                        WhatsApp
+                      <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => openWhatsApp(t.phone)}>
+                        <MessageSquare className="w-3 h-3" /> WhatsApp
                       </Button>
                     )}
                   </div>
@@ -332,14 +320,8 @@ export default function ExecutiveDashboardTab() {
                         </p>
                       </div>
                       {c.phone && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openChatWithPhone(c.phone, navigate)}
-                        >
-                          <TrendingUp className="w-3 h-3" />
-                          Oferecer upgrade
+                        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => openWhatsApp(c.phone)}>
+                          <TrendingUp className="w-3 h-3" /> Oferecer upgrade
                         </Button>
                       )}
                     </div>
@@ -353,7 +335,6 @@ export default function ExecutiveDashboardTab() {
 
       {/* ── Row 3: Charts ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* MRR Growth */}
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">Crescimento MRR</CardTitle>
@@ -363,42 +344,16 @@ export default function ExecutiveDashboardTab() {
               <LineChart data={data.mrr_history}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 12 }} />
-                <YAxis
-                  yAxisId="mrr"
-                  tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                  tick={{ fontSize: 12 }}
-                />
+                <YAxis yAxisId="mrr" tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="clients" orientation="right" tick={{ fontSize: 12 }} />
-                <Tooltip
-                  formatter={(value: number, name: string) =>
-                    name === "MRR" ? formatCurrency(value) : `${value} clientes`
-                  }
-                />
-                <Line
-                  yAxisId="mrr"
-                  type="monotone"
-                  dataKey="mrr"
-                  name="MRR"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: "hsl(var(--primary))" }}
-                />
-                <Line
-                  yAxisId="clients"
-                  type="monotone"
-                  dataKey="clients"
-                  name="Clientes"
-                  stroke="#10B981"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  dot={{ fill: "#10B981" }}
-                />
+                <Tooltip formatter={(value: number, name: string) => name === "MRR" ? formatCurrency(value) : `${value} clientes`} />
+                <Line yAxisId="mrr" type="monotone" dataKey="mrr" name="MRR" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ fill: "hsl(var(--primary))" }} />
+                <Line yAxisId="clients" type="monotone" dataKey="clients" name="Clientes" stroke="#10B981" strokeWidth={2} strokeDasharray="5 5" dot={{ fill: "#10B981" }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Funnel */}
         <Card>
           <CardHeader>
             <CardTitle className="text-sm font-semibold">Funil de Conversão — Mês Atual</CardTitle>
@@ -418,11 +373,7 @@ export default function ExecutiveDashboardTab() {
                 <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12 }} />
                 <Tooltip />
                 <Bar dataKey="value" name="Total" radius={[0, 6, 6, 0]}>
-                  {[
-                    { fill: "#6B7280" },
-                    { fill: "#F59E0B" },
-                    { fill: "#10B981" },
-                  ].map((entry, index) => (
+                  {[{ fill: "#6B7280" }, { fill: "#F59E0B" }, { fill: "#10B981" }].map((entry, index) => (
                     <Cell key={index} fill={entry.fill} />
                   ))}
                 </Bar>
@@ -450,10 +401,8 @@ export default function ExecutiveDashboardTab() {
                   data={data.plan_distribution}
                   dataKey="count"
                   nameKey="plan"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={90}
-                  innerRadius={50}
+                  cx="50%" cy="50%"
+                  outerRadius={90} innerRadius={50}
                   label={({ plan, count }) => `${PLAN_LABELS[plan] || plan}: ${count}`}
                 >
                   {data.plan_distribution.map((entry) => (
@@ -468,10 +417,7 @@ export default function ExecutiveDashboardTab() {
                 <div key={p.plan} className="p-3 rounded-lg bg-muted/30">
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-3">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: PLAN_COLORS[p.plan] || "#6B7280" }}
-                      />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PLAN_COLORS[p.plan] || "#6B7280" }} />
                       <span className="font-medium text-sm">{PLAN_LABELS[p.plan] || p.plan}</span>
                     </div>
                     <div className="text-right">
@@ -481,17 +427,29 @@ export default function ExecutiveDashboardTab() {
                   </div>
                   <div className="flex gap-2 mt-1.5">
                     {p.active > 0 && (
-                      <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-emerald-500/10 text-emerald-700 border-emerald-500/30 cursor-pointer hover:bg-emerald-500/20"
+                        onClick={() => data.plan_clients?.[p.plan] && openDrilldown(`${PLAN_LABELS[p.plan] || p.plan} — Pagos`, data.plan_clients[p.plan].active_list, "clients")}
+                      >
                         {p.active} pagos
                       </Badge>
                     )}
                     {p.trialing > 0 && (
-                      <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-700 border-amber-500/30">
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-amber-500/10 text-amber-700 border-amber-500/30 cursor-pointer hover:bg-amber-500/20"
+                        onClick={() => data.plan_clients?.[p.plan] && openDrilldown(`${PLAN_LABELS[p.plan] || p.plan} — Trial`, data.plan_clients[p.plan].trial_list, "trials")}
+                      >
                         {p.trialing} trial
                       </Badge>
                     )}
                     {p.past_due > 0 && (
-                      <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive/30">
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-destructive/10 text-destructive border-destructive/30 cursor-pointer hover:bg-destructive/20"
+                        onClick={() => data.plan_clients?.[p.plan] && openDrilldown(`${PLAN_LABELS[p.plan] || p.plan} — Inadimplentes`, data.plan_clients[p.plan].past_due_list, "clients")}
+                      >
                         {p.past_due} inadimplente
                       </Badge>
                     )}
@@ -505,9 +463,12 @@ export default function ExecutiveDashboardTab() {
 
       {/* Lead Packs + Provider Distribution */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
+        <Card
+          className="cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+          onClick={() => data.lead_packs_list && openDrilldown("Pacotes de Leads Ativos", data.lead_packs_list, "packs")}
+        >
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold">Pacotes de Leads</CardTitle>
+            <CardTitle className="text-sm font-semibold">Pacotes de Leads · Clique para ver</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -533,20 +494,32 @@ export default function ExecutiveDashboardTab() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-lg p-1.5 -mx-1.5 transition-colors"
+                onClick={() => data.provider_clients?.stripe_list && openDrilldown("Clientes Stripe (legado)", data.provider_clients.stripe_list, "clients")}
+              >
                 <span className="text-sm text-muted-foreground">Stripe (legado)</span>
                 <Badge variant="outline">{data.provider_distribution?.stripe || 0}</Badge>
               </div>
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-lg p-1.5 -mx-1.5 transition-colors"
+                onClick={() => data.provider_clients?.asaas_list && openDrilldown("Clientes Asaas", data.provider_clients.asaas_list, "clients")}
+              >
                 <span className="text-sm text-muted-foreground">Asaas</span>
                 <Badge variant="outline">{data.provider_distribution?.asaas || 0}</Badge>
               </div>
-              <div className="flex items-center justify-between">
+              <div
+                className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded-lg p-1.5 -mx-1.5 transition-colors"
+                onClick={() => data.provider_clients?.none_list && openDrilldown("Sem provedor", data.provider_clients.none_list, "clients")}
+              >
                 <span className="text-sm text-muted-foreground">Sem provedor</span>
                 <Badge variant="outline">{data.provider_distribution?.none || 0}</Badge>
               </div>
               {data.past_due_count > 0 && (
-                <div className="flex items-center justify-between pt-2 border-t border-border">
+                <div
+                  className="flex items-center justify-between pt-2 border-t border-border cursor-pointer hover:bg-muted/50 rounded-lg p-1.5 -mx-1.5 transition-colors"
+                  onClick={() => data.past_due_list && openDrilldown("Inadimplentes", data.past_due_list, "clients")}
+                >
                   <span className="text-sm text-destructive font-medium">Inadimplentes</span>
                   <Badge variant="destructive">{data.past_due_count}</Badge>
                 </div>
@@ -556,7 +529,6 @@ export default function ExecutiveDashboardTab() {
         </Card>
       </div>
 
-      {/* ── Tables ── */}
       {/* New clients this month */}
       <Card>
         <CardHeader>
@@ -585,12 +557,8 @@ export default function ExecutiveDashboardTab() {
                 data.new_clients.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell>
-                      {new Date(c.created_at).toLocaleDateString("pt-BR")}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{PLAN_LABELS[c.plan] || c.plan}</Badge>
-                    </TableCell>
+                    <TableCell>{new Date(c.created_at).toLocaleDateString("pt-BR")}</TableCell>
+                    <TableCell><Badge variant="outline">{PLAN_LABELS[c.plan] || c.plan}</Badge></TableCell>
                     <TableCell>
                       <Badge
                         variant={c.status === "active" ? "default" : "secondary"}
@@ -602,14 +570,8 @@ export default function ExecutiveDashboardTab() {
                     <TableCell className="text-muted-foreground text-xs">{c.email}</TableCell>
                     <TableCell className="text-right">
                       {c.phone && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5 text-xs"
-                          onClick={() => openChatWithPhone(c.phone, navigate)}
-                        >
-                          <MessageSquare className="w-3 h-3" />
-                          Contatar
+                        <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => openWhatsApp(c.phone)}>
+                          <MessageSquare className="w-3 h-3" /> Contatar
                         </Button>
                       )}
                     </TableCell>
@@ -620,6 +582,83 @@ export default function ExecutiveDashboardTab() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* ── Drill-down Sheet ── */}
+      <Sheet open={!!drilldown} onOpenChange={(open) => !open && setDrilldown(null)}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>{drilldown?.title}</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4">
+            {drilldown && drilldown.items.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-10">Nenhum registro encontrado.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    {drilldown?.type === "packs" ? (
+                      <>
+                        <TableHead>Leads</TableHead>
+                        <TableHead>Valor</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead>Plano</TableHead>
+                        {drilldown?.type === "trials" && <TableHead>Dias restantes</TableHead>}
+                        {drilldown?.type === "churn" && <TableHead>Bloqueado em</TableHead>}
+                        <TableHead>E-mail</TableHead>
+                        <TableHead className="text-right">WhatsApp</TableHead>
+                      </>
+                    )}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {drilldown?.items.map((item, idx) => (
+                    <TableRow key={item.id || idx}>
+                      <TableCell className="font-medium">{item.name || item.workspace_name}</TableCell>
+                      {drilldown.type === "packs" ? (
+                        <>
+                          <TableCell>{(item.pack_size || 0).toLocaleString("pt-BR")}</TableCell>
+                          <TableCell>{formatCurrency(item.price_paid || 0)}</TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell>
+                            <Badge variant="outline">{PLAN_LABELS[item.plan_name || ""] || item.plan_name || "—"}</Badge>
+                          </TableCell>
+                          {drilldown.type === "trials" && (
+                            <TableCell>
+                              <Badge variant={item.days_left && item.days_left <= 3 ? "destructive" : "secondary"}>
+                                {item.days_left} dia(s)
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {drilldown.type === "churn" && (
+                            <TableCell className="text-xs text-muted-foreground">
+                              {item.blocked_at ? new Date(item.blocked_at).toLocaleDateString("pt-BR") : "—"}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-xs text-muted-foreground">{item.email || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            {item.phone ? (
+                              <Button size="sm" variant="ghost" className="gap-1.5 text-xs" onClick={() => openWhatsApp(item.phone!)}>
+                                <ExternalLink className="w-3 h-3" /> WhatsApp
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
