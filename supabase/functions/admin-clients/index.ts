@@ -1293,10 +1293,10 @@ serve(async (req) => {
       const currentYear = now.getFullYear();
       const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
 
-      // Fetch all workspaces
+      // Fetch all workspaces with relevant fields
       const { data: allWorkspaces } = await supabaseAdmin
         .from("workspaces")
-        .select("id, name, plan_type, plan_name, subscription_status, trial_end, blocked_at, created_at, created_by, lead_limit, extra_leads, ai_interactions_limit, ai_interactions_used, stripe_customer_id, stripe_subscription_id");
+        .select("id, name, plan_type, plan_name, subscription_status, trial_end, blocked_at, created_at, created_by, lead_limit, extra_leads, ai_interactions_limit, ai_interactions_used, stripe_customer_id, payment_provider");
 
       const workspaces = allWorkspaces || [];
 
@@ -1318,20 +1318,55 @@ serve(async (req) => {
         leadCountMap.set(l.workspace_id, (leadCountMap.get(l.workspace_id) || 0) + 1);
       });
 
-      // Classify
-      const paidPlans = ["essencial", "negocio", "escala"];
-      const planPrices: Record<string, number> = { essencial: 47.90, negocio: 97.90, escala: 197.90, gratuito: 0 };
-      const activeClients = workspaces.filter(w => paidPlans.includes(w.plan_type || "") && w.subscription_status === "active" && !w.blocked_at);
-      const trialsActive = workspaces.filter(w => w.subscription_status === "trialing" && w.trial_end && new Date(w.trial_end) > now);
-      const currentMRR = activeClients.reduce((sum, w) => sum + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+      // Fetch lead packs
+      const { data: leadPacks } = await supabaseAdmin
+        .from("lead_packs")
+        .select("workspace_id, pack_size, active, price_paid");
 
-      // Churn this month
+      const activePacksByWs = new Map<string, { packs: number; extra_leads: number; pack_mrr: number }>();
+      (leadPacks || []).forEach(lp => {
+        if (!lp.active) return;
+        const existing = activePacksByWs.get(lp.workspace_id) || { packs: 0, extra_leads: 0, pack_mrr: 0 };
+        existing.packs += 1;
+        existing.extra_leads += lp.pack_size;
+        existing.pack_mrr += lp.price_paid || 0;
+        activePacksByWs.set(lp.workspace_id, existing);
+      });
+
+      // Classification — use plan_name (not plan_type)
+      const paidPlans = ["essencial", "negocio", "escala"];
+      const planPrices: Record<string, number> = { essencial: 47.90, negocio: 97.90, escala: 197.90, gratuito: 0, semente: 0, trial: 0 };
+
+      // Active paying clients: plan_name is a paid plan AND subscription_status is "active"
+      const activeClients = workspaces.filter(w =>
+        paidPlans.includes(w.plan_name || "") && w.subscription_status === "active" && !w.blocked_at
+      );
+
+      // Active trials: subscription_status is "trialing" and trial hasn't expired
+      const trialsActive = workspaces.filter(w =>
+        w.subscription_status === "trialing" && w.trial_end && new Date(w.trial_end) > now
+      );
+
+      // Past-due clients
+      const pastDueClients = workspaces.filter(w =>
+        w.subscription_status === "past_due"
+      );
+
+      // Calculate MRR from active subscriptions + lead pack MRR
+      const baseMRR = activeClients.reduce((sum, w) => sum + (planPrices[w.plan_name || "gratuito"] || 0), 0);
+      const packMRR = Array.from(activePacksByWs.values()).reduce((sum, p) => sum + p.pack_mrr, 0);
+      const currentMRR = baseMRR + packMRR;
+
+      // Churn this month (blocked or canceled this month)
       const churnedThisMonth = workspaces.filter(w => {
+        if (w.subscription_status === "canceled") {
+          return new Date(w.created_at).getMonth() !== currentMonth; // exclude newly-canceled same-month
+        }
         if (!w.blocked_at) return false;
         const blocked = new Date(w.blocked_at);
         return blocked.getMonth() === currentMonth && blocked.getFullYear() === currentYear;
       });
-      const churnValue = churnedThisMonth.reduce((sum, w) => sum + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+      const churnValue = churnedThisMonth.reduce((sum, w) => sum + (planPrices[w.plan_name || "gratuito"] || 0), 0);
 
       // Trials expiring in 7 days
       const sevenDays = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -1341,7 +1376,7 @@ serve(async (req) => {
       }).map(w => {
         const profile = profileMap.get(w.created_by);
         const daysLeft = Math.ceil((new Date(w.trial_end!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        return { id: w.id, name: w.name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", days_left: daysLeft, trial_end: w.trial_end };
+        return { id: w.id, name: w.name, plan_name: w.plan_name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", days_left: daysLeft, trial_end: w.trial_end };
       });
 
       // Clients at plan limit (>90%)
@@ -1355,10 +1390,10 @@ serve(async (req) => {
         const profile = profileMap.get(w.created_by);
         const leadsUsed = leadCountMap.get(w.id) || 0;
         const totalLeadLimit = (w.lead_limit || 0) + (w.extra_leads || 0);
-        return { id: w.id, name: w.name, plan: w.plan_type, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", leads_used: leadsUsed, lead_limit: totalLeadLimit, ai_used: w.ai_interactions_used || 0, ai_limit: w.ai_interactions_limit || 0 };
+        return { id: w.id, name: w.name, plan: w.plan_name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", leads_used: leadsUsed, lead_limit: totalLeadLimit, ai_used: w.ai_interactions_used || 0, ai_limit: w.ai_interactions_limit || 0 };
       });
 
-      // MRR history (last 6 months)
+      // MRR history (last 6 months) — based on plan_name
       const mrrHistory: { month: string; mrr: number; clients: number }[] = [];
       for (let i = 5; i >= 0; i--) {
         const m = new Date(currentYear, currentMonth - i, 1);
@@ -1369,28 +1404,46 @@ serve(async (req) => {
           const monthEnd = new Date(m.getFullYear(), m.getMonth() + 1, 0);
           const activeBefore = workspaces.filter(w => {
             const created = new Date(w.created_at);
-            return created <= monthEnd && paidPlans.includes(w.plan_type || "") && (!w.blocked_at || new Date(w.blocked_at) > monthEnd);
+            return created <= monthEnd && paidPlans.includes(w.plan_name || "") && (!w.blocked_at || new Date(w.blocked_at) > monthEnd);
           });
-          const mrr = activeBefore.reduce((s, w) => s + (planPrices[w.plan_type || "gratuito"] || 0), 0);
+          const mrr = activeBefore.reduce((s, w) => s + (planPrices[w.plan_name || "gratuito"] || 0), 0);
           mrrHistory.push({ month: label, mrr, clients: activeBefore.length });
         }
       }
 
-      // Plan distribution
-      const planDistribution = Object.entries(planPrices).map(([plan, price]) => {
-        const count = activeClients.filter(w => w.plan_type === plan).length;
-        return { plan, count, mrr: count * price };
-      }).filter(p => p.count > 0 || p.plan !== "gratuito");
+      // Plan distribution — by plan_name, showing count per status
+      const planDistribution = [...paidPlans, "gratuito", "semente"].map(plan => {
+        const activeCount = workspaces.filter(w => w.plan_name === plan && w.subscription_status === "active" && !w.blocked_at).length;
+        const trialingCount = workspaces.filter(w => w.plan_name === plan && w.subscription_status === "trialing").length;
+        const pastDueCount = workspaces.filter(w => w.plan_name === plan && w.subscription_status === "past_due").length;
+        const totalCount = activeCount + trialingCount + pastDueCount;
+        const mrr = activeCount * (planPrices[plan] || 0);
+        return { plan, count: totalCount, active: activeCount, trialing: trialingCount, past_due: pastDueCount, mrr };
+      }).filter(p => p.count > 0);
+
+      // Provider distribution
+      const providerDistribution = {
+        stripe: workspaces.filter(w => w.payment_provider === "stripe" && !!w.stripe_customer_id).length,
+        asaas: workspaces.filter(w => w.payment_provider === "asaas").length,
+        none: workspaces.filter(w => w.payment_provider === "stripe" && !w.stripe_customer_id).length,
+      };
+
+      // Lead packs summary
+      const leadPacksSummary = {
+        total_active: Array.from(activePacksByWs.values()).reduce((s, p) => s + p.packs, 0),
+        total_extra_leads: Array.from(activePacksByWs.values()).reduce((s, p) => s + p.extra_leads, 0),
+        total_mrr: packMRR,
+      };
 
       // Funnel
       const signupsThisMonth = workspaces.filter(w => new Date(w.created_at) >= new Date(monthStart));
       const trialsThisMonth = signupsThisMonth.filter(w => w.subscription_status === "trialing" || w.subscription_status === "active");
-      const convertedThisMonth = signupsThisMonth.filter(w => paidPlans.includes(w.plan_type || "") && w.subscription_status === "active");
+      const convertedThisMonth = signupsThisMonth.filter(w => paidPlans.includes(w.plan_name || "") && w.subscription_status === "active");
 
       // New clients this month
       const newClientsThisMonth = signupsThisMonth.map(w => {
         const profile = profileMap.get(w.created_by);
-        return { id: w.id, name: w.name, created_at: w.created_at, plan: w.plan_type, status: w.subscription_status, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "" };
+        return { id: w.id, name: w.name, created_at: w.created_at, plan: w.plan_name, status: w.subscription_status, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", payment_provider: w.payment_provider };
       });
 
       const prevMRR = mrrHistory.length >= 2 ? mrrHistory[mrrHistory.length - 2].mrr : 0;
@@ -1399,11 +1452,15 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         current_mrr: currentMRR, mrr_variation: mrrVariation,
         active_clients: activeClients.length, active_trials: trialsActive.length,
+        past_due_count: pastDueClients.length,
         churn_count: churnedThisMonth.length, churn_value: churnValue,
         trials_expiring: trialsExpiring, at_limit: atLimit,
         mrr_history: mrrHistory, plan_distribution: planDistribution,
+        provider_distribution: providerDistribution,
+        lead_packs: leadPacksSummary,
         funnel: { signups: signupsThisMonth.length, trials: trialsThisMonth.length, converted: convertedThisMonth.length, conversion_rate: signupsThisMonth.length > 0 ? (convertedThisMonth.length / signupsThisMonth.length) * 100 : 0 },
         new_clients: newClientsThisMonth,
+        total_workspaces: workspaces.length,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
