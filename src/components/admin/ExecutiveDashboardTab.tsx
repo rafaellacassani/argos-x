@@ -56,6 +56,7 @@ interface DashboardData {
   mrr_variation: number;
   active_clients: number;
   active_trials: number;
+  past_due_count: number;
   churn_count: number;
   churn_value: number;
   trials_expiring: {
@@ -65,6 +66,7 @@ interface DashboardData {
     phone: string;
     days_left: number;
     trial_end: string;
+    plan_name?: string;
   }[];
   at_limit: {
     id: string;
@@ -78,7 +80,9 @@ interface DashboardData {
     ai_limit: number;
   }[];
   mrr_history: { month: string; mrr: number; clients: number }[];
-  plan_distribution: { plan: string; count: number; mrr: number }[];
+  plan_distribution: { plan: string; count: number; active: number; trialing: number; past_due: number; mrr: number }[];
+  provider_distribution: { stripe: number; asaas: number; none: number };
+  lead_packs: { total_active: number; total_extra_leads: number; total_mrr: number };
   funnel: {
     signups: number;
     trials: number;
@@ -93,7 +97,9 @@ interface DashboardData {
     status: string;
     email: string;
     phone: string;
+    payment_provider?: string;
   }[];
+  total_workspaces: number;
 }
 
 const PLAN_LABELS: Record<string, string> = {
