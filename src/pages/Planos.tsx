@@ -114,20 +114,30 @@ export default function Planos() {
     if (!workspaceId) return;
     setLoadingPack(packSize);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: {
-          workspaceId,
-          type: "lead_pack",
-          packSize,
-          successUrl: window.location.origin + "/planos?pack=success",
-          cancelUrl: window.location.origin + "/planos",
-        },
-      });
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
+      if (isAsaas) {
+        const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
+          body: { action: "lead_pack", workspaceId, packSize },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        toast({ title: "Pacote contratado!", description: data.message || "Pacote de leads adicionado com sucesso." });
+        planLimits.refetch();
       } else {
-        throw new Error("Nenhuma URL de checkout retornada.");
+        const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+          body: {
+            workspaceId,
+            type: "lead_pack",
+            packSize,
+            successUrl: window.location.origin + "/planos?pack=success",
+            cancelUrl: window.location.origin + "/planos",
+          },
+        });
+        if (error) throw error;
+        if (data?.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error("Nenhuma URL de checkout retornada.");
+        }
       }
     } catch (err: any) {
       console.error("Pack checkout error:", err);
