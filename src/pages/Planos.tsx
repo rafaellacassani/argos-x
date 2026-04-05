@@ -114,7 +114,7 @@ export default function Planos() {
     if (!workspaceId) return;
     setLoadingPack(packSize);
     try {
-      if (isAsaas) {
+      if (!useStripe) {
         const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
           body: { action: "lead_pack", workspaceId, packSize },
         });

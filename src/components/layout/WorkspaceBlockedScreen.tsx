@@ -88,7 +88,7 @@ export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) 
     if (!workspaceId) return;
     setLoadingPlan(planKey);
     try {
-      if (isAsaas) {
+      if (!useStripe) {
         const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
           body: { action: "upgrade", workspaceId, plan: planKey },
         });
