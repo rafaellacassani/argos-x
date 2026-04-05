@@ -1449,6 +1449,50 @@ serve(async (req) => {
       const prevMRR = mrrHistory.length >= 2 ? mrrHistory[mrrHistory.length - 2].mrr : 0;
       const mrrVariation = prevMRR > 0 ? ((currentMRR - prevMRR) / prevMRR) * 100 : 0;
 
+      // Build drill-down lists from already-loaded data
+      const mapWsToItem = (w: any) => {
+        const profile = profileMap.get(w.created_by);
+        return { id: w.id, name: w.name, plan_name: w.plan_name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", subscription_status: w.subscription_status, created_at: w.created_at, payment_provider: w.payment_provider };
+      };
+
+      const active_clients_list = activeClients.map(mapWsToItem);
+
+      const active_trials_list = trialsActive.map(w => {
+        const profile = profileMap.get(w.created_by);
+        const daysLeft = Math.ceil((new Date(w.trial_end!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        return { id: w.id, name: w.name, plan_name: w.plan_name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", trial_end: w.trial_end, days_left: daysLeft };
+      });
+
+      const churn_list = churnedThisMonth.map(w => {
+        const profile = profileMap.get(w.created_by);
+        return { id: w.id, name: w.name, plan_name: w.plan_name, email: profile?.email || "", phone: profile?.phone || profile?.personal_whatsapp || "", blocked_at: w.blocked_at };
+      });
+
+      const past_due_list = pastDueClients.map(mapWsToItem);
+
+      const lead_packs_list: { workspace_name: string; pack_size: number; price_paid: number }[] = [];
+      (leadPacks || []).forEach(lp => {
+        if (!lp.active) return;
+        const ws = workspaces.find(w => w.id === lp.workspace_id);
+        lead_packs_list.push({ workspace_name: ws?.name || "Desconhecido", pack_size: lp.pack_size, price_paid: lp.price_paid || 0 });
+      });
+
+      const provider_clients = {
+        stripe_list: workspaces.filter(w => w.payment_provider === "stripe" && !!w.stripe_customer_id).map(mapWsToItem),
+        asaas_list: workspaces.filter(w => w.payment_provider === "asaas").map(mapWsToItem),
+        none_list: workspaces.filter(w => w.payment_provider === "stripe" && !w.stripe_customer_id).map(mapWsToItem),
+      };
+
+      // Plan distribution lists (by plan + status)
+      const plan_clients: Record<string, { active_list: any[]; trial_list: any[]; past_due_list: any[] }> = {};
+      for (const plan of [...paidPlans, "gratuito", "semente"]) {
+        plan_clients[plan] = {
+          active_list: workspaces.filter(w => w.plan_name === plan && w.subscription_status === "active" && !w.blocked_at).map(mapWsToItem),
+          trial_list: workspaces.filter(w => w.plan_name === plan && w.subscription_status === "trialing").map(mapWsToItem),
+          past_due_list: workspaces.filter(w => w.plan_name === plan && w.subscription_status === "past_due").map(mapWsToItem),
+        };
+      }
+
       return new Response(JSON.stringify({
         current_mrr: currentMRR, mrr_variation: mrrVariation,
         active_clients: activeClients.length, active_trials: trialsActive.length,
@@ -1461,6 +1505,9 @@ serve(async (req) => {
         funnel: { signups: signupsThisMonth.length, trials: trialsThisMonth.length, converted: convertedThisMonth.length, conversion_rate: signupsThisMonth.length > 0 ? (convertedThisMonth.length / signupsThisMonth.length) * 100 : 0 },
         new_clients: newClientsThisMonth,
         total_workspaces: workspaces.length,
+        // Drill-down lists
+        active_clients_list, active_trials_list, churn_list, past_due_list,
+        lead_packs_list, provider_clients, plan_clients,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
