@@ -72,13 +72,13 @@ export default function Planos() {
     plansRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const isAsaas = workspace?.payment_provider === "asaas";
+  const useStripe = !!workspace?.stripe_customer_id;
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
     setLoadingPlan(planKey);
     try {
-      if (isAsaas) {
+      if (!useStripe) {
         const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
           body: { action: "upgrade", workspaceId, plan: planKey },
         });
@@ -114,7 +114,7 @@ export default function Planos() {
     if (!workspaceId) return;
     setLoadingPack(packSize);
     try {
-      if (isAsaas) {
+      if (!useStripe) {
         const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
           body: { action: "lead_pack", workspaceId, packSize },
         });

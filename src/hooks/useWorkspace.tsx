@@ -25,6 +25,7 @@ export interface Workspace {
   onboarding_completed?: boolean | null;
   onboarding_step?: number | null;
   payment_provider?: string | null;
+  stripe_customer_id?: string | null;
 }
 
 export interface WorkspaceMember {
