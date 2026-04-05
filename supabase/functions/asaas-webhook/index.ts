@@ -465,7 +465,44 @@ serve(async (req) => {
     switch (event) {
       case "PAYMENT_CONFIRMED":
       case "PAYMENT_RECEIVED": {
-        // First check if workspace already exists
+        // Check if this is a lead_pack subscription
+        let isLeadPack = false;
+        let leadPackMeta: any = {};
+        try {
+          const parsed = JSON.parse(subscription.externalReference || "{}");
+          if (parsed.type === "lead_pack") {
+            isLeadPack = true;
+            leadPackMeta = parsed;
+          }
+        } catch { /* not JSON, not a lead pack */ }
+
+        if (isLeadPack && event === "PAYMENT_RECEIVED") {
+          // Lead pack payment — ensure pack exists in DB
+          const packWsId = leadPackMeta.workspace_id;
+          const packSize = leadPackMeta.pack_size;
+          if (packWsId && packSize) {
+            const { data: existingPack } = await supabaseAdmin
+              .from("lead_packs")
+              .select("id")
+              .eq("workspace_id", packWsId)
+              .eq("asaas_subscription_id", subscriptionId)
+              .maybeSingle();
+
+            if (!existingPack) {
+              await supabaseAdmin.from("lead_packs").insert({
+                workspace_id: packWsId,
+                pack_size: packSize,
+                price_paid: payment.value || 0,
+                active: true,
+                asaas_subscription_id: subscriptionId,
+              });
+              console.log(`[asaas-webhook] Lead pack +${packSize} inserted for workspace ${packWsId}`);
+            }
+          }
+          break;
+        }
+
+        // Regular plan payment flow
         const { data: existingWs } = await supabaseAdmin
           .from("workspaces")
           .select("id")
@@ -473,7 +510,6 @@ serve(async (req) => {
           .maybeSingle();
 
         if (!existingWs && meta.user_id) {
-          // Create workspace (first payment confirmation)
           await createWorkspaceForAsaasCustomer(
             supabaseAdmin,
             asaasCustomerId,
@@ -484,7 +520,6 @@ serve(async (req) => {
         }
 
         if (event === "PAYMENT_RECEIVED") {
-          // Payment actually received — mark as active
           const planConfig = getPlanConfig(planName);
           await supabaseAdmin
             .from("workspaces")
@@ -505,7 +540,6 @@ serve(async (req) => {
           }
         }
 
-        // Send Meta CAPI Purchase event
         const paymentValue = payment.value || 0;
         sendMetaPurchaseEvent(customerEmail, customerPhone, paymentValue, payment.id, planName).catch(console.warn);
 

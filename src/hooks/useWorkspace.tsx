@@ -24,6 +24,7 @@ export interface Workspace {
   ai_interactions_used?: number | null;
   onboarding_completed?: boolean | null;
   onboarding_step?: number | null;
+  payment_provider?: string | null;
 }
 
 export interface WorkspaceMember {

@@ -1886,6 +1886,7 @@ export type Database = {
       lead_packs: {
         Row: {
           active: boolean | null
+          asaas_subscription_id: string | null
           created_at: string | null
           id: string
           pack_size: number
@@ -1895,6 +1896,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean | null
+          asaas_subscription_id?: string | null
           created_at?: string | null
           id?: string
           pack_size: number
@@ -1904,6 +1906,7 @@ export type Database = {
         }
         Update: {
           active?: boolean | null
+          asaas_subscription_id?: string | null
           created_at?: string | null
           id?: string
           pack_size?: number

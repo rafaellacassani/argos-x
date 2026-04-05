@@ -79,28 +79,39 @@ const plans = [
 ];
 
 export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) {
-  const { workspaceId } = useWorkspace();
+  const { workspace, workspaceId, refreshWorkspace } = useWorkspace();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const isPastDue = reason === "past_due";
+  const isAsaas = workspace?.payment_provider === "asaas";
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
     setLoadingPlan(planKey);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout-session", {
-        body: {
-          workspaceId,
-          plan: planKey,
-          successUrl: window.location.origin + "/dashboard?checkout=success",
-          cancelUrl: window.location.origin + "/dashboard",
-        },
-      });
-
-      if (error) throw error;
-      if (data?.url) {
-        window.location.href = data.url;
+      if (isAsaas) {
+        const { data, error } = await supabase.functions.invoke("asaas-manage-subscription", {
+          body: { action: "upgrade", workspaceId, plan: planKey },
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        toast({ title: "Plano ativado!", description: data.message || "Seu plano foi reativado com sucesso." });
+        refreshWorkspace?.();
       } else {
-        throw new Error("Nenhuma URL de checkout retornada.");
+        const { data, error } = await supabase.functions.invoke("create-checkout-session", {
+          body: {
+            workspaceId,
+            plan: planKey,
+            successUrl: window.location.origin + "/dashboard?checkout=success",
+            cancelUrl: window.location.origin + "/dashboard",
+          },
+        });
+
+        if (error) throw error;
+        if (data?.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error("Nenhuma URL de checkout retornada.");
+        }
       }
     } catch (err: any) {
       console.error("Checkout error:", err);
