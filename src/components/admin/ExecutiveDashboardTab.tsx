@@ -107,6 +107,8 @@ const PLAN_LABELS: Record<string, string> = {
   essencial: "Essencial",
   negocio: "Negócio",
   escala: "Escala",
+  semente: "Semente",
+  trial: "Trial",
 };
 
 const PLAN_COLORS: Record<string, string> = {
