@@ -77,6 +77,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         tools: agent.tools || [],
         on_start_actions: (agent as any).on_start_actions || [],
         website_url: (agent as any).website_url || "",
+        website_scraped_at: (agent as any).website_scraped_at || null,
         style_analysis: (agent as any).style_analysis || "",
         trainer_phone: (agent as any).trainer_phone || "",
         followup_enabled: (agent as any).followup_enabled ?? false,
