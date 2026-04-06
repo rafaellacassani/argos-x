@@ -663,10 +663,9 @@ serve(async (req) => {
     try {
       // --- respond_to check ---
       if (agent.respond_to === "new_leads" && lead_id) {
-        const { data: existingMemories } = await supabase
-          .from("agent_memories").select("id").eq("agent_id", agent_id).eq("lead_id", lead_id);
-        if (existingMemories && existingMemories.length > 1) {
-          console.log("[ai-agent-chat] ⏭️ Skipped: not_new_lead");
+        // Check if memory already has previous conversation (not a new lead)
+        if (memory.messages && Array.isArray(memory.messages) && memory.messages.length > 0) {
+          console.log("[ai-agent-chat] ⏭️ Skipped: not_new_lead (has existing messages in memory)");
           return new Response(JSON.stringify({ response: null, skipped: true, reason: "not_new_lead" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }

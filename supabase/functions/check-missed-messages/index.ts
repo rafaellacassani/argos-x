@@ -207,6 +207,10 @@ Deno.serve(async (req) => {
 
         leadId = existingLead?.id || null;
 
+        if (matchingAgent.respond_to === "new_leads" && existingLead) {
+          shouldRespond = false;
+        }
+
         if (matchingAgent.respond_to === "specific_stages" && existingLead) {
           const stages = matchingAgent.respond_to_stages || [];
           if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
