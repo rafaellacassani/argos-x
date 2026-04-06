@@ -48,7 +48,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
   const [isDirty, setIsDirty] = useState(false);
   const { updateAgent, toggleAgent } = useAIAgents();
   const { toast } = useToast();
-  const { isAdminViewing } = useWorkspace();
+  const { isAdminViewing, workspace } = useWorkspace();
 
   useEffect(() => {
     if (agent) {
