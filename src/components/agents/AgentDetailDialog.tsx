@@ -189,7 +189,23 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
     };
 
     updateAgent.mutate(payload, {
-      onSuccess: () => setIsDirty(false),
+      onSuccess: () => {
+        setIsDirty(false);
+        // Auto-scrape if website_url changed and plan is Escala
+        if (
+          formData.website_url &&
+          formData.website_url !== ((agent as any).website_url || "") &&
+          workspace?.plan_name?.toLowerCase() === "escala"
+        ) {
+          supabase.functions.invoke("scrape-agent-website", {
+            body: { agent_id: agent.id },
+          }).then(({ data }) => {
+            if (data?.success) {
+              toast({ title: "Site sincronizado automaticamente", description: `${data.chars_saved} caracteres extraídos.` });
+            }
+          }).catch(() => {});
+        }
+      },
     });
   };
 
