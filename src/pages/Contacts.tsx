@@ -310,6 +310,60 @@ export default function Contacts() {
     );
   };
 
+  const handleExport = useCallback(async () => {
+    try {
+      toast({ title: "Exportando contatos..." });
+
+      // If "select all global" is active, fetch all contacts from DB
+      let exportData: ContactRow[];
+      if (allGlobalSelected) {
+        const { data } = await supabase
+          .from("leads")
+          .select("id, name, phone, email, company, source, created_at")
+          .order("created_at", { ascending: false });
+        exportData = data || [];
+      } else if (selectedContacts.length > 0) {
+        // Export only selected contacts from current page
+        exportData = filteredContacts.filter(c => selectedContacts.includes(c.id));
+      } else {
+        // Export current page
+        exportData = filteredContacts;
+      }
+
+      if (exportData.length === 0) {
+        toast({ title: "Nenhum contato para exportar", variant: "destructive" });
+        return;
+      }
+
+      const headers = ["Nome", "Telefone", "Email", "Empresa", "Fonte", "Criado em"];
+      const csvRows = [
+        headers.join(","),
+        ...exportData.map(c => [
+          `"${(c.name || "").replace(/"/g, '""')}"`,
+          `"${formatContactPhone(c.phone)}"`,
+          `"${(c.email || "").replace(/"/g, '""')}"`,
+          `"${(c.company || "").replace(/"/g, '""')}"`,
+          `"${(c.source || "").replace(/"/g, '""')}"`,
+          `"${new Date(c.created_at).toLocaleDateString("pt-BR")}"`,
+        ].join(","))
+      ];
+
+      const bom = "\uFEFF";
+      const blob = new Blob([bom + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `contatos_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast({ title: "Exportação concluída", description: `${exportData.length} contatos exportados.` });
+    } catch (err) {
+      console.error("Export error:", err);
+      toast({ title: "Erro ao exportar", description: "Tente novamente.", variant: "destructive" });
+    }
+  }, [allGlobalSelected, selectedContacts, filteredContacts]);
+
   return (
     <div className="space-y-6" data-tour="contacts-section">
       {/* Header */}
@@ -335,7 +389,7 @@ export default function Contacts() {
             Importar
           </Button>
           {canExportData && (
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExport}>
               <Download className="w-4 h-4" />
               Exportar
             </Button>
