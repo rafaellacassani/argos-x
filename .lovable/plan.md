@@ -1,60 +1,68 @@
 
 
-## Corrigir filtro "respond_to: new_leads" nos Agentes de IA
+## Implementar consulta de site/e-commerce nos Agentes de IA (Plano Escala)
 
-### Problema
+### Resumo
 
-O cliente configurou o agente para responder apenas "novos leads", mas a IA responde a todos. Há dois bugs:
+Quando o agente tiver um `website_url` configurado e o workspace for plano Escala, o sistema usará Firecrawl para extrair o conteúdo do site e injetá-lo no contexto da IA. Isso permite que a IA responda perguntas sobre produtos, preços e estoque automaticamente.
 
-1. **Webhooks não filtram**: `whatsapp-webhook`, `check-missed-messages` e `facebook-webhook` só verificam `specific_stages` — nunca checam `new_leads`. Toda mensagem é encaminhada ao `ai-agent-chat`.
+### Pré-requisito
 
-2. **ai-agent-chat tem lógica incorreta**: Verifica `agent_memories.length > 1`, mas como o sistema reutiliza o mesmo registro de memória (atualiza em vez de criar novo), o count quase sempre retorna 1, e a IA nunca para de responder.
+Conectar o **Firecrawl** como connector do projeto para obter a `FIRECRAWL_API_KEY` nas edge functions.
 
-### Correção
+### Arquivos e mudanças
 
-**4 arquivos**, mesma lógica adicionada em cada webhook + correção no ai-agent-chat:
+#### 1. Migração de banco — adicionar cache de conteúdo
 
-#### 1. `supabase/functions/whatsapp-webhook/index.ts`
-Após a busca do `existingLead` (linha ~1022), antes do bloco `specific_stages` (linha 1076), adicionar:
+Adicionar 2 colunas em `ai_agents`:
+- `website_content TEXT` — conteúdo scraped em markdown
+- `website_scraped_at TIMESTAMPTZ` — timestamp do último scrape
 
+#### 2. Nova edge function: `scrape-agent-website/index.ts`
+
+- Recebe `{ agent_id }`, verifica se workspace é plano Escala
+- Busca `website_url` do agente
+- Chama Firecrawl `/v1/scrape` com `formats: ['markdown']`, `onlyMainContent: true`
+- Trunca o markdown para ~8000 chars (limite de contexto)
+- Salva em `ai_agents.website_content` e `website_scraped_at`
+- Retorna sucesso com preview do conteúdo
+
+#### 3. Modificar `ai-agent-chat/index.ts`
+
+Na função `buildKnowledgeBlock`:
+- Se `agent.website_content` existir, adicionar bloco:
+  ```
+  INFORMAÇÕES DO SITE/E-COMMERCE:
+  {agent.website_content}
+  ```
+- Isso é injetado automaticamente no prompt sem queries extras
+
+#### 4. Modificar `AttachmentsTab.tsx`
+
+- Importar `useWorkspace` para checar plano
+- Se plano NÃO for Escala: mostrar o campo website com cadeado e tooltip "Disponível no plano Escala"
+- Se plano for Escala: mostrar campo + botão "Sincronizar site" que chama `scrape-agent-website`
+- Mostrar badge com data do último sync quando houver
+
+#### 5. Modificar `AgentDetailDialog.tsx`
+
+No `handleSave`, se `website_url` mudou e plano é Escala, disparar scrape automático após salvar.
+
+### Fluxo
+
+```text
+1. Usuário Escala configura website_url no agente
+2. Ao salvar → chama scrape-agent-website → Firecrawl extrai markdown
+3. Conteúdo salvo em ai_agents.website_content
+4. Quando lead pergunta sobre produto/preço → ai-agent-chat injeta website_content no prompt
+5. IA responde com dados reais do site
+6. Botão "Sincronizar" permite re-scrape manual
 ```
-if (matchingAgent.respond_to === "new_leads" && existingLead) {
-  // Lead já existia antes desta mensagem — não é novo
-  shouldRespond = false;
-  console.log("[whatsapp-webhook] ⏭️ Agent skipped: respond_to=new_leads but lead already exists");
-}
-```
 
-Nota: se `existingLead` é null, o lead será auto-criado logo abaixo (linha 1030-1074) — nesse caso o lead É novo e `shouldRespond` permanece true. Se o lead já existia, ele não é novo e a IA não deve responder.
+### Limites e segurança
 
-#### 2. `supabase/functions/check-missed-messages/index.ts`
-Após linha 208, antes do bloco `specific_stages`:
-
-```
-if (matchingAgent.respond_to === "new_leads" && existingLead) {
-  shouldRespond = false;
-}
-```
-
-#### 3. `supabase/functions/facebook-webhook/index.ts`
-Mesma lógica antes do bloco `specific_stages` existente.
-
-#### 4. `supabase/functions/ai-agent-chat/index.ts`
-Corrigir a verificação na linha 665-672. Em vez de contar memories (que são reutilizados), verificar quantas mensagens já existem no memory atual:
-
-```typescript
-if (agent.respond_to === "new_leads" && lead_id) {
-  // Check if memory already has previous conversation (not new lead)
-  if (memory.messages && Array.isArray(memory.messages) && memory.messages.length > 0) {
-    console.log("[ai-agent-chat] ⏭️ Skipped: not_new_lead (has existing messages)");
-    return response with skipped: true;
-  }
-}
-```
-
-### Resultado
-
-- Leads que já existem no sistema não receberão resposta automática da IA quando `respond_to = "new_leads"`
-- Apenas contatos completamente novos (sem lead cadastrado) serão respondidos
-- Nenhuma outra funcionalidade é afetada
+- Conteúdo truncado em 8000 chars para não estourar contexto
+- Re-scrape apenas a cada 6 horas (cooldown)
+- Somente plano Escala tem acesso (verificação no backend e no frontend)
+- Firecrawl key nunca exposta ao cliente
 
