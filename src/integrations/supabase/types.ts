@@ -319,6 +319,8 @@ export type Database = {
           type: string
           updated_at: string
           use_emojis: boolean | null
+          website_content: string | null
+          website_scraped_at: string | null
           website_url: string | null
           workspace_id: string
         }
@@ -368,6 +370,8 @@ export type Database = {
           type?: string
           updated_at?: string
           use_emojis?: boolean | null
+          website_content?: string | null
+          website_scraped_at?: string | null
           website_url?: string | null
           workspace_id: string
         }
@@ -417,6 +421,8 @@ export type Database = {
           type?: string
           updated_at?: string
           use_emojis?: boolean | null
+          website_content?: string | null
+          website_scraped_at?: string | null
           website_url?: string | null
           workspace_id?: string
         }

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { supabase } from "@/integrations/supabase/client";
 import { Save, Loader2, Bot, BookOpen, HelpCircle, Settings, Target, Wrench, FlaskConical, CalendarClock, Paperclip, MessageSquareText, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PersonalityTab } from "./tabs/PersonalityTab";
@@ -47,7 +48,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
   const [isDirty, setIsDirty] = useState(false);
   const { updateAgent, toggleAgent } = useAIAgents();
   const { toast } = useToast();
-  const { isAdminViewing } = useWorkspace();
+  const { isAdminViewing, workspace } = useWorkspace();
 
   useEffect(() => {
     if (agent) {
@@ -77,6 +78,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         tools: agent.tools || [],
         on_start_actions: (agent as any).on_start_actions || [],
         website_url: (agent as any).website_url || "",
+        website_scraped_at: (agent as any).website_scraped_at || null,
         style_analysis: (agent as any).style_analysis || "",
         trainer_phone: (agent as any).trainer_phone || "",
         followup_enabled: (agent as any).followup_enabled ?? false,
@@ -188,7 +190,23 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
     };
 
     updateAgent.mutate(payload, {
-      onSuccess: () => setIsDirty(false),
+      onSuccess: () => {
+        setIsDirty(false);
+        // Auto-scrape if website_url changed and plan is Escala
+        if (
+          formData.website_url &&
+          formData.website_url !== ((agent as any).website_url || "") &&
+          workspace?.plan_name?.toLowerCase() === "escala"
+        ) {
+          supabase.functions.invoke("scrape-agent-website", {
+            body: { agent_id: agent.id },
+          }).then(({ data }) => {
+            if (data?.success) {
+              toast({ title: "Site sincronizado automaticamente", description: `${data.chars_saved} caracteres extraídos.` });
+            }
+          }).catch(() => {});
+        }
+      },
     });
   };
 

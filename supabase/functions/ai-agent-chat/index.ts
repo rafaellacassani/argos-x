@@ -415,6 +415,9 @@ function buildKnowledgeBlock(agent: any): string {
   if (agent.knowledge_extra) {
     parts.push(agent.knowledge_extra);
   }
+  if (agent.website_content) {
+    parts.push("INFORMAÇÕES DO SITE/E-COMMERCE:\n" + agent.website_content);
+  }
   return parts.length > 0 ? "\n\nCONHECIMENTO BASE:\n" + parts.join("\n\n") : "";
 }
 
