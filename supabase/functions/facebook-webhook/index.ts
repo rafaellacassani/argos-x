@@ -375,6 +375,12 @@ async function routeToAIAgent(workspaceId: string, senderPhone: string, messageT
       .single();
     leadId = existingLead?.id || null;
 
+    // Check new_leads filter
+    if (matchingAgent.respond_to === "new_leads" && existingLead) {
+      console.log("[Facebook Webhook] Agent skipped: respond_to=new_leads but lead already exists");
+      return;
+    }
+
     // Check stage filter
     if (matchingAgent.respond_to === "specific_stages" && existingLead) {
       const stages = matchingAgent.respond_to_stages || [];

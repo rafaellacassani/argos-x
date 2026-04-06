@@ -1073,6 +1073,11 @@ app.post("/", async (c) => {
           }
         }
 
+        if (matchingAgent.respond_to === "new_leads" && existingLead) {
+          shouldRespond = false;
+          console.log("[whatsapp-webhook] ⏭️ Agent skipped: respond_to=new_leads but lead already exists");
+        }
+
         if (matchingAgent.respond_to === "specific_stages" && existingLead) {
           const stages = matchingAgent.respond_to_stages || [];
           if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
