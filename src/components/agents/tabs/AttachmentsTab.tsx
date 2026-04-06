@@ -8,7 +8,10 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload, FileSpreadsheet, FileText, Trash2, Globe, Loader2, Link } from "lucide-react";
+import { Upload, FileSpreadsheet, FileText, Trash2, Globe, Loader2, Link, Lock, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 interface Props {
   agentId: string;
@@ -18,9 +21,12 @@ interface Props {
 
 export function AttachmentsTab({ agentId, formData, updateField }: Props) {
   const { toast } = useToast();
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, workspace } = useWorkspace();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const isEscala = workspace?.plan_name?.toLowerCase() === "escala";
 
   const { data: attachments = [], isLoading } = useQuery({
     queryKey: ["agent-attachments", agentId, "document"],
@@ -44,7 +50,7 @@ export function AttachmentsTab({ agentId, formData, updateField }: Props) {
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        const maxSize = 10 * 1024 * 1024; // 10MB
+        const maxSize = 10 * 1024 * 1024;
         if (file.size > maxSize) {
           toast({ title: "Arquivo muito grande", description: `${file.name} excede 10MB`, variant: "destructive" });
           continue;
@@ -86,6 +92,24 @@ export function AttachmentsTab({ agentId, formData, updateField }: Props) {
     await supabase.from("agent_attachments").delete().eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["agent-attachments", agentId, "document"] });
     toast({ title: "Removido", description: "Documento excluído." });
+  };
+
+  const handleSyncWebsite = async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-agent-website", {
+        body: { agent_id: agentId },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast({ title: "Site sincronizado!", description: `${data.chars_saved} caracteres extraídos do site.` });
+    } catch (err: any) {
+      toast({ title: "Erro ao sincronizar", description: err.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const getFileIcon = (name: string) => {
@@ -174,14 +198,31 @@ export function AttachmentsTab({ agentId, formData, updateField }: Props) {
       </Card>
 
       {/* Website URL */}
-      <Card>
+      <Card className={!isEscala ? "opacity-70" : ""}>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Globe className="w-4 h-4" />
             Site / E-commerce
+            {!isEscala && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <Lock className="w-3 h-3" />
+                      Escala
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Consulta automática de site disponível apenas no plano Escala</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </CardTitle>
           <CardDescription>
-            Insira a URL do seu site ou loja virtual. A IA lerá automaticamente as informações de produtos e preços para responder aos leads.
+            {isEscala
+              ? "Insira a URL do seu site ou loja virtual. A IA lerá automaticamente as informações de produtos e preços para responder aos leads."
+              : "Faça upgrade para o plano Escala para que a IA consulte seu site automaticamente."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -193,17 +234,43 @@ export function AttachmentsTab({ agentId, formData, updateField }: Props) {
                 onChange={(e) => updateField("website_url", e.target.value)}
                 placeholder="https://www.sualoja.com.br"
                 className="pl-10"
+                disabled={!isEscala}
               />
             </div>
+            {isEscala && formData.website_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncWebsite}
+                disabled={syncing}
+                className="gap-1 shrink-0"
+              >
+                {syncing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Sincronizar
+              </Button>
+            )}
           </div>
           {formData.website_url && (
-            <Badge variant="secondary" className="gap-1">
-              <Globe className="w-3 h-3" />
-              Site configurado
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="secondary" className="gap-1">
+                <Globe className="w-3 h-3" />
+                Site configurado
+              </Badge>
+              {formData.website_scraped_at && (
+                <Badge variant="outline" className="gap-1 text-xs">
+                  Última sync: {formatDistanceToNow(new Date(formData.website_scraped_at), { addSuffix: true, locale: ptBR })}
+                </Badge>
+              )}
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
-            A IA irá consultar este site quando precisar de informações sobre produtos, preços e disponibilidade.
+            {isEscala
+              ? "A IA irá consultar este site quando precisar de informações sobre produtos, preços e disponibilidade."
+              : "No plano Escala, a IA consulta automaticamente seu site para responder sobre produtos, preços e disponibilidade."}
           </p>
         </CardContent>
       </Card>
