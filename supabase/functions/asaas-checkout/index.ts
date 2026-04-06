@@ -382,7 +382,7 @@ serve(async (req) => {
 
     const subscriptionPayload: Record<string, any> = {
       customer: asaasCustomer.id,
-      billingType: "UNDEFINED",
+      billingType: "CREDIT_CARD",
       value: planInfo.value,
       cycle: "MONTHLY",
       nextDueDate,
