@@ -335,7 +335,7 @@ export default function Contacts() {
             Importar
           </Button>
           {canExportData && (
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={handleExport}>
               <Download className="w-4 h-4" />
               Exportar
             </Button>
