@@ -360,8 +360,8 @@ serve(async (req) => {
 
         // Determine the actual message that was sent for logging
         let sentMessageText = "";
-        if (isWabaTemplate && typeof fullContent !== "undefined") {
-          sentMessageText = fullContent || "";
+        if (isTemplateCampaign && wabaHydratedMessage) {
+          sentMessageText = wabaHydratedMessage;
         } else {
           sentMessageText = recipient.personalized_message || campaign.message_text || "";
         }
