@@ -274,6 +274,10 @@ export function FunnelAutomationsPage({
     if (auto.action_type === 'create_task' && config.title) {
       return `${label}: ${config.title}`;
     }
+    if (auto.action_type === 'move_stage' && config.target_stage_id) {
+      const st = stages.find(s => s.id === config.target_stage_id);
+      return `${label}: ${st?.name || config.target_stage_name || 'Etapa'}`;
+    }
     return label;
   };
 
@@ -400,8 +404,9 @@ export function FunnelAutomationsPage({
                             </span>
                             <div className="min-w-0 flex-1">
                               <p className="text-[10px] text-muted-foreground leading-tight">
-                                {auto.trigger === 'on_enter' ? 'Quando movido para ou criado nesta etapa' :
+                              {auto.trigger === 'on_enter' ? 'Quando movido para ou criado nesta etapa' :
                                  auto.trigger === 'on_exit' ? 'Quando sair desta etapa' :
+                                 auto.trigger === 'on_reply' ? 'Quando lead responder' :
                                  getTriggerBadge(auto)}
                               </p>
                               <p className="text-sm font-medium leading-tight truncate">
@@ -542,6 +547,7 @@ export function FunnelAutomationsPage({
                   <SelectItem value="on_enter">Executar: Quando movido para esta etapa</SelectItem>
                   <SelectItem value="on_exit">Executar: Quando sair desta etapa</SelectItem>
                   <SelectItem value="after_time">Executar: Após tempo na etapa</SelectItem>
+                  <SelectItem value="on_reply">Executar: Quando lead responder</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -549,6 +555,8 @@ export function FunnelAutomationsPage({
                   ? 'A ação será executada quando um lead entrar ou for criado nesta etapa'
                   : form.trigger === 'on_exit'
                   ? 'A ação será executada quando um lead sair desta etapa'
+                  : form.trigger === 'on_reply'
+                  ? 'A ação será executada quando o lead responder uma mensagem nesta etapa'
                   : 'A ação será executada após o tempo configurado na etapa'}
               </p>
               {form.trigger === 'after_time' && (
@@ -574,6 +582,7 @@ export function FunnelAutomationsPage({
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="run_bot">🤖 Executar Robô de vendas</SelectItem>
+                  <SelectItem value="move_stage">➡️ Mover para etapa</SelectItem>
                   <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
                   <SelectItem value="change_responsible">👤 Alterar usuário de lead</SelectItem>
                   <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
@@ -595,6 +604,7 @@ export function FunnelAutomationsPage({
                 teamMembers={teamMembers}
                 instances={instances}
                 cloudConnections={cloudConnections}
+                stages={stages}
               />
             </div>
 
