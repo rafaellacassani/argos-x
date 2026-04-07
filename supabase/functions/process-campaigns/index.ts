@@ -215,7 +215,8 @@ serve(async (req) => {
                 // Fallback: if no mapping exists, use lead name as default
                 if (!paramValue && !mapping) paramValue = leadName;
 
-                const param: any = { type: "text", text: paramValue || match };
+                // Use paramValue even if empty string; only fallback to match literal if truly undefined
+                const param: any = { type: "text", text: paramValue !== undefined && paramValue !== null ? paramValue : match };
                 // Add parameter_name for named variables (required by Meta Graph API)
                 const pName = namedParamMap.get(i);
                 if (pName) param.parameter_name = pName;
