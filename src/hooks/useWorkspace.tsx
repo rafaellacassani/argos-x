@@ -364,6 +364,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       loading,
       hasWorkspace: !!workspace,
       isAdminViewing,
+      allWorkspaces,
+      switchWorkspace,
       createWorkspace,
       inviteMember,
       fetchMembers,
