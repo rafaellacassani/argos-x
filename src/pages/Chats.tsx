@@ -3457,44 +3457,38 @@ export default function Chats() {
                           <DropdownMenuItem
                             onClick={async () => {
                               const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                              if (!chatLead?.id) {
-                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
-                                return;
-                              }
                               const confirmed = window.confirm("Ignorar este contato? Ele será removido da lista de chats e a IA será pausada.");
                               if (!confirmed) return;
                               try {
-                                // Mark lead as ignored
-                                await supabase
-                                  .from("leads")
-                                  .update({ is_ignored: true } as any)
-                                  .eq("id", chatLead.id);
-                                // Pause AI by session_id (primary)
+                                if (chatLead?.id) {
+                                  await supabase
+                                    .from("leads")
+                                    .update({ is_ignored: true } as any)
+                                    .eq("id", chatLead.id);
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: true } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                  await supabase
+                                    .from("agent_followup_queue")
+                                    .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("status", "pending");
+                                }
+                                // Pause AI by session_id (always)
                                 await supabase
                                   .from("agent_memories")
                                   .update({ is_paused: true } as any)
                                   .eq("session_id", selectedChat.remoteJid)
                                   .eq("workspace_id", workspaceId);
-                                // Also by lead_id
-                                await supabase
-                                  .from("agent_memories")
-                                  .update({ is_paused: true } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("workspace_id", workspaceId);
-                                // Cancel pending followups by session_id and lead_id
                                 await supabase
                                   .from("agent_followup_queue")
                                   .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
                                   .eq("session_id", selectedChat.remoteJid)
                                   .eq("workspace_id", workspaceId)
                                   .eq("status", "pending");
-                                await supabase
-                                  .from("agent_followup_queue")
-                                  .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("status", "pending");
                                 toast({ title: "✅ Contato ignorado e IA pausada" });
-                                // Deselect chat to go back to list
                                 setSelectedChat(null);
                               } catch (err: any) {
                                 console.error("[Chats] Ignore error:", err);
@@ -3505,16 +3499,16 @@ export default function Chats() {
                             <EyeOff className="w-4 h-4 mr-2" />
                             Ignorar contato
                           </DropdownMenuItem>
-                          {/* Bloquear e Excluir lead */}
+                          {/* Bloquear e Excluir — funciona com ou sem lead */}
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={async () => {
                               const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                              if (!chatLead?.id) {
-                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
-                                return;
-                              }
-                              const confirmed = window.confirm("Tem certeza que deseja BLOQUEAR no WhatsApp e EXCLUIR este lead permanentemente do CRM?");
+                              const hasLead = !!chatLead?.id;
+                              const confirmMsg = hasLead
+                                ? "Tem certeza que deseja BLOQUEAR no WhatsApp e EXCLUIR este lead permanentemente do CRM?"
+                                : "Tem certeza que deseja BLOQUEAR este contato no WhatsApp e pausar a IA?";
+                              const confirmed = window.confirm(confirmMsg);
                               if (!confirmed) return;
                               try {
                                 // Block on WhatsApp (Evolution only)
@@ -3524,37 +3518,40 @@ export default function Chats() {
                                     try {
                                       await blockContact(inst, selectedChat.remoteJid, true);
                                     } catch (blockErr) {
-                                      console.warn("[Chats] Block failed, continuing with delete:", blockErr);
+                                      console.warn("[Chats] Block failed, continuing:", blockErr);
                                     }
                                   }
                                 }
-                                // Pause AI
+                                // Pause AI by session_id (always)
                                 await supabase
                                   .from("agent_memories")
                                   .update({ is_paused: true } as any)
                                   .eq("session_id", selectedChat.remoteJid)
                                   .eq("workspace_id", workspaceId);
-                                await supabase
-                                  .from("agent_memories")
-                                  .update({ is_paused: true } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("workspace_id", workspaceId);
-                                // Cancel followups
+                                // Cancel followups by session_id
                                 await supabase
                                   .from("agent_followup_queue")
                                   .update({ status: "canceled", canceled_reason: "lead_blocked_deleted" } as any)
                                   .eq("session_id", selectedChat.remoteJid)
                                   .eq("workspace_id", workspaceId)
                                   .eq("status", "pending");
-                                await supabase
-                                  .from("agent_followup_queue")
-                                  .update({ status: "canceled", canceled_reason: "lead_blocked_deleted" } as any)
-                                  .eq("lead_id", chatLead.id)
-                                  .eq("workspace_id", workspaceId)
-                                  .eq("status", "pending");
-                                // Delete lead
-                                await deleteLead(chatLead.id);
-                                toast({ title: "✅ Contato bloqueado e lead excluído" });
+                                if (hasLead) {
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: true } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                  await supabase
+                                    .from("agent_followup_queue")
+                                    .update({ status: "canceled", canceled_reason: "lead_blocked_deleted" } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId)
+                                    .eq("status", "pending");
+                                  await deleteLead(chatLead.id);
+                                  toast({ title: "✅ Contato bloqueado e lead excluído" });
+                                } else {
+                                  toast({ title: "✅ Contato bloqueado e IA pausada" });
+                                }
                                 setSelectedChat(null);
                               } catch (err: any) {
                                 console.error("[Chats] Block+Delete error:", err);
@@ -3563,7 +3560,7 @@ export default function Chats() {
                             }}
                           >
                             <UserX className="w-4 h-4 mr-2" />
-                            Bloquear e excluir lead
+                            Bloquear e excluir
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
