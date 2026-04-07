@@ -498,6 +498,55 @@ serve(async (req) => {
               });
               console.log(`[asaas-webhook] Lead pack +${packSize} inserted for workspace ${packWsId}`);
             }
+
+            // Recalculate extra_leads from all active packs
+            const { data: allPacks } = await supabaseAdmin
+              .from("lead_packs")
+              .select("pack_size")
+              .eq("workspace_id", packWsId)
+              .eq("active", true);
+            
+            const totalExtra = (allPacks || []).reduce((sum: number, p: any) => sum + p.pack_size, 0);
+            await supabaseAdmin
+              .from("workspaces")
+              .update({ extra_leads: totalExtra })
+              .eq("id", packWsId);
+            
+            console.log(`[asaas-webhook] Updated extra_leads to ${totalExtra} for workspace ${packWsId}`);
+          }
+          break;
+        }
+
+        // Check if this is an add_user subscription
+        let isAddUser = false;
+        let addUserMeta: any = {};
+        try {
+          const parsed = JSON.parse(subscription.externalReference || "{}");
+          if (parsed.type === "add_user") {
+            isAddUser = true;
+            addUserMeta = parsed;
+          }
+        } catch { /* not JSON */ }
+
+        if (isAddUser && event === "PAYMENT_RECEIVED") {
+          const userWsId = addUserMeta.workspace_id;
+          const extraUsers = addUserMeta.extra_users || 1;
+          if (userWsId) {
+            const { data: ws } = await supabaseAdmin
+              .from("workspaces")
+              .select("user_limit")
+              .eq("id", userWsId)
+              .single();
+            
+            if (ws) {
+              const planBaseLimit = getPlanConfig(planName || "essencial").user_limit;
+              const newLimit = Math.max(ws.user_limit, planBaseLimit) + extraUsers;
+              await supabaseAdmin
+                .from("workspaces")
+                .update({ user_limit: newLimit })
+                .eq("id", userWsId);
+              console.log(`[asaas-webhook] Updated user_limit to ${newLimit} for workspace ${userWsId}`);
+            }
           }
           break;
         }
@@ -521,6 +570,18 @@ serve(async (req) => {
 
         if (event === "PAYMENT_RECEIVED") {
           const planConfig = getPlanConfig(planName);
+          
+          // Preserve user_limit if it's higher than plan default (means extra users were purchased)
+          const { data: currentWs } = await supabaseAdmin
+            .from("workspaces")
+            .select("user_limit")
+            .eq("asaas_customer_id", asaasCustomerId)
+            .maybeSingle();
+          
+          const effectiveUserLimit = currentWs && currentWs.user_limit > planConfig.user_limit
+            ? currentWs.user_limit
+            : planConfig.user_limit;
+
           await supabaseAdmin
             .from("workspaces")
             .update({
@@ -530,7 +591,7 @@ serve(async (req) => {
               plan_name: planConfig.plan_name,
               lead_limit: planConfig.lead_limit,
               whatsapp_limit: planConfig.whatsapp_limit,
-              user_limit: planConfig.user_limit,
+              user_limit: effectiveUserLimit,
               ai_interactions_limit: planConfig.ai_interactions_limit,
             })
             .eq("asaas_customer_id", asaasCustomerId);
