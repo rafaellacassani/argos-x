@@ -3344,25 +3344,45 @@ export default function Chats() {
                           ) : (
                             <DropdownMenuItem
                               onClick={async () => {
-                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                if (!chatLead?.id) {
-                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                const sessionId = selectedChat.remoteJid;
+                                if (!sessionId) {
+                                  toast({ title: "Sessão não encontrada para este contato", variant: "destructive" });
                                   return;
                                 }
                                 const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
                                 if (!confirmed) return;
                                 try {
+                                  // Update by session_id (primary)
                                   await supabase
                                     .from("agent_memories")
                                     .update({ is_paused: true } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId);
+                                  // Also update by lead_id as fallback
+                                  const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: true } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId);
+                                  }
+                                  // Cancel pending followups by session_id
                                   await supabase
                                     .from("agent_followup_queue")
                                     .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId)
                                     .eq("status", "pending");
+                                  // Also cancel by lead_id
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_followup_queue")
+                                      .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId)
+                                      .eq("status", "pending");
+                                  }
                                   setSelectedChatAiPaused(true);
                                   toast({ title: "✅ IA pausada para este contato" });
                                 } catch {
