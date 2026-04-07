@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, CreditCard, MessageCircle, Check, Zap, Crown, Rocket, Loader2, X } from "lucide-react";
+import { Lock, CreditCard, MessageCircle, Check, Zap, Crown, Rocket, Loader2, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,6 +81,7 @@ const plans = [
 export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) {
   const { workspace, workspaceId, refreshWorkspace } = useWorkspace();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const isPastDue = reason === "past_due";
   const useStripe = !!workspace?.stripe_customer_id;
 
@@ -217,8 +218,46 @@ export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) 
             })}
           </div>
 
-          {/* Support link */}
-          <div className="mt-6 text-center">
+          {/* Cancel & Support */}
+          <div className="mt-6 text-center flex flex-col items-center gap-2">
+            {isPastDue && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                disabled={cancelingSubscription}
+                onClick={async () => {
+                  if (!workspaceId) return;
+                  setCancelingSubscription(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke("cancel-subscription", {
+                      body: { workspaceId },
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    toast({
+                      title: "Assinatura cancelada",
+                      description: "Nenhuma nova cobrança será realizada.",
+                    });
+                    refreshWorkspace?.();
+                  } catch (err: any) {
+                    toast({
+                      title: "Erro ao cancelar",
+                      description: err.message || "Tente novamente.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setCancelingSubscription(false);
+                  }
+                }}
+              >
+                {cancelingSubscription ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Cancelando...</>
+                ) : (
+                  <><XCircle className="w-4 h-4 mr-2" />Cancelar assinatura e parar cobranças</>
+                )}
+              </Button>
+            )}
             <Button variant="ghost" size="sm" asChild>
               <a
                 href="https://wa.me/5513954753979?text=Preciso%20de%20ajuda%20com%20meu%20plano"
