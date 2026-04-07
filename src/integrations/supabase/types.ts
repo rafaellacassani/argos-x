@@ -3573,6 +3573,7 @@ export type Database = {
           synced_at: string
           template_id: string
           template_name: string
+          variable_mappings: Json | null
           workspace_id: string
         }
         Insert: {
@@ -3586,6 +3587,7 @@ export type Database = {
           synced_at?: string
           template_id: string
           template_name: string
+          variable_mappings?: Json | null
           workspace_id: string
         }
         Update: {
@@ -3599,6 +3601,7 @@ export type Database = {
           synced_at?: string
           template_id?: string
           template_name?: string
+          variable_mappings?: Json | null
           workspace_id?: string
         }
         Relationships: [
