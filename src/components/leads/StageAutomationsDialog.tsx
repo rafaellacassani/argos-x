@@ -648,6 +648,25 @@ function ActionConfigForm({
         </div>
       );
 
+    case 'move_stage':
+      return (
+        <Select value={config.target_stage_id || ''} onValueChange={v => {
+          const st = stages.find(s => s.id === v);
+          onChange({ target_stage_id: v, target_stage_name: st?.name || '' });
+        }}>
+          <SelectTrigger><SelectValue placeholder="Selecione a etapa de destino" /></SelectTrigger>
+          <SelectContent>
+            {stages.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
     default:
       return <p className="text-sm text-muted-foreground">Selecione uma ação</p>;
   }
