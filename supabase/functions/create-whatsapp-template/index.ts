@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
         category,
         status: result.status || "PENDING",
         components,
+        variable_mappings: variableMappings || null,
         synced_at: now,
       },
       { onConflict: "workspace_id,template_id" }
