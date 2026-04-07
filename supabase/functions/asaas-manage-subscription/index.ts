@@ -220,6 +220,59 @@ serve(async (req) => {
       });
     }
 
+    // === ADD USER ===
+    if (action === "add_user") {
+      if (!workspace.asaas_customer_id) {
+        return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado a este workspace." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const currentPlan = workspace.plan_name || "essencial";
+      const userPrice = currentPlan === "escala" ? 57 : 37;
+
+      const externalReference = JSON.stringify({
+        type: "add_user",
+        extra_users: 1,
+        workspace_id: workspaceId,
+      });
+
+      const nextDueDate = new Date();
+      nextDueDate.setDate(nextDueDate.getDate() + 1);
+
+      await asaasFetch("/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: workspace.asaas_customer_id,
+          billingType: "CREDIT_CARD",
+          value: userPrice,
+          cycle: "MONTHLY",
+          nextDueDate: nextDueDate.toISOString().split("T")[0],
+          description: `Argos X - Usuário adicional (${currentPlan})`,
+          externalReference,
+        }),
+      });
+
+      // Increment user_limit immediately
+      const { data: ws } = await supabaseAdmin
+        .from("workspaces")
+        .select("user_limit")
+        .eq("id", workspaceId)
+        .single();
+
+      const newLimit = (ws?.user_limit || 1) + 1;
+      await supabaseAdmin
+        .from("workspaces")
+        .update({ user_limit: newLimit })
+        .eq("id", workspaceId);
+
+      console.log(`[asaas-manage] Add user for workspace ${workspaceId}, new limit: ${newLimit}`);
+
+      return new Response(JSON.stringify({ success: true, message: `Usuário adicional contratado! Novo limite: ${newLimit}` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     return new Response(JSON.stringify({ error: `Ação desconhecida: ${action}` }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
