@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { connectionId, name, language, category, components } = await req.json();
+    const { connectionId, name, language, category, components, variableMappings } = await req.json();
 
     if (!connectionId || !name || !language || !category || !components?.length) {
       return new Response(
@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
         category,
         status: result.status || "PENDING",
         components,
+        variable_mappings: variableMappings || null,
         synced_at: now,
       },
       { onConflict: "workspace_id,template_id" }
