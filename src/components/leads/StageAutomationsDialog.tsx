@@ -452,7 +452,7 @@ export function StageAutomationsDialog({
 
 // Sub-component for action-specific config
 function ActionConfigForm({
-  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [],
+  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [], stages = [],
 }: {
   actionType: string;
   config: Record<string, any>;
@@ -462,6 +462,7 @@ function ActionConfigForm({
   teamMembers: Array<{ id: string; full_name: string }>;
   instances?: { instance_name: string; display_name: string | null }[];
   cloudConnections?: { id: string; inbox_name: string; phone_number: string; phone_number_id: string }[];
+  stages?: FunnelStage[];
 }) {
   const set = (key: string, value: any) => onChange({ ...config, [key]: value });
 
