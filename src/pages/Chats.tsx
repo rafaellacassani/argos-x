@@ -474,24 +474,44 @@ export default function Chats() {
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
   
   // Query AI pause state when selected chat changes
+  // Uses session_id (remoteJid) as primary key — this matches how the backend tracks sessions
   useEffect(() => {
     if (!selectedChat || !workspaceId) {
       setSelectedChatAiPaused(false);
       return;
     }
     const checkPauseState = async () => {
-      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-      if (!chatLead?.id) {
+      const sessionId = selectedChat.remoteJid;
+      if (!sessionId) {
         setSelectedChatAiPaused(false);
         return;
       }
+      // Query by session_id first (most reliable — backend always sets this)
       const { data } = await supabase
         .from("agent_memories")
         .select("is_paused")
-        .eq("lead_id", chatLead.id)
+        .eq("session_id", sessionId)
         .eq("workspace_id", workspaceId)
+        .order("updated_at", { ascending: false })
         .limit(1);
-      setSelectedChatAiPaused(data?.[0]?.is_paused === true);
+      if (data && data.length > 0) {
+        setSelectedChatAiPaused(data[0].is_paused === true);
+        return;
+      }
+      // Fallback: try by lead_id
+      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+      if (chatLead?.id) {
+        const { data: leadData } = await supabase
+          .from("agent_memories")
+          .select("is_paused")
+          .eq("lead_id", chatLead.id)
+          .eq("workspace_id", workspaceId)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        setSelectedChatAiPaused(leadData?.[0]?.is_paused === true);
+      } else {
+        setSelectedChatAiPaused(false);
+      }
     };
     checkPauseState();
   }, [selectedChat?.id, workspaceId]);
