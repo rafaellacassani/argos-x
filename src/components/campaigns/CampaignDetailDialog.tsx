@@ -746,7 +746,7 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                     })}
                     {filteredRecipients.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">Nenhum destinatário encontrado</td>
+                        <td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum destinatário encontrado</td>
                       </tr>
                     )}
                   </tbody>
