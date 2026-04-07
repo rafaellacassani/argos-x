@@ -2135,7 +2135,7 @@ export type Database = {
           position: number
           responsible_user: string | null
           source: string | null
-          stage_id: string
+          stage_id: string | null
           status: Database["public"]["Enums"]["lead_status"]
           updated_at: string
           value: number | null
@@ -2160,7 +2160,7 @@ export type Database = {
           position?: number
           responsible_user?: string | null
           source?: string | null
-          stage_id: string
+          stage_id?: string | null
           status?: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
           value?: number | null
@@ -2185,7 +2185,7 @@ export type Database = {
           position?: number
           responsible_user?: string | null
           source?: string | null
-          stage_id?: string
+          stage_id?: string | null
           status?: Database["public"]["Enums"]["lead_status"]
           updated_at?: string
           value?: number | null
