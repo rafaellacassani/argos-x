@@ -287,7 +287,7 @@ export function useEvolutionAPI() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   const deleteInstance = useCallback(async (instanceName: string, userId?: string): Promise<boolean> => {
     setLoading(true);
