@@ -19,6 +19,8 @@ import {
   ShieldOff,
   Zap,
   EyeOff,
+  Trash2,
+  UserX,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -3209,6 +3211,53 @@ export default function Chats() {
                             <UserCheck className="h-4 w-4 mr-2" />
                             Ver detalhes do lead
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={async () => {
+                              const confirmed = window.confirm("Tem certeza que deseja EXCLUIR este lead permanentemente? Todos os dados serão removidos do CRM.");
+                              if (!confirmed) return;
+                              try {
+                                // Pause AI
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId);
+                                if (chatLead.id) {
+                                  await supabase
+                                    .from("agent_memories")
+                                    .update({ is_paused: true } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId);
+                                }
+                                // Cancel followups
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "lead_deleted" } as any)
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
+                                if (chatLead.id) {
+                                  await supabase
+                                    .from("agent_followup_queue")
+                                    .update({ status: "canceled", canceled_reason: "lead_deleted" } as any)
+                                    .eq("lead_id", chatLead.id)
+                                    .eq("workspace_id", workspaceId)
+                                    .eq("status", "pending");
+                                }
+                                // Delete lead
+                                await deleteLead(chatLead.id);
+                                toast({ title: "✅ Lead excluído permanentemente" });
+                                setSelectedChat(null);
+                              } catch (err: any) {
+                                console.error("[Chats] Delete lead error:", err);
+                                toast({ title: "Erro ao excluir lead", description: err?.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Excluir lead
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     );
@@ -3455,6 +3504,66 @@ export default function Chats() {
                           >
                             <EyeOff className="w-4 h-4 mr-2" />
                             Ignorar contato
+                          </DropdownMenuItem>
+                          {/* Bloquear e Excluir lead */}
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={async () => {
+                              const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                              if (!chatLead?.id) {
+                                toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                return;
+                              }
+                              const confirmed = window.confirm("Tem certeza que deseja BLOQUEAR no WhatsApp e EXCLUIR este lead permanentemente do CRM?");
+                              if (!confirmed) return;
+                              try {
+                                // Block on WhatsApp (Evolution only)
+                                if (!selectedChat.isMeta) {
+                                  const inst = selectedChat.instanceName || selectedInstance;
+                                  if (inst) {
+                                    try {
+                                      await blockContact(inst, selectedChat.remoteJid, true);
+                                    } catch (blockErr) {
+                                      console.warn("[Chats] Block failed, continuing with delete:", blockErr);
+                                    }
+                                  }
+                                }
+                                // Pause AI
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId);
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId);
+                                // Cancel followups
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "lead_blocked_deleted" } as any)
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "lead_blocked_deleted" } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
+                                // Delete lead
+                                await deleteLead(chatLead.id);
+                                toast({ title: "✅ Contato bloqueado e lead excluído" });
+                                setSelectedChat(null);
+                              } catch (err: any) {
+                                console.error("[Chats] Block+Delete error:", err);
+                                toast({ title: "Erro ao bloquear e excluir", description: err?.message, variant: "destructive" });
+                              }
+                            }}
+                          >
+                            <UserX className="w-4 h-4 mr-2" />
+                            Bloquear e excluir lead
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
