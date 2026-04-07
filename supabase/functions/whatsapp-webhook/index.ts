@@ -960,6 +960,50 @@ app.post("/", async (c) => {
           timestamp: new Date().toISOString(),
         });
         console.log(`[whatsapp-webhook] 💾 Inbound message persisted for ${canonicalSessionJid}`);
+
+        // --- Process on_reply automations ---
+        try {
+          const leadOrFilters = [`whatsapp_jid.eq.${canonicalSessionJid}`];
+          if (phoneNumber.length >= 10 && phoneNumber.length <= 15) {
+            leadOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
+          }
+          const { data: replyLead } = await supabase
+            .from("leads")
+            .select("id, stage_id, workspace_id")
+            .eq("workspace_id", workspaceId)
+            .or(leadOrFilters.join(','))
+            .limit(1)
+            .single();
+
+          if (replyLead?.stage_id) {
+            const { data: replyAutos } = await supabase
+              .from("stage_automations")
+              .select("id, action_type, action_config")
+              .eq("stage_id", replyLead.stage_id)
+              .eq("trigger", "on_reply")
+              .eq("is_active", true);
+
+            if (replyAutos && replyAutos.length > 0) {
+              for (const auto of replyAutos) {
+                if (auto.action_type === "move_stage" && (auto.action_config as any)?.target_stage_id) {
+                  const targetStageId = (auto.action_config as any).target_stage_id;
+                  await supabase.from("leads").update({ stage_id: targetStageId }).eq("id", replyLead.id);
+                  await supabase.from("lead_history").insert({
+                    lead_id: replyLead.id,
+                    action: "stage_changed",
+                    from_stage_id: replyLead.stage_id,
+                    to_stage_id: targetStageId,
+                    performed_by: "Automação (resposta)",
+                    workspace_id: workspaceId,
+                  });
+                  console.log(`[whatsapp-webhook] ➡️ on_reply: moved lead ${replyLead.id} to stage ${targetStageId}`);
+                }
+              }
+            }
+          }
+        } catch (replyAutoErr) {
+          console.warn(`[whatsapp-webhook] ⚠️ on_reply automation error (non-blocking):`, replyAutoErr);
+        }
       } catch (persistErr) {
         // Don't block processing if persist fails (e.g. duplicate message_id)
         console.warn(`[whatsapp-webhook] ⚠️ Inbound persist failed (non-blocking):`, persistErr);
