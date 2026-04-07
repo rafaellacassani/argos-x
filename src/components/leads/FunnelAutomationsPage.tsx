@@ -39,6 +39,7 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   add_tag: <Tag className="h-4 w-4 text-emerald-500" />,
   remove_tag: <Tag className="h-4 w-4 text-red-500" />,
   create_task: <CheckSquare className="h-4 w-4 text-violet-500" />,
+  move_stage: <ArrowRight className="h-4 w-4 text-cyan-500" />,
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -48,16 +49,18 @@ const ACTION_LABELS: Record<string, string> = {
   add_tag: 'Aplicar tag',
   remove_tag: 'Remover tag',
   create_task: 'Criar tarefa',
+  move_stage: 'Mover para etapa',
 };
 
 const TRIGGER_LABELS: Record<string, string> = {
   on_enter: 'Ao entrar',
   on_exit: 'Ao sair',
   after_time: 'Após tempo',
+  on_reply: 'Ao responder',
 };
 
 type FormData = {
-  trigger: 'on_enter' | 'on_exit' | 'after_time';
+  trigger: 'on_enter' | 'on_exit' | 'after_time' | 'on_reply';
   trigger_delay_minutes: number;
   action_type: string;
   action_config: Record<string, any>;
