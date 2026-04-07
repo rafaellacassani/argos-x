@@ -162,28 +162,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       setIsAdminViewing(false);
 
-      // Normal flow
+      // Normal flow - load ALL workspaces the user belongs to
       const memberResult = await supabase
         .from("workspace_members")
         .select("*")
         .eq("user_id", user.id)
-        .not("accepted_at", "is", null)
-        .limit(1)
-        .maybeSingle();
+        .not("accepted_at", "is", null);
 
       if (memberResult.error) throw memberResult.error;
 
-      if (memberResult.data) {
-        setMembership(memberResult.data as WorkspaceMember);
-        
-        const { data: wsData, error: wsError } = await supabase
+      if (memberResult.data && memberResult.data.length > 0) {
+        const wsIds = memberResult.data.map((m: any) => m.workspace_id);
+        const { data: wsDataAll, error: wsError } = await supabase
           .from("workspaces")
           .select("*")
-          .eq("id", memberResult.data.workspace_id)
-          .single();
+          .in("id", wsIds);
 
         if (wsError) throw wsError;
-        setWorkspace(wsData as Workspace);
+
+        const allWs = (wsDataAll || []) as Workspace[];
+        setAllWorkspaces(allWs);
+
+        // Pick workspace: localStorage preference > first one
+        const savedWsId = localStorage.getItem("selected_workspace_id");
+        const selectedWs = allWs.find(w => w.id === savedWsId) || allWs[0];
+        const selectedMembership = memberResult.data.find((m: any) => m.workspace_id === selectedWs.id);
+
+        setWorkspace(selectedWs);
+        setMembership(selectedMembership as WorkspaceMember);
+        localStorage.setItem("selected_workspace_id", selectedWs.id);
       } else {
         const userEmail = user.email;
         if (userEmail) {
@@ -208,6 +215,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         }
         setWorkspace(null);
         setMembership(null);
+        setAllWorkspaces([]);
       }
     } catch (err) {
       console.error("Error loading workspace:", err);
