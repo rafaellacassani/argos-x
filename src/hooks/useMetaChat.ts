@@ -76,10 +76,11 @@ export function useMetaChat() {
   ) => {
     let query = supabase
       .from("meta_conversation_summary" as any)
-      .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction")
+      .select("meta_page_id, sender_id, sender_name, platform, content, message_type, timestamp, direction, workspace_id")
       .order("timestamp", { ascending: false })
       .range(offset, offset + META_PAGE_SIZE - 1);
 
+    if (workspaceId) query = query.eq("workspace_id", workspaceId);
     if (metaPageId) query = query.eq("meta_page_id", metaPageId);
     if (directionFilter) query = query.eq("direction", directionFilter);
 
@@ -100,7 +101,7 @@ export function useMetaChat() {
       unread_count: 0,
       page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
     }));
-  }, [metaPages]);
+  }, [metaPages, workspaceId]);
 
   // Fetch first page of conversations (resets pagination)
   const fetchConversations = useCallback(async (
