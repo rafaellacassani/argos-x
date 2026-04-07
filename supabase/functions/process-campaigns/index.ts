@@ -95,7 +95,7 @@ serve(async (req) => {
         // Get next pending recipient (join lead name for template fallback)
         const { data: recipients } = await supabase
           .from("campaign_recipients")
-          .select("*, leads(name)")
+          .select("*, leads(name, phone, email, company)")
           .eq("campaign_id", campaign.id)
           .eq("status", "pending")
           .order("position", { ascending: true })
