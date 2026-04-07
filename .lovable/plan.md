@@ -1,38 +1,29 @@
 
 
-## Plano: Botões rápidos de Bloquear + Excluir Lead no Chat
+## Diagnóstico
 
-### Contexto
-Hoje o menu de "Acao rapida" no header do chat tem apenas "Mover para etapa" e "Ver detalhes do lead". O menu de tres pontos tem "Bloquear contato" e "Ignorar contato", mas nenhum deles exclui o lead do banco de dados.
+O membro **Rosivaldo** (`Rosivaldo.correia@terra.com.br`) foi convidado ao workspace do Wellington, mas seu registro em `workspace_members` tem `accepted_at: NULL`. Quando ele faz login, o `ProtectedRoute` detecta que não há workspace aceito e redireciona para `/aguardando-ativacao`. Porém, essa página **nunca chama a função `accept-invite`** — ela apenas faz polling esperando que `accepted_at` seja preenchido magicamente. Resultado: loop infinito.
 
-### O que sera feito
+## Correção
 
-**Arquivo: `src/pages/Chats.tsx`**
+**Arquivo: `src/pages/AguardandoAtivacao.tsx`**
 
-1. **Adicionar "Excluir lead" no menu "Acao rapida"** (linhas ~3188-3214)
-   - Novo item no DropdownMenu existente com icone `Trash2` e texto "Excluir lead"
-   - Ao clicar: confirmacao via `window.confirm` com aviso claro
-   - Acao: chama `deleteLead(chatLead.id)` (ja disponivel via `useLeads`)
-   - Pausa IA (`agent_memories.is_paused = true`) por session_id e lead_id
-   - Cancela followups pendentes
-   - Remove o chat da lista e volta para a lista (`setSelectedChat(null)`)
-   - Toast de sucesso
+1. Na função `check()`, **antes** de consultar `workspace_members`, chamar `supabase.functions.invoke("accept-invite")` para aceitar automaticamente qualquer convite pendente do usuário logado.
+2. O `accept-invite` já existe e faz exatamente isso: busca o convite pendente por `user_id` ou `email` e define `accepted_at`.
+3. A chamada é idempotente — se não houver convite pendente, retorna 404 sem efeito colateral.
+4. Após a chamada, o polling existente encontrará o `accepted_at` preenchido e redirecionará para `/dashboard`.
 
-2. **Adicionar "Bloquear e Excluir" no menu tres pontos** (linhas ~3246-3458)
-   - Novo item apos "Bloquear contato" com icone `UserX` e texto "Bloquear e excluir lead"
-   - Ao clicar: confirmacao dupla
-   - Acao: bloqueia no WhatsApp (`blockContact`), pausa IA, cancela followups, e deleta o lead do banco
-   - Toast e fecha o chat
+### Correção imediata (dados)
 
-### Detalhes tecnicos
-- Reutiliza `deleteLead` do hook `useLeads` ja importado
-- A exclusao em cascata ja funciona (RLS permite delete para membros do workspace)
-- Se nao houver lead vinculado ao chat, os botoes ficam desabilitados/ocultos
-- Icones necessarios: `Trash2`, `UserX` (de lucide-react)
+Além da correção no código, definir `accepted_at = now()` diretamente no registro do Rosivaldo via migration para desbloquear o acesso dele imediatamente.
 
-### Resultado
-O usuario tera 3 opcoes rapidas quando alguem diz "esse numero nao e meu":
-- **Ignorar contato** (ja existe) — oculta da lista mas mantem no banco
-- **Excluir lead** (novo) — remove completamente do CRM
-- **Bloquear e excluir** (novo) — bloqueia no WhatsApp E remove do CRM
+### Fluxo corrigido
+
+```text
+Login → ProtectedRoute (sem workspace aceito) → /aguardando-ativacao
+  → chama accept-invite (aceita convite pendente)
+  → polling detecta accepted_at → redireciona /dashboard
+```
+
+Nenhum outro arquivo será alterado.
 
