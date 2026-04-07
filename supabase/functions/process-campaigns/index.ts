@@ -355,11 +355,20 @@ serve(async (req) => {
           console.error(`[process-campaigns] ❌ Send failed for ${recipient.id}:`, sendError);
         }
 
+        // Determine the actual message that was sent for logging
+        let sentMessageText = "";
+        if (isWabaTemplate && typeof fullContent !== "undefined") {
+          sentMessageText = fullContent || "";
+        } else {
+          sentMessageText = recipient.personalized_message || campaign.message_text || "";
+        }
+
         // Update recipient
         if (sendSuccess) {
           await supabase.from("campaign_recipients").update({
             status: "sent",
             sent_at: new Date().toISOString(),
+            personalized_message: sentMessageText.substring(0, 2000) || null,
           }).eq("id", recipient.id);
 
           await supabase.from("campaigns").update({
