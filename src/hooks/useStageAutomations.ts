@@ -8,9 +8,9 @@ export interface StageAutomation {
   id: string;
   stage_id: string;
   workspace_id: string;
-  trigger: 'on_enter' | 'on_exit' | 'after_time';
+  trigger: 'on_enter' | 'on_exit' | 'after_time' | 'on_reply';
   trigger_delay_minutes: number;
-  action_type: 'run_bot' | 'notify_responsible' | 'change_responsible' | 'add_tag' | 'remove_tag' | 'create_task';
+  action_type: 'run_bot' | 'notify_responsible' | 'change_responsible' | 'add_tag' | 'remove_tag' | 'create_task' | 'move_stage';
   action_config: Record<string, any>;
   conditions: Array<{ field: string; operator: string; value: string }>;
   is_active: boolean;

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown, ArrowRight } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -39,6 +39,7 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   add_tag: <Tag className="h-4 w-4" />,
   remove_tag: <Tag className="h-4 w-4" />,
   create_task: <CheckSquare className="h-4 w-4" />,
+  move_stage: <ArrowRight className="h-4 w-4" />,
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -48,16 +49,18 @@ const ACTION_LABELS: Record<string, string> = {
   add_tag: 'Aplicar tag',
   remove_tag: 'Remover tag',
   create_task: 'Criar tarefa',
+  move_stage: 'Mover para etapa',
 };
 
 const TRIGGER_LABELS: Record<string, string> = {
   on_enter: 'Ao entrar na etapa',
   on_exit: 'Ao sair da etapa',
   after_time: 'Após tempo na etapa',
+  on_reply: 'Quando lead responder',
 };
 
 type FormData = {
-  trigger: 'on_enter' | 'on_exit' | 'after_time';
+  trigger: 'on_enter' | 'on_exit' | 'after_time' | 'on_reply';
   trigger_delay_minutes: number;
   action_type: string;
   action_config: Record<string, any>;
@@ -144,6 +147,7 @@ export function StageAutomationsDialog({
       stage_id: stage.id,
       trigger: form.trigger,
       trigger_delay_minutes: form.trigger === 'after_time' ? form.trigger_delay_minutes : 0,
+      // @ts-ignore - on_reply and move_stage are valid in DB
       action_type: form.action_type as StageAutomation['action_type'],
       action_config: form.action_config,
       conditions: form.conditions,
@@ -294,6 +298,7 @@ export function StageAutomationsDialog({
                         <SelectItem value="on_enter">Ao entrar na etapa</SelectItem>
                         <SelectItem value="on_exit">Ao sair da etapa</SelectItem>
                         <SelectItem value="after_time">Após tempo na etapa</SelectItem>
+                        <SelectItem value="on_reply">Quando lead responder</SelectItem>
                       </SelectContent>
                     </Select>
                     {form.trigger === 'after_time' && (
@@ -311,6 +316,7 @@ export function StageAutomationsDialog({
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="run_bot">🤖 Executar SalesBot</SelectItem>
+                        <SelectItem value="move_stage">➡️ Mover para etapa</SelectItem>
                         <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
                         <SelectItem value="change_responsible">👤 Mudar responsável</SelectItem>
                         <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
