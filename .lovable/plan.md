@@ -1,38 +1,38 @@
 
 
-## Corrigir RLS para suportar multi-workspace
+## Plano: Botões rápidos de Bloquear + Excluir Lead no Chat
 
-### Problema raiz
+### Contexto
+Hoje o menu de "Acao rapida" no header do chat tem apenas "Mover para etapa" e "Ver detalhes do lead". O menu de tres pontos tem "Bloquear contato" e "Ignorar contato", mas nenhum deles exclui o lead do banco de dados.
 
-A função `get_user_workspace_id(auth.uid())` retorna apenas **1 workspace** (`LIMIT 1`), que é sempre o Argos X. Todas as tabelas que usam essa função nas políticas RLS bloqueiam silenciosamente qualquer acesso a dados do ECX Company — funnels, stages, leads, tags, tudo retorna vazio.
+### O que sera feito
 
-É por isso que as fases não aparecem: os dados existem no banco (8 fases corretas), mas o RLS impede a leitura.
+**Arquivo: `src/pages/Chats.tsx`**
 
-### Correção
+1. **Adicionar "Excluir lead" no menu "Acao rapida"** (linhas ~3188-3214)
+   - Novo item no DropdownMenu existente com icone `Trash2` e texto "Excluir lead"
+   - Ao clicar: confirmacao via `window.confirm` com aviso claro
+   - Acao: chama `deleteLead(chatLead.id)` (ja disponivel via `useLeads`)
+   - Pausa IA (`agent_memories.is_paused = true`) por session_id e lead_id
+   - Cancela followups pendentes
+   - Remove o chat da lista e volta para a lista (`setSelectedChat(null)`)
+   - Toast de sucesso
 
-**1 migration** que altera todas as ~50 políticas RLS afetadas, trocando:
+2. **Adicionar "Bloquear e Excluir" no menu tres pontos** (linhas ~3246-3458)
+   - Novo item apos "Bloquear contato" com icone `UserX` e texto "Bloquear e excluir lead"
+   - Ao clicar: confirmacao dupla
+   - Acao: bloqueia no WhatsApp (`blockContact`), pausa IA, cancela followups, e deleta o lead do banco
+   - Toast e fecha o chat
 
-```sql
-get_user_workspace_id(auth.uid())
-```
-por:
-```sql
-get_user_workspace_ids(auth.uid())
-```
-
-Ou seja, trocar `workspace_id = get_user_workspace_id(...)` por `workspace_id IN (SELECT get_user_workspace_ids(...))`.
-
-A função `get_user_workspace_ids` (plural, já existe) retorna **todos** os workspaces do usuário, permitindo acesso ao ECX Company quando logado.
-
-### Tabelas afetadas (~50 policies)
-
-Todas as que aparecem na query acima: `funnels`, `funnel_stages`, `leads`, `lead_tags`, `lead_tag_assignments`, `ai_agents`, `campaigns`, `clients`, `whatsapp_messages`, `salesbots`, `stage_automations`, etc.
-
-### O que NÃO muda
-- Nenhum arquivo frontend
-- A lógica de `switchWorkspace` continua a mesma
-- Segurança mantida: o usuário só vê workspaces dos quais é membro
+### Detalhes tecnicos
+- Reutiliza `deleteLead` do hook `useLeads` ja importado
+- A exclusao em cascata ja funciona (RLS permite delete para membros do workspace)
+- Se nao houver lead vinculado ao chat, os botoes ficam desabilitados/ocultos
+- Icones necessarios: `Trash2`, `UserX` (de lucide-react)
 
 ### Resultado
-Ao trocar para ECX Company, todas as fases, leads, tags e demais dados aparecerão corretamente.
+O usuario tera 3 opcoes rapidas quando alguem diz "esse numero nao e meu":
+- **Ignorar contato** (ja existe) — oculta da lista mas mantem no banco
+- **Excluir lead** (novo) — remove completamente do CRM
+- **Bloquear e excluir** (novo) — bloqueia no WhatsApp E remove do CRM
 
