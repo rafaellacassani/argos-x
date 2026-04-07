@@ -216,12 +216,20 @@ export default function Contacts() {
   }, [listInstances, getConnectionState, fetchProfilesBatch]);
 
   const fetchContacts = useCallback(async (page = currentPage) => {
+    if (!workspaceId) {
+      setContacts([]);
+      setTotalCount(0);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
 
     // Get total count
     const { count } = await supabase
       .from("leads")
-      .select("id", { count: "exact", head: true });
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", workspaceId);
     setTotalCount(count ?? 0);
 
     // Fetch paginated leads
@@ -230,6 +238,7 @@ export default function Contacts() {
     const { data: leads } = await supabase
       .from("leads")
       .select("id, name, phone, email, company, source, created_at")
+      .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: false })
       .range(from, to);
 
@@ -243,6 +252,7 @@ export default function Contacts() {
     const { data: tagAssignments } = await supabase
       .from("lead_tag_assignments")
       .select("lead_id, lead_tags(id, name, color)")
+      .eq("workspace_id", workspaceId)
       .in("lead_id", leadIds);
 
     const tagMap = new Map<string, { id: string; name: string; color: string }[]>();
@@ -257,9 +267,9 @@ export default function Contacts() {
       leads.map((l) => ({ ...l, tags: tagMap.get(l.id) || [] }))
     );
     setLoading(false);
-  }, [currentPage]);
+  }, [currentPage, workspaceId]);
 
-  useEffect(() => { fetchContacts(currentPage); }, [currentPage]);
+  useEffect(() => { fetchContacts(currentPage); }, [currentPage, fetchContacts]);
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
@@ -320,6 +330,7 @@ export default function Contacts() {
         const { data } = await supabase
           .from("leads")
           .select("id, name, phone, email, company, source, created_at")
+          .eq("workspace_id", workspaceId)
           .order("created_at", { ascending: false });
         exportData = data || [];
       } else if (selectedContacts.length > 0) {
@@ -362,7 +373,7 @@ export default function Contacts() {
       console.error("Export error:", err);
       toast({ title: "Erro ao exportar", description: "Tente novamente.", variant: "destructive" });
     }
-  }, [allGlobalSelected, selectedContacts, filteredContacts]);
+  }, [allGlobalSelected, selectedContacts, filteredContacts, workspaceId]);
 
   return (
     <div className="space-y-6" data-tour="contacts-section">
