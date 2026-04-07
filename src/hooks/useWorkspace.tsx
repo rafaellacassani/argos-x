@@ -46,6 +46,8 @@ interface WorkspaceContextType {
   loading: boolean;
   hasWorkspace: boolean;
   isAdminViewing: boolean;
+  allWorkspaces: Workspace[];
+  switchWorkspace: (workspaceId: string) => void;
   createWorkspace: (name: string) => Promise<Workspace | null>;
   inviteMember: (email: string, role: "admin" | "manager" | "seller") => Promise<boolean>;
   fetchMembers: () => Promise<WorkspaceMember[]>;
