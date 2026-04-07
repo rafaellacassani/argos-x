@@ -294,6 +294,8 @@ serve(async (req) => {
               }
 
               wabaHydratedMessage = fullContent;
+
+              await supabase.from("meta_conversations").insert({
                 workspace_id: campaign.workspace_id,
                 meta_page_id: metaPageId || null,
                 sender_id: cleanPhone,
