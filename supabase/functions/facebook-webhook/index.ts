@@ -711,6 +711,47 @@ async function processWhatsAppBusinessEvent(entry: any) {
         workspace_id: metaPage.workspace_id,
       });
 
+      // --- Process on_reply automations ---
+      try {
+        const phoneSuffix = senderId.length >= 10 ? senderId.slice(-10) : senderId;
+        const { data: replyLead } = await supabase
+          .from("leads")
+          .select("id, stage_id")
+          .eq("workspace_id", metaPage.workspace_id)
+          .like("phone", `%${phoneSuffix}`)
+          .limit(1)
+          .single();
+
+        if (replyLead?.stage_id) {
+          const { data: replyAutos } = await supabase
+            .from("stage_automations")
+            .select("id, action_type, action_config")
+            .eq("stage_id", replyLead.stage_id)
+            .eq("trigger", "on_reply")
+            .eq("is_active", true);
+
+          if (replyAutos && replyAutos.length > 0) {
+            for (const auto of replyAutos) {
+              if (auto.action_type === "move_stage" && (auto.action_config as any)?.target_stage_id) {
+                const targetStageId = (auto.action_config as any).target_stage_id;
+                await supabase.from("leads").update({ stage_id: targetStageId }).eq("id", replyLead.id);
+                await supabase.from("lead_history").insert({
+                  lead_id: replyLead.id,
+                  action: "stage_changed",
+                  from_stage_id: replyLead.stage_id,
+                  to_stage_id: targetStageId,
+                  performed_by: "Automação (resposta)",
+                  workspace_id: metaPage.workspace_id,
+                });
+                console.log(`[Facebook Webhook] ➡️ on_reply: moved lead ${replyLead.id} to stage ${targetStageId}`);
+              }
+            }
+          }
+        }
+      } catch (replyAutoErr) {
+        console.warn(`[Facebook Webhook] ⚠️ on_reply automation error (non-blocking):`, replyAutoErr);
+      }
+
       // Route to AI Agent — pass media info for image/audio understanding
       const rawMediaId = msg[msg.type]?.id;
       const supportedMediaTypes = ["image", "audio"];
