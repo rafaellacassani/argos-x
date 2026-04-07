@@ -3298,11 +3298,13 @@ export default function Chats() {
                                   try {
                                     await blockContact(instName, number, true);
                                     toast({ title: "Contato bloqueado com sucesso" });
+                                    // Pause AI by session_id (primary)
+                                    await supabase.from("agent_memories").update({ is_paused: true } as any).eq("session_id", selectedChat.remoteJid).eq("workspace_id", workspaceId);
                                     if (chatLead?.id) {
-                                      await supabase.from("agent_memories").update({ is_paused: true } as any).eq("lead_id", chatLead.id);
+                                      await supabase.from("agent_memories").update({ is_paused: true } as any).eq("lead_id", chatLead.id).eq("workspace_id", workspaceId);
                                       await supabase.from("leads").update({ is_opted_out: true } as any).eq("id", chatLead.id);
-                                      setSelectedChatAiPaused(true);
                                     }
+                                    setSelectedChatAiPaused(true);
                                   } catch (blockErr: any) {
                                     console.error("[Chats] Block error:", blockErr);
                                     toast({ title: "Erro ao bloquear contato", description: blockErr?.message || "Erro desconhecido", variant: "destructive" });
