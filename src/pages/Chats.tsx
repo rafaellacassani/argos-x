@@ -3522,7 +3522,7 @@ export default function Chats() {
                                   const inst = selectedChat.instanceName || selectedInstance;
                                   if (inst) {
                                     try {
-                                      await blockContact(inst, selectedChat.remoteJid, "block");
+                                      await blockContact(inst, selectedChat.remoteJid, true);
                                     } catch (blockErr) {
                                       console.warn("[Chats] Block failed, continuing with delete:", blockErr);
                                     }
