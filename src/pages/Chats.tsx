@@ -474,24 +474,44 @@ export default function Chats() {
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
   
   // Query AI pause state when selected chat changes
+  // Uses session_id (remoteJid) as primary key — this matches how the backend tracks sessions
   useEffect(() => {
     if (!selectedChat || !workspaceId) {
       setSelectedChatAiPaused(false);
       return;
     }
     const checkPauseState = async () => {
-      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-      if (!chatLead?.id) {
+      const sessionId = selectedChat.remoteJid;
+      if (!sessionId) {
         setSelectedChatAiPaused(false);
         return;
       }
+      // Query by session_id first (most reliable — backend always sets this)
       const { data } = await supabase
         .from("agent_memories")
         .select("is_paused")
-        .eq("lead_id", chatLead.id)
+        .eq("session_id", sessionId)
         .eq("workspace_id", workspaceId)
+        .order("updated_at", { ascending: false })
         .limit(1);
-      setSelectedChatAiPaused(data?.[0]?.is_paused === true);
+      if (data && data.length > 0) {
+        setSelectedChatAiPaused(data[0].is_paused === true);
+        return;
+      }
+      // Fallback: try by lead_id
+      const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+      if (chatLead?.id) {
+        const { data: leadData } = await supabase
+          .from("agent_memories")
+          .select("is_paused")
+          .eq("lead_id", chatLead.id)
+          .eq("workspace_id", workspaceId)
+          .order("updated_at", { ascending: false })
+          .limit(1);
+        setSelectedChatAiPaused(leadData?.[0]?.is_paused === true);
+      } else {
+        setSelectedChatAiPaused(false);
+      }
     };
     checkPauseState();
   }, [selectedChat?.id, workspaceId]);
@@ -3240,13 +3260,21 @@ export default function Chats() {
                                     await blockContact(instName, number, false);
                                     if (chatLead?.id) {
                                       await supabase.from("leads").update({ is_opted_out: false } as any).eq("id", chatLead.id);
+                                    }
+                                    // Resume AI by session_id (primary)
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: false } as any)
+                                      .eq("session_id", selectedChat.remoteJid)
+                                      .eq("workspace_id", workspaceId);
+                                    if (chatLead?.id) {
                                       await supabase
                                         .from("agent_memories")
-                                        .update({ is_paused: false })
+                                        .update({ is_paused: false } as any)
                                         .eq("lead_id", chatLead.id)
                                         .eq("workspace_id", workspaceId);
-                                      setSelectedChatAiPaused(false);
                                     }
+                                    setSelectedChatAiPaused(false);
                                     toast({ title: "Contato desbloqueado com sucesso" });
                                   } catch {
                                     toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
@@ -3270,11 +3298,13 @@ export default function Chats() {
                                   try {
                                     await blockContact(instName, number, true);
                                     toast({ title: "Contato bloqueado com sucesso" });
+                                    // Pause AI by session_id (primary)
+                                    await supabase.from("agent_memories").update({ is_paused: true } as any).eq("session_id", selectedChat.remoteJid).eq("workspace_id", workspaceId);
                                     if (chatLead?.id) {
-                                      await supabase.from("agent_memories").update({ is_paused: true } as any).eq("lead_id", chatLead.id);
+                                      await supabase.from("agent_memories").update({ is_paused: true } as any).eq("lead_id", chatLead.id).eq("workspace_id", workspaceId);
                                       await supabase.from("leads").update({ is_opted_out: true } as any).eq("id", chatLead.id);
-                                      setSelectedChatAiPaused(true);
                                     }
+                                    setSelectedChatAiPaused(true);
                                   } catch (blockErr: any) {
                                     console.error("[Chats] Block error:", blockErr);
                                     toast({ title: "Erro ao bloquear contato", description: blockErr?.message || "Erro desconhecido", variant: "destructive" });
@@ -3290,17 +3320,27 @@ export default function Chats() {
                           {selectedChatAiPaused ? (
                             <DropdownMenuItem
                               onClick={async () => {
-                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                if (!chatLead?.id) {
-                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                const sessionId = selectedChat.remoteJid;
+                                if (!sessionId) {
+                                  toast({ title: "Sessão não encontrada para este contato", variant: "destructive" });
                                   return;
                                 }
                                 try {
+                                  // Update by session_id (primary) — this is how the backend identifies sessions
                                   await supabase
                                     .from("agent_memories")
                                     .update({ is_paused: false } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId);
+                                  // Also update by lead_id as fallback for completeness
+                                  const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: false } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId);
+                                  }
                                   setSelectedChatAiPaused(false);
                                   toast({ title: "✅ IA retomada para este contato" });
                                 } catch {
@@ -3314,25 +3354,45 @@ export default function Chats() {
                           ) : (
                             <DropdownMenuItem
                               onClick={async () => {
-                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                if (!chatLead?.id) {
-                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                const sessionId = selectedChat.remoteJid;
+                                if (!sessionId) {
+                                  toast({ title: "Sessão não encontrada para este contato", variant: "destructive" });
                                   return;
                                 }
                                 const confirmed = window.confirm("Pausar a IA para este contato? A IA não responderá mais automaticamente.");
                                 if (!confirmed) return;
                                 try {
+                                  // Update by session_id (primary)
                                   await supabase
                                     .from("agent_memories")
                                     .update({ is_paused: true } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId);
+                                  // Also update by lead_id as fallback
+                                  const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: true } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId);
+                                  }
+                                  // Cancel pending followups by session_id
                                   await supabase
                                     .from("agent_followup_queue")
                                     .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId)
                                     .eq("status", "pending");
+                                  // Also cancel by lead_id
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_followup_queue")
+                                      .update({ status: "canceled", canceled_reason: "manual_pause" } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId)
+                                      .eq("status", "pending");
+                                  }
                                   setSelectedChatAiPaused(true);
                                   toast({ title: "✅ IA pausada para este contato" });
                                 } catch {
@@ -3360,12 +3420,25 @@ export default function Chats() {
                                   .from("leads")
                                   .update({ is_ignored: true } as any)
                                   .eq("id", chatLead.id);
-                                // Pause AI for this lead
+                                // Pause AI by session_id (primary)
                                 await supabase
                                   .from("agent_memories")
                                   .update({ is_paused: true } as any)
-                                  .eq("lead_id", chatLead.id);
-                                // Cancel pending followups
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId);
+                                // Also by lead_id
+                                await supabase
+                                  .from("agent_memories")
+                                  .update({ is_paused: true } as any)
+                                  .eq("lead_id", chatLead.id)
+                                  .eq("workspace_id", workspaceId);
+                                // Cancel pending followups by session_id and lead_id
+                                await supabase
+                                  .from("agent_followup_queue")
+                                  .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
+                                  .eq("session_id", selectedChat.remoteJid)
+                                  .eq("workspace_id", workspaceId)
+                                  .eq("status", "pending");
                                 await supabase
                                   .from("agent_followup_queue")
                                   .update({ status: "canceled", canceled_reason: "lead_ignored" } as any)
