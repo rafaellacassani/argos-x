@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useWorkspace } from "./useWorkspace";
 
 export interface EvolutionInstance {
   instanceName: string;
@@ -125,6 +126,7 @@ export interface CreateInstanceResponse {
 }
 
 export function useEvolutionAPI() {
+  const { workspaceId } = useWorkspace();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -212,10 +214,16 @@ export function useEvolutionAPI() {
     try {
       // 1. Buscar instâncias registradas no banco de dados local (CRM) filtradas por workspace
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: localInstances, error: dbError } = await supabase
+      let query = supabase
         .from('whatsapp_instances')
         .select('*')
         .neq('instance_type', 'alerts');
+      
+      if (workspaceId) {
+        query = query.eq('workspace_id', workspaceId);
+      }
+
+      const { data: localInstances, error: dbError } = await query;
 
       if (dbError) {
         console.error("[useEvolutionAPI] Error fetching local instances:", dbError);
@@ -279,7 +287,7 @@ export function useEvolutionAPI() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   const deleteInstance = useCallback(async (instanceName: string, userId?: string): Promise<boolean> => {
     setLoading(true);

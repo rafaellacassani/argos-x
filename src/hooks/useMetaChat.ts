@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useWorkspace } from "./useWorkspace";
 
 export interface MetaPage {
   id: string;
@@ -35,6 +36,7 @@ export interface MetaMessage {
 const META_PAGE_SIZE = 50;
 
 export function useMetaChat() {
+  const { workspaceId } = useWorkspace();
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [conversations, setConversations] = useState<MetaConversation[]>([]);
   const [messages, setMessages] = useState<MetaMessage[]>([]);
@@ -45,10 +47,16 @@ export function useMetaChat() {
 
   // Fetch active meta pages
   const fetchMetaPages = useCallback(async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("meta_pages")
       .select("id, page_id, page_name, platform, instagram_username, is_active")
       .eq("is_active", true);
+    
+    if (workspaceId) {
+      query = query.eq("workspace_id", workspaceId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("[useMetaChat] Error fetching meta pages:", error);
@@ -58,7 +66,7 @@ export function useMetaChat() {
     const pages = (data || []) as MetaPage[];
     setMetaPages(pages);
     return pages;
-  }, []);
+  }, [workspaceId]);
 
   // Build and execute a paginated query against the summary view
   const queryConversations = useCallback(async (
