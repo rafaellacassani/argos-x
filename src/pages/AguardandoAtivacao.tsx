@@ -26,6 +26,9 @@ export default function AguardandoAtivacao() {
         return;
       }
 
+      // Auto-accept any pending invite for the logged-in user
+      await supabase.functions.invoke("accept-invite").catch(() => {});
+
       const { data } = await supabase
         .from("workspace_members")
         .select("workspace_id")
