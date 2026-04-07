@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { Zap, Bot, Bell, User, Tag, CheckSquare, Trash2, Plus, ChevronDown, ArrowRight } from 'lucide-react';
 import { useWorkspace } from '@/hooks/useWorkspace';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -39,6 +39,7 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   add_tag: <Tag className="h-4 w-4" />,
   remove_tag: <Tag className="h-4 w-4" />,
   create_task: <CheckSquare className="h-4 w-4" />,
+  move_stage: <ArrowRight className="h-4 w-4" />,
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -48,16 +49,18 @@ const ACTION_LABELS: Record<string, string> = {
   add_tag: 'Aplicar tag',
   remove_tag: 'Remover tag',
   create_task: 'Criar tarefa',
+  move_stage: 'Mover para etapa',
 };
 
 const TRIGGER_LABELS: Record<string, string> = {
   on_enter: 'Ao entrar na etapa',
   on_exit: 'Ao sair da etapa',
   after_time: 'Após tempo na etapa',
+  on_reply: 'Quando lead responder',
 };
 
 type FormData = {
-  trigger: 'on_enter' | 'on_exit' | 'after_time';
+  trigger: 'on_enter' | 'on_exit' | 'after_time' | 'on_reply';
   trigger_delay_minutes: number;
   action_type: string;
   action_config: Record<string, any>;
@@ -90,6 +93,7 @@ export function StageAutomationsDialog({
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
   const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
+  const [allStages, setAllStages] = useState<FunnelStage[]>([]);
   const [conditionsOpen, setConditionsOpen] = useState(false);
   const { workspaceId } = useWorkspace();
 
@@ -98,6 +102,7 @@ export function StageAutomationsDialog({
       fetchAutomations(stage.id);
       fetchBots();
       fetchInstances();
+      fetchAllStages();
       setEditing(null);
     }
   }, [open, stage]);
@@ -118,6 +123,12 @@ export function StageAutomationsDialog({
     ]);
     if (evoRes.data) setInstances(evoRes.data);
     if (cloudRes.data) setCloudConnections(cloudRes.data);
+  };
+
+  const fetchAllStages = async () => {
+    if (!workspaceId) return;
+    const { data } = await supabase.from('funnel_stages').select('*').eq('workspace_id', workspaceId).order('position');
+    if (data) setAllStages(data as FunnelStage[]);
   };
 
   const handleEdit = (auto: StageAutomation) => {
@@ -144,6 +155,7 @@ export function StageAutomationsDialog({
       stage_id: stage.id,
       trigger: form.trigger,
       trigger_delay_minutes: form.trigger === 'after_time' ? form.trigger_delay_minutes : 0,
+      // @ts-ignore - on_reply and move_stage are valid in DB
       action_type: form.action_type as StageAutomation['action_type'],
       action_config: form.action_config,
       conditions: form.conditions,
@@ -205,6 +217,10 @@ export function StageAutomationsDialog({
     }
     if (auto.action_type === 'create_task' && config.title) {
       return `${label}: ${config.title}`;
+    }
+    if (auto.action_type === 'move_stage' && config.target_stage_id) {
+      const st = allStages.find(s => s.id === config.target_stage_id);
+      return `${label}: ${st?.name || config.target_stage_name || 'Etapa'}`;
     }
     return label;
   };
@@ -294,6 +310,7 @@ export function StageAutomationsDialog({
                         <SelectItem value="on_enter">Ao entrar na etapa</SelectItem>
                         <SelectItem value="on_exit">Ao sair da etapa</SelectItem>
                         <SelectItem value="after_time">Após tempo na etapa</SelectItem>
+                        <SelectItem value="on_reply">Quando lead responder</SelectItem>
                       </SelectContent>
                     </Select>
                     {form.trigger === 'after_time' && (
@@ -311,6 +328,7 @@ export function StageAutomationsDialog({
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="run_bot">🤖 Executar SalesBot</SelectItem>
+                        <SelectItem value="move_stage">➡️ Mover para etapa</SelectItem>
                         <SelectItem value="notify_responsible">🔔 Notificar responsável</SelectItem>
                         <SelectItem value="change_responsible">👤 Mudar responsável</SelectItem>
                         <SelectItem value="add_tag">🏷️ Aplicar tag</SelectItem>
@@ -332,6 +350,7 @@ export function StageAutomationsDialog({
                       teamMembers={teamMembers}
                       instances={instances}
                       cloudConnections={cloudConnections}
+                      stages={allStages}
                     />
                   </div>
 
@@ -433,7 +452,7 @@ export function StageAutomationsDialog({
 
 // Sub-component for action-specific config
 function ActionConfigForm({
-  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [],
+  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [], stages = [],
 }: {
   actionType: string;
   config: Record<string, any>;
@@ -443,6 +462,7 @@ function ActionConfigForm({
   teamMembers: Array<{ id: string; full_name: string }>;
   instances?: { instance_name: string; display_name: string | null }[];
   cloudConnections?: { id: string; inbox_name: string; phone_number: string; phone_number_id: string }[];
+  stages?: FunnelStage[];
 }) {
   const set = (key: string, value: any) => onChange({ ...config, [key]: value });
 
@@ -628,6 +648,25 @@ function ActionConfigForm({
         </div>
       );
 
+    case 'move_stage':
+      return (
+        <Select value={config.target_stage_id || ''} onValueChange={v => {
+          const st = stages.find(s => s.id === v);
+          onChange({ target_stage_id: v, target_stage_name: st?.name || '' });
+        }}>
+          <SelectTrigger><SelectValue placeholder="Selecione a etapa de destino" /></SelectTrigger>
+          <SelectContent>
+            {stages.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      );
     default:
       return <p className="text-sm text-muted-foreground">Selecione uma ação</p>;
   }
