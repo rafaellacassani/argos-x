@@ -69,6 +69,35 @@ export function useWhatsAppTemplates() {
     }
   }, [fetchTemplates]);
 
+  const [creating, setCreating] = useState(false);
+
+  const createTemplate = useCallback(async (connectionId: string, payload: {
+    name: string;
+    language: string;
+    category: string;
+    components: any[];
+  }) => {
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('create-whatsapp-template', {
+        body: { connectionId, ...payload },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Template criado com sucesso! Status: ' + (data.status || 'PENDING'));
+      await fetchTemplates(connectionId);
+      return data;
+    } catch (err: any) {
+      console.error('Error creating template:', err);
+      toast.error(err?.message || 'Erro ao criar template');
+      return null;
+    } finally {
+      setCreating(false);
+    }
+  }, [fetchTemplates]);
+
   const getApprovedTemplates = useCallback(() => {
     return templates.filter(t => t.status === 'APPROVED');
   }, [templates]);
@@ -77,8 +106,10 @@ export function useWhatsAppTemplates() {
     templates,
     loading,
     syncing,
+    creating,
     fetchTemplates,
     syncTemplates,
+    createTemplate,
     getApprovedTemplates,
   };
 }
