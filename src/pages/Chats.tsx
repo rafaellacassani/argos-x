@@ -3260,13 +3260,21 @@ export default function Chats() {
                                     await blockContact(instName, number, false);
                                     if (chatLead?.id) {
                                       await supabase.from("leads").update({ is_opted_out: false } as any).eq("id", chatLead.id);
+                                    }
+                                    // Resume AI by session_id (primary)
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: false } as any)
+                                      .eq("session_id", selectedChat.remoteJid)
+                                      .eq("workspace_id", workspaceId);
+                                    if (chatLead?.id) {
                                       await supabase
                                         .from("agent_memories")
-                                        .update({ is_paused: false })
+                                        .update({ is_paused: false } as any)
                                         .eq("lead_id", chatLead.id)
                                         .eq("workspace_id", workspaceId);
-                                      setSelectedChatAiPaused(false);
                                     }
+                                    setSelectedChatAiPaused(false);
                                     toast({ title: "Contato desbloqueado com sucesso" });
                                   } catch {
                                     toast({ title: "Erro ao desbloquear contato", variant: "destructive" });
