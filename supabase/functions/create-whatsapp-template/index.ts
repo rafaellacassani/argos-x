@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { connectionId, name, language, category, components } = await req.json();
+    const { connectionId, name, language, category, components, variableMappings } = await req.json();
 
     if (!connectionId || !name || !language || !category || !components?.length) {
       return new Response(
