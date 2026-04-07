@@ -101,7 +101,7 @@ export function useMetaChat() {
       unread_count: 0,
       page_name: metaPages.find((p) => p.id === row.meta_page_id)?.page_name,
     }));
-  }, [metaPages]);
+  }, [metaPages, workspaceId]);
 
   // Fetch first page of conversations (resets pagination)
   const fetchConversations = useCallback(async (

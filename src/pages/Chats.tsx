@@ -1023,7 +1023,8 @@ export default function Chats() {
           const { data: localInstances } = await supabase
             .from('whatsapp_instances')
             .select('instance_name, display_name')
-            .neq('instance_type', 'alerts');
+            .neq('instance_type', 'alerts')
+            .eq('workspace_id', workspaceId);
           if (localInstances && localInstances.length > 0) {
             connectedInstances = localInstances.map(inst => ({
               instanceName: inst.instance_name,
