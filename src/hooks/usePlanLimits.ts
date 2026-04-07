@@ -16,6 +16,7 @@ export const PLAN_DEFINITIONS = {
   essencial: {
     name: 'Essencial',
     price: 47.90,
+    extraUserPrice: 47,
     leadLimit: 300,
     whatsappLimit: 1,
     userLimit: 1,
@@ -26,7 +27,7 @@ export const PLAN_DEFINITIONS = {
   negocio: {
     name: 'Negócio',
     price: 97.90,
-    extraUserPrice: 37,
+    extraUserPrice: 47,
     leadLimit: 2000,
     whatsappLimit: 3,
     userLimit: 1,
@@ -37,7 +38,7 @@ export const PLAN_DEFINITIONS = {
   escala: {
     name: 'Escala',
     price: 197.90,
-    extraUserPrice: 57,
+    extraUserPrice: 47,
     leadLimit: 999999,
     whatsappLimit: 999,
     userLimit: 3,
@@ -49,7 +50,7 @@ export const PLAN_DEFINITIONS = {
     name: 'Escala Semestral',
     price: 1187.40,
     billingPeriod: '6 meses',
-    extraUserPrice: 57,
+    extraUserPrice: 47,
     leadLimit: 999999,
     whatsappLimit: 999,
     userLimit: 3,
