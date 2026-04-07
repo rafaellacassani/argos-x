@@ -66,7 +66,7 @@ export function useMetaChat() {
     const pages = (data || []) as MetaPage[];
     setMetaPages(pages);
     return pages;
-  }, []);
+  }, [workspaceId]);
 
   // Build and execute a paginated query against the summary view
   const queryConversations = useCallback(async (
