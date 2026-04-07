@@ -200,6 +200,19 @@ serve(async (req) => {
         asaas_subscription_id: subscription.id,
       });
 
+      // Recalculate extra_leads from all active packs
+      const { data: allPacks } = await supabaseAdmin
+        .from("lead_packs")
+        .select("pack_size")
+        .eq("workspace_id", workspaceId)
+        .eq("active", true);
+      
+      const totalExtra = (allPacks || []).reduce((sum: number, p: any) => sum + p.pack_size, 0);
+      await supabaseAdmin
+        .from("workspaces")
+        .update({ extra_leads: totalExtra })
+        .eq("id", workspaceId);
+
       console.log(`[asaas-manage] Lead pack +${packSize} created for workspace ${workspaceId}, sub: ${subscription.id}`);
 
       return new Response(JSON.stringify({ success: true, message: `Pacote de +${packSize.toLocaleString()} leads contratado!` }), {
