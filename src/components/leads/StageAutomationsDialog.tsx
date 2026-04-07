@@ -93,6 +93,7 @@ export function StageAutomationsDialog({
   const [bots, setBots] = useState<Array<{ id: string; name: string; is_active: boolean }>>([]);
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
   const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
+  const [allStages, setAllStages] = useState<FunnelStage[]>([]);
   const [conditionsOpen, setConditionsOpen] = useState(false);
   const { workspaceId } = useWorkspace();
 
@@ -101,6 +102,7 @@ export function StageAutomationsDialog({
       fetchAutomations(stage.id);
       fetchBots();
       fetchInstances();
+      fetchAllStages();
       setEditing(null);
     }
   }, [open, stage]);
@@ -121,6 +123,12 @@ export function StageAutomationsDialog({
     ]);
     if (evoRes.data) setInstances(evoRes.data);
     if (cloudRes.data) setCloudConnections(cloudRes.data);
+  };
+
+  const fetchAllStages = async () => {
+    if (!workspaceId) return;
+    const { data } = await supabase.from('funnel_stages').select('*').eq('workspace_id', workspaceId).order('position');
+    if (data) setAllStages(data as FunnelStage[]);
   };
 
   const handleEdit = (auto: StageAutomation) => {
@@ -209,6 +217,10 @@ export function StageAutomationsDialog({
     }
     if (auto.action_type === 'create_task' && config.title) {
       return `${label}: ${config.title}`;
+    }
+    if (auto.action_type === 'move_stage' && config.target_stage_id) {
+      const st = allStages.find(s => s.id === config.target_stage_id);
+      return `${label}: ${st?.name || config.target_stage_name || 'Etapa'}`;
     }
     return label;
   };
