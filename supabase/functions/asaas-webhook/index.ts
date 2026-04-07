@@ -570,6 +570,18 @@ serve(async (req) => {
 
         if (event === "PAYMENT_RECEIVED") {
           const planConfig = getPlanConfig(planName);
+          
+          // Preserve user_limit if it's higher than plan default (means extra users were purchased)
+          const { data: currentWs } = await supabaseAdmin
+            .from("workspaces")
+            .select("user_limit")
+            .eq("asaas_customer_id", asaasCustomerId)
+            .maybeSingle();
+          
+          const effectiveUserLimit = currentWs && currentWs.user_limit > planConfig.user_limit
+            ? currentWs.user_limit
+            : planConfig.user_limit;
+
           await supabaseAdmin
             .from("workspaces")
             .update({
@@ -579,7 +591,7 @@ serve(async (req) => {
               plan_name: planConfig.plan_name,
               lead_limit: planConfig.lead_limit,
               whatsapp_limit: planConfig.whatsapp_limit,
-              user_limit: planConfig.user_limit,
+              user_limit: effectiveUserLimit,
               ai_interactions_limit: planConfig.ai_interactions_limit,
             })
             .eq("asaas_customer_id", asaasCustomerId);
