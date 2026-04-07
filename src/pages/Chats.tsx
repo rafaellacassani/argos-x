@@ -3310,17 +3310,27 @@ export default function Chats() {
                           {selectedChatAiPaused ? (
                             <DropdownMenuItem
                               onClick={async () => {
-                                const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
-                                if (!chatLead?.id) {
-                                  toast({ title: "Lead não encontrado para este contato", variant: "destructive" });
+                                const sessionId = selectedChat.remoteJid;
+                                if (!sessionId) {
+                                  toast({ title: "Sessão não encontrada para este contato", variant: "destructive" });
                                   return;
                                 }
                                 try {
+                                  // Update by session_id (primary) — this is how the backend identifies sessions
                                   await supabase
                                     .from("agent_memories")
                                     .update({ is_paused: false } as any)
-                                    .eq("lead_id", chatLead.id)
+                                    .eq("session_id", sessionId)
                                     .eq("workspace_id", workspaceId);
+                                  // Also update by lead_id as fallback for completeness
+                                  const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+                                  if (chatLead?.id) {
+                                    await supabase
+                                      .from("agent_memories")
+                                      .update({ is_paused: false } as any)
+                                      .eq("lead_id", chatLead.id)
+                                      .eq("workspace_id", workspaceId);
+                                  }
                                   setSelectedChatAiPaused(false);
                                   toast({ title: "✅ IA retomada para este contato" });
                                 } catch {
