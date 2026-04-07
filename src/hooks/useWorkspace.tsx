@@ -61,6 +61,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [allWorkspaces, setAllWorkspaces] = useState<Workspace[]>([]);
   const [membership, setMembership] = useState<WorkspaceMember | null>(null);
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
