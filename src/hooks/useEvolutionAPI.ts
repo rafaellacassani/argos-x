@@ -214,10 +214,16 @@ export function useEvolutionAPI() {
     try {
       // 1. Buscar instâncias registradas no banco de dados local (CRM) filtradas por workspace
       const { data: { user } } = await supabase.auth.getUser();
-      const { data: localInstances, error: dbError } = await supabase
+      let query = supabase
         .from('whatsapp_instances')
         .select('*')
         .neq('instance_type', 'alerts');
+      
+      if (workspaceId) {
+        query = query.eq('workspace_id', workspaceId);
+      }
+
+      const { data: localInstances, error: dbError } = await query;
 
       if (dbError) {
         console.error("[useEvolutionAPI] Error fetching local instances:", dbError);
