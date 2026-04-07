@@ -209,9 +209,9 @@ serve(async (req) => {
                 let paramValue = mapping?.value || "";
                 // Replace shortcodes with lead data
                 if (paramValue === "#nome#") paramValue = leadName;
-                else if (paramValue === "#empresa#") paramValue = "";
+                else if (paramValue === "#empresa#") paramValue = leadCompany;
                 else if (paramValue === "#telefone#") paramValue = cleanPhone;
-                else if (paramValue === "#email#") paramValue = "";
+                else if (paramValue === "#email#") paramValue = leadEmail;
                 // Fallback: if no mapping exists, use lead name as default
                 if (!paramValue && !mapping) paramValue = leadName;
 
