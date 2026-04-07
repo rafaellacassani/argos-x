@@ -1,28 +1,44 @@
 
 
-## Diagnóstico
+## Problema Identificado
 
-O membro **Rosivaldo** (`Rosivaldo.correia@terra.com.br`) foi convidado ao workspace do Wellington, mas seu registro em `workspace_members` tem `accepted_at: NULL`. Quando ele faz login, o `ProtectedRoute` detecta que não há workspace aceito e redireciona para `/aguardando-ativacao`. Porém, essa página **nunca chama a função `accept-invite`** — ela apenas faz polling esperando que `accepted_at` seja preenchido magicamente. Resultado: loop infinito.
+A IA está vazando notas internas para o cliente. Isso acontece porque o código **concatena metadados internos diretamente no `responseContent`** — a mesma string que é enviada ao WhatsApp.
+
+Há **4 pontos** no `ai-agent-chat/index.ts` onde isso acontece:
+
+1. **Linha 1482** — `pausar_ia`: adiciona `[Atendimento transferido para humano. Motivo: ...]`
+2. **Linha 1566** — calendário (conflito): adiciona `[INSTRUÇÃO INTERNA: Este horário já está ocupado...]`
+3. **Linha 1676** — calendário (reagendar conflito): adiciona `[INSTRUÇÃO INTERNA: Este horário já está ocupado...]`
+4. **Linha 1814** — calendário (slots ocupados): adiciona `[INSTRUÇÃO INTERNA - Horários indisponíveis...]`
 
 ## Correção
 
-**Arquivo: `src/pages/AguardandoAtivacao.tsx`**
+**Arquivo: `supabase/functions/ai-agent-chat/index.ts`**
 
-1. Na função `check()`, **antes** de consultar `workspace_members`, chamar `supabase.functions.invoke("accept-invite")` para aceitar automaticamente qualquer convite pendente do usuário logado.
-2. O `accept-invite` já existe e faz exatamente isso: busca o convite pendente por `user_id` ou `email` e define `accepted_at`.
-3. A chamada é idempotente — se não houver convite pendente, retorna 404 sem efeito colateral.
-4. Após a chamada, o polling existente encontrará o `accepted_at` preenchido e redirecionará para `/dashboard`.
+### 1. `pausar_ia` (linha 1482)
+- **Remover** a concatenação de `[Atendimento transferido para humano...]` no `responseContent`
+- A informação do motivo já está sendo salva no `human_support_queue.reason` (linha 1489), então nenhum dado é perdido
+- O `responseContent` deve conter apenas a despedida natural da IA (que ela já gera no próprio texto da resposta)
 
-### Correção imediata (dados)
+### 2. Instruções de calendário (linhas 1566, 1676, 1814)
+- **Mover** essas instruções para uma variável separada (ex: `internalNotes`) que é adicionada apenas ao array `messages` (memória interna do agente) mas **NÃO** ao `responseContent`/`finalResponse` enviado ao cliente
+- Isso permite que a IA "lembre" da instrução na próxima interação sem expor ao lead
 
-Além da correção no código, definir `accepted_at = now()` diretamente no registro do Rosivaldo via migration para desbloquear o acesso dele imediatamente.
+### 3. Sanitização final (safety net)
+- Antes de montar `finalResponse` (linha 1885), aplicar uma regex para remover qualquer padrão `[INSTRUÇÃO INTERNA...` ou `[Atendimento transferido...` residual:
+  ```
+  responseContent = responseContent.replace(/\n*\[(?:INSTRUÇÃO INTERNA|Atendimento transferido)[^\]]*\]/g, '').trim()
+  ```
+- Isso serve como rede de segurança caso a IA gere esses padrões espontaneamente
 
 ### Fluxo corrigido
 
 ```text
-Login → ProtectedRoute (sem workspace aceito) → /aguardando-ativacao
-  → chama accept-invite (aceita convite pendente)
-  → polling detecta accepted_at → redireciona /dashboard
+Antes:  responseContent = "Resposta da IA" + "[INSTRUÇÃO INTERNA: ...]"
+                          ↓ enviado ao cliente via WhatsApp
+
+Depois: responseContent = "Resposta da IA"  → enviado ao cliente
+        internalNotes = "[INSTRUÇÃO INTERNA: ...]"  → salvo apenas na memória
 ```
 
 Nenhum outro arquivo será alterado.
