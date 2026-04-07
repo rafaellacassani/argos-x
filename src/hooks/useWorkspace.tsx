@@ -235,6 +235,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     loadWorkspace(true);
   }, [loadWorkspace]);
 
+  const switchWorkspace = useCallback((targetId: string) => {
+    const target = allWorkspaces.find(w => w.id === targetId);
+    if (!target) return;
+    localStorage.setItem("selected_workspace_id", targetId);
+    setWorkspace(target);
+    // Reload the page to reset all query caches
+    window.location.href = "/dashboard";
+  }, [allWorkspaces]);
+
   const createWorkspace = useCallback(async (name: string): Promise<Workspace | null> => {
     if (!user) return null;
 
