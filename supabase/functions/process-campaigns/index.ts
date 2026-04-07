@@ -112,19 +112,24 @@ serve(async (req) => {
         }
 
         const recipient = recipients[0];
-        let leadName = (recipient as any).leads?.name || "";
+        const leadData = (recipient as any).leads || {};
+        let leadName = leadData.name || "";
+        let leadCompany = leadData.company || "";
+        let leadEmail = leadData.email || "";
 
-        // Robust fallback: if join didn't work, fetch lead name separately
+        // Robust fallback: if join didn't work, fetch lead data separately
         if (!leadName && recipient.lead_id) {
-          const { data: leadData } = await supabase
+          const { data: fetchedLead } = await supabase
             .from("leads")
-            .select("name")
+            .select("name, company, email")
             .eq("id", recipient.lead_id)
             .single();
-          leadName = leadData?.name || "";
+          leadName = fetchedLead?.name || "";
+          leadCompany = fetchedLead?.company || "";
+          leadEmail = fetchedLead?.email || "";
         }
 
-        // Ultimate fallback: never send empty parameter
+        // Ultimate fallback: never send empty name parameter
         if (!leadName) {
           leadName = "Cliente";
         }
