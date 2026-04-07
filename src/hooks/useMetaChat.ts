@@ -47,10 +47,16 @@ export function useMetaChat() {
 
   // Fetch active meta pages
   const fetchMetaPages = useCallback(async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("meta_pages")
       .select("id, page_id, page_name, platform, instagram_username, is_active")
       .eq("is_active", true);
+    
+    if (workspaceId) {
+      query = query.eq("workspace_id", workspaceId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error("[useMetaChat] Error fetching meta pages:", error);
