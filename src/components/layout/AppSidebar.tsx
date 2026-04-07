@@ -194,7 +194,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
 
   const workspaceBlock = (showLabel: boolean) => (
     workspace ? (
-      <div className={cn("border-b border-sidebar-border", showLabel ? "px-4 py-3" : "flex justify-center py-3")}>
+      <div className={cn("border-b border-sidebar-border flex-shrink-0", showLabel ? "px-4 py-3" : "flex justify-center py-3")}>
         <div className={cn("flex items-center", showLabel ? "gap-3" : "justify-center")}>
           {workspace.logo_url ? (
             <img src={workspace.logo_url} alt={workspace.name} className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0" />
@@ -218,16 +218,16 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   if (isMobile) {
     return (
       <Sheet open={mobileOpen} onOpenChange={onMobileOpenChange}>
-        <SheetContent side="left" className="w-[280px] p-0 bg-sidebar border-sidebar-border [&>button]:hidden">
+        <SheetContent side="left" className="w-[280px] p-0 bg-sidebar border-sidebar-border [&>button]:hidden flex flex-col h-full">
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
-          <div className="flex items-center justify-between h-14 px-4 border-b border-sidebar-border">
+          <div className="flex items-center justify-between h-14 px-4 border-b border-sidebar-border flex-shrink-0">
             <img src={argosLogoDarkHorizontal} alt="Argos X" className="h-8 object-contain" />
             <button onClick={() => onMobileOpenChange?.(false)} className="p-1 rounded-lg text-white/60 hover:text-white">
               <X className="w-5 h-5" />
             </button>
           </div>
           {workspaceBlock(true)}
-          <nav className="flex-1 py-4 px-3 overflow-y-auto">
+          <nav className="flex-1 py-4 px-3 overflow-y-auto min-h-0 scrollbar-thin">
             <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} onNavigate={() => onMobileOpenChange?.(false)} />
           </nav>
         </SheetContent>
