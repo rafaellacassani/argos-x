@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useWhatsAppTemplates, WhatsAppTemplate } from "@/hooks/useWhatsAppTemplates";
+import CreateTemplateDialog from "@/components/settings/CreateTemplateDialog";
 import {
   MessageCircle,
   Phone,
@@ -1288,6 +1289,14 @@ export default function Settings() {
         open={showEmbeddedSignup}
         onOpenChange={setShowEmbeddedSignup}
         onSuccess={() => { fetchCloudConnections(); }}
+      />
+
+      <CreateTemplateDialog
+        open={showCreateTemplate}
+        onOpenChange={setShowCreateTemplate}
+        connectionId={selectedTemplateConnection}
+        creating={creatingTemplate}
+        createTemplate={createTemplate}
       />
     </div>
   );
