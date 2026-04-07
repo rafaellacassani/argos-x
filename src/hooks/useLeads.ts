@@ -277,17 +277,26 @@ export function useLeads() {
 
   // Fetch all funnels
   const fetchFunnels = useCallback(async () => {
+    if (!workspaceId) {
+      setFunnels([]);
+      setCurrentFunnel(null);
+      return [];
+    }
+
     try {
       const { data, error } = await supabase
         .from('funnels')
         .select('*')
+        .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
       setFunnels(data || []);
       
-      const defaultFunnel = data?.find(f => f.is_default) || data?.[0];
-      if (defaultFunnel && !currentFunnel) {
+      const defaultFunnel = data?.find(f => f.is_default) || data?.[0] || null;
+      if (!defaultFunnel) {
+        setCurrentFunnel(null);
+      } else if (!currentFunnel || !data?.some(f => f.id === currentFunnel.id)) {
         setCurrentFunnel(defaultFunnel);
       }
       
@@ -297,15 +306,21 @@ export function useLeads() {
       setError('Erro ao carregar funis');
       return [];
     }
-  }, [currentFunnel]);
+  }, [currentFunnel, workspaceId]);
 
   // Fetch stages for current funnel
   const fetchStages = useCallback(async (funnelId: string) => {
+    if (!workspaceId) {
+      setStages([]);
+      return [];
+    }
+
     try {
       const { data, error } = await supabase
         .from('funnel_stages')
         .select('*')
         .eq('funnel_id', funnelId)
+        .eq('workspace_id', workspaceId)
         .order('position', { ascending: true });
 
       if (error) throw error;
@@ -316,7 +331,7 @@ export function useLeads() {
       setError('Erro ao carregar estágios');
       return [];
     }
-  }, []);
+  }, [workspaceId]);
 
   // Fetch leads for current funnel with optional server-side filters
   const fetchLeads = useCallback(async (stageIds: string[], filters?: {
@@ -332,12 +347,16 @@ export function useLeads() {
     unassigned?: boolean;
     aiScoreLabels?: string[];
   }) => {
-    if (stageIds.length === 0) return [];
+    if (!workspaceId || stageIds.length === 0) {
+      setLeads([]);
+      return [];
+    }
     
     try {
       let query = supabase
         .from('leads')
         .select('*')
+        .eq('workspace_id', workspaceId)
         .in('stage_id', stageIds)
         .order('position', { ascending: true });
 
@@ -371,10 +390,10 @@ export function useLeads() {
       
       const [tagAssignments, salesData] = await Promise.all([
         leadIds.length > 0
-          ? supabase.from('lead_tag_assignments').select('lead_id, tag_id, lead_tags(*)').in('lead_id', leadIds)
+          ? supabase.from('lead_tag_assignments').select('lead_id, tag_id, lead_tags(*)').eq('workspace_id', workspaceId).in('lead_id', leadIds)
           : Promise.resolve({ data: [] as any[] }),
         leadIds.length > 0
-          ? supabase.from('lead_sales').select('*').in('lead_id', leadIds)
+          ? supabase.from('lead_sales').select('*').eq('workspace_id', workspaceId).in('lead_id', leadIds)
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
@@ -436,14 +455,20 @@ export function useLeads() {
       setError('Erro ao carregar leads');
       return [];
     }
-  }, []);
+  }, [workspaceId]);
 
   // Fetch all tags
   const fetchTags = useCallback(async () => {
+    if (!workspaceId) {
+      setTags([]);
+      return [];
+    }
+
     try {
       const { data, error } = await supabase
         .from('lead_tags')
         .select('*')
+        .eq('workspace_id', workspaceId)
         .order('name', { ascending: true });
 
       if (error) throw error;
@@ -453,7 +478,7 @@ export function useLeads() {
       console.error('Error fetching tags:', err);
       return [];
     }
-  }, []);
+  }, [workspaceId]);
 
   // Create a new tag
   const createTag = useCallback(async (name: string, color: string): Promise<LeadTag | null> => {
@@ -1321,13 +1346,23 @@ export function useLeads() {
   // Initial data fetch
   useEffect(() => {
     const loadData = async () => {
+      if (!workspaceId) {
+        setFunnels([]);
+        setTags([]);
+        setStages([]);
+        setLeads([]);
+        setCurrentFunnel(null);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       await fetchFunnels();
       await fetchTags();
       setLoading(false);
     };
     loadData();
-  }, [fetchFunnels, fetchTags]);
+  }, [workspaceId, fetchFunnels, fetchTags]);
 
   // Fetch stages and leads when funnel changes
   useEffect(() => {
@@ -1336,19 +1371,26 @@ export function useLeads() {
         const stageData = await fetchStages(currentFunnel.id);
         if (stageData && stageData.length > 0) {
           await fetchLeads(stageData.map(s => s.id));
+        } else {
+          setLeads([]);
         }
       };
       loadFunnelData();
+    } else {
+      setStages([]);
+      setLeads([]);
     }
   }, [currentFunnel, fetchStages, fetchLeads]);
 
   // Setup realtime subscription
   useEffect(() => {
+    if (!workspaceId) return;
+
     const channel = supabase
-      .channel('leads-changes')
+      .channel(`leads-changes-${workspaceId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
+        { event: '*', schema: 'public', table: 'leads', filter: `workspace_id=eq.${workspaceId}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newLead = payload.new as Lead;
@@ -1369,7 +1411,7 @@ export function useLeads() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [stages]);
+  }, [stages, workspaceId]);
 
   // Create a new stage
   const createStage = useCallback(async (funnelId: string, name: string, color: string) => {
