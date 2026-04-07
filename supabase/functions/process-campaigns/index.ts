@@ -168,6 +168,7 @@ serve(async (req) => {
         const isTemplateCampaign = !!campaign.template_id;
         let sendSuccess = false;
         let sendError = "";
+        let wabaHydratedMessage = "";
 
         try {
           if (isTemplateCampaign) {
