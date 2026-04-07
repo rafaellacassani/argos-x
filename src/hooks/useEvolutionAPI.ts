@@ -126,6 +126,7 @@ export interface CreateInstanceResponse {
 }
 
 export function useEvolutionAPI() {
+  const { workspaceId } = useWorkspace();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
