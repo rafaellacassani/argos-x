@@ -46,6 +46,8 @@ interface WorkspaceContextType {
   loading: boolean;
   hasWorkspace: boolean;
   isAdminViewing: boolean;
+  allWorkspaces: Workspace[];
+  switchWorkspace: (workspaceId: string) => void;
   createWorkspace: (name: string) => Promise<Workspace | null>;
   inviteMember: (email: string, role: "admin" | "manager" | "seller") => Promise<boolean>;
   fetchMembers: () => Promise<WorkspaceMember[]>;
@@ -59,6 +61,7 @@ const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefin
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [allWorkspaces, setAllWorkspaces] = useState<Workspace[]>([]);
   const [membership, setMembership] = useState<WorkspaceMember | null>(null);
   const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -159,28 +162,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
       setIsAdminViewing(false);
 
-      // Normal flow
+      // Normal flow - load ALL workspaces the user belongs to
       const memberResult = await supabase
         .from("workspace_members")
         .select("*")
         .eq("user_id", user.id)
-        .not("accepted_at", "is", null)
-        .limit(1)
-        .maybeSingle();
+        .not("accepted_at", "is", null);
 
       if (memberResult.error) throw memberResult.error;
 
-      if (memberResult.data) {
-        setMembership(memberResult.data as WorkspaceMember);
-        
-        const { data: wsData, error: wsError } = await supabase
+      if (memberResult.data && memberResult.data.length > 0) {
+        const wsIds = memberResult.data.map((m: any) => m.workspace_id);
+        const { data: wsDataAll, error: wsError } = await supabase
           .from("workspaces")
           .select("*")
-          .eq("id", memberResult.data.workspace_id)
-          .single();
+          .in("id", wsIds);
 
         if (wsError) throw wsError;
-        setWorkspace(wsData as Workspace);
+
+        const allWs = (wsDataAll || []) as Workspace[];
+        setAllWorkspaces(allWs);
+
+        // Pick workspace: localStorage preference > first one
+        const savedWsId = localStorage.getItem("selected_workspace_id");
+        const selectedWs = allWs.find(w => w.id === savedWsId) || allWs[0];
+        const selectedMembership = memberResult.data.find((m: any) => m.workspace_id === selectedWs.id);
+
+        setWorkspace(selectedWs);
+        setMembership(selectedMembership as WorkspaceMember);
+        localStorage.setItem("selected_workspace_id", selectedWs.id);
       } else {
         const userEmail = user.email;
         if (userEmail) {
@@ -205,6 +215,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         }
         setWorkspace(null);
         setMembership(null);
+        setAllWorkspaces([]);
       }
     } catch (err) {
       console.error("Error loading workspace:", err);
@@ -223,6 +234,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const refreshWorkspace = useCallback(() => {
     loadWorkspace(true);
   }, [loadWorkspace]);
+
+  const switchWorkspace = useCallback((targetId: string) => {
+    const target = allWorkspaces.find(w => w.id === targetId);
+    if (!target) return;
+    localStorage.setItem("selected_workspace_id", targetId);
+    setWorkspace(target);
+    // Reload the page to reset all query caches
+    window.location.href = "/dashboard";
+  }, [allWorkspaces]);
 
   const createWorkspace = useCallback(async (name: string): Promise<Workspace | null> => {
     if (!user) return null;
@@ -344,6 +364,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       loading,
       hasWorkspace: !!workspace,
       isAdminViewing,
+      allWorkspaces,
+      switchWorkspace,
       createWorkspace,
       inviteMember,
       fetchMembers,

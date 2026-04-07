@@ -3800,6 +3800,15 @@ export type Database = {
       }
     }
     Functions: {
+      clone_workspace: {
+        Args: {
+          _new_name: string
+          _new_slug: string
+          _owner_user_id: string
+          _source_workspace_id: string
+        }
+        Returns: string
+      }
       get_my_roles: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"][]

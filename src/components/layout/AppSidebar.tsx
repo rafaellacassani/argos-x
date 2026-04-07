@@ -39,6 +39,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ChevronsUpDown } from "lucide-react";
 
 interface MenuItem {
   icon: React.ElementType;
@@ -152,7 +154,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   const [collapsed, setCollapsed] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const location = useLocation();
-  const { workspace } = useWorkspace();
+  const { workspace, allWorkspaces, switchWorkspace } = useWorkspace();
   const { user } = useAuth();
   const permissions = useUserRole();
   const { canAccessPage } = useMemberPermissions();
@@ -192,27 +194,76 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
     ] : []),
   ];
 
-  const workspaceBlock = (showLabel: boolean) => (
-    workspace ? (
-      <div className={cn("border-b border-sidebar-border flex-shrink-0", showLabel ? "px-4 py-3" : "flex justify-center py-3")}>
-        <div className={cn("flex items-center", showLabel ? "gap-3" : "justify-center")}>
-          {workspace.logo_url ? (
-            <img src={workspace.logo_url} alt={workspace.name} className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0" />
-          ) : (
-            <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-xs font-bold text-sidebar-primary">{workspace.name.charAt(0).toUpperCase()}</span>
-            </div>
-          )}
-          {showLabel && (
-            <div className="min-w-0">
-              <p className="text-[11px] text-white/50 leading-tight">Workspace de</p>
-              <p className="text-sm font-semibold text-white truncate leading-tight">{workspace.name}</p>
-            </div>
-          )}
-        </div>
+  const canSwitch = isSuperAdmin && allWorkspaces.length > 1;
+
+  const workspaceBlock = (showLabel: boolean) => {
+    if (!workspace) return null;
+
+    const wsContent = (
+      <div className={cn("flex items-center", showLabel ? "gap-3 w-full" : "justify-center")}>
+        {workspace.logo_url ? (
+          <img src={workspace.logo_url} alt={workspace.name} className="w-8 h-8 rounded-lg object-contain bg-white/10 border border-white/10 flex-shrink-0" />
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
+            <span className="text-xs font-bold text-sidebar-primary">{workspace.name.charAt(0).toUpperCase()}</span>
+          </div>
+        )}
+        {showLabel && (
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-white/50 leading-tight">Workspace</p>
+            <p className="text-sm font-semibold text-white truncate leading-tight">{workspace.name}</p>
+          </div>
+        )}
+        {showLabel && canSwitch && (
+          <ChevronsUpDown className="w-4 h-4 text-white/40 flex-shrink-0" />
+        )}
       </div>
-    ) : null
-  );
+    );
+
+    if (!canSwitch) {
+      return (
+        <div className={cn("border-b border-sidebar-border flex-shrink-0", showLabel ? "px-4 py-3" : "flex justify-center py-3")}>
+          {wsContent}
+        </div>
+      );
+    }
+
+    return (
+      <div className={cn("border-b border-sidebar-border flex-shrink-0", showLabel ? "" : "flex justify-center py-3")}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={cn(
+              "w-full text-left transition-colors hover:bg-white/5",
+              showLabel ? "px-4 py-3" : ""
+            )}>
+              {wsContent}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="bottom" align="start" className="w-[248px]">
+            {allWorkspaces.map((ws) => (
+              <DropdownMenuItem
+                key={ws.id}
+                onClick={() => switchWorkspace(ws.id)}
+                className={cn(
+                  "flex items-center gap-3 cursor-pointer",
+                  ws.id === workspace.id && "bg-accent"
+                )}
+              >
+                {ws.logo_url ? (
+                  <img src={ws.logo_url} alt={ws.name} className="w-6 h-6 rounded object-contain bg-muted flex-shrink-0" />
+                ) : (
+                  <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[10px] font-bold text-primary">{ws.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                )}
+                <span className="truncate text-sm">{ws.name}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  };
 
   // ─── MOBILE: Sheet drawer ───
   if (isMobile) {
