@@ -564,6 +564,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Agent is not active", paused: true }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ============ WORKSPACE BLOCKED CHECK ============
+    const { data: wsCheck } = await supabase
+      .from("workspaces")
+      .select("plan_type, blocked_at, trial_end")
+      .eq("id", agent.workspace_id)
+      .single();
+
+    if (wsCheck) {
+      const isBlocked = !!wsCheck.blocked_at || wsCheck.plan_type === "blocked" || wsCheck.plan_type === "canceled";
+      const isTrialExpired = (wsCheck.plan_type === "trialing" || wsCheck.plan_type === "trial_manual") && wsCheck.trial_end && new Date(wsCheck.trial_end) < new Date();
+      
+      if (isBlocked || isTrialExpired) {
+        console.log(`[ai-agent-chat] 🚫 Workspace blocked/expired for agent ${agent.name} (workspace=${agent.workspace_id}, plan=${wsCheck.plan_type})`);
+        // Auto-deactivate the agent to prevent future attempts
+        await supabase.from("ai_agents").update({ is_active: false }).eq("id", agent_id);
+        return new Response(JSON.stringify({ error: "Workspace blocked", paused: true }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     console.log(`[ai-agent-chat] 🤖 Processing: agent=${agent.name}, session=${session_id}, lead=${lead_id}, message_id=${message_id || 'none'}`);
 
     // ============ DEDUPLICATION BY MESSAGE_ID ============
