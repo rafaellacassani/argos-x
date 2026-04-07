@@ -14,7 +14,8 @@ import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWhatsAppTemplates, WhatsAppTemplate } from "@/hooks/useWhatsAppTemplates";
 import { supabase } from "@/integrations/supabase/client";
-import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw, Pencil, Save, X, FileText } from "lucide-react";
+import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw, Pencil, Save, X, FileText, Eye } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 
 interface Props {
@@ -702,6 +703,7 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                       <th className="text-left p-3 font-medium">Telefone</th>
                       <th className="text-left p-3 font-medium">Status</th>
                       <th className="text-left p-3 font-medium">Enviado em</th>
+                      <th className="text-left p-3 font-medium">Mensagem</th>
                       <th className="text-left p-3 font-medium">Erro</th>
                     </tr>
                   </thead>
@@ -718,13 +720,33 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                           <td className="p-3 text-muted-foreground">
                             {r.sent_at ? new Date(r.sent_at).toLocaleString("pt-BR") : "—"}
                           </td>
+                          <td className="p-3">
+                            {r.personalized_message ? (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="gap-1 h-7 text-xs">
+                                    <Eye className="w-3 h-3" />
+                                    Ver
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 max-h-60 overflow-y-auto">
+                                  <p className="text-xs font-medium mb-2">Mensagem enviada:</p>
+                                  <div className="p-3 rounded-lg bg-[#dcf8c6] text-[#111] text-sm whitespace-pre-wrap border">
+                                    {r.personalized_message}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="p-3 text-xs text-destructive truncate max-w-[200px]">{r.error_message || ""}</td>
                         </tr>
                       );
                     })}
                     {filteredRecipients.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-8 text-center text-muted-foreground">Nenhum destinatário encontrado</td>
+                        <td colSpan={6} className="p-8 text-center text-muted-foreground">Nenhum destinatário encontrado</td>
                       </tr>
                     )}
                   </tbody>

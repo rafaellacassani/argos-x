@@ -168,6 +168,7 @@ serve(async (req) => {
         const isTemplateCampaign = !!campaign.template_id;
         let sendSuccess = false;
         let sendError = "";
+        let wabaHydratedMessage = "";
 
         try {
           if (isTemplateCampaign) {
@@ -292,6 +293,8 @@ serve(async (req) => {
                 }
               }
 
+              wabaHydratedMessage = fullContent;
+
               await supabase.from("meta_conversations").insert({
                 workspace_id: campaign.workspace_id,
                 meta_page_id: metaPageId || null,
@@ -355,11 +358,20 @@ serve(async (req) => {
           console.error(`[process-campaigns] ❌ Send failed for ${recipient.id}:`, sendError);
         }
 
+        // Determine the actual message that was sent for logging
+        let sentMessageText = "";
+        if (isTemplateCampaign && wabaHydratedMessage) {
+          sentMessageText = wabaHydratedMessage;
+        } else {
+          sentMessageText = recipient.personalized_message || campaign.message_text || "";
+        }
+
         // Update recipient
         if (sendSuccess) {
           await supabase.from("campaign_recipients").update({
             status: "sent",
             sent_at: new Date().toISOString(),
+            personalized_message: sentMessageText.substring(0, 2000) || null,
           }).eq("id", recipient.id);
 
           await supabase.from("campaigns").update({
