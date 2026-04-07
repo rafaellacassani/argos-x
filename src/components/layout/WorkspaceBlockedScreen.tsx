@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Lock, CreditCard, MessageCircle, Check, Zap, Crown, Rocket, Loader2, X } from "lucide-react";
+import { Lock, CreditCard, MessageCircle, Check, Zap, Crown, Rocket, Loader2, X, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
