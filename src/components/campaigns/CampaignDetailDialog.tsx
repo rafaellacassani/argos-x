@@ -14,7 +14,8 @@ import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useWhatsAppTemplates, WhatsAppTemplate } from "@/hooks/useWhatsAppTemplates";
 import { supabase } from "@/integrations/supabase/client";
-import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw, Pencil, Save, X, FileText } from "lucide-react";
+import { Download, Send, CheckCircle2, XCircle, Clock, Users, AlertTriangle, RotateCcw, Pencil, Save, X, FileText, Eye } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 
 interface Props {
