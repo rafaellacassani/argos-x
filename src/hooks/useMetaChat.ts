@@ -36,6 +36,7 @@ export interface MetaMessage {
 const META_PAGE_SIZE = 50;
 
 export function useMetaChat() {
+  const { workspaceId } = useWorkspace();
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [conversations, setConversations] = useState<MetaConversation[]>([]);
   const [messages, setMessages] = useState<MetaMessage[]>([]);
