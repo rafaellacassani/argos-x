@@ -16,6 +16,7 @@ export const PLAN_DEFINITIONS = {
   essencial: {
     name: 'Essencial',
     price: 47.90,
+    extraUserPrice: 47,
     leadLimit: 300,
     whatsappLimit: 1,
     userLimit: 1,

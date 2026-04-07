@@ -228,8 +228,7 @@ serve(async (req) => {
         });
       }
 
-      const currentPlan = workspace.plan_name || "essencial";
-      const userPrice = currentPlan === "escala" ? 57 : 37;
+      const userPrice = 47;
 
       const externalReference = JSON.stringify({
         type: "add_user",
