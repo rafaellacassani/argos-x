@@ -751,7 +751,7 @@ export function FunnelAutomationsPage({
 
 // Action config sub-component
 function ActionConfigForm({
-  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [],
+  actionType, config, onChange, bots, tags, teamMembers, instances = [], cloudConnections = [], stages = [],
 }: {
   actionType: string;
   config: Record<string, any>;
@@ -761,6 +761,7 @@ function ActionConfigForm({
   teamMembers: Array<{ id: string; full_name: string }>;
   instances?: { instance_name: string; display_name: string | null }[];
   cloudConnections?: { id: string; inbox_name: string; phone_number: string; phone_number_id: string }[];
+  stages?: FunnelStage[];
 }) {
   const set = (key: string, value: any) => onChange({ ...config, [key]: value });
 
@@ -888,6 +889,25 @@ function ActionConfigForm({
             </SelectContent>
           </Select>
         </div>
+      );
+    case 'move_stage':
+      return (
+        <Select value={config.target_stage_id || ''} onValueChange={v => {
+          const st = stages.find(s => s.id === v);
+          onChange({ target_stage_id: v, target_stage_name: st?.name || '' });
+        }}>
+          <SelectTrigger><SelectValue placeholder="Selecione a etapa de destino" /></SelectTrigger>
+          <SelectContent>
+            {stages.map(s => (
+              <SelectItem key={s.id} value={s.id}>
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  {s.name}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       );
     default:
       return <p className="text-sm text-muted-foreground">Selecione uma ação</p>;
