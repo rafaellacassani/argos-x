@@ -135,9 +135,10 @@ export default function Settings() {
   const [showEmbeddedSignup, setShowEmbeddedSignup] = useState(false);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
-  const { templates, loading: templatesLoading, syncing, fetchTemplates, syncTemplates } = useWhatsAppTemplates();
+  const { templates, loading: templatesLoading, syncing, creating: creatingTemplate, fetchTemplates, syncTemplates, createTemplate } = useWhatsAppTemplates();
   const [selectedTemplateConnection, setSelectedTemplateConnection] = useState<string>("");
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
 
   const {
     loading,
@@ -1110,6 +1111,11 @@ export default function Settings() {
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "Sincronizando..." : "Sincronizar"}
+            </Button>
+
+            <Button onClick={() => setShowCreateTemplate(true)} disabled={!selectedTemplateConnection}>
+              <Plus className="w-4 h-4 mr-2" />
+              Criar Template
             </Button>
           </div>
 
