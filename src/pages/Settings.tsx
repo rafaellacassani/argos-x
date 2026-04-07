@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useCalendar } from "@/hooks/useCalendar";
 import { useWhatsAppTemplates, WhatsAppTemplate } from "@/hooks/useWhatsAppTemplates";
+import CreateTemplateDialog from "@/components/settings/CreateTemplateDialog";
 import {
   MessageCircle,
   Phone,
@@ -135,9 +136,10 @@ export default function Settings() {
   const [showEmbeddedSignup, setShowEmbeddedSignup] = useState(false);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const { googleConnected, googleEmail, connectGoogle, disconnectGoogle, pullFromGoogle } = useCalendar();
-  const { templates, loading: templatesLoading, syncing, fetchTemplates, syncTemplates } = useWhatsAppTemplates();
+  const { templates, loading: templatesLoading, syncing, creating: creatingTemplate, fetchTemplates, syncTemplates, createTemplate } = useWhatsAppTemplates();
   const [selectedTemplateConnection, setSelectedTemplateConnection] = useState<string>("");
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
 
   const {
     loading,
@@ -1111,6 +1113,11 @@ export default function Settings() {
               <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
               {syncing ? "Sincronizando..." : "Sincronizar"}
             </Button>
+
+            <Button onClick={() => setShowCreateTemplate(true)} disabled={!selectedTemplateConnection}>
+              <Plus className="w-4 h-4 mr-2" />
+              Criar Template
+            </Button>
           </div>
 
           {selectedTemplateConnection && templates.length > 0 && (
@@ -1282,6 +1289,14 @@ export default function Settings() {
         open={showEmbeddedSignup}
         onOpenChange={setShowEmbeddedSignup}
         onSuccess={() => { fetchCloudConnections(); }}
+      />
+
+      <CreateTemplateDialog
+        open={showCreateTemplate}
+        onOpenChange={setShowCreateTemplate}
+        connectionId={selectedTemplateConnection}
+        creating={creatingTemplate}
+        createTemplate={createTemplate}
       />
     </div>
   );
