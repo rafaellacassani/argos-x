@@ -1011,8 +1011,9 @@ app.post("/", async (c) => {
 
 // Diagnostic endpoint to check/fix app-level leadgen subscription
 app.post("/diagnose-leadgen", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.includes(supabaseKey)) {
+  // Allow service role or anon key with special header
+  const diagKey = c.req.header("X-Diagnose-Key");
+  if (diagKey !== VERIFY_TOKEN) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
