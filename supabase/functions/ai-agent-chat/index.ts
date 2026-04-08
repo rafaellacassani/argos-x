@@ -1424,6 +1424,7 @@ serve(async (req) => {
           usedFallback = true;
         }
 
+        let internalNotes = "";
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
@@ -1479,7 +1480,7 @@ serve(async (req) => {
             }
             case "pausar_ia":
               await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
-              responseContent += `\n\n[Atendimento transferido para humano. Motivo: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}]`;
+              // Internal note saved to human_support_queue.reason only — NOT sent to client
               // Enqueue for human support
               await supabase.from("human_support_queue").insert({
                 workspace_id: agent.workspace_id,
@@ -1563,7 +1564,7 @@ serve(async (req) => {
                   .limit(5);
 
                 if (conflictEvents && conflictEvents.length > 0) {
-                  responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Informe ao lead que esse horário não está disponível e sugira outro horário próximo. NÃO revele quais compromissos existem.]`;
+                  internalNotes += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Informe ao lead que esse horário não está disponível e sugira outro horário próximo. NÃO revele quais compromissos existem.]`;
                   console.log(`[ai-agent-chat] 📅 Conflict detected: ${conflictEvents.length} events`);
                   break;
                 }
@@ -1673,7 +1674,7 @@ serve(async (req) => {
                       .gt("end_at", newStart)
                       .limit(5);
                     if (conflictEvents && conflictEvents.length > 0) {
-                      responseContent += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Sugira outro horário ao lead. NÃO revele detalhes dos compromissos existentes.]`;
+                      internalNotes += `\n\n[INSTRUÇÃO INTERNA: Este horário já está ocupado. Sugira outro horário ao lead. NÃO revele detalhes dos compromissos existentes.]`;
                       break;
                     }
                   }
@@ -1800,7 +1801,7 @@ serve(async (req) => {
                       const eEnd = new Date(e.end_at);
                       return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)} (ID: ${e.id})`;
                     }).join("\n");
-                    responseContent += `\n\n[Eventos do lead:\n${eventList}]`;
+                    internalNotes += `\n\n[Eventos do lead:\n${eventList}]`;
                   }
                 }
 
@@ -1811,7 +1812,7 @@ serve(async (req) => {
                     const eEnd = new Date(e.end_at);
                     return `- ${s.toISOString().slice(0,10)} ${s.toTimeString().slice(0,5)} até ${eEnd.toTimeString().slice(0,5)}`;
                   }).join("\n");
-                  responseContent += `\n\n[INSTRUÇÃO INTERNA - Horários indisponíveis (NÃO revele ao lead os detalhes, apenas diga que o horário não está disponível):\n${busySlots}]`;
+                  internalNotes += `\n\n[INSTRUÇÃO INTERNA - Horários indisponíveis (NÃO revele ao lead os detalhes, apenas diga que o horário não está disponível):\n${busySlots}]`;
                 }
               }
               break;
@@ -1820,7 +1821,11 @@ serve(async (req) => {
         }
       }
 
+      // Push the clean response to memory, then add internal notes separately for AI context
       messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
+      if (internalNotes.trim()) {
+        messages.push({ role: "system", content: internalNotes.trim(), timestamp: new Date().toISOString() });
+      }
 
       // --- Anti-spam: consecutive fallback tracking ---
       const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
@@ -1882,6 +1887,8 @@ serve(async (req) => {
       }
 
       // --- TRAINER MODE: wrap response in proposal ---
+      // Safety net: strip any residual internal metadata patterns before sending to client
+      responseContent = responseContent.replace(/\n*\[(?:INSTRUÇÃO INTERNA|Atendimento transferido|Eventos do lead)[^\]]*\]/g, '').trim();
       let finalResponse = responseContent;
       let finalStatus = "success";
       if (isTrainer) {
