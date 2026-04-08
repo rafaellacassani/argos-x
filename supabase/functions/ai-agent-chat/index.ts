@@ -1098,6 +1098,7 @@ serve(async (req) => {
       }
 
       let responseContent = "";
+      let internalNotes = "";
       const toolsUsed: string[] = [];
       const messages: ChatMessage[] = memory.messages || [];
       messages.push({ role: "user", content: messageText || `[${media_type === "image" ? "Imagem" : media_type === "audio" ? "Áudio" : "Mídia"}]`, timestamp: new Date().toISOString() });
@@ -1424,7 +1425,7 @@ serve(async (req) => {
           usedFallback = true;
         }
 
-        let internalNotes = "";
+        // internalNotes already declared above
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
