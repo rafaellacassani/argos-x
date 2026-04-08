@@ -1098,6 +1098,7 @@ serve(async (req) => {
       }
 
       let responseContent = "";
+      let internalNotes = "";
       const toolsUsed: string[] = [];
       const messages: ChatMessage[] = memory.messages || [];
       messages.push({ role: "user", content: messageText || `[${media_type === "image" ? "Imagem" : media_type === "audio" ? "Áudio" : "Mídia"}]`, timestamp: new Date().toISOString() });
