@@ -1009,59 +1009,7 @@ app.post("/", async (c) => {
   }
 });
 
-// Diagnostic endpoint to check/fix app-level leadgen subscription
-app.post("/diagnose-leadgen", async (c) => {
-  // Allow service role or anon key with special header
-  const diagKey = c.req.header("X-Diagnose-Key");
-  if (diagKey !== VERIFY_TOKEN) {
-    return c.json({ error: "Unauthorized" }, 401);
-  }
 
-  const FACEBOOK_APP_ID = Deno.env.get("FACEBOOK_APP_ID");
-  const appAccessToken = `${FACEBOOK_APP_ID}|${FACEBOOK_APP_SECRET}`;
-  const webhookUrl = `${supabaseUrl}/functions/v1/facebook-webhook`;
-
-  const results: any = { app_id: FACEBOOK_APP_ID, webhook_url: webhookUrl, steps: [] };
-
-  try {
-    // 1. Check current app subscriptions
-    const checkRes = await fetch(
-      `https://graph.facebook.com/v21.0/${FACEBOOK_APP_ID}/subscriptions?access_token=${appAccessToken}`
-    );
-    const checkData = await checkRes.json();
-    results.steps.push({ step: "check_subscriptions", data: checkData });
-
-    // 2. Check if "page" object has "leadgen" field
-    const pageSubscription = checkData.data?.find((s: any) => s.object === "page");
-    const hasLeadgen = pageSubscription?.fields?.some((f: any) => f.name === "leadgen");
-    results.steps.push({ step: "has_leadgen_in_page", has_it: hasLeadgen, page_sub: pageSubscription || null });
-
-    // 3. If missing, subscribe page object with leadgen
-    if (!hasLeadgen) {
-      const subRes = await fetch(
-        `https://graph.facebook.com/v21.0/${FACEBOOK_APP_ID}/subscriptions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            object: "page",
-            callback_url: webhookUrl,
-            verify_token: VERIFY_TOKEN,
-            fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,feed,leadgen",
-            access_token: appAccessToken,
-          }),
-        }
-      );
-      const subData = await subRes.json();
-      results.steps.push({ step: "subscribe_leadgen", success: subData.success, data: subData });
-    }
-
-    return c.json(results, 200);
-  } catch (err) {
-    results.error = String(err);
-    return c.json(results, 500);
-  }
-});
 
 // OPTIONS - CORS preflight
 app.options("*", (c) => {
