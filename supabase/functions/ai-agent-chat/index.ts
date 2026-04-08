@@ -1424,6 +1424,7 @@ serve(async (req) => {
           usedFallback = true;
         }
 
+        let internalNotes = "";
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
@@ -1820,7 +1821,11 @@ serve(async (req) => {
         }
       }
 
+      // Push the clean response to memory, then add internal notes separately for AI context
       messages.push({ role: "assistant", content: responseContent, timestamp: new Date().toISOString() });
+      if (internalNotes.trim()) {
+        messages.push({ role: "system", content: internalNotes.trim(), timestamp: new Date().toISOString() });
+      }
 
       // --- Anti-spam: consecutive fallback tracking ---
       const existingSummary = memory.summary ? JSON.parse(memory.summary || "{}") : {};
@@ -1882,6 +1887,8 @@ serve(async (req) => {
       }
 
       // --- TRAINER MODE: wrap response in proposal ---
+      // Safety net: strip any residual internal metadata patterns before sending to client
+      responseContent = responseContent.replace(/\n*\[(?:INSTRUÇÃO INTERNA|Atendimento transferido|Eventos do lead)[^\]]*\]/g, '').trim();
       let finalResponse = responseContent;
       let finalStatus = "success";
       if (isTrainer) {
