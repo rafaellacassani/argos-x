@@ -1425,7 +1425,7 @@ serve(async (req) => {
           usedFallback = true;
         }
 
-        let internalNotes = "";
+        // internalNotes already declared above
         for (const toolCall of toolCalls) {
           const toolName = toolCall.function?.name;
           const toolArgs = JSON.parse(toolCall.function?.arguments || "{}");
