@@ -866,6 +866,133 @@ app.post("/", async (c) => {
 
     console.log(`[whatsapp-webhook] 📩 MSG from ${pushName} (${remoteJid}) on instance "${instanceName}": "${messageText?.substring(0, 100)}"`);
 
+    // ============ WORKSPACE ASSISTANT VIA WHATSAPP ============
+    const ASSISTANT_INSTANCE = Deno.env.get("ASSISTANT_INSTANCE_NAME") || "";
+    if (ASSISTANT_INSTANCE && instanceName === ASSISTANT_INSTANCE) {
+      console.log(`[whatsapp-webhook] 🤖 Assistant instance detected! Routing to workspace assistant for phone: ${phoneNumber}`);
+      const questionText = messageText?.trim();
+      if (!questionText) {
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber,
+          text: "👋 Olá! Sou o Assistente de Workspace do Argos X. Me faça uma pergunta sobre seu workspace!\n\nExemplos:\n• Quantos leads entraram essa semana?\n• Tem alguém sem resposta?\n• Como estão minhas campanhas?",
+          delay: 0, linkPreview: false,
+        });
+        return c.json({ received: true, handler: "assistant_greeting" }, 200, corsHeaders);
+      }
+
+      const cleanPhone = phoneNumber.replace(/\D/g, "");
+      const phoneSuffix = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("user_id, phone, personal_whatsapp")
+        .or(`phone.like.%${phoneSuffix},personal_whatsapp.like.%${phoneSuffix}`);
+
+      const assistantUserId = profiles?.[0]?.user_id || null;
+
+      if (!assistantUserId) {
+        console.warn(`[whatsapp-webhook] ❌ Assistant: no user found for phone ${phoneNumber}`);
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber,
+          text: "❌ Não encontrei seu cadastro no sistema. Certifique-se de que seu telefone está cadastrado no seu perfil do Argos X.",
+          delay: 0, linkPreview: false,
+        });
+        return c.json({ received: true, handler: "assistant_no_user" }, 200, corsHeaders);
+      }
+
+      const { data: wsMember } = await supabase
+        .from("workspace_members")
+        .select("workspace_id")
+        .eq("user_id", assistantUserId)
+        .not("accepted_at", "is", null)
+        .limit(1)
+        .single();
+
+      if (!wsMember) {
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber,
+          text: "❌ Não encontrei um workspace ativo associado à sua conta.",
+          delay: 0, linkPreview: false,
+        });
+        return c.json({ received: true, handler: "assistant_no_ws" }, 200, corsHeaders);
+      }
+
+      const assistantWsId = wsMember.workspace_id;
+      console.log(`[whatsapp-webhook] 🤖 Assistant: user=${assistantUserId}, ws=${assistantWsId}`);
+
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+
+      const [aLeads, aWeek, aToday, aRecent, aAgents, aStages, aCampaigns, aWs, aMembers, aQueue] = await Promise.all([
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId),
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).gte("created_at", weekAgo),
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).gte("created_at", todayStart),
+        supabase.from("leads").select("id, name, phone, source, created_at, stage_id, value, ai_score_label").eq("workspace_id", assistantWsId).order("created_at", { ascending: false }).limit(30),
+        supabase.from("ai_agents").select("id, name, is_active, type").eq("workspace_id", assistantWsId),
+        supabase.from("funnel_stages").select("id, name, position").eq("workspace_id", assistantWsId).order("position"),
+        supabase.from("campaigns").select("id, name, status, sent_count, total_recipients, failed_count").eq("workspace_id", assistantWsId).order("created_at", { ascending: false }).limit(5),
+        supabase.from("workspaces").select("name, plan_name, status, lead_limit, subscription_status").eq("id", assistantWsId).single(),
+        supabase.from("workspace_members").select("role, user_profile:user_profiles(full_name)").eq("workspace_id", assistantWsId),
+        supabase.from("human_support_queue").select("id").eq("workspace_id", assistantWsId).eq("status", "pending"),
+      ]);
+
+      const stageMapA: Record<string, string> = {};
+      (aStages.data || []).forEach((s: any) => { stageMapA[s.id] = s.name; });
+      const enriched = (aRecent.data || []).map((l: any) => ({ ...l, stage_name: l.stage_id ? stageMapA[l.stage_id] || "?" : "sem etapa" }));
+      const byStage: Record<string, number> = {};
+      enriched.forEach((l: any) => { const s = l.stage_name; byStage[s] = (byStage[s] || 0) + 1; });
+
+      const ctx = {
+        workspace: aWs.data,
+        stats: { total: aLeads.count || 0, semana: aWeek.count || 0, hoje: aToday.count || 0, suporte_pendente: (aQueue.data || []).length },
+        leads_por_etapa: byStage,
+        leads_recentes: enriched.slice(0, 15),
+        agentes: aAgents.data || [],
+        campanhas: aCampaigns.data || [],
+        equipe: (aMembers.data || []).map((m: any) => ({ nome: (m as any).user_profile?.full_name || "?", role: m.role })),
+      };
+
+      const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_KEY) {
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber, text: "⚠️ Erro interno. Contate o suporte.", delay: 0, linkPreview: false,
+        });
+        return c.json({ received: true, handler: "assistant_error" }, 200, corsHeaders);
+      }
+
+      const sysPrompt = `Você é o Assistente de Workspace do Argos X via WhatsApp. Responda CONCISO — máximo 2 parágrafos curtos.
+DADOS (${now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}):
+${JSON.stringify(ctx)}
+REGRAS: Português BR. Conciso (é WhatsApp). Emojis moderados. NÃO invente dados. Formate para WhatsApp (*negrito*, _itálico_). Quando mencionar leads, inclua nome e telefone.`;
+
+      try {
+        const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [{ role: "system", content: sysPrompt }, { role: "user", content: questionText }],
+          }),
+        });
+        if (!aiResp.ok) throw new Error(`AI error: ${aiResp.status}`);
+        const aiData = await aiResp.json();
+        const answer = aiData.choices?.[0]?.message?.content || "Desculpe, não consegui processar sua pergunta.";
+
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber, text: answer, delay: 0, linkPreview: false,
+        });
+        console.log(`[whatsapp-webhook] ✅ Assistant replied to ${phoneNumber} in ws ${assistantWsId}`);
+      } catch (aiErr) {
+        console.error("[whatsapp-webhook] Assistant AI error:", aiErr);
+        await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+          number: phoneNumber, text: "⚠️ Erro ao processar sua pergunta. Tente novamente.", delay: 0, linkPreview: false,
+        });
+      }
+      return c.json({ received: true, handler: "assistant" }, 200, corsHeaders);
+    }
+    // ============ END WORKSPACE ASSISTANT ============
+
     // ============ CHECK SALESBOT WAIT QUEUE FOR INBOUND MESSAGE ============
     try {
       const waitSessionIds = Array.from(new Set([remoteJid, canonicalSessionJid]));
