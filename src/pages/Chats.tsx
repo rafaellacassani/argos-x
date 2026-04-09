@@ -546,6 +546,47 @@ export default function Chats() {
     checkPauseState();
   }, [selectedChat?.id, workspaceId]);
 
+  // Direct DB fallback: when selectedChat has no lead in the funnel-filtered array,
+  // fetch from DB to handle leads in other funnels or not yet in local state
+  useEffect(() => {
+    if (!selectedChat || !workspaceId) return;
+    const existingLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+    if (existingLead) return; // Already found, no need to fetch
+
+    const fetchLeadFromDB = async () => {
+      const phoneCandidates = [
+        cleanPhoneNumber(selectedChat.phone || ""),
+        cleanPhoneNumber(selectedChat.remoteJidAlt || ""),
+        cleanPhoneNumber(selectedChat.remoteJid || ""),
+      ].filter(d => d.length >= 10 && d.length <= 13);
+
+      const orFilters: string[] = [];
+      if (selectedChat.remoteJid) orFilters.push(`whatsapp_jid.eq.${selectedChat.remoteJid}`);
+      if (selectedChat.remoteJidAlt) orFilters.push(`whatsapp_jid.eq.${selectedChat.remoteJidAlt}`);
+      for (const digits of phoneCandidates) {
+        orFilters.push(`phone.like.%${digits.slice(-10)}`);
+      }
+      if (orFilters.length === 0) return;
+
+      const { data } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .or(orFilters.join(","))
+        .limit(1);
+
+      if (data && data.length > 0) {
+        const dbLead = { ...data[0], tags: [], sales: [] } as Lead;
+        setChatLeadOverrides(prev => {
+          const next = new Map(prev);
+          next.set(dbLead.id, dbLead);
+          return next;
+        });
+      }
+    };
+    fetchLeadFromDB();
+  }, [selectedChat?.id, workspaceId, leads]); // re-check when leads change too
+
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
 
