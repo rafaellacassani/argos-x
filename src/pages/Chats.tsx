@@ -21,6 +21,8 @@ import {
   EyeOff,
   Trash2,
   UserX,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -474,6 +476,29 @@ export default function Chats() {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
+
+  // Pinned/Important chats — persisted per workspace in localStorage
+  const pinnedStorageKey = `pinned-chats-${workspaceId}`;
+  const [pinnedChatIds, setPinnedChatIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`pinned-chats-${workspaceId || "default"}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  // Persist pinned chats to localStorage
+  const togglePinChat = useCallback((chatId: string) => {
+    setPinnedChatIds(prev => {
+      const next = new Set(prev);
+      if (next.has(chatId)) {
+        next.delete(chatId);
+      } else {
+        next.add(chatId);
+      }
+      localStorage.setItem(`pinned-chats-${workspaceId || "default"}`, JSON.stringify([...next]));
+      return next;
+    });
+  }, [workspaceId]);
   
   // Query AI pause state when selected chat changes
   // Uses session_id (remoteJid) as primary key — this matches how the backend tracks sessions
@@ -2711,8 +2736,16 @@ export default function Chats() {
       });
     }
 
+    // Sort pinned chats to the top
+    result.sort((a, b) => {
+      const aPinned = pinnedChatIds.has(a.id) ? 1 : 0;
+      const bPinned = pinnedChatIds.has(b.id) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return 0; // preserve existing order for non-pinned
+    });
+
     return result;
-  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, pinnedChatIds]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -3085,7 +3118,14 @@ export default function Chats() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col mb-0.5">
-                      <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        {pinnedChatIds.has(chat.id) && (
+                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-destructive flex items-center justify-center" title="Importante">
+                            <Pin className="w-2.5 h-2.5 text-destructive-foreground" />
+                          </span>
+                        )}
+                        <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      </div>
                       <span className="text-[11px] text-muted-foreground">{chat.time}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -3280,12 +3320,27 @@ export default function Chats() {
                     senderId={selectedChat.metaSenderId}
                     contactName={selectedChat.name}
                   />
-                  <Button variant="ghost" size="icon">
-                    <Star className="w-5 h-5" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => togglePinChat(selectedChat.id)}
+                    title={pinnedChatIds.has(selectedChat.id) ? "Desmarcar como importante" : "Marcar como importante"}
+                  >
+                    {pinnedChatIds.has(selectedChat.id) ? (
+                      <PinOff className="w-5 h-5 text-destructive" />
+                    ) : (
+                      <Pin className="w-5 h-5" />
+                    )}
                   </Button>
+                  {pinnedChatIds.has(selectedChat.id) && (
+                    <span className="px-2 py-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold uppercase tracking-wide">
+                      Importante
+                    </span>
+                  )}
                   {/* Dropdown menu with block/unblock */}
                   {(() => {
                     const isMeta = !!selectedChat.isMeta;
+                    const isPinned = pinnedChatIds.has(selectedChat.id);
                     return (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -3294,6 +3349,14 @@ export default function Chats() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* Marcar/Desmarcar como importante */}
+                          <DropdownMenuItem onClick={() => togglePinChat(selectedChat.id)}>
+                            {isPinned ? (
+                              <><PinOff className="w-4 h-4 mr-2" /> Desmarcar importante</>
+                            ) : (
+                              <><Pin className="w-4 h-4 mr-2 text-destructive" /> Marcar como importante</>
+                            )}
+                          </DropdownMenuItem>
                           {!isMeta && (() => {
                             const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
                             const isOptedOut = chatLead && (chatLead as any).is_opted_out === true;
