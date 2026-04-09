@@ -151,9 +151,17 @@ export function WorkspaceAssistantWidget() {
               💡 Pergunte qualquer coisa sobre seus leads, chats, agentes e mais!
             </p>
             <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-3 mb-2">
-              <p className="text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
+              <p className="text-xs text-orange-700 dark:text-orange-300 leading-relaxed mb-2">
                 📱 <strong>Novidade!</strong> Se o seu número de WhatsApp estiver cadastrado no seu perfil, você também pode conversar com sua assistente virtual direto pelo WhatsApp, a qualquer momento! Pergunte sobre leads, chats, agentes e tudo do seu workspace.
               </p>
+              <a
+                href="https://wa.me/5511995461014"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-full transition-colors"
+              >
+                💬 Conversar no WhatsApp
+              </a>
             </div>
             <div className="grid grid-cols-1 gap-2">
               {SUGGESTIONS.map((s) => (
