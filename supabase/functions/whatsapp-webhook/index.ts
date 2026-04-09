@@ -883,14 +883,13 @@ app.post("/", async (c) => {
       const cleanPhone = phoneNumber.replace(/\D/g, "");
       const phoneSuffix = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
 
+      // Find ALL profiles matching this phone number
       const { data: profiles } = await supabase
         .from("user_profiles")
-        .select("user_id, phone, personal_whatsapp")
+        .select("user_id, phone, personal_whatsapp, full_name")
         .or(`phone.like.%${phoneSuffix},personal_whatsapp.like.%${phoneSuffix}`);
 
-      const assistantUserId = profiles?.[0]?.user_id || null;
-
-      if (!assistantUserId) {
+      if (!profiles || profiles.length === 0) {
         console.warn(`[whatsapp-webhook] ❌ Assistant: no user found for phone ${phoneNumber}`);
         await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
           number: phoneNumber,
@@ -900,15 +899,17 @@ app.post("/", async (c) => {
         return c.json({ received: true, handler: "assistant_no_user" }, 200, corsHeaders);
       }
 
-      const { data: wsMember } = await supabase
-        .from("workspace_members")
-        .select("workspace_id")
-        .eq("user_id", assistantUserId)
-        .not("accepted_at", "is", null)
-        .limit(1)
-        .single();
+      // Collect ALL unique user_ids from matching profiles
+      const matchedUserIds = [...new Set(profiles.map((p: any) => p.user_id))];
 
-      if (!wsMember) {
+      // Find ALL workspaces for ALL matched users
+      const { data: wsMembers } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, user_id")
+        .in("user_id", matchedUserIds)
+        .not("accepted_at", "is", null);
+
+      if (!wsMembers || wsMembers.length === 0) {
         await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
           number: phoneNumber,
           text: "❌ Não encontrei um workspace ativo associado à sua conta.",
@@ -917,8 +918,46 @@ app.post("/", async (c) => {
         return c.json({ received: true, handler: "assistant_no_ws" }, 200, corsHeaders);
       }
 
-      const assistantWsId = wsMember.workspace_id;
-      console.log(`[whatsapp-webhook] 🤖 Assistant: user=${assistantUserId}, ws=${assistantWsId}`);
+      // Get all unique workspace names
+      const wsIds = [...new Set(wsMembers.map((m: any) => m.workspace_id))];
+      const { data: allWorkspaces } = await supabase
+        .from("workspaces")
+        .select("id, name")
+        .in("id", wsIds);
+
+      const wsList = allWorkspaces || [];
+      let assistantWsId: string;
+      let assistantUserId: string;
+
+      if (wsList.length === 1) {
+        assistantWsId = wsList[0].id;
+        assistantUserId = wsMembers.find((m: any) => m.workspace_id === assistantWsId)!.user_id;
+      } else {
+        // Multiple workspaces — check if user mentioned a workspace name in the question
+        const qLower = questionText!.toLowerCase();
+        const matchedWs = wsList.find((ws: any) => {
+          const wsNameLower = ws.name.toLowerCase().trim();
+          if (qLower.includes(wsNameLower)) return true;
+          // Also match significant words (>3 chars) from workspace name
+          return wsNameLower.split(/\s+/).some((word: string) => word.length > 3 && qLower.includes(word.toLowerCase()));
+        });
+
+        if (matchedWs) {
+          assistantWsId = matchedWs.id;
+          assistantUserId = wsMembers.find((m: any) => m.workspace_id === assistantWsId)!.user_id;
+        } else {
+          // No workspace mentioned — ask user to specify
+          const wsNames = wsList.map((ws: any, i: number) => `${i + 1}. *${ws.name}*`).join("\n");
+          await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+            number: phoneNumber,
+            text: `Você tem acesso a ${wsList.length} workspaces:\n\n${wsNames}\n\n📝 Inclua o nome do workspace na sua pergunta.\n\nEx: _"Quantos leads entraram essa semana no Argos X?"_`,
+            delay: 0, linkPreview: false,
+          });
+          return c.json({ received: true, handler: "assistant_multi_ws" }, 200, corsHeaders);
+        }
+      }
+
+      console.log(`[whatsapp-webhook] 🤖 Assistant: user=${assistantUserId}, ws=${assistantWsId}, workspaces=${wsList.length}`);
 
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
