@@ -118,6 +118,7 @@ export default function CalendarPage() {
   const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [leadNames, setLeadNames] = useState<Record<string, string>>({});
+  const [selectedAgentForCalendar, setSelectedAgentForCalendar] = useState<AIAgent | null>(null);
   const {
     events,
     loading,
@@ -131,6 +132,7 @@ export default function CalendarPage() {
     disconnectGoogle,
     pullFromGoogle,
   } = useCalendar();
+  const { agents } = useAIAgents();
 
   const [syncing, setSyncing] = useState(false);
 
