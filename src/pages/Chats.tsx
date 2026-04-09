@@ -1240,13 +1240,8 @@ export default function Chats() {
   useEffect(() => {
     const byJid = new Map<string, Lead>();
     const byPhone10 = new Map<string, Lead>();
-    // Merge funnel leads + override leads (overrides take priority for freshness)
-    const allLeads = [...leads];
-    for (const [, overrideLead] of chatLeadOverrides) {
-      if (!allLeads.some(l => l.id === overrideLead.id)) {
-        allLeads.push(overrideLead);
-      }
-    }
+    // Merge funnel leads + override leads (overrides must be applied last for freshness)
+    const allLeads = [...leads, ...Array.from(chatLeadOverrides.values())];
     for (const lead of allLeads) {
       if (lead.whatsapp_jid) byJid.set(lead.whatsapp_jid, lead);
       const digits = (lead.phone || '').replace(/[^0-9]/g, '');
@@ -3991,13 +3986,20 @@ export default function Chats() {
             }}
             onMoveLead={async (leadId, stageId, pos) => {
               const result = await moveLead(leadId, stageId, pos);
-              // Also update override to prevent stale revert
+              if (!result) return result;
+
               setChatLeadOverrides(prev => {
-                if (!prev.has(leadId)) return prev;
                 const next = new Map(prev);
-                next.set(leadId, { ...prev.get(leadId)!, stage_id: stageId, position: pos } as Lead);
+                const previousLead = prev.get(leadId) || leads.find((lead) => lead.id === leadId);
+                next.set(leadId, {
+                  ...(previousLead || {}),
+                  ...result,
+                  stage_id: stageId,
+                  position: pos,
+                } as Lead);
                 return next;
               });
+
               return result;
             }}
             onAddTag={addTagToLead}
