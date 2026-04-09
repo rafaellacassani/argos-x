@@ -21,6 +21,8 @@ import {
   EyeOff,
   Trash2,
   UserX,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
