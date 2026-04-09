@@ -4061,6 +4061,10 @@ export default function Chats() {
             } : undefined}
           />
         );
+        } catch (e) {
+          console.error("LeadSidePanel render error:", e);
+          return null;
+        }
       })()}
       <LeadDetailModal
         lead={leadModalLead}
