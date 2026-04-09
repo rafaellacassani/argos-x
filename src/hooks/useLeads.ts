@@ -660,7 +660,12 @@ export function useLeads() {
               if (updated) existing = { ...existing, ...updated } as Lead;
             }
 
-            setLeads((prev) => prev.map((l) => (l.id === existing.id ? { ...l, ...existing } : l)));
+            setLeads((prev) => {
+              const exists = prev.some((l) => l.id === existing.id);
+              if (exists) return prev.map((l) => (l.id === existing.id ? { ...l, ...existing } : l));
+              // Lead is in another funnel — add it so the chat can find it
+              return [...prev, { ...existing, tags: [], sales: [] as LeadSale[] }];
+            });
             toast.success('Lead já existente vinculado à conversa.');
             return existing;
           }

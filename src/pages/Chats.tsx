@@ -477,6 +477,9 @@ export default function Chats() {
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
 
+  // Override map: leads fetched directly from DB that aren't in the funnel-filtered leads array
+  const [chatLeadOverrides, setChatLeadOverrides] = useState<Map<string, Lead>>(new Map());
+
   // Pinned/Important chats — persisted per workspace in localStorage
   const pinnedStorageKey = `pinned-chats-${workspaceId}`;
   const [pinnedChatIds, setPinnedChatIds] = useState<Set<string>>(() => {
@@ -542,6 +545,47 @@ export default function Chats() {
     };
     checkPauseState();
   }, [selectedChat?.id, workspaceId]);
+
+  // Direct DB fallback: when selectedChat has no lead in the funnel-filtered array,
+  // fetch from DB to handle leads in other funnels or not yet in local state
+  useEffect(() => {
+    if (!selectedChat || !workspaceId) return;
+    const existingLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
+    if (existingLead) return; // Already found, no need to fetch
+
+    const fetchLeadFromDB = async () => {
+      const phoneCandidates = [
+        cleanPhoneNumber(selectedChat.phone || ""),
+        cleanPhoneNumber(selectedChat.remoteJidAlt || ""),
+        cleanPhoneNumber(selectedChat.remoteJid || ""),
+      ].filter(d => d.length >= 10 && d.length <= 13);
+
+      const orFilters: string[] = [];
+      if (selectedChat.remoteJid) orFilters.push(`whatsapp_jid.eq.${selectedChat.remoteJid}`);
+      if (selectedChat.remoteJidAlt) orFilters.push(`whatsapp_jid.eq.${selectedChat.remoteJidAlt}`);
+      for (const digits of phoneCandidates) {
+        orFilters.push(`phone.like.%${digits.slice(-10)}`);
+      }
+      if (orFilters.length === 0) return;
+
+      const { data } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .or(orFilters.join(","))
+        .limit(1);
+
+      if (data && data.length > 0) {
+        const dbLead = { ...data[0], tags: [], sales: [] } as Lead;
+        setChatLeadOverrides(prev => {
+          const next = new Map(prev);
+          next.set(dbLead.id, dbLead);
+          return next;
+        });
+      }
+    };
+    fetchLeadFromDB();
+  }, [selectedChat?.id, workspaceId, leads]); // re-check when leads change too
 
   // Load tag rules for auto-tagging
   const { rules: tagRules, checkMessageAgainstRules } = useTagRules();
@@ -1196,13 +1240,20 @@ export default function Chats() {
   useEffect(() => {
     const byJid = new Map<string, Lead>();
     const byPhone10 = new Map<string, Lead>();
-    for (const lead of leads) {
+    // Merge funnel leads + override leads (overrides take priority for freshness)
+    const allLeads = [...leads];
+    for (const [, overrideLead] of chatLeadOverrides) {
+      if (!allLeads.some(l => l.id === overrideLead.id)) {
+        allLeads.push(overrideLead);
+      }
+    }
+    for (const lead of allLeads) {
       if (lead.whatsapp_jid) byJid.set(lead.whatsapp_jid, lead);
       const digits = (lead.phone || '').replace(/[^0-9]/g, '');
       if (digits.length >= 10) byPhone10.set(digits.slice(-10), lead);
     }
     leadMapsRef.current = { byJid, byPhone10 };
-  }, [leads]);
+  }, [leads, chatLeadOverrides]);
 
   // Fast O(1) lead lookup using maps
   const findLeadByChat = useCallback((remoteJid: string, remoteJidAlt?: string, phone?: string): Lead | undefined => {
@@ -3926,8 +3977,28 @@ export default function Chats() {
             tags={tags}
             isOpen={leadPanelOpen}
             onToggle={() => setLeadPanelOpen((v) => !v)}
-            onUpdateLead={updateLead}
-            onMoveLead={moveLead}
+            onUpdateLead={async (leadId, updates) => {
+              const result = await updateLead(leadId, updates);
+              // Also update override if present
+              setChatLeadOverrides(prev => {
+                if (!prev.has(leadId)) return prev;
+                const next = new Map(prev);
+                next.set(leadId, { ...prev.get(leadId)!, ...updates } as Lead);
+                return next;
+              });
+              return result;
+            }}
+            onMoveLead={async (leadId, stageId, pos) => {
+              const result = await moveLead(leadId, stageId, pos);
+              // Also update override to prevent stale revert
+              setChatLeadOverrides(prev => {
+                if (!prev.has(leadId)) return prev;
+                const next = new Map(prev);
+                next.set(leadId, { ...prev.get(leadId)!, stage_id: stageId, position: pos } as Lead);
+                return next;
+              });
+              return result;
+            }}
             onAddTag={addTagToLead}
             onRemoveTag={removeTagFromLead}
             onCreateTag={createTag}
@@ -3973,6 +4044,14 @@ export default function Chats() {
                 instance_name: selectedChat.instanceName,
                 source: "whatsapp",
               });
+              // Add to overrides so panel shows it immediately
+              if (newLead) {
+                setChatLeadOverrides(prev => {
+                  const next = new Map(prev);
+                  next.set(newLead.id, { ...newLead, tags: newLead.tags || [], sales: newLead.sales || [] } as Lead);
+                  return next;
+                });
+              }
               return !!newLead;
             } : undefined}
             onOpenDetailModal={currentLead ? () => {
