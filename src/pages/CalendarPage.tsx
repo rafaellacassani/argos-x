@@ -762,6 +762,14 @@ export default function CalendarPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Agent Detail Dialog for Calendar Config */}
+      <AgentDetailDialog
+        agent={selectedAgentForCalendar}
+        open={!!selectedAgentForCalendar}
+        onOpenChange={(open) => { if (!open) setSelectedAgentForCalendar(null); }}
+        initialTab="tools"
+      />
     </div>
   );
 }
