@@ -477,6 +477,9 @@ export default function Chats() {
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
 
+  // Override map: leads fetched directly from DB that aren't in the funnel-filtered leads array
+  const [chatLeadOverrides, setChatLeadOverrides] = useState<Map<string, Lead>>(new Map());
+
   // Pinned/Important chats — persisted per workspace in localStorage
   const pinnedStorageKey = `pinned-chats-${workspaceId}`;
   const [pinnedChatIds, setPinnedChatIds] = useState<Set<string>>(() => {
