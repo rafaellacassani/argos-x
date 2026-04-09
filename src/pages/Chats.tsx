@@ -476,6 +476,29 @@ export default function Chats() {
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
   const [selectedChatAiPaused, setSelectedChatAiPaused] = useState(false);
+
+  // Pinned/Important chats — persisted per workspace in localStorage
+  const pinnedStorageKey = `pinned-chats-${workspaceId}`;
+  const [pinnedChatIds, setPinnedChatIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(`pinned-chats-${workspaceId || "default"}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  // Persist pinned chats to localStorage
+  const togglePinChat = useCallback((chatId: string) => {
+    setPinnedChatIds(prev => {
+      const next = new Set(prev);
+      if (next.has(chatId)) {
+        next.delete(chatId);
+      } else {
+        next.add(chatId);
+      }
+      localStorage.setItem(`pinned-chats-${workspaceId || "default"}`, JSON.stringify([...next]));
+      return next;
+    });
+  }, [workspaceId]);
   
   // Query AI pause state when selected chat changes
   // Uses session_id (remoteJid) as primary key — this matches how the backend tracks sessions
