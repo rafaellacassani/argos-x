@@ -3335,7 +3335,6 @@ export default function Chats() {
                     const isMeta = !!selectedChat.isMeta;
                     const isPinned = pinnedChatIds.has(selectedChat.id);
                     return (
-                    return (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
@@ -3343,6 +3342,14 @@ export default function Chats() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {/* Marcar/Desmarcar como importante */}
+                          <DropdownMenuItem onClick={() => togglePinChat(selectedChat.id)}>
+                            {isPinned ? (
+                              <><PinOff className="w-4 h-4 mr-2" /> Desmarcar importante</>
+                            ) : (
+                              <><Pin className="w-4 h-4 mr-2 text-destructive" /> Marcar como importante</>
+                            )}
+                          </DropdownMenuItem>
                           {!isMeta && (() => {
                             const chatLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
                             const isOptedOut = chatLead && (chatLead as any).is_opted_out === true;
