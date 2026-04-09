@@ -17,6 +17,7 @@ import {
   ExternalLink,
   RefreshCw,
   Unlink,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,8 @@ import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
+import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
 import { format, addHours, isSameDay, startOfWeek, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
