@@ -3977,8 +3977,28 @@ export default function Chats() {
             tags={tags}
             isOpen={leadPanelOpen}
             onToggle={() => setLeadPanelOpen((v) => !v)}
-            onUpdateLead={updateLead}
-            onMoveLead={moveLead}
+            onUpdateLead={async (leadId, updates) => {
+              const result = await updateLead(leadId, updates);
+              // Also update override if present
+              setChatLeadOverrides(prev => {
+                if (!prev.has(leadId)) return prev;
+                const next = new Map(prev);
+                next.set(leadId, { ...prev.get(leadId)!, ...updates } as Lead);
+                return next;
+              });
+              return result;
+            }}
+            onMoveLead={async (leadId, stageId, pos) => {
+              const result = await moveLead(leadId, stageId, pos);
+              // Also update override to prevent stale revert
+              setChatLeadOverrides(prev => {
+                if (!prev.has(leadId)) return prev;
+                const next = new Map(prev);
+                next.set(leadId, { ...prev.get(leadId)!, stage_id: stageId, position: pos } as Lead);
+                return next;
+              });
+              return result;
+            }}
             onAddTag={addTagToLead}
             onRemoveTag={removeTagFromLead}
             onCreateTag={createTag}
@@ -4024,6 +4044,14 @@ export default function Chats() {
                 instance_name: selectedChat.instanceName,
                 source: "whatsapp",
               });
+              // Add to overrides so panel shows it immediately
+              if (newLead) {
+                setChatLeadOverrides(prev => {
+                  const next = new Map(prev);
+                  next.set(newLead.id, { ...newLead, tags: newLead.tags || [], sales: newLead.sales || [] } as Lead);
+                  return next;
+                });
+              }
               return !!newLead;
             } : undefined}
             onOpenDetailModal={currentLead ? () => {
