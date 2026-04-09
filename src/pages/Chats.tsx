@@ -3313,9 +3313,23 @@ export default function Chats() {
                     senderId={selectedChat.metaSenderId}
                     contactName={selectedChat.name}
                   />
-                  <Button variant="ghost" size="icon">
-                    <Star className="w-5 h-5" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => togglePinChat(selectedChat.id)}
+                    title={pinnedChatIds.has(selectedChat.id) ? "Desmarcar como importante" : "Marcar como importante"}
+                  >
+                    {pinnedChatIds.has(selectedChat.id) ? (
+                      <PinOff className="w-5 h-5 text-destructive" />
+                    ) : (
+                      <Pin className="w-5 h-5" />
+                    )}
                   </Button>
+                  {pinnedChatIds.has(selectedChat.id) && (
+                    <span className="px-2 py-0.5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold uppercase tracking-wide">
+                      Importante
+                    </span>
+                  )}
                   {/* Dropdown menu with block/unblock */}
                   {(() => {
                     const isMeta = !!selectedChat.isMeta;
