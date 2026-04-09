@@ -120,8 +120,8 @@ export function WorkspaceAssistantWidget() {
       >
         <Sparkles className="h-4 w-4" />
         <span className="hidden sm:inline">Assistente IA</span>
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse shadow-md">
-          Novo
+        <span className="absolute -top-3 -right-3 bg-emerald-400 text-emerald-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-[0_0_8px_2px_rgba(52,211,153,0.7)] animate-[pulse_1s_ease-in-out_infinite]">
+          ✨ Novo
         </span>
       </button>
     );
