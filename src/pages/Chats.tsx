@@ -2736,8 +2736,16 @@ export default function Chats() {
       });
     }
 
+    // Sort pinned chats to the top
+    result.sort((a, b) => {
+      const aPinned = pinnedChatIds.has(a.id) ? 1 : 0;
+      const bPinned = pinnedChatIds.has(b.id) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return 0; // preserve existing order for non-pinned
+    });
+
     return result;
-  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, pinnedChatIds]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
