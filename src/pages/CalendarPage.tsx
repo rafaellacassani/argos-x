@@ -670,6 +670,42 @@ export default function CalendarPage() {
             </Button>
           </div>
         )}
+
+        {/* AI Calendar Config Button */}
+        {agents.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-border">
+            {agents.length === 1 ? (
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => setSelectedAgentForCalendar(agents[0])}
+              >
+                <Bot className="w-4 h-4" />
+                Configurar IA no Calendário
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full gap-2">
+                    <Bot className="w-4 h-4" />
+                    Configurar IA no Calendário
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {agents.map((agent) => (
+                    <DropdownMenuItem
+                      key={agent.id}
+                      onClick={() => setSelectedAgentForCalendar(agent)}
+                    >
+                      <Bot className="w-4 h-4 mr-2" />
+                      {agent.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
       </motion.div>
 
       {/* Create/Edit Dialog */}
