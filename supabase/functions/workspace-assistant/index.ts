@@ -12,19 +12,18 @@ serve(async (req) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing authorization");
+    if (!authHeader?.startsWith("Bearer ")) throw new Error("Missing authorization");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (!lovableKey) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Auth user
-    const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
-    if (authErr || !user) throw new Error("Unauthorized");
+    const token = authHeader.replace("Bearer ", "").trim();
+    const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
+    const { data: claimsData, error: authErr } = await authClient.auth.getClaims(token);
+    const userId = claimsData?.claims?.sub;
+    if (authErr || !userId) throw new Error("Unauthorized");
 
     const adminClient = createClient(supabaseUrl, supabaseKey);
 
@@ -32,7 +31,7 @@ serve(async (req) => {
     const { data: member } = await adminClient
       .from("workspace_members")
       .select("workspace_id")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .not("accepted_at", "is", null)
       .limit(1)
       .single();
