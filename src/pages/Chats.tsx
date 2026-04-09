@@ -1199,13 +1199,20 @@ export default function Chats() {
   useEffect(() => {
     const byJid = new Map<string, Lead>();
     const byPhone10 = new Map<string, Lead>();
-    for (const lead of leads) {
+    // Merge funnel leads + override leads (overrides take priority for freshness)
+    const allLeads = [...leads];
+    for (const [, overrideLead] of chatLeadOverrides) {
+      if (!allLeads.some(l => l.id === overrideLead.id)) {
+        allLeads.push(overrideLead);
+      }
+    }
+    for (const lead of allLeads) {
       if (lead.whatsapp_jid) byJid.set(lead.whatsapp_jid, lead);
       const digits = (lead.phone || '').replace(/[^0-9]/g, '');
       if (digits.length >= 10) byPhone10.set(digits.slice(-10), lead);
     }
     leadMapsRef.current = { byJid, byPhone10 };
-  }, [leads]);
+  }, [leads, chatLeadOverrides]);
 
   // Fast O(1) lead lookup using maps
   const findLeadByChat = useCallback((remoteJid: string, remoteJidAlt?: string, phone?: string): Lead | undefined => {
