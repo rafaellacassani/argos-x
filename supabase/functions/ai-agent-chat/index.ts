@@ -774,7 +774,29 @@ serve(async (req) => {
       }
 
       if (memory.is_paused) {
-        if (messageText.toLowerCase().includes((agent.resume_keyword || "").toLowerCase())) {
+        const resumeKeyword = (agent.resume_keyword || "").toLowerCase();
+        const hasResumeKeyword = resumeKeyword && messageText.toLowerCase().includes(resumeKeyword);
+
+        // Auto-resume: if pause is stale (>2h), no active human queue, and lead is NOT opted out
+        let shouldAutoResume = false;
+        if (!hasResumeKeyword) {
+          const pauseAge = Date.now() - new Date(memory.updated_at).getTime();
+          const PAUSE_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+          if (pauseAge > PAUSE_COOLDOWN_MS) {
+            // Check if lead is opted out
+            let isOptedOut = false;
+            if (lead_id) {
+              const { data: leadCheck } = await supabase.from("leads").select("is_opted_out").eq("id", lead_id).maybeSingle();
+              isOptedOut = leadCheck?.is_opted_out === true;
+            }
+            if (!isOptedOut) {
+              shouldAutoResume = true;
+              console.log(`[ai-agent-chat] ▶️ Auto-resuming stale paused session (paused ${Math.round(pauseAge / 60000)}min ago)`);
+            }
+          }
+        }
+
+        if (hasResumeKeyword || shouldAutoResume) {
           await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);
           memory.is_paused = false;
           console.log("[ai-agent-chat] ▶️ Session resumed");
