@@ -134,3 +134,7 @@ verify_jwt = false
 
 [functions.asaas-manage-subscription]
 verify_jwt = false
+
+
+[functions.workspace-assistant]
+verify_jwt = false
