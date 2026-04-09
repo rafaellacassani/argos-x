@@ -3118,7 +3118,14 @@ export default function Chats() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col mb-0.5">
-                      <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        {pinnedChatIds.has(chat.id) && (
+                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-destructive flex items-center justify-center" title="Importante">
+                            <Pin className="w-2.5 h-2.5 text-destructive-foreground" />
+                          </span>
+                        )}
+                        <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                      </div>
                       <span className="text-[11px] text-muted-foreground">{chat.time}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
