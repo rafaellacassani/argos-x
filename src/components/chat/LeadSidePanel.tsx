@@ -167,6 +167,41 @@ export function LeadSidePanel({
   const [summary, setSummary] = useState<string | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(true);
+  // If the lead's stage isn't in the provided stages (different funnel), fetch its funnel's stages
+  const [crossFunnelStages, setCrossFunnelStages] = useState<FunnelStage[]>([]);
+
+  useEffect(() => {
+    if (!lead?.stage_id) {
+      setCrossFunnelStages([]);
+      return;
+    }
+    const stageExists = stages.some(s => s.id === lead.stage_id);
+    if (stageExists) {
+      setCrossFunnelStages([]);
+      return;
+    }
+    // Fetch the stage's funnel and all its stages
+    const fetchCrossFunnelStages = async () => {
+      const { data: stageData } = await supabase
+        .from("funnel_stages")
+        .select("funnel_id")
+        .eq("id", lead.stage_id)
+        .maybeSingle();
+      if (!stageData?.funnel_id) return;
+      const { data: allStages } = await supabase
+        .from("funnel_stages")
+        .select("*")
+        .eq("funnel_id", stageData.funnel_id)
+        .order("position", { ascending: true });
+      if (allStages && allStages.length > 0) {
+        setCrossFunnelStages(allStages as FunnelStage[]);
+      }
+    };
+    fetchCrossFunnelStages();
+  }, [lead?.stage_id, stages]);
+
+  // Effective stages: use cross-funnel stages if the lead is from another funnel
+  const effectiveStages = crossFunnelStages.length > 0 ? crossFunnelStages : stages;
 
   const handleSummarize = async () => {
     const jid = lead?.whatsapp_jid || chatContact?.remoteJid;
@@ -205,14 +240,14 @@ export function LeadSidePanel({
 
   // Current stage info
   const currentStage = useMemo(
-    () => stages.find((s) => s.id === lead?.stage_id),
-    [stages, lead?.stage_id]
+    () => effectiveStages.find((s) => s.id === lead?.stage_id),
+    [effectiveStages, lead?.stage_id]
   );
 
   // Sorted stages for progress
   const sortedStages = useMemo(
-    () => [...stages].sort((a, b) => a.position - b.position),
-    [stages]
+    () => [...effectiveStages].sort((a, b) => a.position - b.position),
+    [effectiveStages]
   );
 
   // Progress percentage
@@ -386,7 +421,7 @@ export function LeadSidePanel({
       <div className="p-4 border-b border-border bg-gradient-to-br from-[hsl(var(--primary)/0.08)] to-transparent">
         <div className="flex items-start justify-between mb-2">
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-lg text-foreground truncate">{lead.name}</h3>
+            <h3 className="font-bold text-lg text-foreground truncate">{lead.name || "Sem nome"}</h3>
             <span className="text-xs text-muted-foreground font-mono">{shortId}</span>
           </div>
           <div className="flex items-center gap-1">
@@ -553,7 +588,7 @@ export function LeadSidePanel({
                 <p className="text-xs font-semibold text-foreground mb-2">Dados do contato</p>
                 <InlineEditField
                   label="Nome"
-                  value={lead.name}
+                  value={lead.name || ""}
                   icon={User}
                   onSave={(val) => onUpdateLead(lead.id, { name: val })}
                 />

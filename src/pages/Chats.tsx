@@ -3969,6 +3969,7 @@ export default function Chats() {
 
       {/* Lead Side Panel */}
       {!isMobile && selectedChat && (() => {
+        try {
         const currentLead = findLeadByChat(selectedChat.remoteJid, selectedChat.remoteJidAlt, selectedChat.phone);
         return (
           <LeadSidePanel
@@ -4060,6 +4061,10 @@ export default function Chats() {
             } : undefined}
           />
         );
+        } catch (e) {
+          console.error("LeadSidePanel render error:", e);
+          return null;
+        }
       })()}
       <LeadDetailModal
         lead={leadModalLead}
