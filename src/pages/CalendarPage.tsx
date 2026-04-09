@@ -17,6 +17,7 @@ import {
   ExternalLink,
   RefreshCw,
   Unlink,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +49,8 @@ import { CreateEventDialog } from "@/components/calendar/CreateEventDialog";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
+import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
 import { format, addHours, isSameDay, startOfWeek, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -115,6 +118,7 @@ export default function CalendarPage() {
   const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [leadNames, setLeadNames] = useState<Record<string, string>>({});
+  const [selectedAgentForCalendar, setSelectedAgentForCalendar] = useState<AIAgent | null>(null);
   const {
     events,
     loading,
@@ -128,6 +132,7 @@ export default function CalendarPage() {
     disconnectGoogle,
     pullFromGoogle,
   } = useCalendar();
+  const { agents } = useAIAgents();
 
   const [syncing, setSyncing] = useState(false);
 
@@ -665,6 +670,42 @@ export default function CalendarPage() {
             </Button>
           </div>
         )}
+
+        {/* AI Calendar Config Button */}
+        {agents.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-border">
+            {agents.length === 1 ? (
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => setSelectedAgentForCalendar(agents[0])}
+              >
+                <Bot className="w-4 h-4" />
+                Configurar IA no Calendário
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full gap-2">
+                    <Bot className="w-4 h-4" />
+                    Configurar IA no Calendário
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  {agents.map((agent) => (
+                    <DropdownMenuItem
+                      key={agent.id}
+                      onClick={() => setSelectedAgentForCalendar(agent)}
+                    >
+                      <Bot className="w-4 h-4 mr-2" />
+                      {agent.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        )}
       </motion.div>
 
       {/* Create/Edit Dialog */}
@@ -721,6 +762,14 @@ export default function CalendarPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Agent Detail Dialog for Calendar Config */}
+      <AgentDetailDialog
+        agent={selectedAgentForCalendar}
+        open={!!selectedAgentForCalendar}
+        onOpenChange={(open) => { if (!open) setSelectedAgentForCalendar(null); }}
+        initialTab="tools"
+      />
     </div>
   );
 }
