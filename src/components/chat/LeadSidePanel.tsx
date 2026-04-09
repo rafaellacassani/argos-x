@@ -588,7 +588,7 @@ export function LeadSidePanel({
                 <p className="text-xs font-semibold text-foreground mb-2">Dados do contato</p>
                 <InlineEditField
                   label="Nome"
-                  value={lead.name}
+                  value={lead.name || ""}
                   icon={User}
                   onSave={(val) => onUpdateLead(lead.id, { name: val })}
                 />
