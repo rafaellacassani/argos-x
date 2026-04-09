@@ -3333,6 +3333,8 @@ export default function Chats() {
                   {/* Dropdown menu with block/unblock */}
                   {(() => {
                     const isMeta = !!selectedChat.isMeta;
+                    const isPinned = pinnedChatIds.has(selectedChat.id);
+                    return (
                     return (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
