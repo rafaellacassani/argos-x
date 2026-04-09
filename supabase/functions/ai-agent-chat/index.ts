@@ -499,7 +499,7 @@ serve(async (req) => {
     if (!lovableApiKey && !openaiApiKey && !anthropicApiKey) throw new Error("No AI API key configured (OPENAI_API_KEY, ANTHROPIC_API_KEY or LOVABLE_API_KEY)");
 
     const body = await req.json();
-    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
+    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, _recovery_retry = false, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
 
     // FIX: Auth check — allow internal webhook calls with service role key
     const authHeader = req.headers.get("authorization");
@@ -596,8 +596,46 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existingMemory) {
-        console.log(`[ai-agent-chat] ⏭️ Duplicate message_id detected: ${message_id}`);
-        return new Response(JSON.stringify({ skipped: true, reason: "duplicate_message" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        let shouldSkipDuplicate = true;
+
+        if (_recovery_retry === true) {
+          const { data: inboundMessage } = await supabase
+            .from("whatsapp_messages")
+            .select("timestamp")
+            .eq("workspace_id", agent.workspace_id)
+            .eq("remote_jid", session_id)
+            .eq("direction", "inbound")
+            .eq("message_id", message_id)
+            .order("timestamp", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (inboundMessage?.timestamp) {
+            const { data: outboundAfterInbound } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("workspace_id", agent.workspace_id)
+              .eq("remote_jid", session_id)
+              .eq("direction", "outbound")
+              .gte("timestamp", inboundMessage.timestamp)
+              .limit(1)
+              .maybeSingle();
+
+            shouldSkipDuplicate = !!outboundAfterInbound;
+
+            if (!shouldSkipDuplicate) {
+              console.log(`[ai-agent-chat] ♻️ Recovery retry allowed for message_id ${message_id} (no outbound found after inbound)`);
+            }
+          } else {
+            shouldSkipDuplicate = false;
+            console.log(`[ai-agent-chat] ♻️ Recovery retry allowed for message_id ${message_id} (no inbound record found)`);
+          }
+        }
+
+        if (shouldSkipDuplicate) {
+          console.log(`[ai-agent-chat] ⏭️ Duplicate message_id detected: ${message_id}`);
+          return new Response(JSON.stringify({ skipped: true, reason: "duplicate_message" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
     }
 
@@ -766,7 +804,7 @@ serve(async (req) => {
         if (humanQueueActive) {
           // Ensure memory is also paused for consistency
           if (!memory.is_paused) {
-            await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+            await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
           }
           console.log("[ai-agent-chat] ⏸️ Human support queue active — blocking AI response");
           return new Response(JSON.stringify({ response: null, paused: true, message: "Conversa em atendimento humano." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -797,7 +835,7 @@ serve(async (req) => {
         }
 
         if (hasResumeKeyword || shouldAutoResume) {
-          await supabase.from("agent_memories").update({ is_paused: false }).eq("id", memory.id);
+          await supabase.from("agent_memories").update({ is_paused: false, updated_at: new Date().toISOString() }).eq("id", memory.id);
           memory.is_paused = false;
           console.log("[ai-agent-chat] ▶️ Session resumed");
         } else {
@@ -807,7 +845,7 @@ serve(async (req) => {
       }
 
       if (agent.pause_code && messageText.includes(agent.pause_code)) {
-        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
         console.log("[ai-agent-chat] ⏸️ Paused by code");
         return new Response(JSON.stringify({ response: null, paused: true, message: "Atendimento pausado." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -843,7 +881,7 @@ serve(async (req) => {
         await supabase.from("leads").update({ is_opted_out: true } as any).eq("id", lead_id);
         
         // Pause the AI session permanently
-        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         
         // Cancel any pending follow-ups
         await supabase.from("agent_followup_queue")
@@ -889,6 +927,7 @@ serve(async (req) => {
           is_paused: true,
           is_processing: false,
           processing_started_at: null,
+          updated_at: new Date().toISOString(),
           last_message_id: message_id || memory.last_message_id,
         }).eq("id", memory.id);
         lockAcquired = false;
@@ -948,6 +987,7 @@ serve(async (req) => {
           is_paused: true,
           is_processing: false,
           processing_started_at: null,
+          updated_at: new Date().toISOString(),
           last_message_id: message_id || memory.last_message_id,
         }).eq("id", memory.id);
         lockAcquired = false;
@@ -1025,7 +1065,7 @@ serve(async (req) => {
         console.log(`[ai-agent-chat] 🚫 Rejection detected: "${messageText.substring(0, 50)}"`);
         
         // Pause session
-        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         
         // Cancel pending follow-ups
         await supabase.from("agent_followup_queue")
@@ -1065,7 +1105,7 @@ serve(async (req) => {
         console.log(`[ai-agent-chat] 🔄 AI LOOP DETECTED for session ${session_id}: ${loopDetected}`);
         
         // Pause session
-        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         
         // Cancel pending follow-ups
         await supabase.from("agent_followup_queue")
@@ -1502,7 +1542,7 @@ serve(async (req) => {
               break;
             }
             case "pausar_ia":
-              await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+              await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
               // Internal note saved to human_support_queue.reason only — NOT sent to client
               // Enqueue for human support
               await supabase.from("human_support_queue").insert({
@@ -1859,7 +1899,7 @@ serve(async (req) => {
 
       if (newConsecutiveFallbacks >= 3) {
         console.warn(`[ai-agent-chat] 🚨 Fallback limit reached (${newConsecutiveFallbacks}) for session ${session_id}. Auto-pausing.`);
-        await supabase.from("agent_memories").update({ is_paused: true }).eq("id", memory.id);
+        await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         
         // Cancel pending follow-ups
         await supabase.from("agent_followup_queue")
@@ -1928,6 +1968,7 @@ serve(async (req) => {
         summary: JSON.stringify(summaryData),
         is_processing: false,
         processing_started_at: null,
+        updated_at: new Date().toISOString(),
         last_message_id: message_id || memory.last_message_id,
       }).eq("id", memory.id);
       lockAcquired = false; // Mark as released
@@ -1972,7 +2013,6 @@ serve(async (req) => {
         await supabase.from("agent_memories").update({
           is_processing: false,
           processing_started_at: null,
-          last_message_id: message_id || null,
         }).eq("id", memory.id);
         console.log(`[ai-agent-chat] 🔓 Lock released in finally for session ${session_id}`);
       }

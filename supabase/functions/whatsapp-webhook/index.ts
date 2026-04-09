@@ -710,7 +710,7 @@ app.post("/", async (c) => {
                   // Set is_paused on matching memory
                   await supabase
                     .from("agent_memories")
-                    .update({ is_paused: true })
+                    .update({ is_paused: true, updated_at: new Date().toISOString() })
                     .eq("agent_id", matchingAgent.id)
                     .eq("session_id", contactJid);
 
@@ -727,7 +727,7 @@ app.post("/", async (c) => {
                   console.log("[whatsapp-webhook] ▶️ Resume keyword detected for agent", matchingAgent.id, "contact:", contactJid);
                   await supabase
                     .from("agent_memories")
-                    .update({ is_paused: false })
+                    .update({ is_paused: false, updated_at: new Date().toISOString() })
                     .eq("agent_id", matchingAgent.id)
                     .eq("session_id", contactJid);
 

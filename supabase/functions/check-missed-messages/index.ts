@@ -104,6 +104,10 @@ Deno.serve(async (req) => {
         if (!lastMsg?.key?.id) continue;
 
         const msgId = lastMsg.key.id;
+        const rawMessageTimestamp = lastMsg.messageTimestamp || chat.conversationTimestamp || null;
+        const inboundTimestamp = rawMessageTimestamp
+          ? new Date(Number(rawMessageTimestamp) * 1000).toISOString()
+          : new Date().toISOString();
         const messageText = lastMsg.message?.conversation ||
           lastMsg.message?.extendedTextMessage?.text || "";
         const pushName = lastMsg.pushName || chat.pushName || "";
@@ -139,23 +143,26 @@ Deno.serve(async (req) => {
           phoneNumber = jidToNumber(remoteJid);
         }
 
-        // Check if this message was already processed via webhook
-        const { data: existing } = await supabase
-          .from("webhook_message_log")
-          .select("id")
-          .eq("message_id", msgId)
-          .limit(1);
-
-        if (existing && existing.length > 0) {
-          // Already processed
-          continue;
-        }
-
         // Check if message has actual content (text or media)
         const hasMedia = !!(lastMsg.message?.imageMessage || lastMsg.message?.audioMessage ||
           lastMsg.message?.videoMessage || lastMsg.message?.documentMessage);
 
         if (!messageText && !hasMedia) continue;
+
+        // Skip only if we already sent an outbound reply after this inbound message
+        const { data: outboundAfterInbound } = await supabase
+          .from("whatsapp_messages")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("remote_jid", resolvedJid)
+          .eq("direction", "outbound")
+          .gte("timestamp", inboundTimestamp)
+          .limit(1)
+          .maybeSingle();
+
+        if (outboundAfterInbound) {
+          continue;
+        }
 
         console.log(`[check-missed] 🔔 MISSED MESSAGE from ${pushName} (${remoteJid} → ${resolvedJid}): "${messageText?.substring(0, 80)}"`);
 
@@ -171,7 +178,7 @@ Deno.serve(async (req) => {
             message_type: hasMedia ? "media" : "text",
             message_id: msgId,
             push_name: pushName || null,
-            timestamp: new Date().toISOString(),
+            timestamp: inboundTimestamp,
           });
         } catch (_persistErr) {
           // Ignore duplicate inserts
@@ -183,8 +190,7 @@ Deno.serve(async (req) => {
           .insert({ message_id: msgId, session_id: resolvedJid, workspace_id: workspaceId });
 
         if (dupError) {
-          console.log(`[check-missed] Dedup collision for ${msgId}, skipping`);
-          continue;
+          console.log(`[check-missed] Dedup collision for ${msgId}, continuing recovery flow`);
         }
 
         // 6. Check agent respond_to filter
@@ -256,6 +262,7 @@ Deno.serve(async (req) => {
               phone_number: phoneNumber,
               instance_name: instanceName,
               _internal_webhook: true,
+              _recovery_retry: true,
               media_type: mediaType,
             }),
           });
