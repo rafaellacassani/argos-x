@@ -499,7 +499,7 @@ serve(async (req) => {
     if (!lovableApiKey && !openaiApiKey && !anthropicApiKey) throw new Error("No AI API key configured (OPENAI_API_KEY, ANTHROPIC_API_KEY or LOVABLE_API_KEY)");
 
     const body = await req.json();
-    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
+    const { agent_id, session_id, message, lead_id, message_id, _internal_webhook, _recovery_retry = false, phone_number, instance_name: reqInstanceName, media_type, media_base64, media_mimetype } = body;
 
     // FIX: Auth check — allow internal webhook calls with service role key
     const authHeader = req.headers.get("authorization");
@@ -596,8 +596,46 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existingMemory) {
-        console.log(`[ai-agent-chat] ⏭️ Duplicate message_id detected: ${message_id}`);
-        return new Response(JSON.stringify({ skipped: true, reason: "duplicate_message" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        let shouldSkipDuplicate = true;
+
+        if (_recovery_retry === true) {
+          const { data: inboundMessage } = await supabase
+            .from("whatsapp_messages")
+            .select("timestamp")
+            .eq("workspace_id", agent.workspace_id)
+            .eq("remote_jid", session_id)
+            .eq("direction", "inbound")
+            .eq("message_id", message_id)
+            .order("timestamp", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (inboundMessage?.timestamp) {
+            const { data: outboundAfterInbound } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("workspace_id", agent.workspace_id)
+              .eq("remote_jid", session_id)
+              .eq("direction", "outbound")
+              .gte("timestamp", inboundMessage.timestamp)
+              .limit(1)
+              .maybeSingle();
+
+            shouldSkipDuplicate = !!outboundAfterInbound;
+
+            if (!shouldSkipDuplicate) {
+              console.log(`[ai-agent-chat] ♻️ Recovery retry allowed for message_id ${message_id} (no outbound found after inbound)`);
+            }
+          } else {
+            shouldSkipDuplicate = false;
+            console.log(`[ai-agent-chat] ♻️ Recovery retry allowed for message_id ${message_id} (no inbound record found)`);
+          }
+        }
+
+        if (shouldSkipDuplicate) {
+          console.log(`[ai-agent-chat] ⏭️ Duplicate message_id detected: ${message_id}`);
+          return new Response(JSON.stringify({ skipped: true, reason: "duplicate_message" }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
       }
     }
 
@@ -1928,6 +1966,7 @@ serve(async (req) => {
         summary: JSON.stringify(summaryData),
         is_processing: false,
         processing_started_at: null,
+        updated_at: new Date().toISOString(),
         last_message_id: message_id || memory.last_message_id,
       }).eq("id", memory.id);
       lockAcquired = false; // Mark as released
@@ -1972,7 +2011,6 @@ serve(async (req) => {
         await supabase.from("agent_memories").update({
           is_processing: false,
           processing_started_at: null,
-          last_message_id: message_id || null,
         }).eq("id", memory.id);
         console.log(`[ai-agent-chat] 🔓 Lock released in finally for session ${session_id}`);
       }
