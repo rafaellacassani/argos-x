@@ -476,6 +476,8 @@ REGRAS INVIOLÁVEIS — SEGUIR SEMPRE:
 
 13. LEITURA DO CONTEXTO: Se o lead demonstrou confusão ou insatisfação com sua resposta anterior, NÃO repita a mesma explicação com outras palavras. Mude completamente a abordagem.
 
+14. ESCALAÇÃO: Quando o lead pedir para falar com humano/pessoa/atendente, você DEVE usar a ferramenta pausar_ia. NUNCA responda com links de agendamento ou calendly — use SEMPRE a ferramenta.
+
 ---`;
 
 serve(async (req) => {
@@ -1952,6 +1954,8 @@ serve(async (req) => {
       // --- TRAINER MODE: wrap response in proposal ---
       // Safety net: strip any residual internal metadata patterns before sending to client
       responseContent = responseContent.replace(/\n*\[(?:INSTRUÇÃO INTERNA|Atendimento transferido|Eventos do lead)[^\]]*\]/g, '').trim();
+      // Sanitize any Calendly links that may leak from conversation history
+      responseContent = responseContent.replace(/https?:\/\/calendly\.com\/[^\s)>\]]+/gi, '').trim();
       let finalResponse = responseContent;
       let finalStatus = "success";
       if (isTrainer) {
