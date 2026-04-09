@@ -421,7 +421,7 @@ export function LeadSidePanel({
       <div className="p-4 border-b border-border bg-gradient-to-br from-[hsl(var(--primary)/0.08)] to-transparent">
         <div className="flex items-start justify-between mb-2">
           <div className="min-w-0 flex-1">
-            <h3 className="font-bold text-lg text-foreground truncate">{lead.name}</h3>
+            <h3 className="font-bold text-lg text-foreground truncate">{lead.name || "Sem nome"}</h3>
             <span className="text-xs text-muted-foreground font-mono">{shortId}</span>
           </div>
           <div className="flex items-center gap-1">
