@@ -115,11 +115,14 @@ export function WorkspaceAssistantWidget() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-4 py-2.5 shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 text-sm font-medium"
+        className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 text-white px-4 py-2.5 shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 text-sm font-medium"
         aria-label="Abrir assistente IA"
       >
         <Sparkles className="h-4 w-4" />
         <span className="hidden sm:inline">Assistente IA</span>
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse shadow-md">
+          Novo
+        </span>
       </button>
     );
   }
@@ -127,7 +130,7 @@ export function WorkspaceAssistantWidget() {
   return (
     <div className="fixed bottom-20 right-6 z-50 w-[400px] max-w-[calc(100vw-2rem)] h-[540px] max-h-[calc(100vh-8rem)] rounded-2xl border bg-background shadow-2xl flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-t-2xl">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-r from-orange-500 to-rose-500 text-white rounded-t-2xl">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5" />
           <div>
@@ -147,6 +150,11 @@ export function WorkspaceAssistantWidget() {
             <p className="text-sm text-muted-foreground text-center mb-4">
               💡 Pergunte qualquer coisa sobre seus leads, chats, agentes e mais!
             </p>
+            <div className="rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 p-3 mb-2">
+              <p className="text-xs text-orange-700 dark:text-orange-300 leading-relaxed">
+                📱 <strong>Novidade!</strong> Se o seu número de WhatsApp estiver cadastrado no seu perfil, você também pode conversar com sua assistente virtual direto pelo WhatsApp, a qualquer momento! Pergunte sobre leads, chats, agentes e tudo do seu workspace.
+              </p>
+            </div>
             <div className="grid grid-cols-1 gap-2">
               {SUGGESTIONS.map((s) => (
                 <button
@@ -207,7 +215,7 @@ export function WorkspaceAssistantWidget() {
             size="icon"
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || loading}
-            className="shrink-0 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+            className="shrink-0 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600"
           >
             <Send className="h-4 w-4" />
           </Button>
