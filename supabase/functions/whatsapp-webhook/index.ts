@@ -750,6 +750,11 @@ app.post("/", async (c) => {
       return c.json({ received: true, skipped: "group" }, 200, corsHeaders);
     }
 
+    if (remoteJid === "status@broadcast") {
+      console.log("[whatsapp-webhook] ⏭️ Skipped: status broadcast for", instanceName);
+      return c.json({ received: true, skipped: "status_broadcast" }, 200, corsHeaders);
+    }
+
     // Extract text from all known message types
     let messageText =
       data.message?.conversation ||
