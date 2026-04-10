@@ -306,7 +306,7 @@ serve(async (req) => {
           value: userPrice,
           cycle: "MONTHLY",
           nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Usuário adicional (${currentPlan})`,
+          description: `Argos X - Usuário adicional (${workspace.plan_name || 'plano'})`,
           externalReference,
         }),
       });
