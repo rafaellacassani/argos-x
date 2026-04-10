@@ -116,20 +116,78 @@ serve(async (req) => {
 
       const config = PLAN_CONFIGS[plan];
 
-      if (!workspace.asaas_subscription_id) {
-        return new Response(JSON.stringify({ error: "Nenhuma assinatura Asaas encontrada para este workspace." }), {
+      if (!workspace.asaas_customer_id) {
+        return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado a este workspace." }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Update subscription in Asaas
-      await asaasFetch(`/subscriptions/${workspace.asaas_subscription_id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          value: config.price,
-          description: `Argos X - Plano ${config.display}`,
-        }),
-      });
+      // Strategy: try PUT first; if Asaas rejects (paid invoices exist),
+      // cancel old subscription and create a new one.
+      let newSubId = workspace.asaas_subscription_id;
+
+      if (workspace.asaas_subscription_id) {
+        try {
+          await asaasFetch(`/subscriptions/${workspace.asaas_subscription_id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              value: config.price,
+              description: `Argos X - Plano ${config.display}`,
+            }),
+          });
+          console.log(`[asaas-manage] Upgrade via PUT ok for ${workspaceId}`);
+        } catch (putErr: any) {
+          // PUT failed — cancel old and create new subscription
+          console.log(`[asaas-manage] PUT failed (${putErr.message}), recreating subscription`);
+
+          // Cancel old subscription (don't fail if already deleted)
+          try {
+            await asaasFetch(`/subscriptions/${workspace.asaas_subscription_id}`, {
+              method: "DELETE",
+            });
+          } catch (delErr: any) {
+            console.warn(`[asaas-manage] Delete old sub warning: ${delErr.message}`);
+          }
+
+          // Create new subscription
+          const nextDueDate = new Date();
+          nextDueDate.setDate(nextDueDate.getDate() + 1);
+
+          const newSub = await asaasFetch("/subscriptions", {
+            method: "POST",
+            body: JSON.stringify({
+              customer: workspace.asaas_customer_id,
+              billingType: "CREDIT_CARD",
+              value: config.price,
+              cycle: "MONTHLY",
+              nextDueDate: nextDueDate.toISOString().split("T")[0],
+              description: `Argos X - Plano ${config.display}`,
+              externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
+            }),
+          });
+          newSubId = newSub.id;
+          console.log(`[asaas-manage] New subscription created: ${newSubId}`);
+        }
+      } else {
+        // No existing subscription — create fresh
+        const nextDueDate = new Date();
+        nextDueDate.setDate(nextDueDate.getDate() + 1);
+
+        const newSub = await asaasFetch("/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: workspace.asaas_customer_id,
+            billingType: "CREDIT_CARD",
+            value: config.price,
+            cycle: "MONTHLY",
+            nextDueDate: nextDueDate.toISOString().split("T")[0],
+            description: `Argos X - Plano ${config.display}`,
+            externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
+          }),
+        });
+        newSubId = newSub.id;
+        console.log(`[asaas-manage] Fresh subscription created: ${newSubId}`);
+      }
 
       // Update workspace limits immediately
       await supabaseAdmin
@@ -143,6 +201,7 @@ serve(async (req) => {
           subscription_status: "active",
           plan_type: "active",
           blocked_at: null,
+          asaas_subscription_id: newSubId,
         })
         .eq("id", workspaceId);
 
@@ -247,7 +306,7 @@ serve(async (req) => {
           value: userPrice,
           cycle: "MONTHLY",
           nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Usuário adicional (${currentPlan})`,
+          description: `Argos X - Usuário adicional (${workspace.plan_name || 'plano'})`,
           externalReference,
         }),
       });
