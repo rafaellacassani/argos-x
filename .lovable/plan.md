@@ -1,94 +1,121 @@
 
 
-## Diagnóstico dos Problemas
+# Relatório de Saúde do Sistema - 10/Abril/2026
 
-Analisei os prints, o prompt da Iara, o prompt da Aria e o código do `ai-agent-chat`. Encontrei 3 problemas distintos:
+---
 
-### Problema 1: Iara envia link do Calendly (mesmo com regra "NUNCA enviar o link do Calendly")
-O treinamento da Iara diz explicitamente "NUNCA enviar o link do Calendly" e "NUNCA mencionar reunião ou agendamento". Porém, o modelo está ignorando essa instrução. Isso acontece porque:
-- A seção de escalação diz `[Pausar IA e transferir para fila humana]` — mas isso é uma **anotação interna** que o modelo interpreta como texto literal, não como uma instrução de tool call
-- O modelo não recebe uma instrução clara de **usar a tool `pausar_ia`** quando o lead pede para falar com humano
-- O Calendly link provavelmente foi memorizado de mensagens anteriores do Rafael (humano) no histórico da conversa
+## Resumo Executivo
 
-### Problema 2: Iara não sabe orientar clientes existentes
-A Iara está treinada **exclusivamente como vendedora para novos prospects**. Quando um cliente já cadastrado pergunta "como mudar meu teste para o plano escala", ela não sabe responder porque:
-- Não tem instruções sobre funcionalidades internas do painel (Perfil > Plano e Faturamento)
-- Responde genericamente "precisa ser feita direto na plataforma ou pela nossa equipe de suporte" em vez de guiar passo a passo
+| Area | Status | Detalhes |
+|------|--------|---------|
+| Agentes de IA | ⚠️ Atenção | 28 de 53 agentes ativos silenciosos nas últimas 24h; 865 sessões travadas há +7 dias |
+| Chat / Webhooks | ✅ Operacional | Webhooks recebendo mensagens normalmente, sem erros 500 nas últimas 24h |
+| Financeiro | 🔴 CRÍTICO | 3 assinaturas Asaas e ~20 Stripe NÃO canceladas em workspaces bloqueados/cancelados |
+| Conexões | ✅ Operacional | Sem erros de Edge Functions nas últimas 24h |
+| Edge Functions | ✅ Operacional | Zero erros 4xx/5xx nas últimas 24h |
 
-### Problema 3: Aria (suporte no widget) funciona diferente
-A Aria já tem todas as instruções corretas sobre navegação no painel. O problema está concentrado na Iara (WhatsApp).
+---
+
+## 🤖 Agentes de IA
+
+**53 agentes ativos** no total:
+- **25 respondendo** nas últimas 24h
+- **28 silenciosos** — a maioria sem receber mensagens (workspaces pequenos ou novos), sem erro de API
+
+**Erros de API nas últimas 24h**: Zero. Nenhum registro de `status: 'error'` em `agent_executions`.
+
+**Sessões pausadas (potencialmente travadas)**:
+- **865 sessões** pausadas há mais de 7 dias (sem ticket de suporte aberto)
+- **522 sessões** pausadas entre 2 e 7 dias
+- **158 sessões** pausadas recentemente (comportamento normal)
+
+**Problema principal**: As 865 sessões com mais de 7 dias de pausa são leads que a IA nunca mais vai responder. O mecanismo de auto-resume (2h) existe no código, mas só funciona se não houver suporte humano ativo — e muitas dessas sessões têm `open_tickets: 0`, ou seja, estão travadas sem motivo.
+
+**Follow-ups presos**: Zero follow-ups pendentes há mais de 24h. A fila está limpa.
+
+---
+
+## 💳 Financeiro — CRÍTICO
+
+### Workspaces com vazamento de cobrança
+
+**3 workspaces cancelados/bloqueados que AINDA TÊM `asaas_subscription_id` ativo no banco** (podem estar sendo cobrados):
+
+| Workspace | Asaas Sub ID | Status |
+|-----------|-------------|--------|
+| ecxxxx | sub_7bqr5idddbyut0w5 | canceled |
+| Espaço Bem Estar Fátima Ribeiro | sub_4gppfbfqi4ei1pbn | canceled |
+| silmara | sub_orvqytwblvmdn7h7 | canceled |
+
+**~20 workspaces bloqueados que AINDA TÊM `stripe_subscription_id` com status `past_due`**. O Stripe continua tentando cobrar esses clientes. A função `cancel-subscription` cancela o Stripe corretamente quando chamada, MAS o bloqueio automático via cron (`check-no-response-alerts`) NÃO cancela a assinatura — ele apenas seta `blocked_at`. Isso significa que o cliente é bloqueado mas continua recebendo tentativas de cobrança.
+
+### Workspaces com acesso indevido (past_due sem bloqueio)
+
+| Workspace | Provider | Status |
+|-----------|----------|--------|
+| Vantique | asaas | plan_type=active, subscription_status=past_due, SEM blocked_at |
+| Cuidador360 | asaas | plan_type=trialing, subscription_status=past_due, SEM blocked_at |
+
+Esses 2 workspaces estão com pagamento em atraso mas ainda com acesso livre.
+
+### Visão geral dos workspaces
+
+| Tipo | Qtd |
+|------|-----|
+| Trialing (ativos) | 196 |
+| Trial manual | 31 |
+| Ativos pagando | 26 |
+| Bloqueados (past_due) | 21 |
+| Trialing (past_due) | 11 |
+| Cancelados | 5 |
+
+### Trials expirando nas próximas 48h: 12 workspaces
+
+---
+
+## 💬 Chat e Webhooks
+
+- **Webhooks Evolution**: Operacionais, recebendo mensagens em tempo real
+- **WABA**: Operacional
+- **Sem erros 500** nas Edge Functions nas últimas 24h
+- **Filtro de status@broadcast**: Aplicado com sucesso (correção anterior)
 
 ---
 
 ## Plano de Correção
 
-### Passo 1 — Reforçar instruções de escalação na Iara (via DB)
+### Step 1: Cancelar assinaturas de workspaces bloqueados/cancelados (URGENTE)
 
-Atualizar o `system_prompt` e `knowledge_rules` da Iara para incluir:
+Modificar a Edge Function `cancel-subscription` para, além de marcar o workspace como cancelado, **limpar os campos** `stripe_subscription_id` e `asaas_subscription_id` do banco após cancelar na plataforma. Isso garante idempotência e evita que o campo fique "sujo".
 
-**Na seção de ESCALAÇÃO das rules:**
-```
-ESCALAÇÃO — REGRA ABSOLUTA:
-Quando a pessoa pedir para falar com humano, pessoa real ou atendente:
-- Responda: "Claro! Vou transferir você para um atendente agora mesmo. Um instante!"
-- USE OBRIGATORIAMENTE a ferramenta pausar_ia com o motivo da transferência
-- NUNCA envie links do Calendly, NUNCA mencione agendamento de reunião
-- NUNCA diga para a pessoa acessar o site ou clicar em suporte
-- A transferência é feita por VOCÊ usando a ferramenta pausar_ia
+### Step 2: Auto-cancelar assinaturas no bloqueio automático
 
-O link do Calendly (https://calendly.com/contato-argosx/new-meeting) SÓ deve ser enviado quando a pessoa insistir 3 VEZES pedindo uma demonstração ao vivo da ferramenta. Em QUALQUER outro caso, NUNCA envie este link.
-```
+Modificar a Edge Function `check-no-response-alerts` para que, ao bloquear um workspace por trial expirado, também **cancele a assinatura no Stripe/Asaas** automaticamente. Atualmente ela só seta `blocked_at` sem cancelar a cobrança.
 
-**Adicionar seção para clientes existentes nas rules:**
-```
-CLIENTES JÁ CADASTRADOS:
-Se a pessoa já é cliente do Argos X e pergunta sobre:
+### Step 3: Limpeza imediata via migration
 
-- Mudar de plano / fazer upgrade:
-  "Você pode fazer isso direto no painel! Clica no seu avatar (canto inferior esquerdo), depois em Plano e Faturamento. Ali você escolhe o novo plano e pronto!"
+Executar cancelamento das 3 assinaturas Asaas e ~20 Stripe dos workspaces já bloqueados/cancelados, e limpar os campos no banco.
 
-- Comprar pacote extra de leads:
-  "É simples! Clica no seu avatar, depois em Plano e Faturamento. Ali tem a opção de pacotes extras."
+### Step 4: Auto-resume de sessões travadas
 
-- Cancelar conta:
-  "Clica no seu avatar, depois Perfil e Segurança, rola até o final da página e clica em Excluir minha conta."
+Criar uma migration ou ajustar a lógica do cron para despausar automaticamente sessões com `is_paused = true` há mais de 7 dias e sem ticket de suporte humano aberto.
 
-- Problemas técnicos / bugs:
-  Use pausar_ia para transferir para suporte humano.
+### Step 5: Bloquear os 2 workspaces com past_due sem bloqueio
 
-- Cobrança indevida:
-  Use pausar_ia para transferir IMEDIATAMENTE para suporte humano.
-```
-
-### Passo 2 — Reforçar guardrails no código (ai-agent-chat)
-
-Adicionar ao bloco `GUARDRAILS` uma regra extra:
-```
-14. ESCALAÇÃO: Quando o lead pedir para falar com humano/pessoa/atendente, você DEVE usar a ferramenta pausar_ia. NUNCA responda com links de agendamento ou calendly — use SEMPRE a ferramenta.
-```
-
-### Passo 3 — Melhorar a Aria (support-chat)
-
-No `SYSTEM_PROMPT` da Aria, ajustar a regra sobre mudança de plano para ser mais direta:
-- Quando o usuário perguntar sobre upgrade, ela deve guiar: "Clique no seu avatar > Plano e Faturamento > escolha o novo plano"
-- Quando pedir humano, a escalação já funciona corretamente (abre ticket)
-
-### Passo 4 — Sanitizar Calendly do contexto
-
-No `ai-agent-chat`, antes de enviar a resposta, adicionar regex para remover qualquer link do Calendly da resposta da Iara caso esteja no output:
-```
-responseContent = responseContent.replace(/https?:\/\/calendly\.com\/[^\s)>\]]+/gi, '[link removido]')
-```
+Setar `blocked_at = now()` para Vantique e Cuidador360.
 
 ---
 
-## Resumo das Alterações
+### Checklist diário recomendado (para automatizar futuramente)
 
-| Arquivo | Mudança |
-|---------|---------|
-| DB: `ai_agents` (Iara) | Atualizar `knowledge_rules` com instruções de escalação + clientes existentes |
-| `ai-agent-chat/index.ts` | Adicionar guardrail #14 sobre escalação + sanitizar links Calendly |
-| `support-chat/index.ts` | Ajustar prompt da Aria para ser mais direta sobre upgrade de plano |
-
-Nenhuma tabela ou estrutura será alterada — são apenas ajustes de prompt e uma regex de segurança.
+1. Agentes ativos silenciosos há 24h+ (sem execução)
+2. Sessões pausadas há +48h sem ticket aberto
+3. Follow-ups presos em "pending" há +24h
+4. Workspaces past_due sem bloqueio
+5. Workspaces bloqueados/cancelados com subscription_id ainda preenchido
+6. Trials expirando nas próximas 48h
+7. Erros 500 em Edge Functions
+8. Instâncias Evolution desconectadas
+9. Tokens Meta/WABA próximos de expirar
+10. Pagamentos confirmados vs esperados
 
