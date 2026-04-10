@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     // Filter out group chats
     const individualChats = chats.filter((c: any) => {
       const jid = c.remoteJid || c.id || "";
-      return !jid.endsWith("@g.us");
+      return !jid.endsWith("@g.us") && jid !== "status@broadcast";
     });
 
     console.log(`[sync-whatsapp-messages] Found ${individualChats.length} individual chats`);
