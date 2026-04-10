@@ -130,12 +130,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update workspace
+    // Update workspace — clear subscription IDs to prevent orphaned billing
     await supabase
       .from("workspaces")
       .update({
         plan_type: "canceled",
         subscription_status: "canceled",
+        stripe_subscription_id: null,
+        asaas_subscription_id: null,
       })
       .eq("id", workspaceId);
 
