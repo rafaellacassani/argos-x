@@ -138,3 +138,6 @@ verify_jwt = false
 
 [functions.workspace-assistant]
 verify_jwt = false
+
+[functions.cleanup-orphan-subscriptions]
+verify_jwt = false
