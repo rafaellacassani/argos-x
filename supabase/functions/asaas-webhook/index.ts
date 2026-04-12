@@ -568,7 +568,7 @@ serve(async (req) => {
           );
         }
 
-        if (event === "PAYMENT_RECEIVED") {
+        if (event === "PAYMENT_RECEIVED" || event === "PAYMENT_CONFIRMED") {
           const planConfig = getPlanConfig(planName);
           
           // Preserve user_limit if it's higher than plan default (means extra users were purchased)

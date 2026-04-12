@@ -299,56 +299,13 @@ Deno.serve(async (req) => {
         console.error("[auto-block] Error blocking expired trials:", blockErr);
       } else if (expiredTrials?.length) {
         console.log(`[auto-block] Blocked ${expiredTrials.length} expired trial workspaces`);
-
-        // Auto-cancel subscriptions for newly blocked workspaces
-        for (const blocked of expiredTrials) {
-          try {
-            const { data: bws } = await supabase
-              .from("workspaces")
-              .select("stripe_customer_id, stripe_subscription_id, asaas_subscription_id")
-              .eq("id", blocked.id)
-              .single();
-
-            if (!bws) continue;
-
-            // Cancel Stripe subscriptions
-            const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-            if (stripeKey && bws.stripe_subscription_id) {
-              try {
-                const { default: Stripe } = await import("https://esm.sh/stripe@14.21.0?target=deno");
-                const stripe = new Stripe(stripeKey, { apiVersion: "2023-10-16" });
-                await stripe.subscriptions.cancel(bws.stripe_subscription_id);
-                console.log(`[auto-block] Stripe sub canceled: ${bws.stripe_subscription_id}`);
-              } catch (se) {
-                console.warn(`[auto-block] Stripe cancel failed for ${blocked.id}:`, se);
-              }
-            }
-
-            // Cancel Asaas subscriptions
-            const asaasKey = Deno.env.get("ASAAS_API_KEY");
-            if (asaasKey && bws.asaas_subscription_id) {
-              try {
-                await fetch(`https://api.asaas.com/v3/subscriptions/${bws.asaas_subscription_id}`, {
-                  method: "DELETE",
-                  headers: { "Content-Type": "application/json", access_token: asaasKey },
-                });
-                console.log(`[auto-block] Asaas sub canceled: ${bws.asaas_subscription_id}`);
-              } catch (ae) {
-                console.warn(`[auto-block] Asaas cancel failed for ${blocked.id}:`, ae);
-              }
-            }
-
-            // Clear subscription IDs from DB
-            if (bws.stripe_subscription_id || bws.asaas_subscription_id) {
-              await supabase
-                .from("workspaces")
-                .update({ stripe_subscription_id: null, asaas_subscription_id: null })
-                .eq("id", blocked.id);
-            }
-          } catch (cancelErr) {
-            console.error(`[auto-block] Cancel sub error for ${blocked.id}:`, cancelErr);
-          }
-        }
+        // NOTE: We intentionally do NOT cancel subscriptions here.
+        // The workspace is blocked (user can't access), but the subscription
+        // stays active in Asaas/Stripe so that when payment is confirmed,
+        // the webhook can automatically reactivate the workspace.
+        // This prevents the race condition where payment is still being
+        // processed (boleto/PIX can take 1-3 days) and the subscription
+        // gets canceled before it has a chance to be confirmed.
       }
     } catch (e) {
       console.error("[auto-block] Exception:", e);
