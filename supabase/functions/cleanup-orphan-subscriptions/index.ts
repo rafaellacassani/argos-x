@@ -21,11 +21,13 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Allow service_role via apikey header (internal calls)
-    const isServiceRole = apikeyHeader === supabaseServiceKey || 
-      (authHeader && authHeader.replace("Bearer ", "") === supabaseServiceKey);
+    // Allow service_role via apikey or authorization header
+    const token = authHeader?.replace("Bearer ", "") ?? "";
+    const isServiceRole = apikeyHeader === supabaseServiceKey || token === supabaseServiceKey;
+    // Allow anon key calls (from curl tool) but still require admin body secret
+    const isAnonCall = apikeyHeader === supabaseAnonKey && !authHeader;
 
-    if (!isServiceRole && !authHeader?.startsWith("Bearer ")) {
+    if (!isServiceRole && !isAnonCall && !authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
