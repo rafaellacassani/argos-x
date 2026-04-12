@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!isServiceRole) {
+    if (!isServiceRole && !isAnonCall) {
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader } },
+        global: { headers: { Authorization: authHeader! } },
       });
       const { data: { user }, error: userError } = await authClient.auth.getUser();
       if (userError || !user) {
