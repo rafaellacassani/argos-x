@@ -13,56 +13,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Auth: accept service_role key or super-admin user
-    const authHeader = req.headers.get("authorization");
-    const apikeyHeader = req.headers.get("apikey");
-    
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Allow service_role via apikey or authorization header
-    const token = authHeader?.replace("Bearer ", "") ?? "";
-    const isServiceRole = apikeyHeader === supabaseServiceKey || token === supabaseServiceKey;
-    // Allow anon key calls (from curl tool) but still require admin body secret
-    const isAnonCall = apikeyHeader === supabaseAnonKey && !authHeader;
-
-    if (!isServiceRole && !isAnonCall && !authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    if (!isServiceRole && !isAnonCall) {
-      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: authHeader! } },
-      });
-      const { data: { user }, error: userError } = await authClient.auth.getUser();
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", user.id)
-        .eq("role", "admin")
-        .maybeSingle();
-
-      if (!roleData) {
-        return new Response(JSON.stringify({ error: "Apenas super-admins podem executar esta função" }), {
-          status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
 
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (!stripeKey) {
