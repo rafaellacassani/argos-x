@@ -15,7 +15,17 @@ Deno.serve(async (req) => {
   try {
     // Auth: accept service_role key or super-admin user
     const authHeader = req.headers.get("authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    const apikeyHeader = req.headers.get("apikey");
+    
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    // Allow service_role via apikey header (internal calls)
+    const isServiceRole = apikeyHeader === supabaseServiceKey || 
+      (authHeader && authHeader.replace("Bearer ", "") === supabaseServiceKey);
+
+    if (!isServiceRole && !authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
