@@ -1,57 +1,70 @@
 
 
-# Enriquecer o Assistente de Workspace com Performance de IAs, Reuniões e Follow-ups
+# Diagnóstico e Correção: Follow-up Inteligente
 
-## Objetivo
-Adicionar dados de **execuções de agentes IA**, **reuniões agendadas**, **follow-ups enviados** e **alertas críticos** ao Assistente de Workspace — tanto no widget web quanto no WhatsApp.
+## Problemas Encontrados (dados reais do banco)
 
-## O que muda
+### 1. Campanhas ECX travadas como "running" para sempre
+- **Campanha `2697b5c8`**: Status "running", 710 contatos marcados, **0 contatos inseridos no banco**, 0 enviados. A campanha foi criada no browser mas o loop morreu antes de inserir os contatos. Como não existe mecanismo de recuperação, ela ficará "running" eternamente.
 
-### 1. `supabase/functions/workspace-assistant/index.ts` (widget web)
+### 2. Edge Function retornando erro genérico
+- **Campanha `e665d24c`**: 4 contatos com erro `"Edge Function returned a non-2xx status code"`. O erro real da função é engolido pelo `supabase.functions.invoke` — o frontend não consegue distinguir se foi erro de IA, de envio, ou timeout.
 
-Adicionar 4 novas consultas ao `Promise.all` existente (linha ~53):
+### 3. Execução 100% client-side (causa raiz principal)
+O loop inteiro de geração + envio roda no **browser do usuário**. Se fechar a aba, perder internet, ou o computador dormir, a campanha morre silenciosamente com status "running" e sem cleanup.
 
-- `agent_executions` — últimas 24h, agrupadas por agente (total, sucesso, erro, tokens)
-- `calendar_events` — eventos de hoje e próximos 7 dias
-- `followup_campaigns` — campanhas de follow-up inteligente recentes com contadores
-- `agent_followup_queue` — follow-ups automáticos de agentes (pendentes/enviados últimas 24h)
+### 4. Scan sem paginação pode dar timeout
+A query de scan carrega **TODAS** as `meta_conversations` ou `whatsapp_messages` de um workspace de uma vez. Com 1.500+ registros na ECX funciona, mas com workspaces maiores vai dar timeout na edge function.
 
-Enriquecer o `contextData` com:
+### 5. Sem detecção de campanhas abandonadas
+Não existe lógica para detectar que uma campanha está "running" há horas sem progresso e marcá-la como abandonada.
+
+---
+
+## Plano de Correção
+
+### Correção 1: Melhorar tratamento de erros no hook (useFollowupCampaigns.ts)
+
+**O que muda**: Quando `supabase.functions.invoke` retorna erro, extrair a mensagem real do `data.error` ao invés do genérico do wrapper.
+
 ```
-ai_performance: { agent_name, total, success, errors, avg_latency_ms }
-calendar_today: [{ title, start_at, end_at, type, lead_name }]
-calendar_upcoming: [{ title, start_at }]
-followup_campaigns_recent: [{ name, status, sent, total, failed }]
-agent_followups_24h: { pending, sent }
+Antes: throw new Error(genData?.error || genError?.message || 'AI generation failed');
+Depois: extrair genError.context?.body se disponível, ou o response text
 ```
 
-Atualizar o system prompt para incluir instruções sobre como interpretar esses dados (ex: "Se perguntarem como foi o dia, inclua performance dos agentes, reuniões e follow-ups").
+### Correção 2: Adicionar auto-cleanup de campanhas "running" abandonadas (useFollowupCampaigns.ts)
 
-### 2. `supabase/functions/whatsapp-webhook/index.ts` (assistente WhatsApp)
+**O que muda**: Ao carregar campanhas, se alguma está "running" há mais de 30 minutos sem progresso (updated_at desatualizado), marcar automaticamente como "canceled" com nota "abandonada por inatividade".
 
-Mesmo enriquecimento no bloco do assistente (linhas ~999-1026):
+### Correção 3: Proteger contra falha na inserção de contatos (useFollowupCampaigns.ts)
 
-- Adicionar as mesmas 4 consultas ao `Promise.all`
-- Incluir os dados no objeto `ctx`
-- Atualizar o `sysPrompt` para mencionar as novas capacidades
+**O que muda**: Se a inserção de contatos falhar, reverter o status da campanha para "canceled" ao invés de deixar "running" sem contatos. Adicionar try/catch granular.
 
-### 3. System prompt aprimorado
+### Correção 4: Adicionar paginação na query de scan (followup-inteligente/index.ts)
 
-Adicionar ao prompt de ambos os endpoints:
+**O que muda**: As queries de `meta_conversations` e `whatsapp_messages` no action `scan` terão `.limit(5000)` para evitar timeouts, e a mensagem mais recente por contato será considerada (já funciona assim pelo ORDER DESC).
 
-- "Se perguntarem 'como foi o dia', forneça um resumo completo: leads novos, execuções de IA (taxa de sucesso), reuniões agendadas/realizadas, follow-ups enviados, e alertas críticos"
-- "ai_performance mostra as execuções dos agentes de IA nas últimas 24h — use para responder sobre desempenho das IAs"
-- "calendar_today e calendar_upcoming mostram reuniões — use para responder sobre agenda"
-- "Se houver erros de IA acima de 10%, destaque como alerta"
+### Correção 5: Melhorar robustez da execução contra erros intermitentes (useFollowupCampaigns.ts)
+
+**O que muda**: 
+- Adicionar retry automático (1x) quando o erro for timeout/rede
+- Se 5 erros consecutivos ocorrerem, pausar automaticamente a campanha com toast avisando o usuário
+- Logar o erro real no console para debugging
+
+### Correção 6: Adicionar validação de instância antes de iniciar (followup-inteligente/index.ts)
+
+**O que muda**: Na action `send`, se a instância WABA não for encontrada ou a Evolution API não responder, retornar erro claro ao invés de 500 genérico.
+
+---
 
 ## Arquivos modificados
-1. `supabase/functions/workspace-assistant/index.ts`
-2. `supabase/functions/whatsapp-webhook/index.ts`
+1. `src/hooks/useFollowupCampaigns.ts` — Correções 1, 2, 3 e 5
+2. `supabase/functions/followup-inteligente/index.ts` — Correções 4 e 6
 
 ## Resultado
-O usuário poderá perguntar (via web ou WhatsApp):
-- "Como foi o dia hoje?" → resumo completo com leads, IAs, reuniões, follow-ups
-- "A Iara está funcionando bem?" → taxa de sucesso, erros, latência
-- "Quantas reuniões agendadas?" → dados do calendário
-- "Quantos follow-ups foram enviados?" → volume de campanhas e automáticos
+- Campanhas não ficarão mais travadas como "running" eternamente
+- Erros reais serão visíveis no log de execução
+- Falhas intermitentes terão retry automático
+- 5 falhas consecutivas = pausa automática com aviso
+- Scan não vai dar timeout em workspaces grandes
 
