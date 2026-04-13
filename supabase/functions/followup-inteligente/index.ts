@@ -371,7 +371,8 @@ Deno.serve(async (req) => {
           .select("remote_jid, push_name, content, direction, timestamp")
           .eq("instance_name", instance_name)
           .eq("workspace_id", workspace_id)
-          .order("timestamp", { ascending: false });
+          .order("timestamp", { ascending: false })
+          .limit(5000);
 
         if (msgError) throw msgError;
 
@@ -582,7 +583,11 @@ RESPONDA APENAS com o texto da mensagem final pronta para envio. Sem explicaçõ
           .single();
 
         if (pageError || !page) {
-          return jsonResponse({ error: "Meta page not found" }, 404);
+          return jsonResponse({ error: `Meta page não encontrada (id: ${meta_page_id}). Verifique se a página está ativa.` }, 404);
+        }
+
+        if (!page.page_access_token) {
+          return jsonResponse({ error: "Token de acesso da página Meta expirado ou ausente. Reconecte a página." }, 400);
         }
 
         let graphUrl: string;
