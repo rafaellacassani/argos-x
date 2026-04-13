@@ -45,6 +45,11 @@ interface Agent {
   name: string;
 }
 
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
+
 export default function FollowupInteligenteTab() {
   const { workspaceId } = useWorkspace();
   const {
@@ -72,6 +77,9 @@ export default function FollowupInteligenteTab() {
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [audienceType, setAudienceType] = useState<"no_reply_from_lead" | "no_reply_from_us">("no_reply_from_lead");
   const [contactLimit, setContactLimit] = useState(50);
+
+
+  const isMasterWorkspace = !workspaceId || MASTER_WORKSPACE_IDS.has(workspaceId);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -143,6 +151,18 @@ export default function FollowupInteligenteTab() {
   const totalContacts = scannedContacts.length;
   const progressPercent = totalContacts > 0 ? ((sentCount + failedCount) / totalContacts) * 100 : 0;
   const recentCampaigns = campaigns.slice(0, 10);
+
+  if (!isMasterWorkspace) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-muted-foreground">
+        <Brain className="w-12 h-12 text-muted-foreground/50" />
+        <h2 className="text-lg font-semibold text-foreground">Follow-up Inteligente</h2>
+        <p className="text-sm text-center max-w-md">
+          Esta funcionalidade está em fase de testes e disponível apenas para workspaces selecionados.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
