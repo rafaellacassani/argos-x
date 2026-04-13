@@ -141,3 +141,6 @@ verify_jwt = false
 
 [functions.cleanup-orphan-subscriptions]
 verify_jwt = false
+
+[functions.calendly-api]
+verify_jwt = false
