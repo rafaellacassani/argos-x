@@ -86,7 +86,7 @@ interface Message {
   time: string;
   sent: boolean;
   read: boolean;
-  type: "text" | "image" | "audio" | "document" | "video";
+  type: "text" | "image" | "audio" | "document" | "video" | "contact";
   mediaUrl?: string;
   thumbnailBase64?: string;
   fileName?: string;
@@ -2048,7 +2048,7 @@ export default function Chats() {
               time: date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
               sent: msg.direction === "outbound",
               read: true,
-              type: (msg.message_type === "image" ? "image" : msg.message_type === "video" ? "video" : msg.message_type === "audio" ? "audio" : "text") as Message["type"],
+              type: (msg.message_type === "image" ? "image" : msg.message_type === "video" ? "video" : msg.message_type === "audio" ? "audio" : msg.message_type === "contact" ? "contact" : "text") as Message["type"],
               mediaUrl: msg.media_url || undefined,
             };
           });

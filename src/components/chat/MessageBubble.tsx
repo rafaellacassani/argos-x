@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Loader2, X, Mic, Reply, Smile, Copy, Trash2, Pencil, Forward, CheckSquare } from "lucide-react";
+import { Check, CheckCheck, Play, Pause, Download, ExternalLink, FileText, Image as ImageIcon, Video, Loader2, X, Mic, Reply, Smile, Copy, Trash2, Pencil, Forward, CheckSquare, User, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -18,7 +18,7 @@ export interface MessageBubbleProps {
   time: string;
   sent: boolean;
   read: boolean;
-  type: "text" | "image" | "audio" | "document" | "video";
+  type: "text" | "image" | "audio" | "document" | "video" | "contact";
   mediaUrl?: string;
   thumbnailBase64?: string;
   fileName?: string;
@@ -478,6 +478,48 @@ export function MessageBubble({
             <Download className="w-4 h-4 opacity-50" />
           </div>
         );
+
+      case "contact": {
+        // Parse contact card content (format: 📇 Name\n📱 Phone)
+        const contactBlocks = content.split("\n\n").filter(Boolean);
+        return (
+          <div className="space-y-2 min-w-[200px]">
+            {contactBlocks.map((block, idx) => {
+              const lines = block.split("\n");
+              const nameLine = lines.find(l => l.startsWith("📇"))?.replace("📇 ", "") || "Contato";
+              const phoneLine = lines.find(l => l.startsWith("📱"))?.replace("📱 ", "") || "";
+              return (
+                <div
+                  key={idx}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-xl",
+                    sent ? "bg-secondary-foreground/10" : "bg-muted/60"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                    sent ? "bg-secondary-foreground/20" : "bg-primary/15"
+                  )}>
+                    <User className={cn(
+                      "w-5 h-5",
+                      sent ? "text-secondary-foreground" : "text-primary"
+                    )} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{nameLine}</p>
+                    {phoneLine && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Phone className="w-3 h-3 opacity-60" />
+                        <p className="text-xs opacity-70">{phoneLine}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
 
       default:
         return (

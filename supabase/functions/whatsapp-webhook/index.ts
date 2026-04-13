@@ -815,6 +815,34 @@ app.post("/", async (c) => {
     } else if (data.message?.documentMessage) {
       mediaType = "document";
       mediaCaption = data.message.documentMessage.caption || null;
+    } else if (data.message?.contactMessage || data.message?.contactsArrayMessage) {
+      mediaType = "contact";
+      // Parse vCard contact(s)
+      const contacts: { displayName: string; vcard: string }[] = [];
+      if (data.message?.contactMessage) {
+        const c = data.message.contactMessage;
+        contacts.push({
+          displayName: c.displayName || "Contato",
+          vcard: c.vcard || "",
+        });
+      } else if (data.message?.contactsArrayMessage?.contacts) {
+        for (const c of data.message.contactsArrayMessage.contacts) {
+          contacts.push({
+            displayName: c.displayName || "Contato",
+            vcard: c.vcard || "",
+          });
+        }
+      }
+      // Extract phone numbers from vCards
+      const contactEntries = contacts.map((c) => {
+        const telMatch = c.vcard.match(/TEL[^:]*:([\d+\s-]+)/i);
+        const phone = telMatch ? telMatch[1].replace(/[\s-]/g, "") : "";
+        return { name: c.displayName, phone };
+      });
+      // Store as structured text for the UI
+      messageText = contactEntries
+        .map((c) => `📇 ${c.name}${c.phone ? `\n📱 ${c.phone}` : ""}`)
+        .join("\n\n");
     }
 
     if (mediaType) {
