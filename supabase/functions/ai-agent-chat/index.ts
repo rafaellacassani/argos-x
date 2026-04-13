@@ -1181,9 +1181,42 @@ serve(async (req) => {
         const agentCalendarConfig = (agent as any).calendar_config || calendarConfig?.calendar_config || {};
         const configuredReminders = agentCalendarConfig?.reminders || ["180", "30"];
         const generateMeetLink = agentCalendarConfig?.generate_meet_link !== false;
-        const calendarInstruction = enabledTools.includes("gerenciar_calendario")
-          ? "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados antes da reunião." + (generateMeetLink ? " Um link do Google Meet será gerado automaticamente e incluído nos lembretes." : "") + " Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos."
-          : "";
+
+        // Check if Calendly is available for this workspace
+        let calendlyInfo: { schedulingUrl: string; eventTypes: any[]; calendlyEmail: string } | null = null;
+        try {
+          const calendlyRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/calendly-api/ai-get-link`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+            body: JSON.stringify({ workspaceId: agent.workspace_id }),
+          });
+          const calendlyData = await calendlyRes.json();
+          if (calendlyData.schedulingUrl) {
+            calendlyInfo = calendlyData;
+            console.log(`[ai-agent-chat] 📅 Calendly available: ${calendlyData.calendlyEmail}`);
+          }
+        } catch (e) {
+          // Calendly not available, continue with regular calendar
+        }
+
+        let calendarInstruction = "";
+        if (enabledTools.includes("gerenciar_calendario")) {
+          if (calendlyInfo) {
+            // Calendly-powered calendar instruction
+            const eventTypesList = calendlyInfo.eventTypes.map((et: any) => `- ${et.name} (${et.duration}min): ${et.schedulingUrl}`).join("\n");
+            calendarInstruction = `\n\nGERENCIAMENTO DE CALENDÁRIO (CALENDLY): Você tem acesso ao Calendly para agendar reuniões. ` +
+              `PRIORIZE SEMPRE enviar o link de agendamento do Calendly para o lead, pois o Calendly já gerencia horários disponíveis, slots e limites automaticamente. ` +
+              `Link principal: ${calendlyInfo.schedulingUrl}\n` +
+              (eventTypesList ? `Tipos de evento disponíveis:\n${eventTypesList}\n` : "") +
+              `\nQuando o lead quiser agendar: envie o link do Calendly mais adequado ao tipo de reunião. ` +
+              `Use a tool gerenciar_calendario com action 'enviar_link_calendly' para registrar que enviou o link. ` +
+              `Você TAMBÉM pode usar action 'consultar' para verificar próximos agendamentos, e 'cancelar' para cancelar um evento. ` +
+              `Para criar eventos manualmente (sem Calendly), use action 'criar'. ` +
+              `Calcule data/hora ISO 8601 timezone America/Sao_Paulo (UTC-3). Data/hora atual: ${new Date().toISOString()}.`;
+          } else {
+            calendarInstruction = "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados antes da reunião." + (generateMeetLink ? " Um link do Google Meet será gerado automaticamente e incluído nos lembretes." : "") + " Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos.";
+          }
+        }
         const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + GUARDRAILS;
 
         const contextWindow = memory.context_window || agent.max_tokens || 50;
