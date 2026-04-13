@@ -1,51 +1,23 @@
 
 
-# Execução: Criar Lead de Teste via Graph API e Monitorar
+# Correção: Remover `form_name` da query Graph API no facebook-webhook
 
-## Situação atual confirmada no banco
-- **Zero eventos leadgen** nos logs do `facebook-webhook` (confirmado agora)
-- **1 lead meta-leadgen** antigo de 02/Abr (teste manual anterior) no workspace do Fellipe
-- Página `112720421335914` ativa, token salvo
+## Problema confirmado
+A Graph API v21.0 retorna erro 400 `"(#100) Tried accessing nonexisting field (form_name)"` na linha 793, bloqueando toda criação de leads via Meta Lead Ads.
 
-## O que vou executar (4 passos sequenciais)
+## 3 Mudanças (todas em `supabase/functions/facebook-webhook/index.ts`)
 
-### Passo 1: Listar formulários ativos
-```bash
-curl -s "https://graph.facebook.com/v21.0/112720421335914/leadgen_forms?access_token=TOKEN"
+### Mudança 1 — Linha 793: Remover `form_name` da query
 ```
-Se falhar por falta de `pages_manage_ads`, usarei a alternativa: buscar forms via `ads_management` ou simular o payload diretamente.
-
-### Passo 2: Criar lead de teste
-Se o Passo 1 retornar form_ids:
-```bash
-curl -s -X POST "https://graph.facebook.com/v21.0/{form_id}/test_leads?access_token=TOKEN"
-```
-Isso faz a Meta enviar um evento `leadgen` real para o webhook configurado.
-
-**Alternativa** (se não conseguir listar forms): Simular o payload `leadgen` chamando diretamente o endpoint `facebook-webhook` com o formato exato que a Meta enviaria, para testar se o **processamento** funciona.
-
-### Passo 3: Monitorar logs do webhook
-Aguardar 30 segundos e verificar logs de `facebook-webhook` buscando por `leadgen` ou `112720421335914`.
-
-### Passo 4: Verificar banco
-```sql
-SELECT * FROM leads 
-WHERE workspace_id = 'bc7bfbe5-07cc-409c-9a85-5ce46f94b9b3' 
-AND source = 'meta-leadgen' 
-ORDER BY created_at DESC LIMIT 5
+fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id
 ```
 
-## O que o resultado nos dirá
+### Mudança 2 — Após linha 801: Buscar form_name separadamente
+Adicionar bloco que faz `GET /{form_id}?fields=name` em try/catch. Se falhar, `formName = null` sem bloquear o fluxo.
 
-| Resultado | Significado |
-|-----------|------------|
-| Test lead criado + evento chega nos logs + lead no banco | Sistema funciona; problema é outro CRM interceptando na Meta |
-| Test lead criado + evento NAO chega | Meta não entrega ao nosso App (config do App Dashboard) |
-| Simulação direta do payload funciona | Processamento OK; problema é 100% entrega da Meta |
-| Nenhum form encontrado | Fellipe não tem formulários ativos de Lead Ads |
+### Mudança 3 — Linhas 886 e 939: Substituir `leadData.form_name` por `formName`
+Usar a variável do fallback nas referências de notas e histórico.
 
-## Escopo
-- Nenhum código alterado
-- Apenas chamadas de leitura/teste via Graph API e simulação de webhook
-- Restrito ao workspace `bc7bfbe5-07cc-409c-9a85-5ce46f94b9b3`
+### Deploy
+Deploy automático da edge function `facebook-webhook` após as mudanças.
 
