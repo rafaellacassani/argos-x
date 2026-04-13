@@ -78,18 +78,8 @@ export default function FollowupInteligenteTab() {
   const [audienceType, setAudienceType] = useState<"no_reply_from_lead" | "no_reply_from_us">("no_reply_from_lead");
   const [contactLimit, setContactLimit] = useState(50);
 
-  // Only master workspaces can use this feature
-  if (workspaceId && !MASTER_WORKSPACE_IDS.has(workspaceId)) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-muted-foreground">
-        <Brain className="w-12 h-12 text-muted-foreground/50" />
-        <h2 className="text-lg font-semibold text-foreground">Follow-up Inteligente</h2>
-        <p className="text-sm text-center max-w-md">
-          Esta funcionalidade está em fase de testes e disponível apenas para workspaces selecionados.
-        </p>
-      </div>
-    );
-  }
+
+  const isMasterWorkspace = !workspaceId || MASTER_WORKSPACE_IDS.has(workspaceId);
 
   useEffect(() => {
     if (!workspaceId) return;
