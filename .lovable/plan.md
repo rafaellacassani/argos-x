@@ -1,37 +1,50 @@
 
 
-# Plano: Limpeza de Assinaturas Fantasmas no Stripe
+## Problema Identificado
 
-## Diagnóstico Confirmado
+A IA do Follow-up Inteligente está enviando placeholders como `[Nome]` no chat porque:
 
-**22 workspaces bloqueados/cancelados** ainda possuem `stripe_customer_id` no banco. O `stripe_subscription_id` já foi limpo (NULL), mas as assinaturas **continuam ativas no Stripe** porque ninguém cancelou no lado do provedor — apenas removeu a referência do banco.
+1. **O system prompt não menciona o nome do contato** — a IA recebe o histórico mas não sabe o nome real da pessoa, então inventa um placeholder `[Nome]`
+2. **As regras de validação não detectam placeholders** — `FOLLOWUP_LEAK_RULES` não tem regex para `[Nome]`, `[nome]`, `{nome}`, `#nome#`, etc.
+3. **O prompt não proíbe explicitamente o uso de placeholders**
 
-**7 workspaces Asaas ativos** com assinaturas válidas — esses estão corretos (clientes pagantes). Os cancelados do Asaas já tiveram o `asaas_subscription_id` limpo.
+## Correções (todas no arquivo `supabase/functions/followup-inteligente/index.ts`)
 
-## O que será feito
+### 1. Adicionar regras de detecção de placeholders
 
-### 1. Edge Function de limpeza em massa (novo)
+Novas regras em `FOLLOWUP_LEAK_RULES`:
 
-Criar `cleanup-orphan-subscriptions` — uma Edge Function administrativa que:
-- Busca todos os workspaces com `plan_type IN ('blocked', 'canceled')` que ainda têm `stripe_customer_id`
-- Para cada um, usa a API do Stripe para listar **todas** as subscriptions do customer (`active`, `past_due`, `trialing`)
-- Cancela cada subscription encontrada
-- Limpa o `stripe_customer_id` do workspace após cancelar
-- Retorna um relatório detalhado de quantas foram canceladas
+```
+/\[nome\]/i → "placeholder [Nome] detectado"
+/\[name\]/i → "placeholder [Name] detectado"  
+/\{nome\}/i → "placeholder {nome} detectado"
+/#nome#/i → "placeholder #nome# detectado"
+/\[.*?(nome|name|telefone|email|empresa).*?\]/i → "placeholder genérico detectado"
+```
 
-Protegida por verificação de role `admin`.
+### 2. Passar o nome real do contato no prompt
 
-### 2. Execução imediata
+Na action `generate` (linha ~458), buscar o nome do contato e incluí-lo no system prompt:
 
-Após deploy, chamar a função para cancelar as ~20 assinaturas fantasmas de uma vez.
+- Usar `contact_name` do body da request (já disponível no scan)
+- Se não houver nome: instruir a IA explicitamente "O contato NÃO tem nome registrado. NÃO use placeholders como [Nome] — inicie a conversa sem usar o nome."
+- Se houver nome: "O nome do contato é: João. Use naturalmente."
 
-### Resultado esperado
+### 3. Atualizar o hook para enviar o nome
 
-- Zero cobranças do Stripe para clientes bloqueados/cancelados
-- Relatório completo com nome, email e subscriptions canceladas
-- `stripe_customer_id` limpo para evitar reincidência
+No `useFollowupCampaigns.ts`, passar `contact_name: contact.name` no body da chamada `generate`.
 
-### Nota sobre Asaas
+### 4. Reforçar no system prompt
 
-Os workspaces cancelados no Asaas já tiveram `asaas_subscription_id` limpo na correção anterior. Se houver cobranças ativas no Asaas para esses clientes, será necessário cancelar manualmente no painel do Asaas (a API do Asaas não permite listar subscriptions por customer como o Stripe).
+Adicionar instrução explícita:
+> "NUNCA use placeholders como [Nome], [nome], {nome}, #nome# ou qualquer variável entre colchetes/chaves. Se não souber o nome, NÃO use o nome — fale de forma genérica."
+
+### Arquivos modificados
+1. `supabase/functions/followup-inteligente/index.ts` — regras de validação + system prompt + receber nome
+2. `src/hooks/useFollowupCampaigns.ts` — enviar `contact_name` na chamada generate
+
+### Resultado
+- Placeholders como `[Nome]` serão bloqueados automaticamente (não serão enviados)
+- A IA saberá o nome real ou saberá que não tem nome e agirá adequadamente
+- Aplica a **todos os workspaces**, não apenas master
 
