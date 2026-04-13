@@ -790,7 +790,7 @@ async function processLeadgenEvent(pageId: string, eventValue: any) {
 
   try {
     // Fetch lead data from Graph API
-    const leadUrl = `https://graph.facebook.com/v21.0/${leadgenId}?fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id,form_name&access_token=${metaPage.page_access_token}`;
+    const leadUrl = `https://graph.facebook.com/v21.0/${leadgenId}?fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id&access_token=${metaPage.page_access_token}`;
     const leadRes = await fetch(leadUrl);
     if (!leadRes.ok) {
       const errText = await leadRes.text();
@@ -800,6 +800,20 @@ async function processLeadgenEvent(pageId: string, eventValue: any) {
 
     const leadData = await leadRes.json();
     const fieldData = leadData.field_data || [];
+
+    // Fetch form name separately (optional, non-blocking)
+    let formName: string | null = null;
+    if (leadData.form_id) {
+      try {
+        const formRes = await fetch(`https://graph.facebook.com/v21.0/${leadData.form_id}?fields=name&access_token=${metaPage.page_access_token}`);
+        if (formRes.ok) {
+          const formData = await formRes.json();
+          formName = formData.name || null;
+        }
+      } catch (e) {
+        console.warn("[Facebook Webhook] Could not fetch form name:", e);
+      }
+    }
 
     // Extract common fields
     let name = "";
@@ -883,7 +897,7 @@ async function processLeadgenEvent(pageId: string, eventValue: any) {
         notes: [
           leadData.campaign_name ? `Campanha: ${leadData.campaign_name}` : null,
           leadData.ad_name ? `Anúncio: ${leadData.ad_name}` : null,
-          leadData.form_name ? `Formulário: ${leadData.form_name}` : null,
+          formName ? `Formulário: ${formName}` : null,
           fieldData.map((f: any) => `${f.name}: ${f.values?.[0] || ""}`).join("\n"),
         ].filter(Boolean).join("\n"),
       })
@@ -936,7 +950,7 @@ async function processLeadgenEvent(pageId: string, eventValue: any) {
         source: "meta-leadgen",
         campaign_name: leadData.campaign_name || null,
         ad_name: leadData.ad_name || null,
-        form_name: leadData.form_name || null,
+        form_name: formName,
       },
     });
 
