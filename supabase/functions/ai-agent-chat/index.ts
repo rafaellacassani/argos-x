@@ -366,12 +366,13 @@ function getToolDefinitions(enabledTools: string[]) {
         parameters: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["criar", "reagendar", "cancelar", "consultar"], description: "Ação a executar no calendário" },
+            action: { type: "string", enum: ["criar", "reagendar", "cancelar", "consultar", "enviar_link_calendly"], description: "Ação a executar no calendário. Use 'enviar_link_calendly' quando Calendly estiver disponível e quiser enviar o link de agendamento." },
             title: { type: "string", description: "Título do evento (ex: 'Demonstração Argos X - João')" },
             start_at: { type: "string", description: "Data e hora de início no formato ISO 8601 (ex: 2026-03-05T14:00:00-03:00)" },
             end_at: { type: "string", description: "Data e hora de término no formato ISO 8601. Se não informado, será 15 minutos após o início." },
             description: { type: "string", description: "Descrição ou notas do evento" },
             event_id: { type: "string", description: "ID do evento existente (necessário para reagendar ou cancelar)" },
+            calendly_link: { type: "string", description: "Link do Calendly enviado ao lead (usado com action enviar_link_calendly)" },
           },
           required: ["action"]
         }
