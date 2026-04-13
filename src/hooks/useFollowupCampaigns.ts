@@ -255,8 +255,13 @@ export function useFollowupCampaigns() {
 
         } catch (err: any) {
           const errorMsg = err.message || 'Unknown error';
-          const isSendError = errorMsg.includes('Send failed') || errorMsg.includes('Evolution API') || errorMsg.includes('Graph API');
-          
+          const isSafetyBlock = /bloqueada por segurança|unsafe_followup_message/i.test(errorMsg);
+          const isSendError = !isSafetyBlock && (
+            errorMsg.includes('Send failed') ||
+            errorMsg.includes('Evolution API') ||
+            errorMsg.includes('Graph API')
+          );
+
           if (isSendError) {
             failedCount++;
             console.error(`[followup] Failed for ${contact.phone}:`, errorMsg);
