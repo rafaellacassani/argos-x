@@ -294,6 +294,7 @@ export function useCalendar() {
     try {
       const data = await callSyncFunction("/pull", "POST", {
         userId: user.id,
+        workspaceId,
         daysAhead: 60,
         daysBehind: 90,
       });
