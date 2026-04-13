@@ -18,7 +18,7 @@ export interface MessageBubbleProps {
   time: string;
   sent: boolean;
   read: boolean;
-  type: "text" | "image" | "audio" | "document" | "video";
+  type: "text" | "image" | "audio" | "document" | "video" | "contact";
   mediaUrl?: string;
   thumbnailBase64?: string;
   fileName?: string;
