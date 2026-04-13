@@ -568,6 +568,89 @@ export default function CalendarPage() {
                 Conectar Google Calendar
               </Button>
             )}
+            {/* Calendly Connection */}
+            {calendlyAllowed && (
+              calendlyConnected ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-cyan-600 border-cyan-200 bg-cyan-50 hover:bg-cyan-100 dark:text-cyan-400 dark:border-cyan-800 dark:bg-cyan-950 dark:hover:bg-cyan-900">
+                      {calendlySyncing ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Link2 className="w-3.5 h-3.5" />
+                      )}
+                      Calendly
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {calendlyEmail && (
+                      <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+                        {calendlyEmail}
+                      </DropdownMenuItem>
+                    )}
+                    {schedulingUrl && (
+                      <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(schedulingUrl); toast({ title: "Link copiado!" }); }}>
+                        <Link2 className="w-4 h-4 mr-2" />
+                        Copiar link de agendamento
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={async () => { setCalendlySyncing(true); await syncCalendlyEvents(); setCalendlySyncing(false); }}>
+                      <RefreshCw className={cn("w-4 h-4 mr-2", calendlySyncing && "animate-spin")} />
+                      Sincronizar eventos
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={disconnectCalendly} className="text-destructive">
+                      <Unlink className="w-4 h-4 mr-2" />
+                      Desconectar Calendly
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <Popover open={showCalendlyTokenInput} onOpenChange={setShowCalendlyTokenInput}>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-xs gap-1.5 text-muted-foreground">
+                      <Link2 className="w-3.5 h-3.5" />
+                      Conectar Calendly
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-4" align="end">
+                    <div className="space-y-3">
+                      <div>
+                        <h4 className="font-medium text-sm mb-1">Conectar Calendly</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Cole seu Personal Access Token do Calendly.{" "}
+                          <a href="https://calendly.com/integrations/api_webhooks" target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                            Gerar token →
+                          </a>
+                        </p>
+                      </div>
+                      <Input
+                        type="password"
+                        placeholder="eyJhbGciOi..."
+                        value={calendlyToken}
+                        onChange={(e) => setCalendlyToken(e.target.value)}
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={!calendlyToken || calendlyConnecting}
+                        onClick={async () => {
+                          const success = await connectCalendly(calendlyToken);
+                          if (success) {
+                            setShowCalendlyTokenInput(false);
+                            setCalendlyToken("");
+                            // Refresh events
+                            fetchEvents(currentDate.getFullYear(), currentDate.getMonth());
+                          }
+                        }}
+                      >
+                        {calendlyConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Key className="w-4 h-4 mr-2" />}
+                        {calendlyConnecting ? "Conectando..." : "Conectar"}
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )
+            )}
             <div className="flex rounded-lg border border-border overflow-hidden">
               {(["day", "week", "month"] as const).map(v => (
                 <Button
