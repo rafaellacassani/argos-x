@@ -436,12 +436,12 @@ Deno.serve(async (req) => {
           content: message.content || "",
           timestamp: message.timestamp,
         }));
-      } else if (instance_type === "evolution") {
+      } else if (instance_type === "evolution" && instance_name) {
         const jid = contact_phone.includes("@") ? contact_phone : `${contact_phone}@s.whatsapp.net`;
         const { data: msgs } = await supabase
           .from("whatsapp_messages")
           .select("content, direction, timestamp")
-          .eq("instance_name", instanceName)
+          .eq("instance_name", instance_name)
           .eq("remote_jid", jid)
           .eq("workspace_id", workspace_id)
           .order("timestamp", { ascending: true })
