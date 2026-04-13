@@ -1648,6 +1648,15 @@ serve(async (req) => {
                 break;
               }
 
+              // Handle enviar_link_calendly action - just log and let AI respond naturally
+              if (action === "enviar_link_calendly") {
+                const calendlyLink = toolArgs.calendly_link || "";
+                console.log(`[ai-agent-chat] 📅 Calendly link sent to lead: ${calendlyLink}`);
+                // Log this as an internal note for tracking
+                internalNotes += `\n\n[CALENDLY: Link de agendamento enviado ao lead: ${calendlyLink}]`;
+                break;
+              }
+
               if (action === "criar") {
                 const startAt = toolArgs.start_at;
                 if (!startAt) { console.error("[ai-agent-chat] ❌ Calendar: missing start_at"); break; }
