@@ -137,8 +137,22 @@ export default function CalendarPage() {
     pullFromGoogle,
   } = useCalendar();
   const { agents } = useAIAgents();
+  const {
+    calendlyConnected,
+    calendlyEmail,
+    schedulingUrl,
+    calendlyAllowed,
+    checkingCalendly,
+    connecting: calendlyConnecting,
+    connectCalendly,
+    disconnectCalendly,
+    syncCalendlyEvents,
+  } = useCalendly();
 
   const [syncing, setSyncing] = useState(false);
+  const [showCalendlyTokenInput, setShowCalendlyTokenInput] = useState(false);
+  const [calendlyToken, setCalendlyToken] = useState("");
+  const [calendlySyncing, setCalendlySyncing] = useState(false);
 
   const handleManualSync = async () => {
     if (syncing) return;
