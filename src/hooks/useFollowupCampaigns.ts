@@ -194,6 +194,7 @@ export function useFollowupCampaigns() {
               agent_id: agentId,
               context_prompt: contextPrompt,
               contact_phone: contact.phone,
+              contact_name: contact.name || null,
               sender_id: contact.sender_id,
               instance_type: instanceType,
               instance_name: instanceName,
