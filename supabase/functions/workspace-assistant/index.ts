@@ -49,6 +49,8 @@ serve(async (req) => {
     const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const hours24Ago = new Date(now.getTime() - 24 * 3600000).toISOString();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    const week7 = new Date(now.getTime() + 7 * 86400000).toISOString();
 
     const [
       leadsTotal,
@@ -64,6 +66,12 @@ serve(async (req) => {
       tags,
       recentMessages,
       humanQueue,
+      agentExecs,
+      calendarToday,
+      calendarUpcoming,
+      followupCampaigns,
+      agentFollowupsPending,
+      agentFollowupsSent,
     ] = await Promise.all([
       adminClient.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", wsId),
       adminClient.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).gte("created_at", weekAgo),
@@ -76,9 +84,20 @@ serve(async (req) => {
       adminClient.from("workspaces").select("name, plan, status, lead_limit, extra_leads, whatsapp_limit, user_limit, subscription_status").eq("id", wsId).single(),
       adminClient.from("workspace_members").select("user_id, role, accepted_at, user_profile:user_profiles(full_name, email)").eq("workspace_id", wsId),
       adminClient.from("lead_tags").select("id, name, color").eq("workspace_id", wsId),
-      // Always fetch recent messages — critical for "unanswered" questions
       adminClient.from("messages").select("id, lead_id, content, sender, created_at, lead:leads(name, phone)").eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200),
       adminClient.from("human_support_queue").select("id, lead_id, reason, status, created_at, lead:leads(name, phone)").eq("workspace_id", wsId).eq("status", "pending").order("created_at", { ascending: false }).limit(20),
+      // NEW: Agent executions last 24h
+      adminClient.from("agent_executions").select("agent_id, status, tokens_used, latency_ms, error_message").eq("workspace_id", wsId).gte("executed_at", hours24Ago),
+      // NEW: Calendar events today
+      adminClient.from("calendar_events").select("title, start_at, end_at, type, lead_id, lead:leads(name)").eq("workspace_id", wsId).gte("start_at", todayStart).lt("start_at", todayEnd).order("start_at"),
+      // NEW: Calendar events next 7 days (excluding today)
+      adminClient.from("calendar_events").select("title, start_at, type").eq("workspace_id", wsId).gte("start_at", todayEnd).lt("start_at", week7).order("start_at").limit(20),
+      // NEW: Followup campaigns recent
+      adminClient.from("followup_campaigns").select("id, status, total_contacts, sent_count, skipped_count, failed_count, created_at, agent:ai_agents(name)").eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(10),
+      // NEW: Agent followup queue pending
+      adminClient.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).eq("status", "pending"),
+      // NEW: Agent followup queue sent last 24h
+      adminClient.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).eq("status", "sent").gte("executed_at", hours24Ago),
     ]);
 
     // Build stage map
