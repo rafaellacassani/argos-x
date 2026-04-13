@@ -318,7 +318,7 @@ app.post("/pull", async (c) => {
       const allDay = !gEvent.start?.dateTime;
 
       rowsToInsert.push({
-        workspace_id: tokenRow.workspace_id,
+        workspace_id: activeWorkspaceId || tokenRow.workspace_id,
         user_id: userId,
         title: gEvent.summary || "(Sem título)",
         description: gEvent.description || null,
