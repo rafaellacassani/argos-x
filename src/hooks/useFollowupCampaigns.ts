@@ -40,6 +40,33 @@ export interface FollowupContactResult {
   sent_at: string | null;
 }
 
+// Extract real error message from supabase.functions.invoke errors
+function extractErrorMessage(error: any, data: any): string {
+  // If data has an error field, use it
+  if (data?.error) return typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+  
+  // Try to extract from FunctionsHttpError context
+  if (error?.context?.body) {
+    try {
+      const body = typeof error.context.body === 'string' ? JSON.parse(error.context.body) : error.context.body;
+      if (body?.error) return body.error;
+    } catch { /* ignore */ }
+    if (typeof error.context.body === 'string') return error.context.body.substring(0, 500);
+  }
+  
+  // Fallback to error message
+  if (error?.message) return error.message;
+  return 'Unknown error';
+}
+
+// Check if error is a network/timeout issue worth retrying
+function isRetryableError(errorMsg: string): boolean {
+  return /timeout|network|fetch|ECONNRESET|socket|aborted|502|503|504/i.test(errorMsg);
+}
+
+const ABANDONED_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CONSECUTIVE_FAILURES = 5;
+
 export function useFollowupCampaigns() {
   const { workspaceId } = useWorkspace();
   const [campaigns, setCampaigns] = useState<FollowupCampaign[]>([]);
@@ -52,6 +79,31 @@ export function useFollowupCampaigns() {
   const pausedRef = useRef(false);
   const canceledRef = useRef(false);
 
+  // Auto-cleanup abandoned campaigns
+  const cleanupAbandonedCampaigns = useCallback(async (loadedCampaigns: FollowupCampaign[]) => {
+    const now = Date.now();
+    const abandoned = loadedCampaigns.filter(
+      (c) => c.status === 'running' && (now - new Date(c.updated_at).getTime()) > ABANDONED_THRESHOLD_MS
+    );
+
+    for (const campaign of abandoned) {
+      console.warn(`[followup] Auto-canceling abandoned campaign ${campaign.id} (last updated: ${campaign.updated_at})`);
+      await supabase
+        .from('followup_campaigns')
+        .update({
+          status: 'canceled',
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq('id', campaign.id);
+    }
+
+    if (abandoned.length > 0) {
+      toast.info(`${abandoned.length} campanha(s) abandonada(s) foram canceladas automaticamente`);
+    }
+
+    return abandoned.length;
+  }, []);
+
   const fetchCampaigns = useCallback(async () => {
     if (!workspaceId) return;
     setLoading(true);
@@ -62,13 +114,28 @@ export function useFollowupCampaigns() {
         .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setCampaigns((data || []) as unknown as FollowupCampaign[]);
+      const loaded = (data || []) as unknown as FollowupCampaign[];
+      
+      // Auto-cleanup abandoned campaigns
+      const cleanedCount = await cleanupAbandonedCampaigns(loaded);
+      
+      if (cleanedCount > 0) {
+        // Re-fetch after cleanup
+        const { data: refreshed } = await supabase
+          .from('followup_campaigns')
+          .select('*')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false });
+        setCampaigns((refreshed || []) as unknown as FollowupCampaign[]);
+      } else {
+        setCampaigns(loaded);
+      }
     } catch (err) {
       console.error('Error fetching followup campaigns:', err);
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, cleanupAbandonedCampaigns]);
 
   useEffect(() => {
     fetchCampaigns();
@@ -107,7 +174,8 @@ export function useFollowupCampaigns() {
           audience_type: audienceType,
         },
       });
-      if (error) throw error;
+      const errMsg = extractErrorMessage(error, data);
+      if (error && !data?.contacts) throw new Error(errMsg);
       if (data?.error) throw new Error(data.error);
       setScannedContacts(data.contacts || []);
       toast.success(`${data.total} contatos sem resposta encontrados`);
@@ -118,6 +186,22 @@ export function useFollowupCampaigns() {
       setScanning(false);
     }
   }, [workspaceId]);
+
+  // Invoke edge function with 1x retry for retryable errors
+  const invokeWithRetry = useCallback(async (body: Record<string, any>): Promise<{ data: any; error: any }> => {
+    const result = await supabase.functions.invoke('followup-inteligente', { body });
+    
+    if (result.error && !result.data) {
+      const errMsg = extractErrorMessage(result.error, result.data);
+      if (isRetryableError(errMsg)) {
+        console.warn(`[followup] Retryable error, retrying in 2s: ${errMsg}`);
+        await new Promise((r) => setTimeout(r, 2000));
+        return supabase.functions.invoke('followup-inteligente', { body });
+      }
+    }
+    
+    return result;
+  }, []);
 
   const startFollowup = useCallback(async (
     instanceType: string,
@@ -133,6 +217,8 @@ export function useFollowupCampaigns() {
     canceledRef.current = false;
     setExecuting(true);
     setExecutionLog([]);
+
+    let campaignId: string | null = null;
 
     try {
       // Create campaign record
@@ -152,10 +238,10 @@ export function useFollowupCampaigns() {
         .single();
 
       if (createError) throw createError;
-      const campaignId = (campaign as any).id;
+      campaignId = (campaign as any).id;
       setCurrentCampaignId(campaignId);
 
-      // Insert all contacts
+      // Insert all contacts — wrapped in try/catch to revert campaign on failure
       const contactRows = contacts.map((c) => ({
         campaign_id: campaignId,
         workspace_id: workspaceId,
@@ -169,11 +255,20 @@ export function useFollowupCampaigns() {
       const { error: insertErr } = await supabase
         .from('followup_campaign_contacts')
         .insert(contactRows as any);
-      if (insertErr) throw insertErr;
+      
+      if (insertErr) {
+        console.error('[followup] Failed to insert contacts, reverting campaign:', insertErr);
+        await supabase
+          .from('followup_campaigns')
+          .update({ status: 'canceled', updated_at: new Date().toISOString() } as any)
+          .eq('id', campaignId);
+        throw new Error(`Erro ao inserir contatos: ${insertErr.message}`);
+      }
 
       let sentCount = 0;
       let skippedCount = 0;
       let failedCount = 0;
+      let consecutiveFailures = 0;
 
       for (let i = 0; i < contacts.length; i++) {
         if (canceledRef.current) break;
@@ -187,47 +282,46 @@ export function useFollowupCampaigns() {
         const contact = contacts[i];
 
         try {
-          // Generate personalized message
-          const { data: genData, error: genError } = await supabase.functions.invoke('followup-inteligente', {
-            body: {
-              action: 'generate',
-              agent_id: agentId,
-              context_prompt: contextPrompt,
-              contact_phone: contact.phone,
-              contact_name: contact.name || null,
-              sender_id: contact.sender_id,
-              instance_type: instanceType,
-              instance_name: instanceName,
-              meta_page_id: metaPageId,
-              workspace_id: workspaceId,
-            },
+          // Generate personalized message (with retry)
+          const { data: genData, error: genError } = await invokeWithRetry({
+            action: 'generate',
+            agent_id: agentId,
+            context_prompt: contextPrompt,
+            contact_phone: contact.phone,
+            contact_name: contact.name || null,
+            sender_id: contact.sender_id,
+            instance_type: instanceType,
+            instance_name: instanceName,
+            meta_page_id: metaPageId,
+            workspace_id: workspaceId,
           });
 
-          if (genError || genData?.error) {
-            throw new Error(genData?.error || genError?.message || 'AI generation failed');
+          const genErrMsg = extractErrorMessage(genError, genData);
+          if ((genError && !genData?.message) || genData?.error) {
+            throw new Error(genData?.error || genErrMsg);
           }
 
           const generatedMessage = genData.message;
 
-          // Send message
-          const { data: sendData, error: sendError } = await supabase.functions.invoke('followup-inteligente', {
-            body: {
-              action: 'send',
-              instance_type: instanceType,
-              instance_name: instanceName,
-              meta_page_id: metaPageId,
-              contact_phone: contact.phone,
-              sender_id: contact.sender_id,
-              message: generatedMessage,
-              workspace_id: workspaceId,
-            },
+          // Send message (with retry)
+          const { data: sendData, error: sendError } = await invokeWithRetry({
+            action: 'send',
+            instance_type: instanceType,
+            instance_name: instanceName,
+            meta_page_id: metaPageId,
+            contact_phone: contact.phone,
+            sender_id: contact.sender_id,
+            message: generatedMessage,
+            workspace_id: workspaceId,
           });
 
-          if (sendError || sendData?.error) {
-            throw new Error(sendData?.error || sendError?.message || 'Send failed');
+          const sendErrMsg = extractErrorMessage(sendError, sendData);
+          if ((sendError && !sendData?.success) || sendData?.error) {
+            throw new Error(sendData?.error || sendErrMsg);
           }
 
           sentCount++;
+          consecutiveFailures = 0; // Reset on success
 
           // Update contact record
           await supabase
@@ -242,7 +336,7 @@ export function useFollowupCampaigns() {
 
           const logEntry: FollowupContactResult = {
             id: `${i}`,
-            campaign_id: campaignId,
+            campaign_id: campaignId!,
             contact_phone: contact.phone,
             contact_name: contact.name,
             sender_id: contact.sender_id || null,
@@ -255,7 +349,10 @@ export function useFollowupCampaigns() {
           setExecutionLog((prev) => [...prev, logEntry]);
 
         } catch (err: any) {
+          consecutiveFailures++;
           const errorMsg = err.message || 'Unknown error';
+          console.error(`[followup] Error for ${contact.phone} (consecutive: ${consecutiveFailures}):`, errorMsg);
+
           const isSafetyBlock = /bloqueada por segurança|unsafe_followup_message/i.test(errorMsg);
           const isSendError = !isSafetyBlock && (
             errorMsg.includes('Send failed') ||
@@ -263,58 +360,43 @@ export function useFollowupCampaigns() {
             errorMsg.includes('Graph API')
           );
 
+          const status = isSendError ? 'failed' : 'skipped';
           if (isSendError) {
             failedCount++;
-            console.error(`[followup] Failed for ${contact.phone}:`, errorMsg);
-
-            await supabase
-              .from('followup_campaign_contacts')
-              .update({
-                status: 'failed',
-                skip_reason: errorMsg.substring(0, 500),
-              } as any)
-              .eq('campaign_id', campaignId)
-              .eq('contact_phone', contact.phone);
-
-            const logEntry: FollowupContactResult = {
-              id: `${i}`,
-              campaign_id: campaignId,
-              contact_phone: contact.phone,
-              contact_name: contact.name,
-              sender_id: contact.sender_id || null,
-              last_message_preview: contact.last_message,
-              message_sent: null,
-              status: 'failed',
-              skip_reason: errorMsg,
-              sent_at: null,
-            };
-            setExecutionLog((prev) => [...prev, logEntry]);
           } else {
             skippedCount++;
-            console.warn(`[followup] Skipped ${contact.phone}:`, errorMsg);
+          }
 
-            await supabase
-              .from('followup_campaign_contacts')
-              .update({
-                status: 'skipped',
-                skip_reason: errorMsg.substring(0, 500),
-              } as any)
-              .eq('campaign_id', campaignId)
-              .eq('contact_phone', contact.phone);
+          await supabase
+            .from('followup_campaign_contacts')
+            .update({
+              status,
+              skip_reason: errorMsg.substring(0, 500),
+            } as any)
+            .eq('campaign_id', campaignId)
+            .eq('contact_phone', contact.phone);
 
-            const logEntry: FollowupContactResult = {
-              id: `${i}`,
-              campaign_id: campaignId,
-              contact_phone: contact.phone,
-              contact_name: contact.name,
-              sender_id: contact.sender_id || null,
-              last_message_preview: contact.last_message,
-              message_sent: null,
-              status: 'skipped',
-              skip_reason: errorMsg,
-              sent_at: null,
-            };
-            setExecutionLog((prev) => [...prev, logEntry]);
+          const logEntry: FollowupContactResult = {
+            id: `${i}`,
+            campaign_id: campaignId!,
+            contact_phone: contact.phone,
+            contact_name: contact.name,
+            sender_id: contact.sender_id || null,
+            last_message_preview: contact.last_message,
+            message_sent: null,
+            status,
+            skip_reason: errorMsg,
+            sent_at: null,
+          };
+          setExecutionLog((prev) => [...prev, logEntry]);
+
+          // Auto-pause after MAX_CONSECUTIVE_FAILURES consecutive failures
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !pausedRef.current) {
+            pausedRef.current = true;
+            toast.error(
+              `Follow-up pausado automaticamente: ${MAX_CONSECUTIVE_FAILURES} falhas consecutivas. Verifique os erros e retome manualmente.`,
+              { duration: 10000 }
+            );
           }
         }
 
@@ -357,11 +439,19 @@ export function useFollowupCampaigns() {
     } catch (err: any) {
       console.error('Followup error:', err);
       toast.error(err?.message || 'Erro ao executar follow-up');
+      
+      // If campaign was created but failed during setup, mark as canceled
+      if (campaignId) {
+        await supabase
+          .from('followup_campaigns')
+          .update({ status: 'canceled', updated_at: new Date().toISOString() } as any)
+          .eq('id', campaignId);
+      }
     } finally {
       setExecuting(false);
       fetchCampaigns();
     }
-  }, [workspaceId, fetchCampaigns]);
+  }, [workspaceId, fetchCampaigns, invokeWithRetry]);
 
   const pauseFollowup = useCallback(() => {
     pausedRef.current = true;

@@ -317,7 +317,8 @@ Deno.serve(async (req) => {
           .select("sender_id, sender_name, content, direction, timestamp")
           .eq("meta_page_id", meta_page_id)
           .eq("workspace_id", workspace_id)
-          .order("timestamp", { ascending: false });
+          .order("timestamp", { ascending: false })
+          .limit(5000);
 
         if (convError) throw convError;
 
