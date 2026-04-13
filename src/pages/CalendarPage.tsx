@@ -20,19 +20,6 @@ import {
   Bot,
   Link2,
   Key,
-  Clock,
-  User,
-  Phone,
-  Video,
-  CheckSquare,
-  Bell,
-  MoreHorizontal,
-  Calendar,
-  Loader2,
-  ExternalLink,
-  RefreshCw,
-  Unlink,
-  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
