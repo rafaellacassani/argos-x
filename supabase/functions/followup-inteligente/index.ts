@@ -10,6 +10,7 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || "";
+const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
 const rawEvolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") || "";
 const evolutionApiUrl = rawEvolutionApiUrl.replace(/\/manager\/?$/, "");
 const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
@@ -289,39 +290,82 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais. NUNCA rec
         { role: "user", content: "[GERAR MENSAGEM DE FOLLOW-UP AGORA]" },
       ];
 
-      if (!lovableApiKey) {
-        return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      const agentModel = agent.model || "anthropic/claude-haiku-4-5-20251001";
+      const isAnthropic = agentModel.startsWith("anthropic/");
+
+      let generatedMessage = "";
+
+      if (isAnthropic) {
+        // Use Anthropic API directly
+        if (!anthropicApiKey) {
+          return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const anthropicModel = agentModel.replace("anthropic/", "");
+        const systemContent = aiMessages.find(m => m.role === "system")?.content || "";
+        const userMessages = aiMessages.filter(m => m.role !== "system");
+
+        const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": anthropicApiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: anthropicModel,
+            system: systemContent,
+            messages: userMessages,
+            temperature: 0.8,
+            max_tokens: 500,
+          }),
         });
-      }
 
-      // Use the agent's configured model via Lovable AI Gateway
-      const agentModel = agent.model || "google/gemini-2.5-flash";
+        if (!aiResponse.ok) {
+          const errText = await aiResponse.text().catch(() => "");
+          console.error("[followup-inteligente] Anthropic error:", aiResponse.status, errText);
+          return new Response(JSON.stringify({ error: `Erro na geração de IA (${aiResponse.status}): ${errText.substring(0, 200)}` }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: agentModel,
-          messages: aiMessages,
-          temperature: 0.8,
-          max_tokens: 500,
-        }),
-      });
+        const aiData = await aiResponse.json();
+        generatedMessage = aiData.content?.[0]?.text?.trim() || "";
+      } else {
+        // Use Lovable AI Gateway for non-Anthropic models
+        if (!lovableApiKey) {
+          return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
-      if (!aiResponse.ok) {
-        const errText = await aiResponse.text().catch(() => "");
-        console.error("[followup-inteligente] AI Gateway error:", aiResponse.status, errText);
-        return new Response(JSON.stringify({ error: `Erro na geração de IA (${aiResponse.status}): ${errText.substring(0, 200)}` }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${lovableApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: agentModel,
+            messages: aiMessages,
+            temperature: 0.8,
+            max_tokens: 500,
+          }),
         });
-      }
 
-      const aiData = await aiResponse.json();
-      const generatedMessage = aiData.choices?.[0]?.message?.content?.trim() || "";
+        if (!aiResponse.ok) {
+          const errText = await aiResponse.text().catch(() => "");
+          console.error("[followup-inteligente] AI Gateway error:", aiResponse.status, errText);
+          return new Response(JSON.stringify({ error: `Erro na geração de IA (${aiResponse.status}): ${errText.substring(0, 200)}` }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const aiData = await aiResponse.json();
+        generatedMessage = aiData.choices?.[0]?.message?.content?.trim() || "";
+      }
 
       if (!generatedMessage) {
         return new Response(JSON.stringify({ error: "Empty AI response" }), {
