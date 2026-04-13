@@ -9,10 +9,16 @@ const corsHeaders = {
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
+const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || "";
 const rawEvolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") || "";
 const evolutionApiUrl = rawEvolutionApiUrl.replace(/\/manager\/?$/, "");
 const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
+
+// Master workspace IDs — only these can use Follow-up Inteligente
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
