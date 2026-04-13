@@ -49,6 +49,14 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { action } = body;
 
+    // Workspace restriction — only master workspaces allowed
+    const requestWorkspaceId = body.workspace_id;
+    if (requestWorkspaceId && !MASTER_WORKSPACE_IDS.has(requestWorkspaceId)) {
+      return new Response(JSON.stringify({ error: "Follow-up Inteligente não está disponível para este workspace" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ========================
     // ACTION: scan - Find unanswered contacts
     // ========================
@@ -281,29 +289,24 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais. NUNCA rec
         { role: "user", content: "[GERAR MENSAGEM DE FOLLOW-UP AGORA]" },
       ];
 
-      if (!anthropicApiKey) {
-        return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured" }), {
+      if (!lovableApiKey) {
+        return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Call Anthropic API directly (bypass Lovable Gateway)
-      const anthropicMessages = aiMessages
-        .filter(m => m.role !== "system")
-        .map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
-      const systemText = aiMessages.find(m => m.role === "system")?.content || "";
+      // Use the agent's configured model via Lovable AI Gateway
+      const agentModel = agent.model || "google/gemini-2.5-flash";
 
-      const aiResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
-          "x-api-key": anthropicApiKey,
-          "anthropic-version": "2023-06-01",
+          "Authorization": `Bearer ${lovableApiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          system: systemText,
-          messages: anthropicMessages,
+          model: agentModel,
+          messages: aiMessages,
           temperature: 0.8,
           max_tokens: 500,
         }),
@@ -311,14 +314,14 @@ RESPONDA APENAS com o texto da mensagem. Sem explicações adicionais. NUNCA rec
 
       if (!aiResponse.ok) {
         const errText = await aiResponse.text().catch(() => "");
-        console.error("[followup-inteligente] AI error:", aiResponse.status, errText);
-        return new Response(JSON.stringify({ error: "AI generation failed" }), {
+        console.error("[followup-inteligente] AI Gateway error:", aiResponse.status, errText);
+        return new Response(JSON.stringify({ error: `Erro na geração de IA (${aiResponse.status}): ${errText.substring(0, 200)}` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const aiData = await aiResponse.json();
-      const generatedMessage = aiData.content?.[0]?.text?.trim() || "";
+      const generatedMessage = aiData.choices?.[0]?.message?.content?.trim() || "";
 
       if (!generatedMessage) {
         return new Response(JSON.stringify({ error: "Empty AI response" }), {
