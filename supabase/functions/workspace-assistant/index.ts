@@ -49,6 +49,8 @@ serve(async (req) => {
     const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const hours24Ago = new Date(now.getTime() - 24 * 3600000).toISOString();
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    const week7 = new Date(now.getTime() + 7 * 86400000).toISOString();
 
     const [
       leadsTotal,
@@ -64,6 +66,12 @@ serve(async (req) => {
       tags,
       recentMessages,
       humanQueue,
+      agentExecs,
+      calendarToday,
+      calendarUpcoming,
+      followupCampaigns,
+      agentFollowupsPending,
+      agentFollowupsSent,
     ] = await Promise.all([
       adminClient.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", wsId),
       adminClient.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).gte("created_at", weekAgo),
@@ -76,9 +84,20 @@ serve(async (req) => {
       adminClient.from("workspaces").select("name, plan, status, lead_limit, extra_leads, whatsapp_limit, user_limit, subscription_status").eq("id", wsId).single(),
       adminClient.from("workspace_members").select("user_id, role, accepted_at, user_profile:user_profiles(full_name, email)").eq("workspace_id", wsId),
       adminClient.from("lead_tags").select("id, name, color").eq("workspace_id", wsId),
-      // Always fetch recent messages — critical for "unanswered" questions
       adminClient.from("messages").select("id, lead_id, content, sender, created_at, lead:leads(name, phone)").eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(200),
       adminClient.from("human_support_queue").select("id, lead_id, reason, status, created_at, lead:leads(name, phone)").eq("workspace_id", wsId).eq("status", "pending").order("created_at", { ascending: false }).limit(20),
+      // NEW: Agent executions last 24h
+      adminClient.from("agent_executions").select("agent_id, status, tokens_used, latency_ms, error_message").eq("workspace_id", wsId).gte("executed_at", hours24Ago),
+      // NEW: Calendar events today
+      adminClient.from("calendar_events").select("title, start_at, end_at, type, lead_id, lead:leads(name)").eq("workspace_id", wsId).gte("start_at", todayStart).lt("start_at", todayEnd).order("start_at"),
+      // NEW: Calendar events next 7 days (excluding today)
+      adminClient.from("calendar_events").select("title, start_at, type").eq("workspace_id", wsId).gte("start_at", todayEnd).lt("start_at", week7).order("start_at").limit(20),
+      // NEW: Followup campaigns recent
+      adminClient.from("followup_campaigns").select("id, status, total_contacts, sent_count, skipped_count, failed_count, created_at, agent:ai_agents(name)").eq("workspace_id", wsId).order("created_at", { ascending: false }).limit(10),
+      // NEW: Agent followup queue pending
+      adminClient.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).eq("status", "pending"),
+      // NEW: Agent followup queue sent last 24h
+      adminClient.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", wsId).eq("status", "sent").gte("executed_at", hours24Ago),
     ]);
 
     // Build stage map
@@ -127,6 +146,22 @@ serve(async (req) => {
       leadsBySource[source] = (leadsBySource[source] || 0) + 1;
     });
 
+    // Build AI performance by agent
+    const agentNameMap: Record<string, string> = {};
+    (agents.data || []).forEach((a: any) => { agentNameMap[a.id] = a.name; });
+    const execsByAgent: Record<string, { total: number; success: number; errors: number; tokens: number; latency_sum: number }> = {};
+    (agentExecs.data || []).forEach((e: any) => {
+      if (!execsByAgent[e.agent_id]) execsByAgent[e.agent_id] = { total: 0, success: 0, errors: 0, tokens: 0, latency_sum: 0 };
+      const a = execsByAgent[e.agent_id];
+      a.total++; if (e.status === "success") a.success++; else a.errors++;
+      a.tokens += e.tokens_used || 0; a.latency_sum += e.latency_ms || 0;
+    });
+    const aiPerformance = Object.entries(execsByAgent).map(([id, d]) => ({
+      agent_name: agentNameMap[id] || id, total: d.total, success: d.success, errors: d.errors,
+      success_rate: d.total > 0 ? Math.round((d.success / d.total) * 100) : 0,
+      avg_latency_ms: d.total > 0 ? Math.round(d.latency_sum / d.total) : 0, tokens: d.tokens,
+    }));
+
     const contextData = {
       workspace: workspace.data,
       stats: {
@@ -163,6 +198,11 @@ serve(async (req) => {
         reason: h.reason,
         created_at: h.created_at,
       })),
+      ai_performance_24h: aiPerformance,
+      calendar_hoje: (calendarToday.data || []).map((e: any) => ({ title: e.title, start: e.start_at, end: e.end_at, type: e.type, lead: e.lead?.name })),
+      calendar_proximos_7_dias: (calendarUpcoming.data || []).map((e: any) => ({ title: e.title, start: e.start_at, type: e.type })),
+      followup_campaigns_recent: (followupCampaigns.data || []).map((c: any) => ({ agent: c.agent?.name, status: c.status, total: c.total_contacts, sent: c.sent_count, failed: c.failed_count })),
+      followup_automaticos: { pendentes: agentFollowupsPending.count || 0, enviados_24h: agentFollowupsSent.count || 0 },
     };
 
     const systemPrompt = `Você é o **Assistente de Workspace** do Argos X — um CRM com WhatsApp, IA e funil de vendas.
@@ -176,6 +216,9 @@ CAPACIDADES:
 - "unanswered_leads" = leads cuja ÚLTIMA mensagem foi enviada PELO LEAD (sem resposta nossa ainda)
 - "human_support_queue" = leads aguardando atendimento humano
 - "recent_messages" = últimas mensagens trocadas no workspace, com nome do lead e conteúdo
+- "ai_performance_24h" = execuções dos agentes de IA nas últimas 24h (total, sucesso, erros, latência média, tokens). Use para responder sobre desempenho das IAs.
+- "calendar_hoje" e "calendar_proximos_7_dias" = reuniões e eventos agendados. Use para responder sobre agenda.
+- "followup_campaigns_recent" = campanhas de follow-up inteligente. "followup_automaticos" = follow-ups automáticos de agentes (pendentes e enviados 24h).
 
 REGRAS:
 - Responda SEMPRE em português brasileiro
@@ -184,6 +227,8 @@ REGRAS:
 - Se perguntarem "esqueci de responder alguém" ou "tem alguém sem resposta", use a lista "unanswered_leads" — mostre nome, telefone e prévia da última mensagem
 - Se perguntarem sobre uma pessoa específica, busque pelo nome nas mensagens e leads
 - Se perguntarem sobre um lead, mostre: nome, telefone, etapa, origem, valor, data de criação
+- Se perguntarem "como foi o dia" ou "resumo do dia", forneça: leads novos, performance das IAs (taxa de sucesso/erros), reuniões agendadas, follow-ups enviados, e alertas críticos
+- Se a taxa de erro de uma IA for > 10%, destaque como ⚠️ alerta
 - Formate números e datas de forma legível (ex: "terça-feira às 14:30")
 - Use emojis moderadamente para tornar a resposta mais visual
 - NÃO invente dados que não estejam no contexto

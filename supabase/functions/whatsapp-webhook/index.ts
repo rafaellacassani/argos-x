@@ -995,8 +995,11 @@ app.post("/", async (c) => {
       const now = new Date();
       const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const hours24Ago = new Date(now.getTime() - 24 * 3600000).toISOString();
+      const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+      const week7 = new Date(now.getTime() + 7 * 86400000).toISOString();
 
-      const [aLeads, aWeek, aToday, aRecent, aAgents, aStages, aCampaigns, aWs, aMembers, aQueue] = await Promise.all([
+      const [aLeads, aWeek, aToday, aRecent, aAgents, aStages, aCampaigns, aWs, aMembers, aQueue, aExecs, aCalToday, aCalUpcoming, aFollowupCampaigns, aFollowupPending, aFollowupSent] = await Promise.all([
         supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId),
         supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).gte("created_at", weekAgo),
         supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).gte("created_at", todayStart),
@@ -1007,6 +1010,12 @@ app.post("/", async (c) => {
         supabase.from("workspaces").select("name, plan_name, status, lead_limit, subscription_status").eq("id", assistantWsId).single(),
         supabase.from("workspace_members").select("role, user_profile:user_profiles(full_name)").eq("workspace_id", assistantWsId),
         supabase.from("human_support_queue").select("id").eq("workspace_id", assistantWsId).eq("status", "pending"),
+        supabase.from("agent_executions").select("agent_id, status, tokens_used, latency_ms, error_message").eq("workspace_id", assistantWsId).gte("executed_at", hours24Ago),
+        supabase.from("calendar_events").select("title, start_at, end_at, type, lead:leads(name)").eq("workspace_id", assistantWsId).gte("start_at", todayStart).lt("start_at", todayEnd).order("start_at"),
+        supabase.from("calendar_events").select("title, start_at, type").eq("workspace_id", assistantWsId).gte("start_at", todayEnd).lt("start_at", week7).order("start_at").limit(10),
+        supabase.from("followup_campaigns").select("id, status, total_contacts, sent_count, failed_count, created_at, agent:ai_agents(name)").eq("workspace_id", assistantWsId).order("created_at", { ascending: false }).limit(5),
+        supabase.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).eq("status", "pending"),
+        supabase.from("agent_followup_queue").select("id", { count: "exact", head: true }).eq("workspace_id", assistantWsId).eq("status", "sent").gte("executed_at", hours24Ago),
       ]);
 
       const stageMapA: Record<string, string> = {};
@@ -1014,6 +1023,21 @@ app.post("/", async (c) => {
       const enriched = (aRecent.data || []).map((l: any) => ({ ...l, stage_name: l.stage_id ? stageMapA[l.stage_id] || "?" : "sem etapa" }));
       const byStage: Record<string, number> = {};
       enriched.forEach((l: any) => { const s = l.stage_name; byStage[s] = (byStage[s] || 0) + 1; });
+
+      const agentNameMap: Record<string, string> = {};
+      (aAgents.data || []).forEach((a: any) => { agentNameMap[a.id] = a.name; });
+      const execsByAgent: Record<string, { total: number; success: number; errors: number; tokens: number; latency_sum: number }> = {};
+      (aExecs.data || []).forEach((e: any) => {
+        if (!execsByAgent[e.agent_id]) execsByAgent[e.agent_id] = { total: 0, success: 0, errors: 0, tokens: 0, latency_sum: 0 };
+        const a = execsByAgent[e.agent_id];
+        a.total++; if (e.status === "success") a.success++; else a.errors++;
+        a.tokens += e.tokens_used || 0; a.latency_sum += e.latency_ms || 0;
+      });
+      const aiPerformance = Object.entries(execsByAgent).map(([id, d]) => ({
+        agent_name: agentNameMap[id] || id, total: d.total, success: d.success, errors: d.errors,
+        success_rate: d.total > 0 ? Math.round((d.success / d.total) * 100) : 0,
+        avg_latency_ms: d.total > 0 ? Math.round(d.latency_sum / d.total) : 0, tokens: d.tokens,
+      }));
 
       const ctx = {
         workspace: aWs.data,
@@ -1023,6 +1047,11 @@ app.post("/", async (c) => {
         agentes: aAgents.data || [],
         campanhas: aCampaigns.data || [],
         equipe: (aMembers.data || []).map((m: any) => ({ nome: (m as any).user_profile?.full_name || "?", role: m.role })),
+        ai_performance_24h: aiPerformance,
+        calendar_hoje: (aCalToday.data || []).map((e: any) => ({ title: e.title, start: e.start_at, end: e.end_at, type: e.type, lead: e.lead?.name })),
+        calendar_proximos_7_dias: (aCalUpcoming.data || []).map((e: any) => ({ title: e.title, start: e.start_at, type: e.type })),
+        followup_campaigns: (aFollowupCampaigns.data || []).map((c: any) => ({ agent: c.agent?.name, status: c.status, total: c.total_contacts, sent: c.sent_count, failed: c.failed_count })),
+        followup_automaticos: { pendentes: aFollowupPending.count || 0, enviados_24h: aFollowupSent.count || 0 },
       };
 
       const LOVABLE_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -1036,7 +1065,13 @@ app.post("/", async (c) => {
       const sysPrompt = `Você é o Assistente de Workspace do Argos X via WhatsApp. Responda CONCISO — máximo 2 parágrafos curtos.
 DADOS (${now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}):
 ${JSON.stringify(ctx)}
-REGRAS: Português BR. Conciso (é WhatsApp). Emojis moderados. NÃO invente dados. Formate para WhatsApp (*negrito*, _itálico_). Quando mencionar leads, inclua nome e telefone.`;
+REGRAS: Português BR. Conciso (é WhatsApp). Emojis moderados. NÃO invente dados. Formate para WhatsApp (*negrito*, _itálico_). Quando mencionar leads, inclua nome e telefone.
+NOVAS CAPACIDADES:
+- "ai_performance_24h" mostra execuções dos agentes de IA nas últimas 24h (total, sucesso, erros, latência média, tokens). Use para responder sobre desempenho das IAs.
+- "calendar_hoje" e "calendar_proximos_7_dias" mostram reuniões e eventos. Use para responder sobre agenda.
+- "followup_campaigns" mostra campanhas de follow-up inteligente recentes. "followup_automaticos" mostra follow-ups de agentes (pendentes e enviados 24h).
+- Se perguntarem "como foi o dia", dê resumo completo: leads, performance das IAs, reuniões, follow-ups.
+- Se taxa de erro de IA > 10%, destaque como ⚠️ alerta.`;
 
       try {
         const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
