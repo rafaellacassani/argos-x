@@ -53,6 +53,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useAIAgents, AIAgent } from "@/hooks/useAIAgents";
 import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
+import { useCalendly } from "@/hooks/useCalendly";
+import { Input } from "@/components/ui/input";
 import { format, addHours, isSameDay, startOfWeek, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
