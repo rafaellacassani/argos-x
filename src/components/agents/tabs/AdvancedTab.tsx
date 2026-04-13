@@ -26,13 +26,19 @@ const baseModels = [
   { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Plano Escala)", minPlan: "escala" },
 ];
 
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
+
 export function AdvancedTab({ formData, updateField }: Props) {
   const { workspace, isAdminViewing } = useWorkspace();
   const planType = workspace?.plan_type || "gratuito";
   const isEscala = planType === "escala";
+  const isMaster = !!workspace?.id && MASTER_WORKSPACE_IDS.has(workspace.id);
 
-  const availableModels = baseModels.filter(m => !m.minPlan || isEscala);
-  const lockedModels = baseModels.filter(m => m.minPlan && !isEscala);
+  const availableModels = baseModels.filter(m => !m.minPlan || isEscala || isMaster);
+  const lockedModels = baseModels.filter(m => m.minPlan && !isEscala && !isMaster);
 
   return (
     <div className="space-y-6 max-w-2xl">
