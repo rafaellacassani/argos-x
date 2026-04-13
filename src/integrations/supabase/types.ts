@@ -809,6 +809,82 @@ export type Database = {
           },
         ]
       }
+      calendly_allowed_workspaces: {
+        Row: {
+          enabled_at: string
+          enabled_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          enabled_at?: string
+          enabled_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          enabled_at?: string
+          enabled_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendly_allowed_workspaces_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendly_connections: {
+        Row: {
+          api_token: string
+          calendly_email: string | null
+          calendly_user_uri: string | null
+          created_at: string
+          default_event_type_uri: string | null
+          id: string
+          scheduling_url: string | null
+          sync_enabled: boolean
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          api_token: string
+          calendly_email?: string | null
+          calendly_user_uri?: string | null
+          created_at?: string
+          default_event_type_uri?: string | null
+          id?: string
+          scheduling_url?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          api_token?: string
+          calendly_email?: string | null
+          calendly_user_uri?: string | null
+          created_at?: string
+          default_event_type_uri?: string | null
+          id?: string
+          scheduling_url?: string | null
+          sync_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendly_connections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_recipients: {
         Row: {
           campaign_id: string
