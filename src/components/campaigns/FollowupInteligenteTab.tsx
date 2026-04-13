@@ -152,6 +152,18 @@ export default function FollowupInteligenteTab() {
   const progressPercent = totalContacts > 0 ? ((sentCount + failedCount) / totalContacts) * 100 : 0;
   const recentCampaigns = campaigns.slice(0, 10);
 
+  if (!isMasterWorkspace) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4 text-muted-foreground">
+        <Brain className="w-12 h-12 text-muted-foreground/50" />
+        <h2 className="text-lg font-semibold text-foreground">Follow-up Inteligente</h2>
+        <p className="text-sm text-center max-w-md">
+          Esta funcionalidade está em fase de testes e disponível apenas para workspaces selecionados.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
