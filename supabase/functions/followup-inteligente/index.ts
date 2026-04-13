@@ -642,6 +642,11 @@ RESPONDA APENAS com o texto da mensagem final pronta para envio. Sem explicaçõ
         return jsonResponse({ success: true, message_id: outboundMessageId });
 
       } else if (instance_type === "evolution" && instance_name) {
+        // Validate Evolution API is reachable
+        if (!evolutionApiUrl || !evolutionApiKey) {
+          return jsonResponse({ error: "Evolution API não configurada. Verifique as variáveis de ambiente." }, 400);
+        }
+
         // Send via Evolution API
         let number = contact_phone.replace(/\D/g, "");
         if ((number.length === 10 || number.length === 11) && !number.startsWith("55")) {
@@ -656,7 +661,8 @@ RESPONDA APENAS com o texto da mensagem final pronta para envio. Sem explicaçõ
 
         if (!evoRes.ok) {
           const errData = await evoRes.json().catch(() => ({}));
-          return jsonResponse({ error: "Evolution API error", details: errData }, evoRes.status);
+          const detail = errData?.message || errData?.error || JSON.stringify(errData);
+          return jsonResponse({ error: `Evolution API erro (${evoRes.status}): ${detail}` }, evoRes.status);
         }
 
         // Save to whatsapp_messages
@@ -683,8 +689,9 @@ RESPONDA APENAS com o texto da mensagem final pronta para envio. Sem explicaçõ
     return jsonResponse({ error: "Unknown action" }, 400);
 
   } catch (error) {
-    console.error("[followup-inteligente] Error:", error);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("[followup-inteligente] Error:", errMsg);
+    return new Response(JSON.stringify({ error: `Erro interno: ${errMsg.substring(0, 300)}` }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
