@@ -294,6 +294,7 @@ export function useCalendar() {
     try {
       const data = await callSyncFunction("/pull", "POST", {
         userId: user.id,
+        workspaceId,
         daysAhead: 60,
         daysBehind: 90,
       });
@@ -306,7 +307,7 @@ export function useCalendar() {
       console.error("Error pulling from Google:", err);
       toast({ title: "Erro ao sincronizar", variant: "destructive" });
     }
-  }, [user]);
+  }, [user, workspaceId]);
 
   // Auto-pull after Google connection is detected
   useEffect(() => {

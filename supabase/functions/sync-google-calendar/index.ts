@@ -217,11 +217,13 @@ app.post("/pull", async (c) => {
   let userId: string;
   let daysAhead = 30;
   let daysBehind = 0;
+  let activeWorkspaceId: string | undefined;
   try {
     const body = await c.req.json();
     userId = body.userId;
     if (body.daysAhead) daysAhead = body.daysAhead;
     if (body.daysBehind) daysBehind = body.daysBehind;
+    if (body.workspaceId) activeWorkspaceId = body.workspaceId;
     if (!userId) throw new Error();
   } catch {
     return c.json({ error: "userId is required" }, 400, corsHeaders);
@@ -316,7 +318,7 @@ app.post("/pull", async (c) => {
       const allDay = !gEvent.start?.dateTime;
 
       rowsToInsert.push({
-        workspace_id: tokenRow.workspace_id,
+        workspace_id: activeWorkspaceId || tokenRow.workspace_id,
         user_id: userId,
         title: gEvent.summary || "(Sem título)",
         description: gEvent.description || null,
