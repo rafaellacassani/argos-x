@@ -87,6 +87,8 @@ interface DashboardData {
   funnel: { signups: number; trials: number; converted: number; conversion_rate: number };
   new_clients: { id: string; name: string; created_at: string; plan: string; status: string; email: string; phone: string; payment_provider?: string }[];
   total_workspaces: number;
+  first_trial_date: string | null;
+  total_trials_lifetime: number;
   // Drill-down lists
   active_clients_list?: DrilldownItem[];
   active_trials_list?: DrilldownItem[];
@@ -165,11 +167,18 @@ export default function ExecutiveDashboardTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">Dashboard Executivo</h2>
-          {lastUpdated && (
-            <p className="text-xs text-muted-foreground">
-              Atualizado às {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          )}
+          <div className="flex items-center gap-3 mt-0.5">
+            {lastUpdated && (
+              <p className="text-xs text-muted-foreground">
+                Atualizado às {lastUpdated.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            )}
+            {data.first_trial_date && (
+              <p className="text-xs text-muted-foreground">
+                · 1º trial: {new Date(data.first_trial_date).toLocaleDateString("pt-BR")} · {data.total_trials_lifetime} trials lifetime
+              </p>
+            )}
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={fetchDashboard} disabled={loading} className="gap-2">
           <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
