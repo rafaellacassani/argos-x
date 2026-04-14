@@ -1,0 +1,1 @@
+ALTER TABLE public.workspaces ALTER COLUMN payment_provider SET DEFAULT 'asaas';
