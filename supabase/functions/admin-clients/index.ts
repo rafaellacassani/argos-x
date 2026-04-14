@@ -1293,12 +1293,23 @@ serve(async (req) => {
       const currentYear = now.getFullYear();
       const monthStart = new Date(currentYear, currentMonth, 1).toISOString();
 
+      // Master workspace IDs to exclude from external metrics
+      const MASTER_WS_IDS = ["41efdc6d-d4ba-4589-9761-7438a5911d57", "6a8540c9-6eb5-42ce-8d20-960002d85bac"];
+
       // Fetch all workspaces with relevant fields
       const { data: allWorkspaces } = await supabaseAdmin
         .from("workspaces")
         .select("id, name, plan_type, plan_name, subscription_status, trial_end, blocked_at, created_at, created_by, lead_limit, extra_leads, ai_interactions_limit, ai_interactions_used, stripe_customer_id, payment_provider");
 
       const workspaces = allWorkspaces || [];
+
+      // Lifetime metrics (excluding master workspaces)
+      const externalWorkspaces = workspaces.filter(w => !MASTER_WS_IDS.includes(w.id));
+      const total_trials_lifetime = externalWorkspaces.length;
+      const sortedExternal = [...externalWorkspaces].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      // Skip "Default" placeholder workspace
+      const firstReal = sortedExternal.find(w => w.name !== "Default");
+      const first_trial_date = firstReal?.created_at || null;
 
       // Fetch owner profiles
       const creatorIds = [...new Set(workspaces.map(w => w.created_by).filter(Boolean))];
@@ -1505,6 +1516,8 @@ serve(async (req) => {
         funnel: { signups: signupsThisMonth.length, trials: trialsThisMonth.length, converted: convertedThisMonth.length, conversion_rate: signupsThisMonth.length > 0 ? (convertedThisMonth.length / signupsThisMonth.length) * 100 : 0 },
         new_clients: newClientsThisMonth,
         total_workspaces: workspaces.length,
+        first_trial_date,
+        total_trials_lifetime,
         // Drill-down lists
         active_clients_list, active_trials_list, churn_list, past_due_list,
         lead_packs_list, provider_clients, plan_clients,
