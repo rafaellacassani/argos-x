@@ -1,66 +1,46 @@
 
-# Pesquisa de Churn via WhatsApp — Cadência Dia 8
 
-## Ideia refinada
+# Fix: Evolution API Pairing Code retornando null
 
-Quando o trial expira e o cliente não assina, no **dia 8 pós-expiração** o sistema envia uma mensagem interativa via WhatsApp perguntando o motivo. O fluxo:
+## Diagnóstico
 
-1. **Dia 8**: Envio automático de mensagem com lista numerada de motivos
-2. **Resposta do cliente**: O webhook identifica que é uma resposta à pesquisa e salva o motivo
-3. **Agradecimento**: Resposta automática de agradecimento + oferta de ajuda
+Analisando a documentação oficial da Evolution API e o código atual, identifiquei **3 problemas**:
 
-### Opções sugeridas (melhoradas)
+1. **Restart desnecessário quebra o fluxo**: Antes de solicitar o pairing code, o código faz `PUT /instance/restart` (linha 246). Isso coloca a instância em estado `connecting` transitório. Com apenas 2s de delay, a instância ainda não está pronta quando o `/instance/connect` é chamado — resultando em `pairingCode: null`.
+
+2. **A instância precisa estar em estado `close`**: Segundo a documentação, o pairing code só funciona quando a instância está desconectada. Se ela já estiver em `connecting` (após o QR code ter sido gerado anteriormente), precisa fazer **logout** primeiro para voltar ao estado `close`, não restart.
+
+3. **Cache do `getConnectResponse`**: A função `getConnectResponse` cacheia respostas do `/instance/connect` por 15s. Se o QR code foi solicitado antes, o cache pode interferir com a chamada do pairing code.
+
+## Plano de correção
+
+### 1. Edge Function `evolution-api` — rota `POST /pairing/:instanceName`
+
+Substituir a lógica atual por:
 
 ```text
-Olá, {nome}! 👋
-
-Vimos que seu período de teste no Argos X acabou e você ainda não ativou um plano.
-
-Queremos melhorar! Pode nos dizer o que aconteceu? Responda com o número:
-
-1️⃣ Não cheguei a usar
-2️⃣ Não consegui conectar o WhatsApp
-3️⃣ Achei difícil de configurar
-4️⃣ Não recebi suporte/demonstração
-5️⃣ O preço não cabe no momento
-6️⃣ Já uso outra ferramenta
-
-Sua resposta nos ajuda muito! 🙏
+1. Fazer logout da instância (DELETE /instance/logout/{name})
+   — Isso garante estado "close"
+2. Aguardar 3 segundos
+3. Chamar GET /instance/connect/{name}?number={sanitizedNumber}
+4. Limpar cache do connectResponseCache para essa instância
+5. Se pairingCode ainda for null, retornar erro claro
 ```
 
-## Implementação técnica
+Remover o `restart` e usar `logout` no lugar — é o que a Evolution API exige para gerar pairing code quando a instância já teve um QR code gerado.
 
-### 1. Tabela `churn_survey_responses` (nova)
-- `id`, `workspace_id`, `user_id`, `response_number` (1-6), `response_text`, `raw_message`, `created_at`
-- Permite analytics de motivos de churn
+### 2. Validação de número no frontend (`ConnectionModal.tsx`)
 
-### 2. Cadence — Dia 8 como mensagem normal
-- Você adiciona a mensagem acima como uma `cadence_message` no dia 8 via Admin Clientes > Cadência (já funciona hoje)
-- Nenhuma mudança na `process-reactivation` — ela já envia qualquer mensagem configurada por dia
+Garantir que o número digitado pelo usuário é sanitizado corretamente:
+- Strip de `+`, parênteses, traços, espaços
+- Verificar comprimento mínimo (10 dígitos) e máximo (15 dígitos)
+- Já está implementado, apenas confirmar
 
-### 3. Webhook — Interceptar resposta (principal mudança)
-- Na `whatsapp-webhook`, quando chega uma mensagem de um número que:
-  - (a) pertence a um workspace com trial expirado/bloqueado
-  - (b) recebeu a pesquisa no dia 8 (check `reactivation_log` com `cadence_day = 8`)
-  - (c) a mensagem é "1", "2", "3", "4", "5" ou "6"
-- Salvar na `churn_survey_responses`
-- Responder automaticamente: "Obrigado pelo feedback, {nome}! Anotamos sua resposta. Se mudar de ideia, estamos aqui: argosx.com.br/planos 💙"
+### Resumo técnico
 
-### 4. Dashboard — Card de Churn Reasons no Executive Dashboard
-- Gráfico de barras/pizza mostrando distribuição dos motivos
-- Total de respostas vs pesquisas enviadas (taxa de resposta)
-
-### 5. Admin Clientes > Cadência
-- Você configura a mensagem do dia 8 pela UI existente (sem mudança de código)
-- A cadência precisa ter o dia 8 adicionado em `cadence_days`
-
-## Resumo de mudanças
-
-| Componente | Mudança |
+| Arquivo | Mudança |
 |---|---|
-| **Migration** | Criar tabela `churn_survey_responses` |
-| **`whatsapp-webhook`** | Interceptar respostas 1-6 de trials expirados que receberam pesquisa, salvar + auto-reply |
-| **`ExecutiveDashboardTab`** | Card com distribuição de motivos de churn |
-| **Cadência (config)** | Adicionar dia 8 e mensagem via UI existente |
+| `supabase/functions/evolution-api/index.ts` | Trocar restart por logout + delay 3s + limpar cache antes do connect com number |
 
-Nenhuma mudança na `process-reactivation` — o envio já funciona. A inteligência nova fica toda no webhook (interceptar resposta) e no dashboard (visualizar).
+Mudança pontual em ~15 linhas. Nenhuma alteração no frontend necessária.
+
