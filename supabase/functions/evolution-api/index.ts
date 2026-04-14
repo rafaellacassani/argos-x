@@ -241,15 +241,20 @@ app.post("/pairing/:instanceName", async (c) => {
     }
     console.log(`[evolution-api] Requesting pairing code for ${instanceName} with number ${sanitizedNumber}`);
     
-    // First try to restart the instance to reset QR state
+    // Logout first to ensure instance is in "close" state (required for pairing code)
     try {
-      await evolutionRequest(`/instance/restart/${instanceName}`, "PUT", undefined, false);
-      console.log(`[evolution-api] Instance ${instanceName} restarted before pairing`);
-      // Small delay to let the instance restart
-      await new Promise(r => setTimeout(r, 2000));
-    } catch (restartErr) {
-      console.log(`[evolution-api] Restart before pairing skipped:`, restartErr);
+      await evolutionRequest(`/instance/logout/${instanceName}`, "DELETE", undefined, false);
+      console.log(`[evolution-api] Instance ${instanceName} logged out before pairing`);
+    } catch (logoutErr) {
+      console.log(`[evolution-api] Logout before pairing skipped (may already be disconnected):`, logoutErr);
     }
+    
+    // Wait for instance to reach "close" state
+    await new Promise(r => setTimeout(r, 3000));
+    
+    // Clear cached QR code response to avoid interference
+    connectResponseCache.delete(instanceName);
+    connectionStateCache.delete(instanceName);
     
     const result = await evolutionRequest(`/instance/connect/${instanceName}?number=${sanitizedNumber}`);
     console.log(`[evolution-api] Pairing code result:`, JSON.stringify(result).substring(0, 200));
