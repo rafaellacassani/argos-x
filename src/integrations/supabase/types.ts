@@ -1054,6 +1054,44 @@ export type Database = {
           },
         ]
       }
+      churn_survey_responses: {
+        Row: {
+          created_at: string
+          id: string
+          phone: string
+          raw_message: string | null
+          response_number: number
+          response_text: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          phone: string
+          raw_message?: string | null
+          response_number: number
+          response_text: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          phone?: string
+          raw_message?: string | null
+          response_number?: number
+          response_text?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "churn_survey_responses_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_invites: {
         Row: {
           checkout_url: string | null
