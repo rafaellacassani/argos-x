@@ -205,7 +205,8 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      return data;
+      // Return the pairing code from the response
+      return { pairingCode: data?.pairingCode } as any;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao obter código de pareamento";
       setError(message);
