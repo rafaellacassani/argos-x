@@ -1,46 +1,56 @@
 
 
-# Fix: Evolution API Pairing Code retornando null
+# Busca Global no Conteúdo das Conversas
 
-## Diagnóstico
+## O que muda
 
-Analisando a documentação oficial da Evolution API e o código atual, identifiquei **3 problemas**:
+Hoje a busca no chat filtra apenas por **nome** e **telefone** do contato. A proposta é adicionar busca por **conteúdo das mensagens** — como funciona no WhatsApp, onde você digita um termo e ele encontra conversas que contêm aquele texto.
 
-1. **Restart desnecessário quebra o fluxo**: Antes de solicitar o pairing code, o código faz `PUT /instance/restart` (linha 246). Isso coloca a instância em estado `connecting` transitório. Com apenas 2s de delay, a instância ainda não está pronta quando o `/instance/connect` é chamado — resultando em `pairingCode: null`.
+## Como vai funcionar
 
-2. **A instância precisa estar em estado `close`**: Segundo a documentação, o pairing code só funciona quando a instância está desconectada. Se ela já estiver em `connecting` (após o QR code ter sido gerado anteriormente), precisa fazer **logout** primeiro para voltar ao estado `close`, não restart.
+1. Quando o usuário digita um termo de busca (mínimo 3 caracteres), além do filtro local por nome/telefone, o sistema faz uma **consulta no banco de dados** na tabela `whatsapp_messages` buscando mensagens cujo `content` contém o termo (case-insensitive).
 
-3. **Cache do `getConnectResponse`**: A função `getConnectResponse` cacheia respostas do `/instance/connect` por 15s. Se o QR code foi solicitado antes, o cache pode interferir com a chamada do pairing code.
+2. Os resultados trazem os `remote_jid` distintos que possuem mensagens com aquele termo, ordenados pela mensagem mais recente.
 
-## Plano de correção
+3. Esses resultados são **mesclados** com o filtro local — conversas que já aparecem por nome/telefone ficam no topo, e conversas encontradas apenas pelo conteúdo da mensagem são adicionadas à lista.
 
-### 1. Edge Function `evolution-api` — rota `POST /pairing/:instanceName`
+4. Um indicador visual mostra quando a busca está acontecendo no servidor (loading) e quantos resultados vieram do conteúdo.
 
-Substituir a lógica atual por:
+5. A busca também inclui a tabela `meta_conversations` para cobrir mensagens do Facebook/Instagram.
 
-```text
-1. Fazer logout da instância (DELETE /instance/logout/{name})
-   — Isso garante estado "close"
-2. Aguardar 3 segundos
-3. Chamar GET /instance/connect/{name}?number={sanitizedNumber}
-4. Limpar cache do connectResponseCache para essa instância
-5. Se pairingCode ainda for null, retornar erro claro
-```
-
-Remover o `restart` e usar `logout` no lugar — é o que a Evolution API exige para gerar pairing code quando a instância já teve um QR code gerado.
-
-### 2. Validação de número no frontend (`ConnectionModal.tsx`)
-
-Garantir que o número digitado pelo usuário é sanitizado corretamente:
-- Strip de `+`, parênteses, traços, espaços
-- Verificar comprimento mínimo (10 dígitos) e máximo (15 dígitos)
-- Já está implementado, apenas confirmar
-
-### Resumo técnico
+## Plano técnico
 
 | Arquivo | Mudança |
 |---|---|
-| `supabase/functions/evolution-api/index.ts` | Trocar restart por logout + delay 3s + limpar cache antes do connect com number |
+| `src/pages/Chats.tsx` | Adicionar estado `contentSearchResults`, lógica de debounce (500ms) para buscar `whatsapp_messages` e `meta_conversations` por `content ilike %termo%`, mesclar resultados no `filteredChats`. Adicionar indicador de loading na busca. |
 
-Mudança pontual em ~15 linhas. Nenhuma alteração no frontend necessária.
+### Detalhes da query
+
+```sql
+-- WhatsApp messages: buscar remote_jids com conteúdo matching
+SELECT DISTINCT remote_jid, instance_name, MAX(timestamp) as last_match
+FROM whatsapp_messages
+WHERE workspace_id = ? AND content ILIKE '%termo%'
+GROUP BY remote_jid, instance_name
+ORDER BY last_match DESC
+LIMIT 50
+
+-- Meta conversations: buscar sender_ids com conteúdo matching  
+SELECT DISTINCT sender_id, meta_page_id, MAX(timestamp) as last_match
+FROM meta_conversations
+WHERE workspace_id = ? AND content ILIKE '%termo%'
+GROUP BY sender_id, meta_page_id
+ORDER BY last_match DESC
+LIMIT 50
+```
+
+### Fluxo no frontend
+
+1. Debounce de 500ms no `searchTerm` (só dispara para 3+ chars)
+2. Executa as 2 queries em paralelo via `supabase.from(...)`
+3. Mapeia os `remote_jid` / `sender_id` retornados para os chats já carregados
+4. Chats que existem na lista local são priorizados; os que não existem recebem um badge "Encontrado por conteúdo"
+5. Quando o usuário limpa a busca, volta ao comportamento normal
+
+Nenhuma mudança de banco de dados necessária — as tabelas já existem com os campos corretos.
 
