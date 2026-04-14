@@ -542,7 +542,45 @@ export default function ExecutiveDashboardTab() {
         </Card>
       </div>
 
-      {/* New clients this month */}
+      {/* Churn Survey Results */}
+      {data.churn_survey && data.churn_survey.total_responses > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              📊 Pesquisa de Churn — Motivos de Saída ({data.churn_survey.total_responses} respostas)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={data.churn_survey.by_reason} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <YAxis dataKey="reason" type="category" width={180} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Respostas" fill="hsl(var(--destructive))" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="space-y-3">
+                {data.churn_survey.by_reason.map((item, idx) => {
+                  const pct = data.churn_survey!.total_responses > 0
+                    ? Math.round((item.count / data.churn_survey!.total_responses) * 100)
+                    : 0;
+                  return (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                      <span className="text-sm">{item.reason}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{item.count}</Badge>
+                        <span className="text-xs text-muted-foreground">{pct}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-semibold">Novos Clientes do Mês ({data.new_clients.length})</CardTitle>
