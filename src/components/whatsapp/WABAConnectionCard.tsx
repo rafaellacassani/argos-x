@@ -52,6 +52,7 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
   const [newToken, setNewToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [registering, setRegistering] = useState(false);
 
   const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/facebook-webhook`;
 
@@ -153,6 +154,27 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
     }
   };
 
+  const handleRegister = async () => {
+    setRegistering(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-embedded-signup", {
+        body: { action: "register", connection_id: conn.id },
+      });
+      if (error) throw error;
+      if (data?.success) {
+        toast({ title: "Número registrado!", description: "Subscription e registro realizados com sucesso." });
+      } else {
+        toast({ title: "Aviso", description: "Registro concluído com possíveis alertas. Verifique os logs.", variant: "destructive" });
+      }
+      onRefresh();
+    } catch (err) {
+      console.error("Register error:", err);
+      toast({ title: "Erro ao registrar", description: "Verifique os logs para mais detalhes.", variant: "destructive" });
+    } finally {
+      setRegistering(false);
+    }
+  };
+
   const isActive = conn.status === "active";
   const isEnabled = conn.is_active !== false;
 
@@ -209,6 +231,9 @@ export function WABAConnectionCard({ conn, index, workspaceId, onRefresh }: WABA
               </Button>
             ) : (
               <>
+                <Button variant="outline" size="sm" onClick={handleRegister} disabled={registering} title="Registrar número e ativar webhook">
+                  <Wifi className="w-4 h-4 mr-1" /> {registering ? "Registrando..." : "Registrar"}
+                </Button>
                 <Button variant="outline" size="sm" onClick={() => setShowEditTokenModal(true)} title="Editar token de acesso">
                   <KeyRound className="w-4 h-4 mr-1" /> Token
                 </Button>
