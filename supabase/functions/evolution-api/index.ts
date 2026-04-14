@@ -240,8 +240,26 @@ app.post("/pairing/:instanceName", async (c) => {
       return c.json({ error: "Invalid phone number" }, 400, corsHeaders);
     }
     console.log(`[evolution-api] Requesting pairing code for ${instanceName} with number ${sanitizedNumber}`);
+    
+    // First try to restart the instance to reset QR state
+    try {
+      await evolutionRequest(`/instance/restart/${instanceName}`, "PUT", undefined, false);
+      console.log(`[evolution-api] Instance ${instanceName} restarted before pairing`);
+      // Small delay to let the instance restart
+      await new Promise(r => setTimeout(r, 2000));
+    } catch (restartErr) {
+      console.log(`[evolution-api] Restart before pairing skipped:`, restartErr);
+    }
+    
     const result = await evolutionRequest(`/instance/connect/${instanceName}?number=${sanitizedNumber}`);
-    console.log(`[evolution-api] Pairing code result:`, JSON.stringify(result));
+    console.log(`[evolution-api] Pairing code result:`, JSON.stringify(result).substring(0, 200));
+    
+    // If pairingCode is null, the Evolution API version may not support it
+    if (result && result.pairingCode === null) {
+      console.warn(`[evolution-api] pairingCode returned null - API may not support pairing for this instance`);
+      return c.json({ error: "Pairing code não suportado nesta versão. Use o QR Code para conectar." }, 400, corsHeaders);
+    }
+    
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     console.error(`[evolution-api] Pairing code error:`, error);
