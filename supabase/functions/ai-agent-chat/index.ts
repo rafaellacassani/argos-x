@@ -118,9 +118,14 @@ function detectAbusiveSession(messages: ChatMessage[], maxUnproductive: number):
 
   const last25 = userMsgs.slice(-25);
 
-  // Signal 1: Spam of short messages (8+ messages < 6 chars in last 25)
-  const shortCount = last25.filter(m => (m.content || "").trim().length < 6).length;
-  if (shortCount >= 8) {
+  // Signal 1: Spam of short messages (10+ messages < 6 chars in last 25)
+  // Exclude common greetings like "oi", "olá", "bom dia" etc — humans naturally repeat these
+  const GREETING_PATTERNS = /^(oi|ol[aá]|hey|opa|bom dia|boa tarde|boa noite|e a[ií]|alo|al[oô]|ei|eae|eai|fala|salve|boa)[\s!?.]*$/i;
+  const shortCount = last25.filter(m => {
+    const txt = (m.content || "").trim();
+    return txt.length < 6 && !GREETING_PATTERNS.test(txt);
+  }).length;
+  if (shortCount >= 10) {
     return { detected: true, reason: `spam_short_messages (${shortCount} short msgs in last 25)` };
   }
 
