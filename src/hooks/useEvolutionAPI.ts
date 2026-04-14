@@ -192,8 +192,9 @@ export function useEvolutionAPI() {
 
     try {
       const sanitized = phoneNumber.replace(/\D/g, "");
-      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/connect/${instanceName}?number=${sanitized}`, {
-        method: "GET",
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/pairing/${instanceName}`, {
+        method: "POST",
+        body: { number: sanitized },
       });
 
       if (fnError) {
