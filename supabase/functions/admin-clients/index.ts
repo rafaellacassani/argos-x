@@ -1504,6 +1504,21 @@ serve(async (req) => {
         };
       }
 
+      // Churn survey responses
+      const { data: churnSurveyData } = await supabaseAdmin
+        .from("churn_survey_responses")
+        .select("response_number, response_text, created_at");
+
+      const churnSurveyByReason: Record<string, number> = {};
+      (churnSurveyData || []).forEach((r: any) => {
+        const label = r.response_text || `Opção ${r.response_number}`;
+        churnSurveyByReason[label] = (churnSurveyByReason[label] || 0) + 1;
+      });
+      const churn_survey = {
+        total_responses: (churnSurveyData || []).length,
+        by_reason: Object.entries(churnSurveyByReason).map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+      };
+
       return new Response(JSON.stringify({
         current_mrr: currentMRR, mrr_variation: mrrVariation,
         active_clients: activeClients.length, active_trials: trialsActive.length,
@@ -1518,6 +1533,7 @@ serve(async (req) => {
         total_workspaces: workspaces.length,
         first_trial_date,
         total_trials_lifetime,
+        churn_survey,
         // Drill-down lists
         active_clients_list, active_trials_list, churn_list, past_due_list,
         lead_packs_list, provider_clients, plan_clients,
