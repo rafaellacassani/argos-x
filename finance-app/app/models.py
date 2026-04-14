@@ -1,6 +1,6 @@
-from __future__ import annotations
 import enum
 from datetime import date, datetime
+from typing import Optional, List
 from sqlalchemy import (
     Boolean, Date, DateTime, Enum, Float, ForeignKey,
     Integer, String, Text, UniqueConstraint, func,
@@ -62,12 +62,12 @@ class Entity(Base):
     color: Mapped[str] = mapped_column(String(7), default="#6366f1")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    payment_methods: Mapped[list[PaymentMethod]] = relationship(back_populates="entity", cascade="all, delete-orphan")
-    transactions: Mapped[list[Transaction]] = relationship(back_populates="entity", cascade="all, delete-orphan")
-    clients: Mapped[list[Client]] = relationship(back_populates="entity", cascade="all, delete-orphan")
-    unplanned_bills: Mapped[list[UnplannedBill]] = relationship(back_populates="entity", cascade="all, delete-orphan")
-    investment_accounts: Mapped[list[InvestmentAccount]] = relationship(back_populates="entity", cascade="all, delete-orphan")
-    assets: Mapped[list[Asset]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    payment_methods: Mapped[List["PaymentMethod"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    transactions: Mapped[List["Transaction"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    clients: Mapped[List["Client"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    unplanned_bills: Mapped[List["UnplannedBill"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    investment_accounts: Mapped[List["InvestmentAccount"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
+    assets: Mapped[List["Asset"]] = relationship(back_populates="entity", cascade="all, delete-orphan")
 
 
 class PaymentMethod(Base):
@@ -75,14 +75,14 @@ class PaymentMethod(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[PaymentMethodType] = mapped_column(Enum(PaymentMethodType), nullable=False)
-    bank_name: Mapped[str | None] = mapped_column(String(100))
+    bank_name: Mapped[Optional[str]] = mapped_column(String(100))
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="payment_methods")
-    transaction_months: Mapped[list[TransactionMonth]] = relationship(back_populates="payment_method")
-    client_payments: Mapped[list[ClientPayment]] = relationship(back_populates="payment_method")
-    unplanned_bills_paid: Mapped[list[UnplannedBill]] = relationship(back_populates="payment_method")
+    entity: Mapped["Entity"] = relationship(back_populates="payment_methods")
+    transaction_months: Mapped[List["TransactionMonth"]] = relationship(back_populates="payment_method")
+    client_payments: Mapped[List["ClientPayment"]] = relationship(back_populates="payment_method")
+    unplanned_bills_paid: Mapped[List["UnplannedBill"]] = relationship(back_populates="payment_method")
 
 
 class Transaction(Base):
@@ -92,13 +92,13 @@ class Transaction(Base):
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
     type: Mapped[TransactionType] = mapped_column(Enum(TransactionType), nullable=False)
     is_recurring: Mapped[bool] = mapped_column(Boolean, default=True)
-    day_of_month: Mapped[int | None] = mapped_column(Integer)
-    notes: Mapped[str | None] = mapped_column(Text)
+    day_of_month: Mapped[Optional[int]] = mapped_column(Integer)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="transactions")
-    months: Mapped[list[TransactionMonth]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
+    entity: Mapped["Entity"] = relationship(back_populates="transactions")
+    months: Mapped[List["TransactionMonth"]] = relationship(back_populates="transaction", cascade="all, delete-orphan")
 
 
 class TransactionMonth(Base):
@@ -110,12 +110,12 @@ class TransactionMonth(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     status: Mapped[MonthStatus] = mapped_column(Enum(MonthStatus), default=MonthStatus.pending)
-    payment_method_id: Mapped[int | None] = mapped_column(ForeignKey("payment_methods.id"))
-    paid_at: Mapped[date | None] = mapped_column(Date)
-    notes: Mapped[str | None] = mapped_column(Text)
+    payment_method_id: Mapped[Optional[int]] = mapped_column(ForeignKey("payment_methods.id"))
+    paid_at: Mapped[Optional[date]] = mapped_column(Date)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
 
-    transaction: Mapped[Transaction] = relationship(back_populates="months")
-    payment_method: Mapped[PaymentMethod | None] = relationship(back_populates="transaction_months")
+    transaction: Mapped["Transaction"] = relationship(back_populates="months")
+    payment_method: Mapped[Optional["PaymentMethod"]] = relationship(back_populates="transaction_months")
 
 
 class Client(Base):
@@ -125,14 +125,14 @@ class Client(Base):
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
     recurrence: Mapped[RecurrenceType] = mapped_column(Enum(RecurrenceType), default=RecurrenceType.monthly)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
-    payment_day: Mapped[int | None] = mapped_column(Integer)
+    payment_day: Mapped[Optional[int]] = mapped_column(Integer)
     start_month: Mapped[int] = mapped_column(Integer, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="clients")
-    payments: Mapped[list[ClientPayment]] = relationship(back_populates="client", cascade="all, delete-orphan")
+    entity: Mapped["Entity"] = relationship(back_populates="clients")
+    payments: Mapped[List["ClientPayment"]] = relationship(back_populates="client", cascade="all, delete-orphan")
 
 
 class ClientPayment(Base):
@@ -144,12 +144,12 @@ class ClientPayment(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     status: Mapped[MonthStatus] = mapped_column(Enum(MonthStatus), default=MonthStatus.pending)
-    payment_method_id: Mapped[int | None] = mapped_column(ForeignKey("payment_methods.id"))
-    paid_at: Mapped[date | None] = mapped_column(Date)
-    notes: Mapped[str | None] = mapped_column(Text)
+    payment_method_id: Mapped[Optional[int]] = mapped_column(ForeignKey("payment_methods.id"))
+    paid_at: Mapped[Optional[date]] = mapped_column(Date)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
 
-    client: Mapped[Client] = relationship(back_populates="payments")
-    payment_method: Mapped[PaymentMethod | None] = relationship(back_populates="client_payments")
+    client: Mapped["Client"] = relationship(back_populates="payments")
+    payment_method: Mapped[Optional["PaymentMethod"]] = relationship(back_populates="client_payments")
 
 
 class UnplannedBill(Base):
@@ -158,15 +158,15 @@ class UnplannedBill(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
-    due_date: Mapped[date | None] = mapped_column(Date)
+    due_date: Mapped[Optional[date]] = mapped_column(Date)
     status: Mapped[BillStatus] = mapped_column(Enum(BillStatus), default=BillStatus.pending)
-    payment_method_id: Mapped[int | None] = mapped_column(ForeignKey("payment_methods.id"))
-    paid_at: Mapped[date | None] = mapped_column(Date)
-    notes: Mapped[str | None] = mapped_column(Text)
+    payment_method_id: Mapped[Optional[int]] = mapped_column(ForeignKey("payment_methods.id"))
+    paid_at: Mapped[Optional[date]] = mapped_column(Date)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="unplanned_bills")
-    payment_method: Mapped[PaymentMethod | None] = relationship(back_populates="unplanned_bills_paid")
+    entity: Mapped["Entity"] = relationship(back_populates="unplanned_bills")
+    payment_method: Mapped[Optional["PaymentMethod"]] = relationship(back_populates="unplanned_bills_paid")
 
 
 class Asset(Base):
@@ -176,17 +176,17 @@ class Asset(Base):
     type: Mapped[AssetType] = mapped_column(Enum(AssetType), nullable=False)
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
     current_value: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    purchase_price: Mapped[float | None] = mapped_column(Float)
-    purchase_date: Mapped[date | None] = mapped_column(Date)
+    purchase_price: Mapped[Optional[float]] = mapped_column(Float)
+    purchase_date: Mapped[Optional[date]] = mapped_column(Date)
     status: Mapped[AssetStatus] = mapped_column(Enum(AssetStatus), default=AssetStatus.quitado)
     total_financed: Mapped[float] = mapped_column(Float, default=0.0)
     amount_paid: Mapped[float] = mapped_column(Float, default=0.0)
-    total_installments: Mapped[int | None] = mapped_column(Integer)
-    installments_paid: Mapped[int | None] = mapped_column(Integer)
-    notes: Mapped[str | None] = mapped_column(Text)
+    total_installments: Mapped[Optional[int]] = mapped_column(Integer)
+    installments_paid: Mapped[Optional[int]] = mapped_column(Integer)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="assets")
+    entity: Mapped["Entity"] = relationship(back_populates="assets")
 
 
 class InvestmentAccount(Base):
@@ -196,12 +196,12 @@ class InvestmentAccount(Base):
     bank: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[InvestmentType] = mapped_column(Enum(InvestmentType), nullable=False)
     entity_id: Mapped[int] = mapped_column(ForeignKey("entities.id"), nullable=False)
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    entity: Mapped[Entity] = relationship(back_populates="investment_accounts")
-    balances: Mapped[list[InvestmentBalance]] = relationship(back_populates="account", cascade="all, delete-orphan")
+    entity: Mapped["Entity"] = relationship(back_populates="investment_accounts")
+    balances: Mapped[List["InvestmentBalance"]] = relationship(back_populates="account", cascade="all, delete-orphan")
 
 
 class InvestmentBalance(Base):
@@ -213,6 +213,6 @@ class InvestmentBalance(Base):
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     contribution: Mapped[float] = mapped_column(Float, default=0.0)
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
 
-    account: Mapped[InvestmentAccount] = relationship(back_populates="balances")
+    account: Mapped["InvestmentAccount"] = relationship(back_populates="balances")
