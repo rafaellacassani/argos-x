@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, HelpCircle, ImagePlus, Video, FileText, X, Loader2, File } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { toast } from "sonner";
 
 interface FaqAttachment {
   url: string;
