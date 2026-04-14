@@ -3143,14 +3143,23 @@ export default function Chats() {
             </select>
           )}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            {contentSearchLoading ? (
+              <RefreshCw className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            )}
             <Input
-              placeholder="Buscar conversas..."
+              placeholder="Buscar por nome, telefone ou conteúdo..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 bg-muted/50 border-transparent"
             />
           </div>
+          {searchTerm.length >= 3 && contentSearchResults.size > 0 && !contentSearchLoading && (
+            <p className="text-xs text-muted-foreground px-1">
+              {contentSearchResults.size} conversa{contentSearchResults.size !== 1 ? "s" : ""} encontrada{contentSearchResults.size !== 1 ? "s" : ""} por conteúdo
+            </p>
+          )}
         </div>
 
         {/* Chat List */}
