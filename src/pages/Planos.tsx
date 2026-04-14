@@ -72,7 +72,7 @@ export default function Planos() {
     plansRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const useStripe = !!workspace?.stripe_customer_id;
+  const useStripe = workspace?.payment_provider === "stripe" || !!workspace?.stripe_customer_id;
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;

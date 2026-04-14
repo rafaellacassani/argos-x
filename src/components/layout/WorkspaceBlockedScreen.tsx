@@ -83,7 +83,7 @@ export function WorkspaceBlockedScreen({ reason }: WorkspaceBlockedScreenProps) 
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [cancelingSubscription, setCancelingSubscription] = useState(false);
   const isPastDue = reason === "past_due";
-  const useStripe = !!workspace?.stripe_customer_id;
+  const useStripe = workspace?.payment_provider === "stripe" || !!workspace?.stripe_customer_id;
 
   const handleSubscribe = async (planKey: string) => {
     if (!workspaceId) return;
