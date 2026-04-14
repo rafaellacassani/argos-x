@@ -48,6 +48,8 @@ interface MenuItem {
   path: string;
   highlight?: boolean;
   requiredPermission?: 'canManageSalesBots' | 'canManageCampaigns' | 'canManageIntegrations' | 'canManageWorkspaceSettings';
+  /** Plans where this item is locked */
+  blockedPlans?: string[];
 }
 
 const menuItems: MenuItem[] = [
@@ -58,10 +60,10 @@ const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Painel de Dados", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
-  { icon: Calendar, label: "Calendário", path: "/calendar" },
+  { icon: Calendar, label: "Calendário", path: "/calendar", blockedPlans: ["essencial"] },
   { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
-  { icon: Mail, label: "Email", path: "/email" },
+  { icon: Mail, label: "Email", path: "/email", blockedPlans: ["essencial"] },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Crown, label: "Planos", path: "/planos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
