@@ -74,12 +74,14 @@ function SidebarNavContent({
   collapsed,
   permissions,
   canAccessPage,
+  planName,
   onNavigate,
 }: {
   visibleItems: MenuItem[];
   collapsed: boolean;
   permissions: ReturnType<typeof useUserRole>;
   canAccessPage: (path: string) => boolean;
+  planName: string;
   onNavigate?: () => void;
 }) {
   const location = useLocation();
@@ -88,7 +90,9 @@ function SidebarNavContent({
     <ul className="space-y-1">
       {visibleItems.filter((item) => canAccessPage(item.path)).map((item) => {
         const isActive = location.pathname === item.path;
-        const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+        const isPermLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+        const isPlanLocked = item.blockedPlans?.includes(planName) ?? false;
+        const isLocked = isPermLocked || isPlanLocked;
 
         const linkContent = (
           <div
