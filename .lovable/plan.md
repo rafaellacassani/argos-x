@@ -1,23 +1,23 @@
 
 
-# Correção: Remover `form_name` da query Graph API no facebook-webhook
+# Registro automático WABA — Implementação
 
-## Problema confirmado
-A Graph API v21.0 retorna erro 400 `"(#100) Tried accessing nonexisting field (form_name)"` na linha 793, bloqueando toda criação de leads via Meta Lead Ads.
+## 3 Mudanças
 
-## 3 Mudanças (todas em `supabase/functions/facebook-webhook/index.ts`)
+### 1. `whatsapp-embedded-signup/index.ts`
+- **Linha 29**: Detectar `action === "register"` com `connection_id` — nova rota server-side que busca token/IDs do banco, executa register + subscription, retorna resultado
+- **Linha 132**: Adicionar `subscribed_fields: "messages"` no URLSearchParams do Step 3
+- **Após linha 143**: Novo Step 3.5 — `POST /v21.0/{finalPhoneNumberId}/register` com `messaging_product: "whatsapp"` e `pin: "123456"`
 
-### Mudança 1 — Linha 793: Remover `form_name` da query
-```
-fields=field_data,ad_id,ad_name,campaign_id,campaign_name,form_id
-```
+### 2. `facebook-oauth/index.ts`
+- **Linha 393**: Adicionar `subscribed_fields: "messages"` no URLSearchParams
+- **Após linha 405 (dentro do loop de phones)**: Bloco de register para cada phone number
 
-### Mudança 2 — Após linha 801: Buscar form_name separadamente
-Adicionar bloco que faz `GET /{form_id}?fields=name` em try/catch. Se falhar, `formName = null` sem bloquear o fluxo.
-
-### Mudança 3 — Linhas 886 e 939: Substituir `leadData.form_name` por `formName`
-Usar a variável do fallback nas referências de notas e histórico.
+### 3. `WABAConnectionCard.tsx`
+- Estado `registering` + handler `handleRegister` que chama `supabase.functions.invoke("whatsapp-embedded-signup", { body: { action: "register", connection_id: conn.id } })`
+- Botão "Registrar" com ícone `Wifi` entre os botões Token e Webhook (visível quando `isEnabled`)
+- Toast de sucesso/erro
 
 ### Deploy
-Deploy automático da edge function `facebook-webhook` após as mudanças.
+Deploy automático das 2 edge functions: `whatsapp-embedded-signup` e `facebook-oauth`
 
