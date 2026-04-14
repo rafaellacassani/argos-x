@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
 import argosLogoDarkHorizontal from "@/assets/argos-logo-dark-horizontal.png";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useAuth } from "@/hooks/useAuth";
@@ -48,6 +49,8 @@ interface MenuItem {
   path: string;
   highlight?: boolean;
   requiredPermission?: 'canManageSalesBots' | 'canManageCampaigns' | 'canManageIntegrations' | 'canManageWorkspaceSettings';
+  /** Plans where this item is locked */
+  blockedPlans?: string[];
 }
 
 const menuItems: MenuItem[] = [
@@ -58,10 +61,10 @@ const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Painel de Dados", path: "/dashboard" },
   { icon: Users, label: "Funil de Vendas", path: "/leads" },
   { icon: Contact, label: "Contatos", path: "/contacts" },
-  { icon: Calendar, label: "Calendário", path: "/calendar" },
+  { icon: Calendar, label: "Calendário", path: "/calendar", blockedPlans: ["essencial"] },
   { icon: Workflow, label: "SalesBots", path: "/salesbots", requiredPermission: 'canManageSalesBots' },
   { icon: Megaphone, label: "Campanhas", path: "/campaigns", requiredPermission: 'canManageCampaigns' },
-  { icon: Mail, label: "Email", path: "/email" },
+  { icon: Mail, label: "Email", path: "/email", blockedPlans: ["essencial"] },
   { icon: BarChart3, label: "Estatísticas", path: "/statistics" },
   { icon: Crown, label: "Planos", path: "/planos" },
   { icon: Settings, label: "Configurações", path: "/configuracoes" },
@@ -72,12 +75,14 @@ function SidebarNavContent({
   collapsed,
   permissions,
   canAccessPage,
+  planName,
   onNavigate,
 }: {
   visibleItems: MenuItem[];
   collapsed: boolean;
   permissions: ReturnType<typeof useUserRole>;
   canAccessPage: (path: string) => boolean;
+  planName: string;
   onNavigate?: () => void;
 }) {
   const location = useLocation();
@@ -86,7 +91,9 @@ function SidebarNavContent({
     <ul className="space-y-1">
       {visibleItems.filter((item) => canAccessPage(item.path)).map((item) => {
         const isActive = location.pathname === item.path;
-        const isLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+        const isPermLocked = item.requiredPermission ? !permissions[item.requiredPermission] : false;
+        const isPlanLocked = item.blockedPlans?.includes(planName) ?? false;
+        const isLocked = isPermLocked || isPlanLocked;
 
         const linkContent = (
           <div
@@ -125,11 +132,14 @@ function SidebarNavContent({
         );
 
         if (isLocked) {
+          const tooltipMsg = isPlanLocked
+            ? "Disponível a partir do plano Negócio"
+            : "Disponível apenas para administradores";
           return (
             <li key={item.path}>
               <Tooltip>
-                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                <TooltipContent side="right">Disponível apenas para administradores</TooltipContent>
+                <TooltipTrigger asChild>{isPlanLocked ? <NavLink to={item.path}>{linkContent}</NavLink> : linkContent}</TooltipTrigger>
+                <TooltipContent side="right">{tooltipMsg}</TooltipContent>
               </Tooltip>
             </li>
           );
@@ -158,6 +168,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   const { user } = useAuth();
   const permissions = useUserRole();
   const { canAccessPage } = useMemberPermissions();
+  const { planName } = usePlanLimits();
   const isMobile = useIsMobile();
 
   // Close mobile drawer on navigation
@@ -279,7 +290,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
           </div>
           {workspaceBlock(true)}
           <nav className="flex-1 py-4 px-3 overflow-y-auto min-h-0 scrollbar-thin">
-            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} onNavigate={() => onMobileOpenChange?.(false)} />
+            <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} planName={planName} onNavigate={() => onMobileOpenChange?.(false)} />
           </nav>
         </SheetContent>
       </Sheet>
@@ -307,7 +318,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
       </div>
       {workspaceBlock(!collapsed)}
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
-        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} canAccessPage={canAccessPage} />
+        <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} canAccessPage={canAccessPage} planName={planName} />
       </nav>
       <div className="p-3 border-t border-sidebar-border">
         <button

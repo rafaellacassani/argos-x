@@ -9,6 +9,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { PermissionGuard } from "@/components/layout/PermissionGuard";
+import { PlanGate } from "@/components/layout/PlanGate";
 import { PageAccessGuard } from "@/components/layout/PageAccessGuard";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MetaPixelLoader } from "@/components/settings/MetaPixelLoader";
@@ -140,9 +141,9 @@ const App = () => (
                             <Route path="/salesbots" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBots /></PermissionGuard></PageAccessGuard>} />
                             <Route path="/salesbots/builder" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard></PageAccessGuard>} />
                             <Route path="/salesbots/builder/:id" element={<PageAccessGuard path="/salesbots"><PermissionGuard permission="canManageSalesBots"><SalesBotBuilder /></PermissionGuard></PageAccessGuard>} />
-                            <Route path="/calendar" element={<PageAccessGuard path="/calendar"><CalendarPage /></PageAccessGuard>} />
+                            <Route path="/calendar" element={<PageAccessGuard path="/calendar"><PlanGate blockedPlans={["essencial"]} feature="Calendário" minPlan="Negócio"><CalendarPage /></PlanGate></PageAccessGuard>} />
                             <Route path="/contacts" element={<PageAccessGuard path="/contacts"><Contacts /></PageAccessGuard>} />
-                            <Route path="/email" element={<PageAccessGuard path="/email"><Email /></PageAccessGuard>} />
+                            <Route path="/email" element={<PageAccessGuard path="/email"><PlanGate blockedPlans={["essencial"]} feature="Email" minPlan="Negócio"><Email /></PlanGate></PageAccessGuard>} />
                             <Route path="/statistics" element={<PageAccessGuard path="/statistics"><Statistics /></PageAccessGuard>} />
                             <Route path="/campaigns" element={<PageAccessGuard path="/campaigns"><PermissionGuard permission="canManageCampaigns"><Campaigns /></PermissionGuard></PageAccessGuard>} />
                             <Route path="/templates" element={<PageAccessGuard path="/campaigns"><PermissionGuard permission="canManageCampaigns"><WhatsAppTemplates /></PermissionGuard></PageAccessGuard>} />
