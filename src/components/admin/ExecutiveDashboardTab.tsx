@@ -89,6 +89,10 @@ interface DashboardData {
   total_workspaces: number;
   first_trial_date: string | null;
   total_trials_lifetime: number;
+  churn_survey?: {
+    total_responses: number;
+    by_reason: { reason: string; count: number }[];
+  };
   // Drill-down lists
   active_clients_list?: DrilldownItem[];
   active_trials_list?: DrilldownItem[];

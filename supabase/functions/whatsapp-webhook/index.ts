@@ -1244,6 +1244,90 @@ NOVAS CAPACIDADES:
       }
     }
 
+    // ============ CHURN SURVEY INTERCEPT ============
+    // Check if this is a numeric reply (1-6) from an expired/blocked trial workspace
+    const trimmedMsg = (messageText || "").trim();
+    if (["1", "2", "3", "4", "5", "6"].includes(trimmedMsg)) {
+      try {
+        // Find workspace for this instance
+        const { data: surveyInstance } = await supabase
+          .from("whatsapp_instances")
+          .select("workspace_id")
+          .eq("instance_name", instanceName)
+          .limit(1)
+          .single();
+
+        if (surveyInstance) {
+          // Check if this workspace is blocked/expired trial
+          const { data: surveyWs } = await supabase
+            .from("workspaces")
+            .select("id, subscription_status, blocked_at, name")
+            .eq("id", surveyInstance.workspace_id)
+            .single();
+
+          const isExpiredTrial = surveyWs && (
+            surveyWs.blocked_at ||
+            surveyWs.subscription_status === "canceled" ||
+            surveyWs.subscription_status === "expired"
+          );
+
+          if (isExpiredTrial) {
+            // Verify they received a cadence day 8 message
+            const { data: cadenceLogs } = await supabase
+              .from("reactivation_log")
+              .select("id")
+              .eq("workspace_id", surveyWs.id)
+              .eq("cadence_day", 8)
+              .eq("status", "sent")
+              .limit(1);
+
+            if (cadenceLogs && cadenceLogs.length > 0) {
+              // Check if already responded
+              const { data: existingResponse } = await supabase
+                .from("churn_survey_responses")
+                .select("id")
+                .eq("workspace_id", surveyWs.id)
+                .eq("phone", phoneNumber)
+                .limit(1);
+
+              if (!existingResponse || existingResponse.length === 0) {
+                const CHURN_REASONS: Record<string, string> = {
+                  "1": "Não cheguei a usar",
+                  "2": "Não consegui conectar o WhatsApp",
+                  "3": "Achei difícil de configurar",
+                  "4": "Não recebi suporte/demonstração",
+                  "5": "O preço não cabe no momento",
+                  "6": "Já uso outra ferramenta",
+                };
+
+                await supabase.from("churn_survey_responses").insert({
+                  workspace_id: surveyWs.id,
+                  phone: phoneNumber,
+                  response_number: parseInt(trimmedMsg),
+                  response_text: CHURN_REASONS[trimmedMsg],
+                  raw_message: trimmedMsg,
+                });
+
+                // Send thank you reply
+                await evolutionFetch(`/message/sendText/${instanceName}`, "POST", {
+                  number: phoneNumber,
+                  text: `Obrigado pelo feedback! 🙏 Anotamos sua resposta. Se mudar de ideia, estamos aqui: argosx.com.br/planos 💙`,
+                  delay: 0,
+                  linkPreview: true,
+                });
+
+                console.log(`[whatsapp-webhook] 📊 Churn survey response saved: ws=${surveyWs.id}, phone=${phoneNumber}, answer=${trimmedMsg}`);
+                return c.json({ received: true, handler: "churn_survey" }, 200, corsHeaders);
+              }
+            }
+          }
+        }
+      } catch (surveyErr) {
+        console.warn("[whatsapp-webhook] ⚠️ Churn survey check error (non-blocking):", surveyErr);
+      }
+    }
+    // ============ END CHURN SURVEY ============
+
     // Global webhook dedup + canonical session mapping (applies to AI and SalesBots)
     if (msgId) {
       const { error: dedupError } = await supabase
