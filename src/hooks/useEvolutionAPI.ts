@@ -789,6 +789,7 @@ export function useEvolutionAPI() {
     error,
     createInstance,
     getQRCode,
+    getPairingCode,
     getConnectionState,
     listInstances,
     deleteInstance,
