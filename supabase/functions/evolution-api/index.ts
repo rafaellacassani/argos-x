@@ -228,6 +228,27 @@ app.post("/create-instance", async (c) => {
   }
 });
 
+app.post("/pairing/:instanceName", async (c) => {
+  try {
+    const instanceName = c.req.param("instanceName");
+    if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const body = await c.req.json();
+    const number = body?.number;
+    if (!number || typeof number !== "string") return c.json({ error: "Missing phone number" }, 400, corsHeaders);
+    const sanitizedNumber = number.replace(/\D/g, "");
+    if (sanitizedNumber.length < 10 || sanitizedNumber.length > 15) {
+      return c.json({ error: "Invalid phone number" }, 400, corsHeaders);
+    }
+    console.log(`[evolution-api] Requesting pairing code for ${instanceName} with number ${sanitizedNumber}`);
+    const result = await evolutionRequest(`/instance/connect/${instanceName}?number=${sanitizedNumber}`);
+    console.log(`[evolution-api] Pairing code result:`, JSON.stringify(result));
+    return c.json(result, 200, corsHeaders);
+  } catch (error) {
+    console.error(`[evolution-api] Pairing code error:`, error);
+    return c.json({ error: error instanceof Error ? error.message : "Failed to get pairing code" }, 500, corsHeaders);
+  }
+});
+
 app.get("/connect/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
