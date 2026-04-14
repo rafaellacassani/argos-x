@@ -445,7 +445,19 @@ serve(async (req) => {
     try {
       meta = JSON.parse(subscription.externalReference || "{}");
     } catch {
-      console.warn("[asaas-webhook] Could not parse externalReference:", subscription.externalReference);
+      // Fallback: pipe-separated format "userId|plan|company|phone"
+      const parts = (subscription.externalReference || "").split("|");
+      if (parts.length >= 2) {
+        meta = {
+          user_id: parts[0],
+          plan: parts[1],
+          company_name: parts[2] || "",
+          signup_phone: parts[3] || "",
+        };
+        console.log("[asaas-webhook] Parsed pipe-separated externalReference:", JSON.stringify(meta));
+      } else {
+        console.warn("[asaas-webhook] Could not parse externalReference:", subscription.externalReference);
+      }
     }
 
     const asaasCustomerId = subscription.customer || payment.customer;
