@@ -132,11 +132,14 @@ function SidebarNavContent({
         );
 
         if (isLocked) {
+          const tooltipMsg = isPlanLocked
+            ? "Disponível a partir do plano Negócio"
+            : "Disponível apenas para administradores";
           return (
             <li key={item.path}>
               <Tooltip>
-                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                <TooltipContent side="right">Disponível apenas para administradores</TooltipContent>
+                <TooltipTrigger asChild>{isPlanLocked ? <NavLink to={item.path}>{linkContent}</NavLink> : linkContent}</TooltipTrigger>
+                <TooltipContent side="right">{tooltipMsg}</TooltipContent>
               </Tooltip>
             </li>
           );
