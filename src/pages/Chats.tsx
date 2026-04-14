@@ -426,6 +426,10 @@ export default function Chats() {
   const [loadingMoreChats, setLoadingMoreChats] = useState(false);
   const [hasMoreChats, setHasMoreChats] = useState(true);
   const chatListOffsetRef = useRef(1000); // tracks how many messages we've already loaded for chat list
+  // Content search state
+  const [contentSearchResults, setContentSearchResults] = useState<Set<string>>(new Set());
+  const [contentSearchLoading, setContentSearchLoading] = useState(false);
+  const [contentSearchTerm, setContentSearchTerm] = useState("");
   const chatListScrollRef = useRef<HTMLDivElement | null>(null);
   const [activeFilters, setActiveFilters] = useState<ChatFiltersFormData | null>(() => {
     // Initialize filters from URL params on mount
