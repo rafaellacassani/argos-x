@@ -15,6 +15,8 @@ import {
   XCircle,
   RefreshCw,
   Smartphone,
+  Hash,
+  QrCode,
 } from "lucide-react";
 import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
@@ -22,6 +24,7 @@ import { useWorkspace } from "@/hooks/useWorkspace";
 import { supabase } from "@/integrations/supabase/client";
 
 type Step = "name" | "creating" | "qrcode" | "waiting" | "success" | "error";
+type ConnectMode = "qrcode" | "pairing";
 
 interface ConnectionModalProps {
   open: boolean;
@@ -42,16 +45,20 @@ export function ConnectionModal({
   const [step, setStep] = useState<Step>("name");
   const [instanceName, setInstanceName] = useState("");
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [connectMode, setConnectMode] = useState<ConnectMode>("qrcode");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const { createInstance, getQRCode, getConnectionState, error } =
+  const { createInstance, getQRCode, getPairingCode, getConnectionState, error } =
     useEvolutionAPI();
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pollingInFlightRef = useRef(false);
+  // Store the unique Evolution API instance name for use across methods
+  const currentUniqueNameRef = useRef<string>("");
 
-  // Clean up polling on unmount or close
   useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
@@ -60,22 +67,24 @@ export function ConnectionModal({
     };
   }, []);
 
-  // Reset state when modal opens/closes
   useEffect(() => {
     if (!open) {
-      // Delay reset to allow close animation
       setTimeout(() => {
         setStep("name");
         setInstanceName("");
         setQrCodeBase64(null);
+        setPairingCode(null);
+        setConnectMode("qrcode");
+        setPhoneNumber("");
         setErrorMessage(null);
+        currentUniqueNameRef.current = "";
         if (pollingRef.current) clearInterval(pollingRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         pollingInFlightRef.current = false;
       }, 300);
     } else if (open && instanceToReconnect) {
-      // Reconnect mode: skip name step, go straight to QR code
       setInstanceName(instanceToReconnect);
+      currentUniqueNameRef.current = instanceToReconnect;
       setStep("creating");
       (async () => {
         try {
@@ -95,7 +104,6 @@ export function ConnectionModal({
     }
   }, [open]);
 
-  // Generate a unique Evolution API instance name scoped to the workspace
   const buildUniqueInstanceName = (displayName: string) => {
     const sanitized = displayName
       .trim()
@@ -103,56 +111,35 @@ export function ConnectionModal({
       .replace(/[^a-z0-9]/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
-    // Use first 8 chars of workspace ID to avoid collisions across workspaces
     const wsPrefix = workspaceId ? workspaceId.substring(0, 8) : "default";
     return `${wsPrefix}-${sanitized}`;
   };
 
   const handleCreateConnection = async () => {
     if (!instanceName.trim()) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Digite um nome para a conexão",
-        variant: "destructive",
-      });
+      toast({ title: "Nome obrigatório", description: "Digite um nome para a conexão", variant: "destructive" });
       return;
     }
 
-    const sanitizedName = instanceName
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-
+    const sanitizedName = instanceName.trim().toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
     if (!sanitizedName) {
-      toast({
-        title: "Nome inválido",
-        description: "Use apenas letras e números",
-        variant: "destructive",
-      });
+      toast({ title: "Nome inválido", description: "Use apenas letras e números", variant: "destructive" });
       return;
     }
 
-    // Use workspace-scoped unique name for Evolution API
     const uniqueName = buildUniqueInstanceName(instanceName);
-
+    currentUniqueNameRef.current = uniqueName;
     setStep("creating");
 
     try {
       const result = await createInstance(uniqueName);
+      if (!result) throw new Error(error || "Erro ao criar conexão");
 
-      if (!result) {
-        throw new Error(error || "Erro ao criar conexão");
-      }
-
-      // Check if QR code is returned in the create response
       if (result.qrcode?.base64) {
         setQrCodeBase64(result.qrcode.base64);
         setStep("qrcode");
         startPolling(uniqueName);
       } else {
-        // Need to fetch QR code separately
         const qrResult = await getQRCode(uniqueName);
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
@@ -165,28 +152,74 @@ export function ConnectionModal({
     } catch (err) {
       console.error("Error creating connection:", err);
       const errMsg = err instanceof Error ? err.message : "Erro ao criar conexão";
-      setErrorMessage(
-        errMsg.includes("Forbidden")
-          ? "Nome de conexão já existe. Tente outro nome."
-          : errMsg
-      );
+      setErrorMessage(errMsg.includes("Forbidden") ? "Nome de conexão já existe. Tente outro nome." : errMsg);
+      setStep("error");
+    }
+  };
+
+  const handleSwitchToPairing = async () => {
+    if (!phoneNumber.trim()) {
+      toast({ title: "Número obrigatório", description: "Digite o número do WhatsApp com DDD e código do país", variant: "destructive" });
+      return;
+    }
+
+    const targetName = instanceToReconnect || currentUniqueNameRef.current;
+    if (!targetName) {
+      toast({ title: "Erro", description: "Nome da instância não encontrado", variant: "destructive" });
+      return;
+    }
+
+    setStep("creating");
+    try {
+      const result = await getPairingCode(targetName, phoneNumber);
+      if (result?.pairingCode) {
+        setPairingCode(result.pairingCode);
+        setConnectMode("pairing");
+        setStep("qrcode"); // reuse the same step to show pairing code
+        startPolling(targetName);
+      } else {
+        throw new Error("Não foi possível obter o código de pareamento");
+      }
+    } catch (err) {
+      console.error("Error getting pairing code:", err);
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao obter código de pareamento");
+      setStep("error");
+    }
+  };
+
+  const handleSwitchToQR = async () => {
+    const targetName = instanceToReconnect || currentUniqueNameRef.current;
+    if (!targetName) return;
+
+    setStep("creating");
+    setPairingCode(null);
+    setConnectMode("qrcode");
+
+    try {
+      const qrResult = await getQRCode(targetName);
+      if (qrResult?.base64) {
+        setQrCodeBase64(qrResult.base64);
+        setStep("qrcode");
+        startPolling(targetName);
+      } else {
+        throw new Error("Não foi possível obter o QR Code");
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao obter QR Code");
       setStep("error");
     }
   };
 
   const startPolling = (name: string) => {
-    // Clear any existing polling
     if (pollingRef.current) clearInterval(pollingRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // Set a 2-minute timeout
     timeoutRef.current = setTimeout(() => {
       if (pollingRef.current) clearInterval(pollingRef.current);
-      setErrorMessage("Tempo esgotado. O QR Code expirou.");
+      setErrorMessage("Tempo esgotado. O código expirou.");
       setStep("error");
     }, 120000);
 
-    // Poll every 5 seconds with single-flight guard (prevents stacked checks)
     pollingRef.current = setInterval(async () => {
       if (pollingInFlightRef.current) return;
       pollingInFlightRef.current = true;
@@ -200,9 +233,7 @@ export function ConnectionModal({
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           pollingInFlightRef.current = false;
           
-          // Only save to DB if creating new instance (not reconnecting)
           if (!instanceToReconnect) {
-            // Use the Evolution API instance name (name param = uniqueName passed to startPolling)
             const { data: { user } } = await supabase.auth.getUser();
             await supabase.from('whatsapp_instances').upsert({
               instance_name: name,
@@ -212,52 +243,31 @@ export function ConnectionModal({
               instance_type: instanceType,
             } as any, { onConflict: 'instance_name' });
             
-            // Auto-setup webhook for this instance
             try {
-              await supabase.functions.invoke(`evolution-api/setup-webhook/${name}`, {
-                method: "POST",
-              });
+              await supabase.functions.invoke(`evolution-api/setup-webhook/${name}`, { method: "POST" });
               console.log("[ConnectionModal] Webhook configured for", name);
-              toast({
-                title: "Webhook configurado ✓",
-                description: "Automações serão disparadas automaticamente.",
-              });
+              toast({ title: "Webhook configurado ✓", description: "Automações serão disparadas automaticamente." });
             } catch (webhookErr) {
               console.error("[ConnectionModal] Webhook setup error:", webhookErr);
             }
           }
           
-          // Auto-sync message history from Evolution API to local DB
           try {
-            toast({
-              title: "Sincronizando histórico...",
-              description: "Importando mensagens do WhatsApp para o banco local.",
-            });
+            toast({ title: "Sincronizando histórico...", description: "Importando mensagens do WhatsApp para o banco local." });
             supabase.functions.invoke('sync-whatsapp-messages', {
               body: { instanceName: instanceToReconnect || name, workspaceId },
             }).then((res) => {
               if (res.data && !res.error) {
-                console.log("[ConnectionModal] Sync complete:", res.data);
-                toast({
-                  title: "Histórico sincronizado ✓",
-                  description: `${res.data.synced || 0} mensagens de ${res.data.chats || 0} conversas importadas.`,
-                });
+                toast({ title: "Histórico sincronizado ✓", description: `${res.data.synced || 0} mensagens de ${res.data.chats || 0} conversas importadas.` });
               }
-            }).catch((err) => {
-              console.error("[ConnectionModal] Sync error:", err);
-            });
+            }).catch((err) => console.error("[ConnectionModal] Sync error:", err));
           } catch (syncErr) {
             console.error("[ConnectionModal] Sync trigger error:", syncErr);
           }
           
           setStep("success");
+          toast({ title: "Conexão estabelecida!", description: "Seu WhatsApp foi conectado com sucesso." });
 
-          toast({
-            title: "Conexão estabelecida!",
-            description: "Seu WhatsApp foi conectado com sucesso.",
-          });
-
-          // Call onSuccess after a brief delay
           setTimeout(() => {
             onSuccess?.();
             onOpenChange(false);
@@ -272,24 +282,31 @@ export function ConnectionModal({
   };
 
   const handleRefreshQR = async () => {
-    // For reconnect, use the instance name directly; for new, use the unique name
-    const targetName = instanceToReconnect || buildUniqueInstanceName(instanceName);
-
+    const targetName = instanceToReconnect || currentUniqueNameRef.current;
     setStep("creating");
 
     try {
-      const qrResult = await getQRCode(targetName);
-      if (qrResult?.base64) {
-        setQrCodeBase64(qrResult.base64);
-        setStep("qrcode");
-        startPolling(targetName);
+      if (connectMode === "pairing" && phoneNumber) {
+        const result = await getPairingCode(targetName, phoneNumber);
+        if (result?.pairingCode) {
+          setPairingCode(result.pairingCode);
+          setStep("qrcode");
+          startPolling(targetName);
+        } else {
+          throw new Error("Não foi possível obter o código");
+        }
       } else {
-        throw new Error("Não foi possível obter o QR Code");
+        const qrResult = await getQRCode(targetName);
+        if (qrResult?.base64) {
+          setQrCodeBase64(qrResult.base64);
+          setStep("qrcode");
+          startPolling(targetName);
+        } else {
+          throw new Error("Não foi possível obter o QR Code");
+        }
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Erro ao atualizar QR Code"
-      );
+      setErrorMessage(err instanceof Error ? err.message : "Erro ao atualizar");
       setStep("error");
     }
   };
@@ -298,6 +315,15 @@ export function ConnectionModal({
     setStep("name");
     setErrorMessage(null);
     setQrCodeBase64(null);
+    setPairingCode(null);
+    setConnectMode("qrcode");
+  };
+
+  const formatPairingCode = (code: string) => {
+    // Format as XXXX-XXXX for readability
+    const clean = code.replace(/[^A-Z0-9]/gi, "");
+    if (clean.length <= 4) return clean;
+    return clean.slice(0, 4) + "-" + clean.slice(4);
   };
 
   return (
@@ -307,7 +333,8 @@ export function ConnectionModal({
           <DialogTitle className="text-center">
             {step === "name" && "Criar Nova Conexão"}
             {step === "creating" && (instanceToReconnect ? `Reconectando ${instanceToReconnect}...` : "Criando Conexão...")}
-            {step === "qrcode" && (instanceToReconnect ? `Reconectar ${instanceToReconnect}` : "Escaneie o QR Code")}
+            {step === "qrcode" && connectMode === "pairing" && "Código de Pareamento"}
+            {step === "qrcode" && connectMode === "qrcode" && (instanceToReconnect ? `Reconectar ${instanceToReconnect}` : "Escaneie o QR Code")}
             {step === "waiting" && "Aguardando..."}
             {step === "success" && "Conectado!"}
             {step === "error" && "Erro na Conexão"}
@@ -361,12 +388,14 @@ export function ConnectionModal({
                 className="flex flex-col items-center justify-center py-8"
               >
                 <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-                <p className="text-muted-foreground">Criando conexão...</p>
+                <p className="text-muted-foreground">
+                  {connectMode === "pairing" ? "Obtendo código de pareamento..." : "Criando conexão..."}
+                </p>
               </motion.div>
             )}
 
-            {/* Step 3: QR Code */}
-            {step === "qrcode" && qrCodeBase64 && (
+            {/* Step 3: QR Code or Pairing Code */}
+            {step === "qrcode" && connectMode === "qrcode" && qrCodeBase64 && (
               <motion.div
                 key="qrcode"
                 initial={{ opacity: 0, y: 10 }}
@@ -376,11 +405,7 @@ export function ConnectionModal({
               >
                 <div className="flex justify-center">
                   <div className="bg-white p-4 rounded-xl shadow-inner">
-                    <img
-                      src={qrCodeBase64}
-                      alt="QR Code WhatsApp"
-                      className="w-64 h-64"
-                    />
+                    <img src={qrCodeBase64} alt="QR Code WhatsApp" className="w-64 h-64" />
                   </div>
                 </div>
 
@@ -397,14 +422,84 @@ export function ConnectionModal({
                   <li>5. Escaneie este QR Code</li>
                 </ol>
 
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleRefreshQR}
-                >
+                {/* Switch to Pairing Code */}
+                <div className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Hash className="w-4 h-4 text-primary" />
+                    <span>Prefere usar código numérico?</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Se está configurando pelo mesmo celular, use o código de pareamento — não precisa de câmera.
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ex: 5511999999999"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={handleSwitchToPairing}
+                      disabled={!phoneNumber.trim()}
+                      size="sm"
+                    >
+                      Gerar código
+                    </Button>
+                  </div>
+                </div>
+
+                <Button variant="outline" className="w-full" onClick={handleRefreshQR}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Atualizar QR Code
                 </Button>
+              </motion.div>
+            )}
+
+            {/* Pairing Code View */}
+            {step === "qrcode" && connectMode === "pairing" && pairingCode && (
+              <motion.div
+                key="pairing"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <div className="flex justify-center">
+                  <div className="bg-primary/5 border-2 border-primary/20 rounded-2xl p-8 text-center">
+                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">
+                      Código de pareamento
+                    </p>
+                    <p className="text-4xl font-mono font-bold tracking-[0.3em] text-foreground">
+                      {formatPairingCode(pairingCode)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Aguardando pareamento...</span>
+                </div>
+
+                <ol className="text-sm text-muted-foreground space-y-1 bg-muted/50 p-4 rounded-lg">
+                  <li>1. Abra o WhatsApp Business no celular</li>
+                  <li>2. Toque em Menu (⋮) ou Configurações</li>
+                  <li>3. Selecione "Aparelhos conectados"</li>
+                  <li>4. Toque em "Conectar um aparelho"</li>
+                  <li>5. Toque em <strong>"Conectar com número de telefone"</strong></li>
+                  <li>6. Digite o código acima</li>
+                </ol>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={handleSwitchToQR}>
+                    <QrCode className="w-4 h-4 mr-2" />
+                    Usar QR Code
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={handleRefreshQR}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Novo código
+                  </Button>
+                </div>
               </motion.div>
             )}
 
@@ -424,9 +519,7 @@ export function ConnectionModal({
                 >
                   <CheckCircle2 className="w-16 h-16 text-success mb-4" />
                 </motion.div>
-                <h3 className="text-xl font-semibold mb-2">
-                  Conexão Estabelecida!
-                </h3>
+                <h3 className="text-xl font-semibold mb-2">Conexão Estabelecida!</h3>
                 <p className="text-muted-foreground text-center">
                   Seu WhatsApp foi conectado com sucesso.
                 </p>
@@ -443,9 +536,7 @@ export function ConnectionModal({
                 className="flex flex-col items-center justify-center py-8"
               >
                 <XCircle className="w-16 h-16 text-destructive mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  Erro na Conexão
-                </h3>
+                <h3 className="text-xl font-semibold mb-2">Erro na Conexão</h3>
                 <p className="text-muted-foreground text-center mb-4">
                   {errorMessage || "Ocorreu um erro inesperado"}
                 </p>

@@ -232,6 +232,17 @@ app.get("/connect/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const number = c.req.query("number");
+    if (number) {
+      // Pairing code mode: pass phone number to Evolution API
+      const sanitizedNumber = number.replace(/\D/g, "");
+      if (sanitizedNumber.length < 10 || sanitizedNumber.length > 15) {
+        return c.json({ error: "Invalid phone number" }, 400, corsHeaders);
+      }
+      console.log(`[evolution-api] Requesting pairing code for ${instanceName} with number ${sanitizedNumber}`);
+      const result = await evolutionRequest(`/instance/connect/${instanceName}?number=${sanitizedNumber}`);
+      return c.json(result, 200, corsHeaders);
+    }
     const result = await getConnectResponse(instanceName);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
