@@ -178,12 +178,14 @@ export function ConnectionModal({
         setStep("qrcode"); // reuse the same step to show pairing code
         startPolling(targetName);
       } else {
-        throw new Error("Não foi possível obter o código de pareamento");
+        throw new Error("Código de pareamento indisponível. Use o QR Code para conectar.");
       }
     } catch (err) {
       console.error("Error getting pairing code:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Erro ao obter código de pareamento");
-      setStep("error");
+      const msg = err instanceof Error ? err.message : "Erro ao obter código de pareamento";
+      toast({ title: "Pareamento indisponível", description: msg, variant: "destructive" });
+      // Go back to QR code view instead of error screen
+      setStep("qrcode");
     }
   };
 
