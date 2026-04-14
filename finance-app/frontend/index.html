@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Central Financeira</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+[x-cloak]{display:none!important}
+.kpi{background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #f1f5f9;transition:box-shadow .15s,transform .15s}
+.kpi:hover{box-shadow:0 6px 20px rgba(0,0,0,.09);transform:translateY(-2px)}
+.nb{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:500;width:100%;transition:all .15s;text-align:left;cursor:pointer;border:none;background:none}
+.nb-on{background:#6366f1;color:#fff}
+.nb-off{color:#94a3b8}
+.nb-off:hover{background:rgba(255,255,255,.06);color:#e2e8f0}
+.mcell{min-width:66px;padding:3px 6px;border-radius:6px;font-size:11px;text-align:center;cursor:pointer;transition:opacity .1s;white-space:nowrap;display:block}
+.mcell:hover{opacity:.75}
+.mc-paid{background:#d1fae5;color:#065f46;font-weight:600}
+.mc-pending{background:#fef3c7;color:#92400e}
+.mc-skipped{background:#f1f5f9;color:#94a3b8}
+.mc-empty{background:#f8fafc;color:#cbd5e1}
+.bcell{min-width:80px;text-align:right;font-size:12px;padding:3px 6px;cursor:pointer;border-radius:4px;display:block}
+.bcell:hover{background:#eff6ff}
+</style>
+</head>
+<body class="font-sans antialiased bg-slate-50" x-data="rootApp()" x-init="boot()" x-cloak>
+
+<!-- LOGIN -->
+<div x-show="!authenticated" class="min-h-screen flex items-center justify-center p-4" style="background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)">
+  <div class="absolute inset-0 pointer-events-none overflow-hidden">
+    <div class="absolute -top-32 -right-32 w-96 h-96 rounded-full" style="background:radial-gradient(circle,rgba(99,102,241,.18) 0%,transparent 70%)"></div>
+    <div class="absolute -bottom-32 -left-32 w-96 h-96 rounded-full" style="background:radial-gradient(circle,rgba(168,85,247,.14) 0%,transparent 70%)"></div>
+  </div>
+  <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md p-10 relative z-10">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg" style="background:linear-gradient(135deg,#6366f1,#9333ea)">
+        <svg class="w-9 h-9 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Central Financeira</h1>
+      <p class="text-slate-400 text-sm mt-1">Argos X · Controle total</p>
+    </div>
+    <form @submit.prevent="doLogin()" class="space-y-5">
+      <div><label class="form-label">E-mail</label><input type="email" x-model="loginEmail" class="form-input mt-1" placeholder="seu@email.com" required autocomplete="email"></div>
+      <div>
+        <label class="form-label">Senha</label>
+        <div class="relative mt-1">
+          <input :type="showPwd?'text':'password'" x-model="loginPassword" class="form-input pr-10" placeholder="••••••••" required autocomplete="current-password">
+          <button type="button" @click="showPwd=!showPwd" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" :d="showPwd?'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21':'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'"></path></svg>
+          </button>
+        </div>
+      </div>
+      <p x-show="loginError" x-text="loginError" class="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3 text-center"></p>
+      <button type="submit" :disabled="loginLoading" class="btn btn-primary w-full justify-center py-3 text-base rounded-xl gap-2">
+        <svg x-show="loginLoading" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+        <span x-text="loginLoading?'Entrando...':'Entrar'"></span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<!-- APP -->
+<template x-if="authenticated">
+<div class="flex min-h-screen">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-screen w-56 flex flex-col z-30" style="background:#0f172a;box-shadow:4px 0 24px rgba(0,0,0,.25)">
+  <div class="px-5 py-5" style="border-bottom:1px solid rgba(255,255,255,.06)">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center" style="background:linear-gradient(135deg,#6366f1,#9333ea)">
+        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div><p class="text-white font-bold text-sm leading-tight">Central</p><p class="text-indigo-400 text-xs">Financeira</p></div>
+    </div>
+  </div>
+  <nav class="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+    <button @click="page='dashboard'" :class="page==='dashboard'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>Dashboard</button>
+    <button @click="page='patrimonio'" :class="page==='patrimonio'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4z"/></svg>Patrimônio</button>
+    <button @click="page='transactions'" :class="page==='transactions'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>Transações</button>
+    <button @click="page='clients'" :class="page==='clients'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Clientes</button>
+    <button @click="page='investments'" :class="page==='investments'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>Investimentos</button>
+    <button @click="page='unplanned'" :class="page==='unplanned'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>Contas a Vencer</button>
+    <button @click="page='payment-methods'" :class="page==='payment-methods'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>Pagamentos</button>
+    <button @click="page='entities'" :class="page==='entities'?'nb nb-on':'nb nb-off'">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>Entidades</button>
+  </nav>
+  <div class="px-3 py-4" style="border-top:1px solid rgba(255,255,255,.06)">
+    <p class="text-slate-500 text-xs px-3 mb-2 truncate">mafracassani@gmail.com</p>
+    <button @click="doLogout()" class="nb nb-off w-full hover:!text-rose-400">
+      <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>Sair</button>
+  </div>
+</aside>
+
+<!-- CONTENT -->
+<div class="ml-56 flex-1 min-h-screen">
+
+<!-- ═══ DASHBOARD ═══ -->
+<section x-show="page==='dashboard'" x-data="dashboardPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Dashboard</h1><p class="text-slate-500 text-sm mt-1">Visão geral das finanças</p></div>
+    <div class="flex items-center gap-3 flex-wrap justify-end">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2">
+        <option value="">Todas as entidades</option>
+        <template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template>
+      </select>
+      <select x-model="month" @change="load()" class="form-input form-select text-sm py-2" style="width:130px">
+        <option value="">Ano todo</option>
+        <template x-for="(m,i) in MONTHS" :key="i"><option :value="i+1" x-text="m"></option></template>
+      </select>
+      <input type="number" x-model="year" @change="load()" class="form-input text-sm py-2" style="width:90px">
+      <button @click="load()" class="btn btn-secondary text-sm py-2">↻ Atualizar</button>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+    <div class="kpi"><div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Despesas Pagas</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#fee2e2"><svg class="w-5 h-5" style="color:#ef4444" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/></svg></div></div><p class="text-3xl font-extrabold text-slate-900" x-text="summary?fmt(summary.total_expenses_paid):'—'"></p><p class="text-xs text-slate-400 mt-1">Efetivamente pago</p></div>
+    <div class="kpi"><div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Despesas Pendentes</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#fef3c7"><svg class="w-5 h-5" style="color:#f59e0b" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div></div><p class="text-3xl font-extrabold text-amber-600" x-text="summary?fmt(summary.total_expenses_pending):'—'"></p><p class="text-xs text-slate-400 mt-1">Ainda não pago</p></div>
+    <div class="kpi"><div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Receita Recebida</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#d1fae5"><svg class="w-5 h-5" style="color:#10b981" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg></div></div><p class="text-3xl font-extrabold text-emerald-600" x-text="summary?fmt(summary.total_income_received):'—'"></p><p class="text-xs text-slate-400 mt-1">Recebido no período</p></div>
+    <div class="kpi"><div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Receita Pendente</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#dbeafe"><svg class="w-5 h-5" style="color:#3b82f6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div></div><p class="text-3xl font-extrabold text-blue-600" x-text="summary?fmt(summary.total_income_pending):'—'"></p><p class="text-xs text-slate-400 mt-1">A receber</p></div>
+    <div class="kpi"><div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Contas Extras</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#ede9fe"><svg class="w-5 h-5" style="color:#8b5cf6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div></div><p class="text-3xl font-extrabold text-violet-600" x-text="summary?fmt(summary.total_unplanned_pending):'—'"></p><p class="text-xs text-slate-400 mt-1">Contas a vencer pendentes</p></div>
+    <div class="kpi" :style="summary&&summary.net_balance>=0?'border-color:#a7f3d0;background:linear-gradient(135deg,#fff,#f0fdf4)':'border-color:#fecaca;background:linear-gradient(135deg,#fff,#fff5f5)'">
+      <div class="flex items-start justify-between mb-3"><p class="text-slate-500 text-sm font-medium">Saldo Líquido</p><div class="w-10 h-10 rounded-xl flex items-center justify-center" :style="summary&&summary.net_balance>=0?'background:#d1fae5':'background:#fee2e2'"><svg class="w-5 h-5" :style="summary&&summary.net_balance>=0?'color:#10b981':'color:#ef4444'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div></div>
+      <p class="text-3xl font-extrabold" :class="netClass(summary?summary.net_balance:0)" x-text="summary?fmt(summary.net_balance):'—'"></p><p class="text-xs text-slate-400 mt-1">Receita − Despesas pagas</p>
+    </div>
+  </div>
+
+  <!-- Chart + Clients -->
+  <div class="grid grid-cols-3 gap-6 mb-6">
+    <div class="col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-slate-900">Fluxo Mensal <span class="text-slate-400 font-normal text-sm" x-text="year"></span></h3>
+        <div class="flex items-center gap-4 text-xs text-slate-400">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#10b981;display:inline-block"></span>Receita</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#f43f5e;display:inline-block"></span>Despesa</span>
+        </div>
+      </div>
+      <div class="flex items-end gap-1.5" style="height:88px" x-show="flow.length">
+        <template x-for="row in flow" :key="row.month">
+          <div class="flex-1">
+            <div class="flex items-end gap-0.5" style="height:72px">
+              <div class="flex-1 rounded-t-sm transition-all" style="background:#10b981;min-height:3px" :style="`height:${barPct(row.income_received)}%`" :title="`Receita: ${fmt(row.income_received)}`"></div>
+              <div class="flex-1 rounded-t-sm transition-all" style="background:#f43f5e;min-height:3px" :style="`height:${barPct(row.expenses_paid)}%`" :title="`Despesa: ${fmt(row.expenses_paid)}`"></div>
+            </div>
+            <p class="text-center mt-1" style="font-size:10px;color:#94a3b8" x-text="row.month_name"></p>
+          </div>
+        </template>
+      </div>
+      <p x-show="!flow.length" class="text-center text-slate-400 text-sm py-8">Sem dados</p>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+      <h3 class="font-bold text-slate-900 mb-5">Receita por Entidade</h3>
+      <div class="space-y-5" x-show="clientsSummary.length">
+        <template x-for="cs in clientsSummary" :key="cs.entity_id">
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center gap-2"><span class="entity-dot" :style="`background:${cs.entity_color}`"></span><span class="text-sm font-medium text-slate-700" x-text="cs.entity_name"></span></div>
+              <span class="text-sm font-bold" x-text="fmt(cs.received)"></span>
+            </div>
+            <div class="h-1.5 rounded-full" style="background:#f1f5f9"><div class="h-full rounded-full transition-all" :style="`width:${cs.projected>0?Math.round(cs.received/cs.projected*100):0}%;background:${cs.entity_color}`"></div></div>
+            <div class="flex justify-between text-xs text-slate-400 mt-1">
+              <span x-text="`${cs.projected>0?Math.round(cs.received/cs.projected*100):0}% recebido`"></span>
+              <span x-text="`de ${fmt(cs.projected)}`"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+      <p x-show="!clientsSummary.length" class="text-slate-400 text-sm text-center py-6">Sem clientes</p>
+    </div>
+  </div>
+
+  <!-- Flow Table -->
+  <div x-show="flow.length" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <table class="tbl"><thead><tr><th>Mês</th><th>Receita Recebida</th><th>Receita Pendente</th><th>Despesas Pagas</th><th>Despesas Pendentes</th><th>Saldo</th></tr></thead>
+    <tbody>
+      <template x-for="row in flow" :key="row.month">
+        <tr>
+          <td class="font-semibold" x-text="row.month_name"></td>
+          <td class="text-emerald-600 font-medium" x-text="fmt(row.income_received)"></td>
+          <td class="text-blue-500" x-text="fmt(row.income_pending)"></td>
+          <td class="text-rose-500" x-text="fmt(row.expenses_paid)"></td>
+          <td class="text-amber-500" x-text="fmt(row.expenses_pending)"></td>
+          <td class="font-bold" :class="row.net>=0?'text-emerald-600':'text-rose-600'" x-text="fmt(row.net)"></td>
+        </tr>
+      </template>
+    </tbody></table>
+  </div>
+</div>
+</section>
+
+<!-- ═══ PATRIMÔNIO ═══ -->
+<section x-show="page==='patrimonio'" x-data="patrimonioPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Patrimônio</h1><p class="text-slate-500 text-sm mt-1">Balanço patrimonial completo</p></div>
+    <div class="flex items-center gap-3">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todas</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select>
+      <select x-model="month" @change="load()" class="form-input form-select text-sm py-2" style="width:120px"><template x-for="(m,i) in ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']" :key="i"><option :value="i+1" x-text="m"></option></template></select>
+      <input type="number" x-model="year" @change="load()" class="form-input text-sm py-2" style="width:90px">
+      <button @click="openCreate()" class="btn btn-primary text-sm">+ Novo Ativo</button>
+    </div>
+  </div>
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-5 gap-4 mb-8">
+    <div class="kpi"><p class="text-xs text-slate-500 font-medium mb-2">🏠 Imóveis</p><p class="text-xl font-extrabold text-slate-900" x-text="data?fmt(data.total_imoveis):'—'"></p></div>
+    <div class="kpi"><p class="text-xs text-slate-500 font-medium mb-2">🚗 Veículos</p><p class="text-xl font-extrabold text-slate-900" x-text="data?fmt(data.total_veiculos):'—'"></p></div>
+    <div class="kpi"><p class="text-xs text-slate-500 font-medium mb-2">📦 Outros</p><p class="text-xl font-extrabold text-slate-900" x-text="data?fmt(data.total_outros):'—'"></p></div>
+    <div class="kpi"><p class="text-xs text-slate-500 font-medium mb-2">📈 Investimentos</p><p class="text-xl font-extrabold text-indigo-600" x-text="data?fmt(data.total_investimentos):'—'"></p></div>
+    <div class="kpi" style="border-color:#818cf8;background:linear-gradient(135deg,#fff,#eef2ff)"><p class="text-xs text-indigo-500 font-bold mb-2">💎 TOTAL PATRIMÔNIO</p><p class="text-xl font-extrabold text-indigo-700" x-text="data?fmt(data.total_patrimonio):'—'"></p></div>
+  </div>
+  <!-- Asset tables helper macro -->
+  <template x-if="data">
+    <div class="space-y-6">
+      <!-- Imóveis -->
+      <div x-show="data.imoveis.length" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 class="font-bold text-slate-900">🏠 Imóveis</h3><span class="font-bold text-indigo-600" x-text="fmt(data.total_imoveis)"></span></div>
+        <table class="tbl"><thead><tr><th>Nome</th><th>Entidade</th><th>Valor Atual</th><th>Status</th><th>% Quitado</th><th></th></tr></thead><tbody>
+          <template x-for="a in data.imoveis" :key="a.id"><tr>
+            <td class="font-medium" x-text="a.name"></td>
+            <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${a.entity.color}`"></span><span x-text="a.entity.name"></span></span></td>
+            <td class="font-bold" x-text="fmt(a.current_value)"></td>
+            <td><span class="badge" :class="a.status==='quitado'?'asset-quitado':'asset-financiado'" x-text="a.status==='quitado'?'Quitado':'Financiado'"></span></td>
+            <td><div class="flex items-center gap-2"><div class="w-20 h-1.5 rounded-full" style="background:#f1f5f9"><div class="h-full rounded-full bg-indigo-500" :style="`width:${a.paid_percent}%`"></div></div><span class="text-xs text-slate-500" x-text="`${a.paid_percent}%`"></span></div></td>
+            <td><div class="flex gap-1"><button @click="openEdit(a)" class="btn btn-secondary btn-sm">Editar</button><button @click="remove(a.id)" class="btn btn-danger btn-sm">✕</button></div></td>
+          </tr></template>
+        </tbody></table>
+      </div>
+      <!-- Veículos -->
+      <div x-show="data.veiculos.length" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 class="font-bold text-slate-900">🚗 Veículos</h3><span class="font-bold text-indigo-600" x-text="fmt(data.total_veiculos)"></span></div>
+        <table class="tbl"><thead><tr><th>Nome</th><th>Entidade</th><th>Valor Atual</th><th>Status</th><th>% Quitado</th><th></th></tr></thead><tbody>
+          <template x-for="a in data.veiculos" :key="a.id"><tr>
+            <td class="font-medium" x-text="a.name"></td>
+            <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${a.entity.color}`"></span><span x-text="a.entity.name"></span></span></td>
+            <td class="font-bold" x-text="fmt(a.current_value)"></td>
+            <td><span class="badge" :class="a.status==='quitado'?'asset-quitado':'asset-financiado'" x-text="a.status==='quitado'?'Quitado':'Financiado'"></span></td>
+            <td><div class="flex items-center gap-2"><div class="w-20 h-1.5 rounded-full" style="background:#f1f5f9"><div class="h-full rounded-full bg-indigo-500" :style="`width:${a.paid_percent}%`"></div></div><span class="text-xs text-slate-500" x-text="`${a.paid_percent}%`"></span></div></td>
+            <td><div class="flex gap-1"><button @click="openEdit(a)" class="btn btn-secondary btn-sm">Editar</button><button @click="remove(a.id)" class="btn btn-danger btn-sm">✕</button></div></td>
+          </tr></template>
+        </tbody></table>
+      </div>
+      <!-- Outros -->
+      <div x-show="data.outros.length" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 class="font-bold text-slate-900">📦 Outros</h3><span class="font-bold text-indigo-600" x-text="fmt(data.total_outros)"></span></div>
+        <table class="tbl"><thead><tr><th>Nome</th><th>Entidade</th><th>Valor Atual</th><th>Status</th><th>% Quitado</th><th></th></tr></thead><tbody>
+          <template x-for="a in data.outros" :key="a.id"><tr>
+            <td class="font-medium" x-text="a.name"></td>
+            <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${a.entity.color}`"></span><span x-text="a.entity.name"></span></span></td>
+            <td class="font-bold" x-text="fmt(a.current_value)"></td>
+            <td><span class="badge" :class="a.status==='quitado'?'asset-quitado':'asset-financiado'" x-text="a.status==='quitado'?'Quitado':'Financiado'"></span></td>
+            <td><div class="flex items-center gap-2"><div class="w-20 h-1.5 rounded-full" style="background:#f1f5f9"><div class="h-full rounded-full bg-indigo-500" :style="`width:${a.paid_percent}%`"></div></div><span class="text-xs text-slate-500" x-text="`${a.paid_percent}%`"></span></div></td>
+            <td><div class="flex gap-1"><button @click="openEdit(a)" class="btn btn-secondary btn-sm">Editar</button><button @click="remove(a.id)" class="btn btn-danger btn-sm">✕</button></div></td>
+          </tr></template>
+        </tbody></table>
+      </div>
+      <!-- Investimentos por tipo -->
+      <div x-show="Object.keys(data.investimentos_por_tipo||{}).length" class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between"><h3 class="font-bold text-slate-900">📈 Investimentos por Tipo</h3><span class="font-bold text-indigo-600" x-text="fmt(data.total_investimentos)"></span></div>
+        <table class="tbl"><thead><tr><th>Tipo</th><th>Total</th></tr></thead><tbody>
+          <template x-for="entry in Object.entries(data.investimentos_por_tipo||{})" :key="entry[0]"><tr>
+            <td x-text="entry[0]"></td><td class="font-bold text-indigo-600" x-text="fmt(entry[1])"></td>
+          </tr></template>
+        </tbody></table>
+      </div>
+    </div>
+  </template>
+  <p x-show="!data" class="text-center text-slate-400 py-16">Carregando...</p>
+</div>
+<!-- Modal Ativo -->
+<div x-show="showModal" class="modal-backdrop" @click.self="showModal=false">
+  <div class="modal-box modal-lg">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold" x-text="editId?'Editar Ativo':'Novo Ativo'"></h3><button @click="showModal=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="save()" class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Nome</label><input x-model="form.name" class="form-input mt-1" required></div>
+        <div><label class="form-label">Entidade</label><select x-model="form.entity_id" class="form-input form-select mt-1" required><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Tipo</label><select x-model="form.type" class="form-input form-select mt-1"><option value="imovel">Imóvel</option><option value="veiculo">Veículo</option><option value="outro">Outro</option></select></div>
+        <div><label class="form-label">Status</label><select x-model="form.status" class="form-input form-select mt-1"><option value="quitado">Quitado</option><option value="financiado">Financiado</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Valor Atual (R$)</label><input type="number" step="0.01" x-model="form.current_value" class="form-input mt-1" required></div>
+        <div><label class="form-label">Preço de Compra</label><input type="number" step="0.01" x-model="form.purchase_price" class="form-input mt-1"></div>
+      </div>
+      <div x-show="form.status==='financiado'" class="grid grid-cols-3 gap-4">
+        <div><label class="form-label">Total Financiado</label><input type="number" step="0.01" x-model="form.total_financed" class="form-input mt-1"></div>
+        <div><label class="form-label">Valor Pago</label><input type="number" step="0.01" x-model="form.amount_paid" class="form-input mt-1"></div>
+        <div><label class="form-label">Parcelas Pagas/Total</label><div class="flex gap-2 mt-1"><input type="number" x-model="form.installments_paid" class="form-input" placeholder="Pagas"><input type="number" x-model="form.total_installments" class="form-input" placeholder="Total"></div></div>
+      </div>
+      <div><label class="form-label">Observações</label><input x-model="form.notes" class="form-input mt-1"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showModal=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ TRANSAÇÕES ═══ -->
+<section x-show="page==='transactions'" x-data="transactionsPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-6">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Transações</h1><p class="text-slate-500 text-sm mt-1">Despesas e receitas recorrentes</p></div>
+    <div class="flex items-center gap-3">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todas</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select>
+      <input type="number" x-model="year" @change="load()" class="form-input text-sm py-2" style="width:90px">
+      <button @click="showCreate=true;createForm={type:tab,is_recurring:true,default_amount:0}" class="btn btn-primary text-sm">+ Nova Transação</button>
+    </div>
+  </div>
+  <!-- Tabs -->
+  <div class="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1 w-fit">
+    <button @click="tab='expense';load()" :class="tab==='expense'?'bg-white shadow-sm text-slate-900 font-semibold':'text-slate-500 hover:text-slate-700'" class="px-5 py-2 rounded-lg text-sm transition-all">💸 Despesas</button>
+    <button @click="tab='income';load()" :class="tab==='income'?'bg-white shadow-sm text-slate-900 font-semibold':'text-slate-500 hover:text-slate-700'" class="px-5 py-2 rounded-lg text-sm transition-all">💰 Receitas</button>
+  </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="tbl" style="min-width:1100px"><thead><tr>
+        <th style="min-width:180px">Nome</th><th>Entidade</th>
+        <template x-for="m in MONTHS" :key="m"><th class="text-center" x-text="m"></th></template>
+        <th>Total</th><th></th>
+      </tr></thead><tbody>
+        <template x-for="tx in transactions" :key="tx.id"><tr>
+          <td class="font-medium text-slate-900" x-text="tx.name"></td>
+          <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${tx.entity.color}`"></span><span class="text-xs" x-text="tx.entity.name"></span></span></td>
+          <template x-for="(tm,mi) in monthsFor(tx.id)" :key="mi">
+            <td class="text-center p-1.5"><span :class="'mcell mc-'+cellClass(tm)" @click="tm&&openPay(tm)" x-text="cellText(tm)"></span></td>
+          </template>
+          <td class="font-bold text-sm" x-text="fmt((months[tx.id]||[]).reduce((s,m)=>s+(m&&m.status==='paid'?m.amount:0),0))"></td>
+          <td><button @click="removeTx(tx.id)" class="btn btn-danger btn-sm">✕</button></td>
+        </tr></template>
+        <tr x-show="!transactions.length"><td colspan="16" class="text-center text-slate-400 py-10">Nenhuma transação encontrada</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+<!-- Modal Nova Transação -->
+<div x-show="showCreate" class="modal-backdrop" @click.self="showCreate=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Nova Transação</h3><button @click="showCreate=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="createTx()" class="space-y-4">
+      <div><label class="form-label">Nome</label><input x-model="createForm.name" class="form-input mt-1" required placeholder="Ex: Aluguel, Salário..."></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Entidade</label><select x-model="createForm.entity_id" class="form-input form-select mt-1" required><option value="">Selecione...</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+        <div><label class="form-label">Tipo</label><select x-model="createForm.type" class="form-input form-select mt-1"><option value="expense">Despesa</option><option value="income">Receita</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Valor padrão (R$)</label><input type="number" step="0.01" x-model="createForm.default_amount" class="form-input mt-1" placeholder="0,00"></div>
+        <div><label class="form-label">Dia do mês</label><input type="number" min="1" max="31" x-model="createForm.day_of_month" class="form-input mt-1" placeholder="Opcional"></div>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" x-model="createForm.is_recurring" class="rounded border-slate-300 text-indigo-600"><span class="text-sm text-slate-600">Recorrente — gerar os 12 meses do ano <span class="font-bold" x-text="year"></span></span></label>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCreate=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Criar</button></div>
+    </form>
+  </div>
+</div>
+<!-- Modal Pagamento -->
+<div x-show="showPay" class="modal-backdrop" @click.self="showPay=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Registrar Pagamento</h3><button @click="showPay=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="savePay()" class="space-y-4" x-show="payTarget">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Status</label><select x-model="payForm.status" class="form-input form-select mt-1"><option value="paid">✅ Pago</option><option value="pending">⏳ Pendente</option><option value="skipped">⏭ Ignorado</option></select></div>
+        <div><label class="form-label">Valor (R$)</label><input type="number" step="0.01" x-model="payForm.amount" class="form-input mt-1"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Data do pagamento</label><input type="date" x-model="payForm.paid_at" class="form-input mt-1"></div>
+        <div><label class="form-label">Método de pagamento</label><select x-model="payForm.payment_method_id" class="form-input form-select mt-1"><option value="">Nenhum</option><template x-for="pm in paymentMethods" :key="pm.id"><option :value="pm.id" x-text="`${pm.name} · ${pm.entity.name}`"></option></template></select></div>
+      </div>
+      <div><label class="form-label">Observações</label><input x-model="payForm.notes" class="form-input mt-1" placeholder="Opcional"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showPay=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ CLIENTES ═══ -->
+<section x-show="page==='clients'" x-data="clientsPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Clientes</h1><p class="text-slate-500 text-sm mt-1">Receita recorrente por cliente</p></div>
+    <div class="flex items-center gap-3">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todas</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select>
+      <input type="number" x-model="year" @change="load()" class="form-input text-sm py-2" style="width:90px">
+      <button @click="showCreate=true;createForm={recurrence:'monthly',start_month:1,amount:0}" class="btn btn-primary text-sm">+ Novo Cliente</button>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="tbl" style="min-width:1100px"><thead><tr>
+        <th style="min-width:160px">Cliente</th><th>Entidade</th><th>Recorrência</th><th>Valor</th>
+        <template x-for="m in MONTHS" :key="m"><th class="text-center" x-text="m"></th></template>
+        <th></th>
+      </tr></thead><tbody>
+        <template x-for="c in clients" :key="c.id"><tr>
+          <td class="font-medium text-slate-900" x-text="c.name"></td>
+          <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${c.entity.color}`"></span><span class="text-xs" x-text="c.entity.name"></span></span></td>
+          <td><span class="badge badge-pending" x-text="recurrenceLabel(c.recurrence)"></span></td>
+          <td class="font-semibold text-emerald-600" x-text="fmt(c.amount)"></td>
+          <template x-for="(cp,mi) in paymentsFor(c.id)" :key="mi">
+            <td class="text-center p-1.5"><span :class="'mcell '+(cp?(cp.status==='paid'?'mc-paid':'mc-pending'):'mc-empty')" @click="cp&&openPay(cp)" x-text="cp?fmt(cp.amount):'—'"></span></td>
+          </template>
+          <td><button @click="deactivate(c.id)" class="btn btn-danger btn-sm">✕</button></td>
+        </tr></template>
+        <tr x-show="!clients.length"><td colspan="18" class="text-center text-slate-400 py-10">Nenhum cliente cadastrado</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+<!-- Modal Novo Cliente -->
+<div x-show="showCreate" class="modal-backdrop" @click.self="showCreate=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Novo Cliente</h3><button @click="showCreate=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="createClient()" class="space-y-4">
+      <div><label class="form-label">Nome</label><input x-model="createForm.name" class="form-input mt-1" required></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Entidade</label><select x-model="createForm.entity_id" class="form-input form-select mt-1" required><option value="">Selecione...</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+        <div><label class="form-label">Recorrência</label><select x-model="createForm.recurrence" class="form-input form-select mt-1"><option value="monthly">Mensal</option><option value="quarterly">Trimestral</option><option value="annual">Anual</option><option value="one_time">Única vez</option></select></div>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><label class="form-label">Valor (R$)</label><input type="number" step="0.01" x-model="createForm.amount" class="form-input mt-1" required></div>
+        <div><label class="form-label">Dia do mês</label><input type="number" min="1" max="31" x-model="createForm.payment_day" class="form-input mt-1" placeholder="Opcional"></div>
+        <div><label class="form-label">Mês inicial</label><select x-model="createForm.start_month" class="form-input form-select mt-1"><template x-for="(m,i) in MONTHS" :key="i"><option :value="i+1" x-text="m"></option></template></select></div>
+      </div>
+      <div><label class="form-label">Observações</label><input x-model="createForm.notes" class="form-input mt-1" placeholder="Opcional"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCreate=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Criar e Gerar Meses</button></div>
+    </form>
+  </div>
+</div>
+<!-- Modal Confirmar Recebimento -->
+<div x-show="showPay" class="modal-backdrop" @click.self="showPay=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Confirmar Recebimento</h3><button @click="showPay=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="savePay()" class="space-y-4" x-show="payTarget">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Status</label><select x-model="payForm.status" class="form-input form-select mt-1"><option value="paid">✅ Recebido</option><option value="pending">⏳ Pendente</option></select></div>
+        <div><label class="form-label">Valor (R$)</label><input type="number" step="0.01" x-model="payForm.amount" class="form-input mt-1"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Data</label><input type="date" x-model="payForm.paid_at" class="form-input mt-1"></div>
+        <div><label class="form-label">Método</label><select x-model="payForm.payment_method_id" class="form-input form-select mt-1"><option value="">Nenhum</option><template x-for="pm in paymentMethods" :key="pm.id"><option :value="pm.id" x-text="`${pm.name} · ${pm.entity.name}`"></option></template></select></div>
+      </div>
+      <div><label class="form-label">Observações</label><input x-model="payForm.notes" class="form-input mt-1"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showPay=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-success">Confirmar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ INVESTIMENTOS ═══ -->
+<section x-show="page==='investments'" x-data="investmentsPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Investimentos</h1><p class="text-slate-500 text-sm mt-1">Carteira de investimentos mensal</p></div>
+    <div class="flex items-center gap-3">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todas</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select>
+      <select x-model="month" @change="load()" class="form-input form-select text-sm py-2" style="width:120px"><template x-for="(m,i) in MONTHS" :key="i"><option :value="i+1" x-text="m"></option></template></select>
+      <input type="number" x-model="year" @change="load()" class="form-input text-sm py-2" style="width:90px">
+      <button @click="showCreate=true;createForm={type:'renda_fixa'}" class="btn btn-primary text-sm">+ Nova Conta</button>
+    </div>
+  </div>
+  <!-- Type Summary -->
+  <div class="grid grid-cols-4 gap-4 mb-8" x-show="summary.length">
+    <template x-for="[label,total] in totalByType()" :key="label">
+      <div class="kpi"><p class="text-xs text-slate-500 font-medium mb-2" x-text="label"></p><p class="text-lg font-extrabold text-indigo-600" x-text="fmt(total)"></p></div>
+    </template>
+  </div>
+  <!-- Balances Grid -->
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="tbl" style="min-width:1200px"><thead><tr>
+        <th style="min-width:160px">Conta</th><th>Banco</th><th>Tipo</th><th>Entidade</th>
+        <template x-for="m in MONTHS" :key="m"><th class="text-right" x-text="m"></th></template>
+        <th class="text-right">Total</th>
+      </tr></thead><tbody>
+        <template x-for="acc in accounts" :key="acc.id"><tr>
+          <td class="font-medium text-slate-900" x-text="acc.name"></td>
+          <td class="text-slate-600 text-sm" x-text="acc.bank"></td>
+          <td><span class="type-badge" :class="typeClass(acc.type)" x-text="typeLabel(acc.type)"></span></td>
+          <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${acc.entity.color}`"></span><span class="text-xs" x-text="acc.entity.name"></span></span></td>
+          <template x-for="(m,mi) in MONTHS" :key="mi">
+            <td class="p-1">
+              <template x-if="!(editingCell&&editingCell.account_id===acc.id&&editingCell.month===mi+1)">
+                <span class="bcell" :class="balanceFor(acc.id,mi)?'text-slate-800 font-semibold':'text-slate-300'" @click="startEdit(acc.id,mi,balanceFor(acc.id,mi))" x-text="balanceFor(acc.id,mi)?fmt(balanceFor(acc.id,mi).balance):'+'"></span>
+              </template>
+              <template x-if="editingCell&&editingCell.account_id===acc.id&&editingCell.month===mi+1">
+                <input x-init="$el.focus();$el.select()" type="number" step="0.01" x-model="editingCell.value" @keyup.enter="saveCell()" @keyup.escape="editingCell=null" @blur="saveCell()" class="form-input text-xs py-1 px-2 text-right" style="width:80px">
+              </template>
+            </td>
+          </template>
+          <td class="text-right font-bold text-indigo-600 text-sm" x-text="fmt(MONTHS.reduce((s,m,mi)=>s+(balanceFor(acc.id,mi)?balanceFor(acc.id,mi).balance:0),0))"></td>
+        </tr></template>
+        <!-- Totals row -->
+        <tr x-show="accounts.length" class="bg-slate-50 font-bold">
+          <td colspan="4" class="text-slate-700">Total por Mês</td>
+          <template x-for="(m,mi) in MONTHS" :key="mi"><td class="text-right text-indigo-600 text-sm" x-text="fmt(colTotal(mi))"></td></template>
+          <td class="text-right text-indigo-700" x-text="fmt(grandTotal())"></td>
+        </tr>
+        <tr x-show="!accounts.length"><td colspan="17" class="text-center text-slate-400 py-10">Nenhuma conta cadastrada</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+</div>
+<!-- Modal Nova Conta -->
+<div x-show="showCreate" class="modal-backdrop" @click.self="showCreate=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Nova Conta de Investimento</h3><button @click="showCreate=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="createAccount()" class="space-y-4">
+      <div><label class="form-label">Nome</label><input x-model="createForm.name" class="form-input mt-1" required placeholder="Ex: PGBL XP, Tesouro IPCA+..."></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Banco / Corretora</label><input x-model="createForm.bank" class="form-input mt-1" required placeholder="Ex: XP, Itaú..."></div>
+        <div><label class="form-label">Tipo</label><select x-model="createForm.type" class="form-input form-select mt-1"><option value="previdencia">Previdência</option><option value="tesouro">Tesouro Direto</option><option value="renda_fixa">Renda Fixa</option><option value="renda_variavel">Renda Variável</option></select></div>
+      </div>
+      <div><label class="form-label">Entidade</label><select x-model="createForm.entity_id" class="form-input form-select mt-1" required><option value="">Selecione...</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+      <div><label class="form-label">Observações</label><input x-model="createForm.notes" class="form-input mt-1" placeholder="Opcional"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCreate=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Criar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ CONTAS A VENCER ═══ -->
+<section x-show="page==='unplanned'" x-data="unplannedPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-6">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Contas a Vencer</h1><p class="text-slate-500 text-sm mt-1">Despesas não planejadas e a vencer</p></div>
+    <div class="flex items-center gap-3">
+      <select x-model="entityId" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todas</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select>
+      <select x-model="filterStatus" @change="load()" class="form-input form-select text-sm py-2"><option value="">Todos</option><option value="pending">Pendentes</option><option value="paid">Pagas</option></select>
+      <button @click="openCreate()" class="btn btn-primary text-sm">+ Nova Conta</button>
+    </div>
+  </div>
+  <!-- Total Pendente Banner -->
+  <div x-show="bills.filter(b=>b.status==='pending').length" class="rounded-2xl p-5 mb-6 flex items-center gap-4" style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1px solid #fde68a">
+    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background:#f59e0b"><svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>
+    <div><p class="text-amber-800 font-bold text-lg" x-text="`${fmt(totalPending())} pendentes`"></p><p class="text-amber-600 text-sm" x-text="`${bills.filter(b=>b.status==='pending').length} conta(s) a pagar`"></p></div>
+  </div>
+  <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+    <table class="tbl"><thead><tr><th>Nome</th><th>Entidade</th><th>Valor</th><th>Vencimento</th><th>Status</th><th>Pago em</th><th></th></tr></thead>
+    <tbody>
+      <template x-for="b in bills" :key="b.id"><tr>
+        <td class="font-medium" x-text="b.name"></td>
+        <td><span class="flex items-center gap-1.5"><span class="entity-dot" :style="`background:${b.entity.color}`"></span><span class="text-xs" x-text="b.entity.name"></span></span></td>
+        <td class="font-bold" x-text="fmt(b.amount)"></td>
+        <td :class="b.status==='pending'&&b.due_date&&new Date(b.due_date)<new Date()?'text-red-600 font-bold':'text-slate-600'" x-text="b.due_date?fmtDate(b.due_date):'—'"></td>
+        <td><span class="badge" :class="b.status==='paid'?'badge-paid':'badge-pending'" x-text="b.status==='paid'?'Paga':'Pendente'"></span></td>
+        <td class="text-sm text-slate-500" x-text="b.paid_at?fmtDate(b.paid_at):'—'"></td>
+        <td><div class="flex gap-1">
+          <button x-show="b.status==='pending'" @click="openPay(b)" class="btn btn-success btn-sm">Pagar</button>
+          <button @click="remove(b.id)" class="btn btn-danger btn-sm">✕</button>
+        </div></td>
+      </tr></template>
+      <tr x-show="!bills.length"><td colspan="7" class="text-center text-slate-400 py-10">Nenhuma conta encontrada</td></tr>
+    </tbody></table>
+  </div>
+</div>
+<!-- Modal Nova Conta -->
+<div x-show="showCreate" class="modal-backdrop" @click.self="showCreate=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Nova Conta a Vencer</h3><button @click="showCreate=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="saveBill()" class="space-y-4">
+      <div><label class="form-label">Descrição</label><input x-model="createForm.name" class="form-input mt-1" required placeholder="Ex: IPVA, Seguro..."></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Entidade</label><select x-model="createForm.entity_id" class="form-input form-select mt-1" required><option value="">Selecione...</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+        <div><label class="form-label">Valor (R$)</label><input type="number" step="0.01" x-model="createForm.amount" class="form-input mt-1" required></div>
+      </div>
+      <div><label class="form-label">Vencimento</label><input type="date" x-model="createForm.due_date" class="form-input mt-1"></div>
+      <div><label class="form-label">Observações</label><input x-model="createForm.notes" class="form-input mt-1"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCreate=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Criar</button></div>
+    </form>
+  </div>
+</div>
+<!-- Modal Pagar -->
+<div x-show="showPay" class="modal-backdrop" @click.self="showPay=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Registrar Pagamento</h3><button @click="showPay=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="savePay()" class="space-y-4" x-show="payTarget">
+      <p class="text-slate-600 text-sm bg-slate-50 rounded-lg p-3" x-text="`Pagando: ${payTarget?.name} · ${fmt(payTarget?.amount)}`"></p>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Data do pagamento</label><input type="date" x-model="payForm.paid_at" class="form-input mt-1"></div>
+        <div><label class="form-label">Método de pagamento</label><select x-model="payForm.payment_method_id" class="form-input form-select mt-1"><option value="">Nenhum</option><template x-for="pm in paymentMethods" :key="pm.id"><option :value="pm.id" x-text="`${pm.name} · ${pm.entity.name}`"></option></template></select></div>
+      </div>
+      <div><label class="form-label">Observações</label><input x-model="payForm.notes" class="form-input mt-1"></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showPay=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-success">Confirmar Pagamento</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ PAGAMENTOS ═══ -->
+<section x-show="page==='payment-methods'" x-data="paymentMethodsPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Métodos de Pagamento</h1><p class="text-slate-500 text-sm mt-1">Contas bancárias e cartões de crédito</p></div>
+    <button @click="showCreate=true;createForm={type:'bank'}" class="btn btn-primary text-sm">+ Novo Método</button>
+  </div>
+  <div class="grid grid-cols-2 gap-8">
+    <!-- Contas Bancárias -->
+    <div>
+      <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4z"/></svg>Contas Bancárias</h3>
+      <div class="space-y-3">
+        <template x-for="m in banks()" :key="m.id">
+          <div class="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#dbeafe"><svg class="w-5 h-5" style="color:#3b82f6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4z"/></svg></div>
+              <div><p class="font-semibold text-slate-900" x-text="m.name"></p><p class="text-xs text-slate-400" x-text="`${m.bank_name||''} · ${m.entity.name}`"></p></div>
+            </div>
+            <button @click="remove(m.id)" class="btn btn-danger btn-sm">✕</button>
+          </div>
+        </template>
+        <p x-show="!banks().length" class="text-slate-400 text-sm text-center py-8 bg-white rounded-xl border border-dashed border-slate-200">Nenhuma conta bancária</p>
+      </div>
+    </div>
+    <!-- Cartões -->
+    <div>
+      <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><svg class="w-5 h-5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>Cartões de Crédito</h3>
+      <div class="space-y-3">
+        <template x-for="m in cards()" :key="m.id">
+          <div class="bg-white rounded-xl p-4 border border-slate-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center" style="background:#ede9fe"><svg class="w-5 h-5" style="color:#8b5cf6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg></div>
+              <div><p class="font-semibold text-slate-900" x-text="m.name"></p><p class="text-xs text-slate-400" x-text="`${m.bank_name||''} · ${m.entity.name}`"></p></div>
+            </div>
+            <button @click="remove(m.id)" class="btn btn-danger btn-sm">✕</button>
+          </div>
+        </template>
+        <p x-show="!cards().length" class="text-slate-400 text-sm text-center py-8 bg-white rounded-xl border border-dashed border-slate-200">Nenhum cartão cadastrado</p>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Modal -->
+<div x-show="showCreate" class="modal-backdrop" @click.self="showCreate=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold">Novo Método de Pagamento</h3><button @click="showCreate=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="saveMethod()" class="space-y-4">
+      <div><label class="form-label">Nome</label><input x-model="createForm.name" class="form-input mt-1" required placeholder="Ex: Conta Itaú, Nubank..."></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="form-label">Tipo</label><select x-model="createForm.type" class="form-input form-select mt-1"><option value="bank">Conta Bancária</option><option value="card">Cartão de Crédito</option></select></div>
+        <div><label class="form-label">Banco</label><input x-model="createForm.bank_name" class="form-input mt-1" placeholder="Ex: Itaú, Nubank..."></div>
+      </div>
+      <div><label class="form-label">Entidade</label><select x-model="createForm.entity_id" class="form-input form-select mt-1" required><option value="">Selecione...</option><template x-for="e in entities" :key="e.id"><option :value="e.id" x-text="e.name"></option></template></select></div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showCreate=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Criar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+<!-- ═══ ENTIDADES ═══ -->
+<section x-show="page==='entities'" x-data="entitiesPage()" x-init="init()">
+<div class="p-8">
+  <div class="flex items-start justify-between mb-8">
+    <div><h1 class="text-2xl font-extrabold text-slate-900">Entidades</h1><p class="text-slate-500 text-sm mt-1">Família, empresas e centros de custo</p></div>
+    <button @click="openCreate()" class="btn btn-primary text-sm">+ Nova Entidade</button>
+  </div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
+    <template x-for="e in entities" :key="e.id">
+      <div class="bg-white rounded-2xl shadow-sm border-l-4 p-6 hover:shadow-md transition-shadow" :style="`border-left-color:${e.color}`">
+        <div class="flex items-start justify-between mb-4">
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center" :style="`background:${e.color}22`">
+            <span class="text-2xl font-extrabold" :style="`color:${e.color}`" x-text="e.name.charAt(0)"></span>
+          </div>
+          <div class="flex gap-1">
+            <button @click="openEdit(e)" class="btn btn-secondary btn-sm">✏️</button>
+            <button @click="remove(e.id)" class="btn btn-danger btn-sm">✕</button>
+          </div>
+        </div>
+        <h3 class="font-bold text-slate-900 text-lg" x-text="e.name"></h3>
+        <div class="flex items-center gap-2 mt-2">
+          <span class="w-4 h-4 rounded-full border-2 border-white shadow-sm" :style="`background:${e.color}`"></span>
+          <span class="text-xs text-slate-400 font-mono" x-text="e.color"></span>
+        </div>
+      </div>
+    </template>
+    <div x-show="!entities.length" class="col-span-4 text-center text-slate-400 py-16">Nenhuma entidade cadastrada</div>
+  </div>
+</div>
+<!-- Modal -->
+<div x-show="showModal" class="modal-backdrop" @click.self="showModal=false">
+  <div class="modal-box">
+    <div class="flex items-center justify-between mb-6"><h3 class="text-lg font-bold" x-text="editId?'Editar Entidade':'Nova Entidade'"></h3><button @click="showModal=false" class="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button></div>
+    <form @submit.prevent="save()" class="space-y-5">
+      <div><label class="form-label">Nome</label><input x-model="form.name" class="form-input mt-1" required placeholder="Ex: Família, ECX, Argos X..."></div>
+      <div>
+        <label class="form-label mb-2">Cor</label>
+        <div class="flex gap-3 flex-wrap mt-2">
+          <template x-for="c in COLORS" :key="c">
+            <button type="button" @click="form.color=c" class="w-9 h-9 rounded-xl border-2 transition-all" :style="`background:${c}`" :class="form.color===c?'border-slate-900 scale-110':'border-transparent hover:scale-105'"></button>
+          </template>
+        </div>
+        <div class="flex items-center gap-3 mt-3">
+          <input type="color" x-model="form.color" class="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer p-1">
+          <input x-model="form.color" class="form-input text-sm font-mono" placeholder="#6366f1" style="width:120px">
+        </div>
+      </div>
+      <div class="flex justify-end gap-3 pt-2"><button type="button" @click="showModal=false" class="btn btn-secondary">Cancelar</button><button type="submit" class="btn btn-primary">Salvar</button></div>
+    </form>
+  </div>
+</div>
+</section>
+
+</div><!-- end content -->
+</div><!-- end app -->
+</template>
+
+<script src="/static/app.js"></script>
+<script>
+function rootApp(){
+  return {
+    authenticated:false, page:'dashboard',
+    loginEmail:'', loginPassword:'', loginError:'', loginLoading:false, showPwd:false,
+    async boot(){
+      const t=sessionStorage.getItem('cf_token');
+      if(!t)return;
+      const r=await fetch('/api/auth/verify?token='+t).catch(()=>null);
+      if(r&&r.ok)this.authenticated=true; else sessionStorage.removeItem('cf_token');
+    },
+    async doLogin(){
+      this.loginLoading=true; this.loginError='';
+      const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:this.loginEmail,password:this.loginPassword})}).catch(()=>null);
+      this.loginLoading=false;
+      if(!r||!r.ok){const d=r?await r.json().catch(()=>({})):{};this.loginError=d.detail||'Erro ao conectar.';return;}
+      const{token}=await r.json();
+      sessionStorage.setItem('cf_token',token);
+      this.authenticated=true;
+    },
+    async doLogout(){
+      const t=sessionStorage.getItem('cf_token');
+      if(t)await fetch('/api/auth/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:t})}).catch(()=>{});
+      sessionStorage.removeItem('cf_token');
+      this.authenticated=false;
+    }
+  };
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+/* ── Layout ── */
+body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; }
+#sidebar { width: 220px; min-height: 100vh; background: #1e293b; flex-shrink: 0; }
+#main-content { flex: 1; overflow-y: auto; min-height: 100vh; }
+
+/* ── Nav links ── */
+.nav-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; color: #94a3b8; border-radius: 6px;
+  cursor: pointer; transition: all .15s; font-size: 14px;
+  text-decoration: none;
+}
+.nav-link:hover { background: #334155; color: #e2e8f0; }
+.nav-link.active { background: #6366f1; color: #fff; }
+
+/* ── Cards ── */
+.summary-card {
+  background: #fff; border-radius: 12px; padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+/* ── Badges (status) ── */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 9999px;
+  font-size: 12px; font-weight: 600;
+}
+.badge-paid, .badge-pago   { background: #d1fae5; color: #065f46; }
+.badge-pending, .badge-pendente { background: #fef3c7; color: #92400e; }
+.badge-skipped { background: #e2e8f0; color: #475569; }
+
+/* ── Month grid cells ── */
+.month-cell {
+  min-width: 56px; text-align: center; padding: 4px 6px;
+  border-radius: 6px; font-size: 12px; cursor: pointer;
+  transition: opacity .15s;
+}
+.month-cell:hover { opacity: .8; }
+.cell-paid   { background: #d1fae5; color: #065f46; }
+.cell-pending { background: #fef3c7; color: #92400e; }
+.cell-skipped { background: #f1f5f9; color: #94a3b8; }
+.cell-empty   { background: #f8fafc; color: #cbd5e1; }
+
+/* ── Modals ── */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.modal-box {
+  background: #fff; border-radius: 12px; padding: 28px;
+  width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.modal-box.modal-lg { max-width: 640px; }
+
+/* ── Forms ── */
+.form-label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 4px; }
+.form-input {
+  width: 100%; border: 1px solid #d1d5db; border-radius: 8px;
+  padding: 8px 12px; font-size: 14px; outline: none;
+  transition: border-color .15s;
+}
+.form-input:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.15); }
+.form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 36px; }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+.btn-primary { background: #6366f1; color: #fff; }
+.btn-primary:hover { background: #4f46e5; }
+.btn-secondary { background: #f1f5f9; color: #374151; }
+.btn-secondary:hover { background: #e2e8f0; }
+.btn-danger { background: #fee2e2; color: #991b1b; }
+.btn-danger:hover { background: #fecaca; }
+.btn-success { background: #d1fae5; color: #065f46; }
+.btn-success:hover { background: #a7f3d0; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* ── Tables ── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th { text-align: left; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #6b7280; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+.tbl td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: #f9fafb; }
+
+/* ── Entity color dot ── */
+.entity-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── Section header ── */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.section-title { font-size: 18px; font-weight: 700; color: #1e293b; }
+
+/* ── Investment type badge ── */
+.type-badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+.type-previdencia { background: #ede9fe; color: #5b21b6; }
+.type-tesouro { background: #d1fae5; color: #065f46; }
+.type-renda_fixa { background: #dbeafe; color: #1e40af; }
+.type-renda_variavel { background: #fef3c7; color: #92400e; }
+
+/* ── Asset status ── */
+.asset-financiado { background: #fef3c7; color: #92400e; }
+.asset-quitado    { background: #d1fae5; color: #065f46; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
