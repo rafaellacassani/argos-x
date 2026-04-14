@@ -26,7 +26,90 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { code, phone_number_id, waba_id, workspace_id } = await req.json();
+    const body = await req.json();
+    const { action } = body;
+
+    // ── Action: register (server-side register + subscribe for existing connection) ──
+    if (action === "register") {
+      const { connection_id } = body;
+      if (!connection_id) {
+        return new Response(
+          JSON.stringify({ error: "connection_id is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: conn, error: connErr } = await supabase
+        .from("whatsapp_cloud_connections")
+        .select("id, phone_number_id, waba_id, access_token, workspace_id, inbox_name")
+        .eq("id", connection_id)
+        .single();
+
+      if (connErr || !conn) {
+        return new Response(
+          JSON.stringify({ error: "Connection not found" }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const results: Record<string, any> = {};
+
+      // Subscribe WABA
+      try {
+        const subRes = await fetch(
+          `https://graph.facebook.com/v21.0/${conn.waba_id}/subscribed_apps`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              access_token: conn.access_token,
+              subscribed_fields: "messages",
+            }),
+          }
+        );
+        results.subscription = await subRes.json();
+        console.log(`[Register] WABA subscription:`, results.subscription);
+      } catch (err) {
+        console.error("[Register] WABA subscription error:", err);
+        results.subscription = { error: String(err) };
+      }
+
+      // Register phone number
+      try {
+        const regRes = await fetch(
+          `https://graph.facebook.com/v21.0/${conn.phone_number_id}/register`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${conn.access_token}`,
+            },
+            body: JSON.stringify({ messaging_product: "whatsapp", pin: "123456" }),
+          }
+        );
+        results.register = await regRes.json();
+        console.log(`[Register] Phone register:`, results.register);
+      } catch (err) {
+        console.error("[Register] Phone register error:", err);
+        results.register = { error: String(err) };
+      }
+
+      // Audit log
+      await supabase.from("connection_audit_log").insert({
+        connection_id: conn.id,
+        workspace_id: conn.workspace_id,
+        event_type: "registered",
+        details: { results, via: "manual_button" },
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, results }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Default flow: Embedded Signup ──
+    const { code, phone_number_id, waba_id, workspace_id } = body;
 
     if (!code || !workspace_id) {
       return new Response(
@@ -129,7 +212,7 @@ Deno.serve(async (req) => {
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ access_token: accessToken }),
+          body: new URLSearchParams({ access_token: accessToken, subscribed_fields: "messages" }),
         }
       );
       const subData = await subRes.json();
@@ -138,6 +221,29 @@ Deno.serve(async (req) => {
       } else {
         console.error(`[Embedded Signup] ❌ WABA subscription failed:`, subData);
       }
+
+    // Step 3.5: Register phone number on Cloud API
+    try {
+      const regRes = await fetch(
+        `https://graph.facebook.com/v21.0/${finalPhoneNumberId}/register`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({ messaging_product: "whatsapp", pin: "123456" }),
+        }
+      );
+      const regData = await regRes.json();
+      if (regData.success) {
+        console.log(`[Embedded Signup] ✅ Phone ${finalPhoneNumberId} registered`);
+      } else {
+        console.error(`[Embedded Signup] ❌ Phone register failed:`, regData);
+      }
+    } catch (regErr) {
+      console.error("[Embedded Signup] Error registering phone:", regErr);
+    }
     } catch (err) {
       console.error("[Embedded Signup] Error subscribing WABA:", err);
     }

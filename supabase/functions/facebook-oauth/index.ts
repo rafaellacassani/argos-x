@@ -390,7 +390,7 @@ app.get("/", async (c) => {
               {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ access_token: finalUserToken }),
+                body: new URLSearchParams({ access_token: finalUserToken, subscribed_fields: "messages" }),
               }
             );
             const subscribeData = await subscribeRes.json();
@@ -409,6 +409,29 @@ app.get("/", async (c) => {
           for (const phone of phoneNumbers) {
             const phoneName = phone.verified_name || waba.name || "WhatsApp Cloud";
             const phoneDisplay = phone.display_phone_number || phone.id;
+
+            // Register phone number on Cloud API
+            try {
+              const regRes = await fetch(
+                `https://graph.facebook.com/v18.0/${phone.id}/register`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${finalUserToken}`,
+                  },
+                  body: JSON.stringify({ messaging_product: "whatsapp", pin: "123456" }),
+                }
+              );
+              const regData = await regRes.json();
+              if (regData.success) {
+                console.log(`[Facebook OAuth] ✅ Phone ${phone.id} registered`);
+              } else {
+                console.error(`[Facebook OAuth] ❌ Phone register failed for ${phone.id}:`, regData);
+              }
+            } catch (regErr) {
+              console.error(`[Facebook OAuth] Error registering phone ${phone.id}:`, regErr);
+            }
 
             // Step A: Create/update meta_pages entry (required for webhook routing)
             const { data: metaPageEntry, error: metaPageErr } = await supabase
