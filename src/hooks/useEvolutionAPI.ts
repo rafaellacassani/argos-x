@@ -192,8 +192,9 @@ export function useEvolutionAPI() {
 
     try {
       const sanitized = phoneNumber.replace(/\D/g, "");
-      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/connect/${instanceName}?number=${sanitized}`, {
-        method: "GET",
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/pairing/${instanceName}`, {
+        method: "POST",
+        body: { number: sanitized },
       });
 
       if (fnError) {
@@ -204,7 +205,8 @@ export function useEvolutionAPI() {
         throw new Error(data.error);
       }
 
-      return data;
+      // Return the pairing code from the response
+      return { pairingCode: data?.pairingCode } as any;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro ao obter código de pareamento";
       setError(message);
