@@ -2694,6 +2694,71 @@ export default function Chats() {
     setActiveFilters(filters);
   }, []);
 
+  // Debounced content search in DB
+  useEffect(() => {
+    if (searchTerm.length < 3) {
+      setContentSearchResults(new Set());
+      setContentSearchLoading(false);
+      setContentSearchTerm("");
+      return;
+    }
+
+    setContentSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const term = `%${searchTerm}%`;
+        // Query whatsapp_messages and meta_conversations in parallel
+        const [waResult, metaResult] = await Promise.all([
+          workspaceId
+            ? supabase
+                .from("whatsapp_messages")
+                .select("remote_jid, instance_name")
+                .eq("workspace_id", workspaceId)
+                .ilike("content", term)
+                .order("timestamp", { ascending: false })
+                .limit(200)
+            : Promise.resolve({ data: [] as any[], error: null }),
+          workspaceId
+            ? supabase
+                .from("meta_conversations" as any)
+                .select("sender_id, meta_page_id")
+                .eq("workspace_id", workspaceId)
+                .ilike("content", term)
+                .order("timestamp", { ascending: false })
+                .limit(200)
+            : Promise.resolve({ data: [] as any[], error: null }),
+        ]);
+
+        const matchedIds = new Set<string>();
+
+        // Map whatsapp remote_jids to chat IDs
+        if (waResult.data) {
+          for (const row of waResult.data as any[]) {
+            const jid = row.remote_jid;
+            if (jid) matchedIds.add(jid);
+          }
+        }
+
+        // Map meta sender_ids
+        if (metaResult.data) {
+          for (const row of metaResult.data as any[]) {
+            const key = `meta_${row.meta_page_id}_${row.sender_id}`;
+            matchedIds.add(key);
+          }
+        }
+
+        setContentSearchResults(matchedIds);
+        setContentSearchTerm(searchTerm);
+      } catch (err) {
+        console.error("[Chats] Content search error:", err);
+      } finally {
+        setContentSearchLoading(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm, workspaceId]);
+
   // Apply filters to chats
   const filteredChats = useMemo(() => {
     const normalizedSearchDigits = normalizeDigits(searchTerm);
@@ -2703,10 +2768,26 @@ export default function Chats() {
       if (chatLead && (chatLead as any).is_ignored) return false;
 
       if (!searchTerm) return true;
-      return (
+
+      // Match by name or phone (local filter)
+      const localMatch =
         chat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        chatMatchesPhoneSearch(chat, normalizedSearchDigits)
-      );
+        chatMatchesPhoneSearch(chat, normalizedSearchDigits);
+      if (localMatch) return true;
+
+      // Match by content search results (DB)
+      if (contentSearchTerm === searchTerm && contentSearchResults.size > 0) {
+        // Check WhatsApp JID match
+        if (contentSearchResults.has(chat.remoteJid)) return true;
+        if (chat.remoteJidAlt && contentSearchResults.has(chat.remoteJidAlt)) return true;
+        // Check Meta match
+        if (chat.isMeta && chat.metaPageId && chat.metaSenderId) {
+          const metaKey = `meta_${chat.metaPageId}_${chat.metaSenderId}`;
+          if (contentSearchResults.has(metaKey)) return true;
+        }
+      }
+
+      return false;
     });
 
     // Apply additional filters if active
@@ -2730,23 +2811,16 @@ export default function Chats() {
       }
 
       // Filter by response status
-      // "answered" = last message was from team (fromMe = true)  
-      // "unanswered" = lead sent message and WE (team) didn't reply yet
-      //   → last message is from client (lastMessageFromMe === false)
       if (activeFilters.responseStatus && activeFilters.responseStatus.length > 0) {
         const statuses = activeFilters.responseStatus;
         
         result = result.filter((chat) => {
-          // "answered": last message was sent BY US (team replied)
           if (statuses.includes("answered") && chat.lastMessageFromMe === true) {
             return true;
           }
-          
-          // "unanswered": last message was from the LEAD/CLIENT, meaning WE haven't replied
           if (statuses.includes("unanswered") && chat.lastMessageFromMe === false) {
             return true;
           }
-          
           return false;
         });
       }
@@ -2763,12 +2837,9 @@ export default function Chats() {
           return true;
         });
       }
-      
-      // Note: Other filters (stages, tags, etc.) would need lead data correlation
-      // This is a simplified implementation that can be extended
     }
 
-    // Filter by support queue (show only chats that have waiting/in_progress queue items)
+    // Filter by support queue
     if (showQueueOnly && queue.length > 0) {
       const queuePhones = new Set(
         queue
@@ -2791,11 +2862,11 @@ export default function Chats() {
       const aPinned = pinnedChatIds.has(a.id) ? 1 : 0;
       const bPinned = pinnedChatIds.has(b.id) ? 1 : 0;
       if (aPinned !== bPinned) return bPinned - aPinned;
-      return 0; // preserve existing order for non-pinned
+      return 0;
     });
 
     return result;
-  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, pinnedChatIds]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, pinnedChatIds, contentSearchResults, contentSearchTerm]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
