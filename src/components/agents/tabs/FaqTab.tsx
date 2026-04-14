@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Plus, Trash2, HelpCircle, ImagePlus, Video, FileText, X, Loader2, File } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { toast } from "sonner";
 
 interface FaqAttachment {
   url: string;
@@ -25,9 +26,15 @@ interface Props {
   updateField: (key: string, value: any) => void;
 }
 
+const MAX_FILE_SIZE: Record<string, number> = {
+  image: 10 * 1024 * 1024,   // 10 MB
+  video: 50 * 1024 * 1024,   // 50 MB
+  pdf: 20 * 1024 * 1024,     // 20 MB
+};
+
 const ACCEPTED: Record<string, string> = {
   image: "image/jpeg,image/png,image/webp,image/gif",
-  video: "video/mp4,video/3gpp",
+  video: "video/mp4,video/3gpp,video/quicktime,video/webm",
   pdf: "application/pdf",
 };
 
@@ -73,12 +80,24 @@ export function FaqTab({ formData, updateField }: Props) {
     const attachType = e.target.dataset.attachType as "image" | "video" | "pdf";
     if (!file || !faqId || !attachType || !workspaceId) return;
 
+    // Validate file size
+    const maxSize = MAX_FILE_SIZE[attachType] || 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const maxMB = Math.round(maxSize / (1024 * 1024));
+      toast.error(`Arquivo muito grande. Limite: ${maxMB}MB`);
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+
     setUploadingFaqId(faqId);
     try {
       const ext = file.name.split(".").pop() || "bin";
       const path = `${workspaceId}/faq/${faqId}/${Date.now()}.${ext}`;
 
-      const { error } = await supabase.storage.from("salesbot-media").upload(path, file, { upsert: true });
+      const { error } = await supabase.storage.from("salesbot-media").upload(path, file, {
+        upsert: true,
+        contentType: file.type,
+      });
       if (error) throw error;
 
       const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
@@ -97,8 +116,10 @@ export function FaqTab({ formData, updateField }: Props) {
             : f
         )
       );
-    } catch (err) {
+      toast.success(`${attachType === "image" ? "Imagem" : attachType === "video" ? "Vídeo" : "PDF"} anexado com sucesso`);
+    } catch (err: any) {
       console.error("FAQ attachment upload error:", err);
+      toast.error(`Erro ao enviar arquivo: ${err?.message || "tente novamente"}`);
     } finally {
       setUploadingFaqId(null);
       if (fileRef.current) fileRef.current.value = "";
