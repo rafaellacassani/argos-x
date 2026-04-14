@@ -186,6 +186,35 @@ export function useEvolutionAPI() {
     }
   }, []);
 
+  const getPairingCode = useCallback(async (instanceName: string, phoneNumber: string): Promise<QRCodeResponse | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const sanitized = phoneNumber.replace(/\D/g, "");
+      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/connect/${instanceName}?number=${sanitized}`, {
+        method: "GET",
+      });
+
+      if (fnError) {
+        throw new Error(fnError.message);
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Erro ao obter código de pareamento";
+      setError(message);
+      console.error("[useEvolutionAPI] getPairingCode error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const getConnectionState = useCallback(async (instanceName: string): Promise<ConnectionState | null> => {
     try {
       const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/connection-state/${instanceName}`, {
