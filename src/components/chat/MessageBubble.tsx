@@ -542,31 +542,51 @@ export function MessageBubble({
               const nameLine = lines.find(l => l.startsWith("📇"))?.replace("📇 ", "") || "Contato";
               const phoneLine = lines.find(l => l.startsWith("📱"))?.replace("📱 ", "") || "";
               return (
-                <div
-                  key={idx}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl",
-                    sent ? "bg-secondary-foreground/10" : "bg-muted/60"
-                  )}
-                >
-                  <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
-                    sent ? "bg-secondary-foreground/20" : "bg-primary/15"
-                  )}>
-                    <User className={cn(
-                      "w-5 h-5",
-                      sent ? "text-secondary-foreground" : "text-primary"
-                    )} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{nameLine}</p>
-                    {phoneLine && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Phone className="w-3 h-3 opacity-60" />
-                        <p className="text-xs opacity-70">{phoneLine}</p>
-                      </div>
+                <div key={idx} className="space-y-1.5">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl",
+                      sent ? "bg-secondary-foreground/10" : "bg-muted/60"
                     )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                      sent ? "bg-secondary-foreground/20" : "bg-primary/15"
+                    )}>
+                      <User className={cn(
+                        "w-5 h-5",
+                        sent ? "text-secondary-foreground" : "text-primary"
+                      )} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{nameLine}</p>
+                      {phoneLine && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 opacity-60" />
+                          <p className="text-xs opacity-70">{phoneLine}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {phoneLine && onContactChat && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "w-full text-xs h-7 rounded-lg font-medium",
+                        sent 
+                          ? "text-secondary-foreground/80 hover:bg-secondary-foreground/10" 
+                          : "text-primary hover:bg-primary/10"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onContactChat(phoneLine, nameLine);
+                      }}
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      Conversar
+                    </Button>
+                  )}
                 </div>
               );
             })}
