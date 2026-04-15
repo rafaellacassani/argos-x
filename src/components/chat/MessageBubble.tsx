@@ -38,6 +38,7 @@ export interface MessageBubbleProps {
   onDeleteForEveryone?: (id: string, messageId: string) => void;
   onEdit?: (id: string, messageId: string, currentContent: string) => void;
   onReact?: (id: string, messageId: string, reaction: string) => void;
+  onContactChat?: (phone: string, name: string) => void;
 }
 
 // Helper to detect and render links in text
@@ -102,6 +103,7 @@ export function MessageBubble({
   onDeleteForEveryone,
   onEdit,
   onReact,
+  onContactChat,
 }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
