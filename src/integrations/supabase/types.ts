@@ -2812,6 +2812,59 @@ export type Database = {
         }
         Relationships: []
       }
+      reactivation_campaigns: {
+        Row: {
+          asaas_customer_id: string | null
+          campaign_batch: string | null
+          client_name: string | null
+          created_at: string
+          id: string
+          message_sent: string | null
+          phone: string
+          plan_name: string | null
+          resolved_at: string | null
+          sent_at: string
+          status: string
+          workspace_id: string | null
+        }
+        Insert: {
+          asaas_customer_id?: string | null
+          campaign_batch?: string | null
+          client_name?: string | null
+          created_at?: string
+          id?: string
+          message_sent?: string | null
+          phone: string
+          plan_name?: string | null
+          resolved_at?: string | null
+          sent_at?: string
+          status?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          asaas_customer_id?: string | null
+          campaign_batch?: string | null
+          client_name?: string | null
+          created_at?: string
+          id?: string
+          message_sent?: string | null
+          phone?: string
+          plan_name?: string | null
+          resolved_at?: string | null
+          sent_at?: string
+          status?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reactivation_campaigns_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reactivation_log: {
         Row: {
           cadence_day: number
