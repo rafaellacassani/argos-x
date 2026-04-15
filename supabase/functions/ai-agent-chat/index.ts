@@ -1,4 +1,4 @@
-// ai-agent-chat v2.1 - token tracking fix
+// ai-agent-chat v2.2 - context summarization + 30-msg window
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
