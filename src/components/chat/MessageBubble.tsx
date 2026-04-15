@@ -306,7 +306,33 @@ export function MessageBubble({
             </div>
           );
         }
-        // No thumbnail available - show placeholder with click to load
+        // No thumbnail available - show auto-loaded image or loading state
+        const autoLoadedSrc = fullMediaBase64;
+        if (autoLoadedSrc) {
+          return (
+            <div className="-mx-4 -mt-2.5 mb-1">
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => setShowMediaModal(true)}
+              >
+                <img
+                  src={autoLoadedSrc}
+                  alt="Imagem"
+                  className="w-full max-w-[280px] rounded-t-2xl object-cover hover:opacity-95 transition-opacity"
+                  style={{ maxHeight: "300px" }}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-t-2xl transition-colors flex items-center justify-center">
+                  <ExternalLink className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </div>
+              {content && (
+                <p className="text-sm mt-2 px-4 whitespace-pre-wrap break-words">
+                  {renderTextWithLinks(content)}
+                </p>
+              )}
+            </div>
+          );
+        }
         return (
           <div className="mb-2">
             <div 
