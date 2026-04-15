@@ -147,18 +147,25 @@ export function CreateEventDialog({
     if (!title.trim()) return;
     setSaving(true);
 
-    const startAt = allDay
-      ? `${startDate}T00:00:00`
-      : `${startDate}T${startTime}:00`;
-    const endAt = allDay
-      ? `${endDate}T23:59:59`
-      : `${endDate}T${endTime}:00`;
+    // Build Date objects using constructor to guarantee local-time interpretation
+    // new Date(year, month, day, h, m, s) always uses the browser's local timezone
+    const [sy, sm, sd] = startDate.split("-").map(Number);
+    const [sh, smin] = startTime.split(":").map(Number);
+    const [ey, em, ed] = endDate.split("-").map(Number);
+    const [eh, emin] = endTime.split(":").map(Number);
+
+    const startLocal = allDay
+      ? new Date(sy, sm - 1, sd, 0, 0, 0)
+      : new Date(sy, sm - 1, sd, sh, smin, 0);
+    const endLocal = allDay
+      ? new Date(ey, em - 1, ed, 23, 59, 59)
+      : new Date(ey, em - 1, ed, eh, emin, 0);
 
     await onSave({
       title: title.trim(),
       type,
-      start_at: new Date(startAt).toISOString(),
-      end_at: new Date(endAt).toISOString(),
+      start_at: startLocal.toISOString(),
+      end_at: endLocal.toISOString(),
       all_day: allDay,
       description: description || undefined,
       location: location || undefined,

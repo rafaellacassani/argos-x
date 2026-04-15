@@ -195,6 +195,7 @@ export function useCalendar() {
           await callSyncFunction("/push", "POST", { eventId: (newEvent as any).id });
         } catch (syncErr) {
           console.error("Auto-sync to Google failed:", syncErr);
+          // Don't show error to user - event is saved locally
         }
       }
 
@@ -290,7 +291,7 @@ export function useCalendar() {
 
   // Pull from Google Calendar
   const pullFromGoogle = useCallback(async () => {
-    if (!user) return;
+    if (!user || !workspaceId) return;
     try {
       const data = await callSyncFunction("/pull", "POST", {
         userId: user.id,
@@ -303,6 +304,32 @@ export function useCalendar() {
         title: "Sincronização concluída",
         description: `${data?.imported || 0} novos eventos importados.`,
       });
+
+      // After pull, push any local events that haven't been synced yet
+      try {
+        const { data: unsyncedEvents } = await supabase
+          .from("calendar_events" as any)
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("synced_to_google", false)
+          .is("google_event_id", null);
+
+        if (unsyncedEvents && unsyncedEvents.length > 0) {
+          for (const evt of unsyncedEvents) {
+            try {
+              await callSyncFunction("/push", "POST", { eventId: (evt as any).id });
+            } catch {
+              // silently skip individual failures
+            }
+          }
+          toast({
+            title: "Eventos locais sincronizados",
+            description: `${unsyncedEvents.length} eventos enviados ao Google Calendar.`,
+          });
+        }
+      } catch (pushErr) {
+        console.error("Error pushing unsynced events:", pushErr);
+      }
     } catch (err) {
       console.error("Error pulling from Google:", err);
       toast({ title: "Erro ao sincronizar", variant: "destructive" });
