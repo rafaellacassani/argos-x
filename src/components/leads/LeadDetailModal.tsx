@@ -34,6 +34,7 @@ import { LeadProposalsTab } from "./LeadProposalsTab";
 import { LeadFollowupsTab } from "@/components/chat/LeadFollowupsTab";
 import { LeadStatsTab } from "@/components/chat/LeadStatsTab";
 import { LeadCustomFields } from "./LeadCustomFields";
+import { LeadNotesTab } from "./LeadNotesTab";
 
 interface TeamMember {
   id: string;
