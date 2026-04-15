@@ -11,6 +11,7 @@ import { GuidedTourOverlay } from "@/components/tour/GuidedTourOverlay";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { WorkspaceAssistantWidget } from "@/components/assistant/WorkspaceAssistantWidget";
 import { DisconnectedInstanceBanner } from "./DisconnectedInstanceBanner";
+import { PaymentPendingBanner } from "./PaymentPendingBanner";
 import { useInstanceHealth } from "@/hooks/useInstanceHealth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
@@ -101,6 +102,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         {showTrialBanner && !isAdminViewing && <TrialBanner daysRemaining={daysRemaining} />}
         {!isAdminViewing && <LeadLimitBanner />}
         {!isAdminViewing && <DisconnectedInstanceBanner instances={disconnectedInstances} />}
+        {!isAdminViewing && <PaymentPendingBanner />}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>
