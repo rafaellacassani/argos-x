@@ -4009,6 +4009,36 @@ export default function Chats() {
                           onDeleteForEveryone={handleDeleteForEveryone}
                           onEdit={!selectedChat?.isMeta ? handleEdit : undefined}
                           onReact={!selectedChat?.isMeta ? handleReact : undefined}
+                          onContactChat={(phone, name) => {
+                            // Clean phone number and search for existing chat or navigate
+                            const cleanPhone = phone.replace(/[^0-9+]/g, '');
+                            const digits = cleanPhone.replace(/\D/g, '');
+                            // Try to find an existing chat with this phone
+                            const existingChat = chats.find(c => {
+                              const chatDigits = (c.phone || '').replace(/\D/g, '');
+                              return chatDigits.length >= 10 && digits.length >= 10 && 
+                                chatDigits.slice(-10) === digits.slice(-10);
+                            });
+                            if (existingChat) {
+                              setSelectedChat(existingChat);
+                            } else {
+                              // Create a temporary chat entry to open conversation
+                              const jid = `${digits}@s.whatsapp.net`;
+                              const tempChat = {
+                                id: jid,
+                                remoteJid: jid,
+                                name: name || cleanPhone,
+                                phone: cleanPhone,
+                                lastMessage: "",
+                                time: "",
+                                unread: 0,
+                                lastMessageFromMe: false,
+                                instanceName: selectedInstance !== 'all' ? selectedInstance : instances[0]?.name || '',
+                              };
+                              setChats(prev => [tempChat, ...prev]);
+                              setSelectedChat(tempChat);
+                            }
+                          }}
                         />
                       </div>
                     );
