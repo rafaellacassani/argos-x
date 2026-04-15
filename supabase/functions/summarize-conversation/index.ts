@@ -42,7 +42,7 @@ serve(async (req) => {
       .eq("workspace_id", workspaceId)
       .eq("remote_jid", remoteJid)
       .order("timestamp", { ascending: false })
-      .limit(50);
+      .limit(30);
 
     if (instanceName) {
       query = query.eq("instance_name", instanceName);

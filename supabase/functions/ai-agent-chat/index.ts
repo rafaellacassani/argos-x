@@ -1,4 +1,4 @@
-// ai-agent-chat v2.1 - token tracking fix
+// ai-agent-chat v2.2 - context summarization + 30-msg window
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -1225,12 +1225,87 @@ serve(async (req) => {
         }
         const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + GUARDRAILS;
 
-        const contextWindow = memory.context_window || agent.max_tokens || 50;
+        const MAX_CONTEXT_MESSAGES = 30;
+        const contextWindow = Math.min(memory.context_window || MAX_CONTEXT_MESSAGES, MAX_CONTEXT_MESSAGES);
+
+        // --- CONTEXT SUMMARIZATION ---
+        // If messages exceed the context window, summarize older messages to preserve context while saving tokens
+        let summaryPrefix = "";
+        if (messages.length > contextWindow && lovableApiKey) {
+          const olderMessages = messages.slice(0, messages.length - contextWindow);
+          const existingSummaryData = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+          const previousSummary = existingSummaryData.context_summary || "";
+
+          // Only re-summarize if we have new older messages to compress
+          const olderMsgCount = olderMessages.length;
+          const lastSummarizedCount = existingSummaryData.last_summarized_count || 0;
+
+          if (olderMsgCount > lastSummarizedCount) {
+            try {
+              // Build text from older messages (or previous summary + new overflow)
+              const olderText = olderMessages
+                .filter(m => m.role !== "system")
+                .map(m => `${m.role === "user" ? "Cliente" : "Assistente"}: ${(m.content || "").substring(0, 200)}`)
+                .join("\n");
+
+              const summaryInput = previousSummary
+                ? `RESUMO ANTERIOR:\n${previousSummary}\n\nNOVAS MENSAGENS:\n${olderText}`
+                : olderText;
+
+              console.log(`[ai-agent-chat] 📝 Summarizing ${olderMsgCount} older messages (prev summary: ${previousSummary ? "yes" : "no"})`);
+
+              const summaryResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-lite",
+                  messages: [
+                    {
+                      role: "system",
+                      content: "Você é um assistente que resume conversas de WhatsApp comerciais. Gere um resumo conciso (máx 300 palavras) em português brasileiro destacando: nome do cliente, empresa, interesse principal, dados coletados (email, telefone), último assunto discutido, e status da negociação. Seja factual, não invente nada."
+                    },
+                    { role: "user", content: `Resuma esta conversa:\n\n${summaryInput.substring(0, 4000)}` }
+                  ],
+                }),
+              });
+
+              if (summaryResponse.ok) {
+                const summaryData = await summaryResponse.json();
+                const newSummary = summaryData.choices?.[0]?.message?.content || "";
+                if (newSummary.length > 20) {
+                  summaryPrefix = newSummary;
+                  // Store in memory summary for reuse
+                  existingSummaryData.context_summary = newSummary;
+                  existingSummaryData.last_summarized_count = olderMsgCount;
+                  // We'll save this when we update memory at the end
+                  // For now, update the local summary reference
+                  memory._updatedSummaryData = existingSummaryData;
+                  console.log(`[ai-agent-chat] ✅ Context summarized: ${newSummary.length} chars`);
+                }
+              } else {
+                console.warn(`[ai-agent-chat] ⚠️ Summary API failed: ${summaryResponse.status}`);
+                // Use previous summary if available
+                if (previousSummary) summaryPrefix = previousSummary;
+              }
+            } catch (sumErr) {
+              console.error("[ai-agent-chat] ⚠️ Summarization error:", sumErr);
+              const existingSummaryData2 = memory.summary ? JSON.parse(memory.summary || "{}") : {};
+              if (existingSummaryData2.context_summary) summaryPrefix = existingSummaryData2.context_summary;
+            }
+          } else {
+            // Reuse existing summary
+            if (previousSummary) summaryPrefix = previousSummary;
+          }
+        }
+
         const recentMessages = messages.slice(-contextWindow);
 
         // --- Build AI messages with multimodal support ---
+        const contextSummaryBlock = summaryPrefix
+          ? `\n\nRESUMO DO HISTÓRICO ANTERIOR DA CONVERSA (use como contexto, NÃO repita informações já ditas):\n${summaryPrefix}`
+          : "";
         const aiMessages: any[] = [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt + contextSummaryBlock },
         ];
 
         for (let i = 0; i < recentMessages.length; i++) {
@@ -1983,6 +2058,19 @@ serve(async (req) => {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
         consecutive_fallbacks: newConsecutiveFallbacks,
+        // Preserve context summary from summarization
+        ...(memory._updatedSummaryData ? {
+          context_summary: memory._updatedSummaryData.context_summary,
+          last_summarized_count: memory._updatedSummaryData.last_summarized_count,
+        } : {
+          // Preserve existing summary data
+          ...(memory.summary ? (() => {
+            try {
+              const prev = JSON.parse(memory.summary);
+              return { context_summary: prev.context_summary, last_summarized_count: prev.last_summarized_count };
+            } catch { return {}; }
+          })() : {}),
+        }),
       };
 
       // --- GIBBERISH GUARD: block nonsensical AI output ---
