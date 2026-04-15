@@ -620,10 +620,17 @@ serve(async (req) => {
       }
 
       case "PAYMENT_OVERDUE": {
+        // CRITICAL: Set BOTH subscription_status AND plan_type to past_due
+        // so check-workspace-access properly blocks access
         await supabaseAdmin
           .from("workspaces")
-          .update({ subscription_status: "past_due" })
+          .update({
+            subscription_status: "past_due",
+            plan_type: "past_due",
+          })
           .eq("asaas_customer_id", asaasCustomerId);
+
+        console.log(`[asaas-webhook] Workspace marked past_due for customer ${asaasCustomerId}`);
         break;
       }
 
@@ -645,10 +652,16 @@ serve(async (req) => {
       }
 
       case "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED": {
+        // Card refused — mark as past_due and block
         await supabaseAdmin
           .from("workspaces")
-          .update({ subscription_status: "past_due" })
+          .update({
+            subscription_status: "past_due",
+            plan_type: "past_due",
+          })
           .eq("asaas_customer_id", asaasCustomerId);
+
+        console.log(`[asaas-webhook] Card capture refused for customer ${asaasCustomerId}`);
         break;
       }
 
