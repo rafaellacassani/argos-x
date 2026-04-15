@@ -470,6 +470,10 @@ export function LeadDetailModal({
                 <LeadProposalsTab lead={lead} onCreateSaleFromProposal={handleCreateSaleFromProposal} />
               </TabsContent>
 
+              <TabsContent value="notes" className="flex-1 m-0 overflow-hidden">
+                <LeadNotesTab leadId={lead.id} />
+              </TabsContent>
+
               <TabsContent value="followups" className="flex-1 m-0 overflow-hidden">
                 <LeadFollowupsTab lead={lead} />
               </TabsContent>
