@@ -85,11 +85,22 @@ serve(async (req) => {
     }
 
     // ================================================================
-    // 2. Block past_due workspaces after 7 days
+    // 2. D+1 / D+3 WhatsApp notifications + Block past_due after 7 days
     // ================================================================
+    const EVOLUTION_API_URL = Deno.env.get("EVOLUTION_API_URL");
+    const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
+
+    // Get WhatsApp instance for sending dunning messages
+    const { data: cadenceConfig } = await supabaseAdmin
+      .from("reactivation_cadence_config")
+      .select("whatsapp_instance_name")
+      .limit(1)
+      .single();
+    const dunningInstance = cadenceConfig?.whatsapp_instance_name;
+
     const { data: pastDueWorkspaces } = await supabaseAdmin
       .from("workspaces")
-      .select("id, name, updated_at, asaas_customer_id, asaas_subscription_id")
+      .select("id, name, updated_at, asaas_customer_id, asaas_subscription_id, created_by")
       .eq("payment_provider", "asaas")
       .eq("plan_type", "past_due")
       .is("blocked_at", null);
@@ -97,7 +108,64 @@ serve(async (req) => {
     for (const ws of pastDueWorkspaces || []) {
       const updatedAt = new Date(ws.updated_at);
       const daysSincePastDue = (now.getTime() - updatedAt.getTime()) / 86400000;
+      const daysBucket = Math.floor(daysSincePastDue);
 
+      // --- D+1 or D+3: Send WhatsApp warning ---
+      if ((daysBucket === 1 || daysBucket === 3) && dunningInstance && EVOLUTION_API_URL && EVOLUTION_API_KEY) {
+        // Check if already sent for this day
+        const { data: alreadySent } = await supabaseAdmin
+          .from("reactivation_log")
+          .select("id")
+          .eq("workspace_id", ws.id)
+          .eq("cadence_day", daysBucket * -1) // negative = dunning D+N
+          .eq("channel", "whatsapp")
+          .limit(1);
+
+        if (!alreadySent || alreadySent.length === 0) {
+          // Get owner phone
+          const { data: profile } = await supabaseAdmin
+            .from("user_profiles")
+            .select("full_name, phone, personal_whatsapp")
+            .eq("user_id", ws.created_by)
+            .single();
+
+          const ownerPhone = profile?.personal_whatsapp || profile?.phone;
+          if (ownerPhone) {
+            let cleanPhone = ownerPhone.replace(/\D/g, "");
+            if (cleanPhone.length >= 10 && !cleanPhone.startsWith("55")) {
+              cleanPhone = "55" + cleanPhone;
+            }
+
+            const firstName = (profile.full_name || "").split(/\s+/)[0] || "Cliente";
+            const dayLabel = daysBucket === 1 ? "ontem" : "há 3 dias";
+
+            const text = `Olá, ${firstName}! 👋\n\nNotamos que o pagamento da sua assinatura do Argos X venceu ${dayLabel}. Pode ter sido um problema técnico com o cartão.\n\nPara evitar a suspensão do seu acesso, atualize seu método de pagamento:\n\n👉 https://argosx.com.br/planos\n\nQualquer dúvida, responda aqui! 🚀`;
+
+            const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
+            try {
+              const res = await fetch(`${apiUrl}/message/sendText/${dunningInstance}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+                body: JSON.stringify({ number: cleanPhone, text }),
+              });
+
+              await supabaseAdmin.from("reactivation_log").insert({
+                workspace_id: ws.id,
+                cadence_day: daysBucket * -1,
+                channel: "whatsapp",
+                status: res.ok ? "sent" : "failed",
+                error_message: res.ok ? null : `HTTP ${res.status}`,
+              });
+
+              if (res.ok) results.push(`DUNNING D+${daysBucket} sent: ${ws.name} → ${cleanPhone}`);
+            } catch (e: any) {
+              console.warn(`Dunning WhatsApp failed for ${ws.name}:`, e);
+            }
+          }
+        }
+      }
+
+      // --- D+7: Block workspace ---
       if (daysSincePastDue >= 7) {
         await supabaseAdmin
           .from("workspaces")
