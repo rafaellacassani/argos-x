@@ -68,6 +68,32 @@ serve(async (req) => {
       ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
       : null;
 
+    // If workspace is explicitly blocked, deny immediately
+    if (workspace.blocked_at) {
+      return new Response(
+        JSON.stringify({
+          allowed: false,
+          reason: "blocked",
+          trial_end: workspace.trial_end,
+          days_remaining: daysRemaining,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // If subscription_status is past_due, deny access regardless of plan_type
+    if (workspace.subscription_status === "past_due") {
+      return new Response(
+        JSON.stringify({
+          allowed: false,
+          reason: "past_due",
+          trial_end: workspace.trial_end,
+          days_remaining: daysRemaining,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     let allowed = false;
     let reason = workspace.plan_type;
 
@@ -79,7 +105,6 @@ serve(async (req) => {
         } else {
           allowed = false;
           reason = "blocked";
-          // Auto-block expired trial
           await supabaseAdmin
             .from("workspaces")
             .update({ blocked_at: now.toISOString() })
@@ -89,7 +114,6 @@ serve(async (req) => {
 
       case "trialing":
         if (!trialEnd || trialEnd > now) {
-          // If trial_end is null, treat as valid trial (webhook may not have set it yet)
           allowed = true;
           reason = "trialing";
         } else {
