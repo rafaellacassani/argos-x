@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   X, Phone, Mail, Building2, MessageSquare, Calendar, DollarSign,
   User, Tag, ChevronRight, Trash2, Plus, Edit2, Check, FileText,
-  History, BarChart3, CalendarClock, Brain, Loader2, Flame, Sun, Snowflake,
+  History, BarChart3, CalendarClock, Brain, Loader2, Flame, Sun, Snowflake, StickyNote,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogTitle,
