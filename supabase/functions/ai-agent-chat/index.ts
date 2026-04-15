@@ -2058,6 +2058,19 @@ serve(async (req) => {
         qualification_step: qualificationStep,
         qualification_data: qualificationData,
         consecutive_fallbacks: newConsecutiveFallbacks,
+        // Preserve context summary from summarization
+        ...(memory._updatedSummaryData ? {
+          context_summary: memory._updatedSummaryData.context_summary,
+          last_summarized_count: memory._updatedSummaryData.last_summarized_count,
+        } : {
+          // Preserve existing summary data
+          ...(memory.summary ? (() => {
+            try {
+              const prev = JSON.parse(memory.summary);
+              return { context_summary: prev.context_summary, last_summarized_count: prev.last_summarized_count };
+            } catch { return {}; }
+          })() : {}),
+        }),
       };
 
       // --- GIBBERISH GUARD: block nonsensical AI output ---
