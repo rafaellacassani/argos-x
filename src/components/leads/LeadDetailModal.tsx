@@ -4,7 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   X, Phone, Mail, Building2, MessageSquare, Calendar, DollarSign,
   User, Tag, ChevronRight, Trash2, Plus, Edit2, Check, FileText,
-  History, BarChart3, CalendarClock, Brain, Loader2, Flame, Sun, Snowflake,
+  History, BarChart3, CalendarClock, Brain, Loader2, Flame, Sun, Snowflake, StickyNote,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogTitle,
@@ -34,6 +34,7 @@ import { LeadProposalsTab } from "./LeadProposalsTab";
 import { LeadFollowupsTab } from "@/components/chat/LeadFollowupsTab";
 import { LeadStatsTab } from "@/components/chat/LeadStatsTab";
 import { LeadCustomFields } from "./LeadCustomFields";
+import { LeadNotesTab } from "./LeadNotesTab";
 
 interface TeamMember {
   id: string;
@@ -448,6 +449,7 @@ export function LeadDetailModal({
                 {[
                   { value: "sales", label: "Vendas", icon: DollarSign },
                   { value: "proposals", label: "Orçamentos", icon: FileText },
+                  { value: "notes", label: "Notas", icon: StickyNote },
                   { value: "followups", label: "Follow-ups", icon: CalendarClock },
                   { value: "stats", label: "Estatísticas", icon: BarChart3 },
                   { value: "history", label: "Histórico", icon: History },
@@ -466,6 +468,10 @@ export function LeadDetailModal({
 
               <TabsContent value="proposals" className="flex-1 m-0 overflow-hidden">
                 <LeadProposalsTab lead={lead} onCreateSaleFromProposal={handleCreateSaleFromProposal} />
+              </TabsContent>
+
+              <TabsContent value="notes" className="flex-1 m-0 overflow-hidden">
+                <LeadNotesTab leadId={lead.id} />
               </TabsContent>
 
               <TabsContent value="followups" className="flex-1 m-0 overflow-hidden">
