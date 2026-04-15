@@ -449,6 +449,7 @@ export function LeadDetailModal({
                 {[
                   { value: "sales", label: "Vendas", icon: DollarSign },
                   { value: "proposals", label: "Orçamentos", icon: FileText },
+                  { value: "notes", label: "Notas", icon: StickyNote },
                   { value: "followups", label: "Follow-ups", icon: CalendarClock },
                   { value: "stats", label: "Estatísticas", icon: BarChart3 },
                   { value: "history", label: "Histórico", icon: History },
