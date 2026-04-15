@@ -4024,7 +4024,7 @@ export default function Chats() {
                             } else {
                               // Create a temporary chat entry to open conversation
                               const jid = `${digits}@s.whatsapp.net`;
-                              const tempChat = {
+                              const tempChat: Chat = {
                                 id: jid,
                                 remoteJid: jid,
                                 name: name || cleanPhone,
@@ -4032,6 +4032,7 @@ export default function Chats() {
                                 lastMessage: "",
                                 time: "",
                                 unread: 0,
+                                online: false,
                                 lastMessageFromMe: false,
                                 instanceName: selectedInstance !== 'all' ? selectedInstance : instances[0]?.name || '',
                               };
