@@ -144,3 +144,6 @@ verify_jwt = false
 
 [functions.calendly-api]
 verify_jwt = false
+
+[functions.send-reactivation-campaign]
+verify_jwt = false
