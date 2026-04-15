@@ -38,6 +38,7 @@ export interface MessageBubbleProps {
   onDeleteForEveryone?: (id: string, messageId: string) => void;
   onEdit?: (id: string, messageId: string, currentContent: string) => void;
   onReact?: (id: string, messageId: string, reaction: string) => void;
+  onContactChat?: (phone: string, name: string) => void;
 }
 
 // Helper to detect and render links in text
@@ -102,6 +103,7 @@ export function MessageBubble({
   onDeleteForEveryone,
   onEdit,
   onReact,
+  onContactChat,
 }: MessageBubbleProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
@@ -116,6 +118,31 @@ export function MessageBubble({
   const [audioDuration, setAudioDuration] = useState(duration || 0);
   const [waveformBars] = useState(() => generateWaveformBars(35));
   const [hasAutoPlayed, setHasAutoPlayed] = useState(false);
+  const autoLoadAttemptedRef = useRef(false);
+
+  // Auto-load image when no thumbnail is available
+  useEffect(() => {
+    if (type === "image" && !thumbnailBase64 && !fullMediaBase64 && !autoLoadAttemptedRef.current && onDownloadMedia && id) {
+      autoLoadAttemptedRef.current = true;
+      (async () => {
+        setIsLoadingMedia(true);
+        try {
+          const result = await onDownloadMedia(id, false);
+          if (result?.base64) {
+            const base64WithPrefix = result.base64.startsWith("data:")
+              ? result.base64
+              : `data:${result.mimetype || "image/jpeg"};base64,${result.base64}`;
+            setFullMediaBase64(base64WithPrefix);
+            setFullMediaMimetype(result.mimetype || null);
+          }
+        } catch (err) {
+          console.error("Auto-load image failed:", err);
+        } finally {
+          setIsLoadingMedia(false);
+        }
+      })();
+    }
+  }, [type, thumbnailBase64, fullMediaBase64, onDownloadMedia, id]);
 
   // Initialize audio base64 from local prop
   useEffect(() => {
@@ -279,7 +306,33 @@ export function MessageBubble({
             </div>
           );
         }
-        // No thumbnail available - show placeholder with click to load
+        // No thumbnail available - show auto-loaded image or loading state
+        const autoLoadedSrc = fullMediaBase64;
+        if (autoLoadedSrc) {
+          return (
+            <div className="-mx-4 -mt-2.5 mb-1">
+              <div 
+                className="relative cursor-pointer group"
+                onClick={() => setShowMediaModal(true)}
+              >
+                <img
+                  src={autoLoadedSrc}
+                  alt="Imagem"
+                  className="w-full max-w-[280px] rounded-t-2xl object-cover hover:opacity-95 transition-opacity"
+                  style={{ maxHeight: "300px" }}
+                />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-t-2xl transition-colors flex items-center justify-center">
+                  <ExternalLink className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                </div>
+              </div>
+              {content && (
+                <p className="text-sm mt-2 px-4 whitespace-pre-wrap break-words">
+                  {renderTextWithLinks(content)}
+                </p>
+              )}
+            </div>
+          );
+        }
         return (
           <div className="mb-2">
             <div 
@@ -489,31 +542,51 @@ export function MessageBubble({
               const nameLine = lines.find(l => l.startsWith("📇"))?.replace("📇 ", "") || "Contato";
               const phoneLine = lines.find(l => l.startsWith("📱"))?.replace("📱 ", "") || "";
               return (
-                <div
-                  key={idx}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-xl",
-                    sent ? "bg-secondary-foreground/10" : "bg-muted/60"
-                  )}
-                >
-                  <div className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
-                    sent ? "bg-secondary-foreground/20" : "bg-primary/15"
-                  )}>
-                    <User className={cn(
-                      "w-5 h-5",
-                      sent ? "text-secondary-foreground" : "text-primary"
-                    )} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{nameLine}</p>
-                    {phoneLine && (
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <Phone className="w-3 h-3 opacity-60" />
-                        <p className="text-xs opacity-70">{phoneLine}</p>
-                      </div>
+                <div key={idx} className="space-y-1.5">
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl",
+                      sent ? "bg-secondary-foreground/10" : "bg-muted/60"
                     )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0",
+                      sent ? "bg-secondary-foreground/20" : "bg-primary/15"
+                    )}>
+                      <User className={cn(
+                        "w-5 h-5",
+                        sent ? "text-secondary-foreground" : "text-primary"
+                      )} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{nameLine}</p>
+                      {phoneLine && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3 opacity-60" />
+                          <p className="text-xs opacity-70">{phoneLine}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {phoneLine && onContactChat && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "w-full text-xs h-7 rounded-lg font-medium",
+                        sent 
+                          ? "text-secondary-foreground/80 hover:bg-secondary-foreground/10" 
+                          : "text-primary hover:bg-primary/10"
+                      )}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onContactChat(phoneLine, nameLine);
+                      }}
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      Conversar
+                    </Button>
+                  )}
                 </div>
               );
             })}
