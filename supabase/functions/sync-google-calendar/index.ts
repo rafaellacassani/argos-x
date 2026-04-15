@@ -34,14 +34,32 @@ async function getValidToken(userId: string): Promise<string | null> {
 
   // Refresh
   try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/google-calendar-oauth/refresh`, {
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
+        client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
+        refresh_token: tokenRow.refresh_token,
+        grant_type: "refresh_token",
+      }),
     });
-    const data = await res.json();
-    return data.access_token || null;
-  } catch {
+    const tokenData = await tokenRes.json();
+
+    if (tokenData.error) {
+      console.error("[Sync Google] Token refresh failed:", tokenData.error, tokenData.error_description);
+      return null;
+    }
+
+    const newExpiry = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
+    await supabaseAdmin
+      .from("google_calendar_tokens")
+      .update({ access_token: tokenData.access_token, token_expiry: newExpiry })
+      .eq("user_id", userId);
+
+    return tokenData.access_token;
+  } catch (err) {
+    console.error("[Sync Google] Token refresh error:", err);
     return null;
   }
 }
