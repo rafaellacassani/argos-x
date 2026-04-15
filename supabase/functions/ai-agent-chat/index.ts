@@ -1301,8 +1301,11 @@ serve(async (req) => {
         const recentMessages = messages.slice(-contextWindow);
 
         // --- Build AI messages with multimodal support ---
+        const contextSummaryBlock = summaryPrefix
+          ? `\n\nRESUMO DO HISTÓRICO ANTERIOR DA CONVERSA (use como contexto, NÃO repita informações já ditas):\n${summaryPrefix}`
+          : "";
         const aiMessages: any[] = [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: systemPrompt + contextSummaryBlock },
         ];
 
         for (let i = 0; i < recentMessages.length; i++) {
