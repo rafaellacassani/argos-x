@@ -243,7 +243,8 @@ app.post("/refresh", async (c) => {
     const tokenData = await tokenRes.json();
 
     if (tokenData.error) {
-      return c.json({ error: "Refresh failed" }, 500, corsHeaders);
+      console.error("[Google Calendar OAuth] Refresh token error:", JSON.stringify(tokenData));
+      return c.json({ error: "Refresh failed", detail: tokenData.error, description: tokenData.error_description }, 500, corsHeaders);
     }
 
     const newExpiry = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
