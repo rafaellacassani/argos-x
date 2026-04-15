@@ -118,6 +118,31 @@ export function MessageBubble({
   const [audioDuration, setAudioDuration] = useState(duration || 0);
   const [waveformBars] = useState(() => generateWaveformBars(35));
   const [hasAutoPlayed, setHasAutoPlayed] = useState(false);
+  const autoLoadAttemptedRef = useRef(false);
+
+  // Auto-load image when no thumbnail is available
+  useEffect(() => {
+    if (type === "image" && !thumbnailBase64 && !fullMediaBase64 && !autoLoadAttemptedRef.current && onDownloadMedia && id) {
+      autoLoadAttemptedRef.current = true;
+      (async () => {
+        setIsLoadingMedia(true);
+        try {
+          const result = await onDownloadMedia(id, false);
+          if (result?.base64) {
+            const base64WithPrefix = result.base64.startsWith("data:")
+              ? result.base64
+              : `data:${result.mimetype || "image/jpeg"};base64,${result.base64}`;
+            setFullMediaBase64(base64WithPrefix);
+            setFullMediaMimetype(result.mimetype || null);
+          }
+        } catch (err) {
+          console.error("Auto-load image failed:", err);
+        } finally {
+          setIsLoadingMedia(false);
+        }
+      })();
+    }
+  }, [type, thumbnailBase64, fullMediaBase64, onDownloadMedia, id]);
 
   // Initialize audio base64 from local prop
   useEffect(() => {
