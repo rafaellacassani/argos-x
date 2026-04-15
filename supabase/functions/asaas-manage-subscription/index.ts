@@ -43,6 +43,65 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
   return data;
 }
 
+/**
+ * Cancel all PENDING and OVERDUE payments for a given Asaas customer,
+ * optionally filtering by subscription ID.
+ * Returns the count of canceled payments.
+ */
+async function cancelOrphanPayments(
+  customerId: string,
+  excludeSubscriptionId?: string
+): Promise<{ canceled: number; details: string[] }> {
+  const details: string[] = [];
+  let canceled = 0;
+
+  for (const status of ["PENDING", "OVERDUE"]) {
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const res = await asaasFetch(
+        `/payments?customer=${customerId}&status=${status}&limit=100&offset=${offset}`
+      );
+      const payments = res.data || [];
+
+      for (const p of payments) {
+        // Skip payments belonging to the NEW subscription (keep those)
+        if (excludeSubscriptionId && p.subscription === excludeSubscriptionId) {
+          continue;
+        }
+
+        try {
+          await asaasFetch(`/payments/${p.id}`, { method: "DELETE" });
+          details.push(`Cancelado: ${p.id} (${status}, R$${p.value}, sub:${p.subscription || 'avulso'})`);
+          canceled++;
+        } catch (e: any) {
+          details.push(`Falha ao cancelar ${p.id}: ${e.message}`);
+        }
+      }
+
+      hasMore = payments.length === 100;
+      offset += 100;
+    }
+  }
+
+  return { canceled, details };
+}
+
+/**
+ * Cancel a specific subscription in Asaas (silently ignores if already deleted).
+ */
+async function cancelSubscriptionSafe(subscriptionId: string): Promise<boolean> {
+  try {
+    await asaasFetch(`/subscriptions/${subscriptionId}`, { method: "DELETE" });
+    console.log(`[asaas-manage] Subscription ${subscriptionId} canceled`);
+    return true;
+  } catch (e: any) {
+    console.warn(`[asaas-manage] Delete sub ${subscriptionId} warning: ${e.message}`);
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -50,7 +109,35 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, workspaceId, plan, packSize } = body;
+    const { action, workspaceId, plan, packSize, paymentId } = body;
+
+    // === CANCEL ORPHAN PAYMENT (admin action, no workspace needed) ===
+    if (action === "cancel_orphan_payment" && paymentId) {
+      const authHeader = req.headers.get("authorization") || "";
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (authError || !user) {
+        return new Response(JSON.stringify({ error: "Não autenticado." }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      try {
+        await asaasFetch(`/payments/${paymentId}`, { method: "DELETE" });
+        console.log(`[asaas-manage] Orphan payment ${paymentId} canceled by ${user.id}`);
+        return new Response(JSON.stringify({ success: true, message: `Cobrança ${paymentId} cancelada.` }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     if (!workspaceId || !action) {
       return new Response(JSON.stringify({ error: "workspaceId e action são obrigatórios." }), {
@@ -115,6 +202,8 @@ serve(async (req) => {
       }
 
       const config = PLAN_CONFIGS[plan];
+      const previousPlan = workspace.plan_name;
+      const previousSubId = workspace.asaas_subscription_id;
 
       if (!workspace.asaas_customer_id) {
         return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado a este workspace." }), {
@@ -122,72 +211,45 @@ serve(async (req) => {
         });
       }
 
-      // Strategy: try PUT first; if Asaas rejects (paid invoices exist),
-      // cancel old subscription and create a new one.
-      let newSubId = workspace.asaas_subscription_id;
+      // ============================================================
+      // CLEAN UPGRADE LOGIC:
+      // 1. Cancel ALL pending/overdue payments from old subscription
+      // 2. Cancel old subscription
+      // 3. Create new subscription
+      // ============================================================
 
-      if (workspace.asaas_subscription_id) {
-        try {
-          await asaasFetch(`/subscriptions/${workspace.asaas_subscription_id}`, {
-            method: "PUT",
-            body: JSON.stringify({
-              value: config.price,
-              description: `Argos X - Plano ${config.display}`,
-            }),
-          });
-          console.log(`[asaas-manage] Upgrade via PUT ok for ${workspaceId}`);
-        } catch (putErr: any) {
-          // PUT failed — cancel old and create new subscription
-          console.log(`[asaas-manage] PUT failed (${putErr.message}), recreating subscription`);
+      let newSubId: string;
 
-          // Cancel old subscription (don't fail if already deleted)
-          try {
-            await asaasFetch(`/subscriptions/${workspace.asaas_subscription_id}`, {
-              method: "DELETE",
-            });
-          } catch (delErr: any) {
-            console.warn(`[asaas-manage] Delete old sub warning: ${delErr.message}`);
-          }
+      // Step 1 & 2: Cancel old subscription and its orphan payments
+      if (previousSubId) {
+        console.log(`[asaas-manage] Starting clean upgrade: ${previousPlan} → ${plan}`);
 
-          // Create new subscription
-          const nextDueDate = new Date();
-          nextDueDate.setDate(nextDueDate.getDate() + 1);
+        // Cancel all pending/overdue payments for this customer (except new sub)
+        const orphanResult = await cancelOrphanPayments(workspace.asaas_customer_id);
+        console.log(`[asaas-manage] Canceled ${orphanResult.canceled} orphan payments:`, orphanResult.details);
 
-          const newSub = await asaasFetch("/subscriptions", {
-            method: "POST",
-            body: JSON.stringify({
-              customer: workspace.asaas_customer_id,
-              billingType: "CREDIT_CARD",
-              value: config.price,
-              cycle: "MONTHLY",
-              nextDueDate: nextDueDate.toISOString().split("T")[0],
-              description: `Argos X - Plano ${config.display}`,
-              externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
-            }),
-          });
-          newSubId = newSub.id;
-          console.log(`[asaas-manage] New subscription created: ${newSubId}`);
-        }
-      } else {
-        // No existing subscription — create fresh
-        const nextDueDate = new Date();
-        nextDueDate.setDate(nextDueDate.getDate() + 1);
-
-        const newSub = await asaasFetch("/subscriptions", {
-          method: "POST",
-          body: JSON.stringify({
-            customer: workspace.asaas_customer_id,
-            billingType: "CREDIT_CARD",
-            value: config.price,
-            cycle: "MONTHLY",
-            nextDueDate: nextDueDate.toISOString().split("T")[0],
-            description: `Argos X - Plano ${config.display}`,
-            externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
-          }),
-        });
-        newSubId = newSub.id;
-        console.log(`[asaas-manage] Fresh subscription created: ${newSubId}`);
+        // Cancel old subscription
+        await cancelSubscriptionSafe(previousSubId);
       }
+
+      // Step 3: Create new subscription
+      const nextDueDate = new Date();
+      nextDueDate.setDate(nextDueDate.getDate() + 1);
+
+      const newSub = await asaasFetch("/subscriptions", {
+        method: "POST",
+        body: JSON.stringify({
+          customer: workspace.asaas_customer_id,
+          billingType: "CREDIT_CARD",
+          value: config.price,
+          cycle: "MONTHLY",
+          nextDueDate: nextDueDate.toISOString().split("T")[0],
+          description: `Argos X - Plano ${config.display}`,
+          externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
+        }),
+      });
+      newSubId = newSub.id;
+      console.log(`[asaas-manage] New subscription created: ${newSubId}`);
 
       // Update workspace limits immediately
       await supabaseAdmin
@@ -205,9 +267,34 @@ serve(async (req) => {
         })
         .eq("id", workspaceId);
 
-      console.log(`[asaas-manage] Upgrade ${workspace.plan_name} → ${plan} for workspace ${workspaceId}`);
+      // Log plan change history
+      try {
+        await supabaseAdmin.from("lead_history").insert({
+          lead_id: workspaceId, // Using workspace ID for tracking
+          workspace_id: workspaceId,
+          action: "plan_change",
+          performed_by: user.id,
+          metadata: {
+            from_plan: previousPlan,
+            to_plan: plan,
+            from_subscription: previousSubId,
+            to_subscription: newSubId,
+            from_price: PLAN_CONFIGS[previousPlan]?.price || null,
+            to_price: config.price,
+            changed_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        console.warn("[asaas-manage] Failed to log plan change:", e);
+      }
 
-      return new Response(JSON.stringify({ success: true, message: `Plano atualizado para ${config.display}` }), {
+      console.log(`[asaas-manage] Clean upgrade ${previousPlan} → ${plan} for workspace ${workspaceId}`);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        message: `Plano atualizado para ${config.display}`,
+        details: { from: previousPlan, to: plan, newSubscriptionId: newSubId }
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -233,7 +320,6 @@ serve(async (req) => {
         workspace_id: workspaceId,
       });
 
-      // Create a new monthly subscription for the pack
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 1);
 
@@ -250,7 +336,6 @@ serve(async (req) => {
         }),
       });
 
-      // Insert lead_pack immediately
       await supabaseAdmin.from("lead_packs").insert({
         workspace_id: workspaceId,
         pack_size: packSize,
@@ -259,7 +344,6 @@ serve(async (req) => {
         asaas_subscription_id: subscription.id,
       });
 
-      // Recalculate extra_leads from all active packs
       const { data: allPacks } = await supabaseAdmin
         .from("lead_packs")
         .select("pack_size")
@@ -288,7 +372,6 @@ serve(async (req) => {
       }
 
       const userPrice = 47;
-
       const externalReference = JSON.stringify({
         type: "add_user",
         extra_users: 1,
@@ -311,7 +394,6 @@ serve(async (req) => {
         }),
       });
 
-      // Increment user_limit immediately
       const { data: ws } = await supabaseAdmin
         .from("workspaces")
         .select("user_limit")
@@ -327,6 +409,44 @@ serve(async (req) => {
       console.log(`[asaas-manage] Add user for workspace ${workspaceId}, new limit: ${newLimit}`);
 
       return new Response(JSON.stringify({ success: true, message: `Usuário adicional contratado! Novo limite: ${newLimit}` }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // === AUDIT ORPHAN PAYMENTS (admin-only) ===
+    if (action === "audit_orphans") {
+      if (!workspace.asaas_customer_id) {
+        return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const orphans: any[] = [];
+      for (const status of ["PENDING", "OVERDUE"]) {
+        const res = await asaasFetch(
+          `/payments?customer=${workspace.asaas_customer_id}&status=${status}&limit=100`
+        );
+        for (const p of (res.data || [])) {
+          if (p.subscription !== workspace.asaas_subscription_id) {
+            orphans.push({
+              paymentId: p.id,
+              status: p.status,
+              value: p.value,
+              dueDate: p.dueDate,
+              description: p.description,
+              subscription: p.subscription,
+            });
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ 
+        workspace: workspace.id,
+        currentPlan: workspace.plan_name,
+        currentSubscription: workspace.asaas_subscription_id,
+        orphanPayments: orphans,
+        orphanCount: orphans.length,
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
