@@ -272,37 +272,113 @@ export default function SupportAdmin() {
     return () => { supabase.removeChannel(channel); };
   }, [selected?.id, selected?.session_id, selected?.instance_name]);
 
-  /* ── Send reply ── */
-  const sendReply = async () => {
-    if (!reply.trim() || !selected?.session_id || !selected?.instance_name || sending) return;
-    setSending(true);
+  /* ── Send handlers for ChatInput ── */
+  const getRecipientNumber = useCallback(() => {
+    if (!selected?.session_id) return "";
+    return selected.session_id.replace("@s.whatsapp.net", "").replace("@lid", "");
+  }, [selected?.session_id]);
 
+  const autoClaimIfWaiting = useCallback(async () => {
+    if (selected?.status === "waiting" && user?.id) {
+      await supabase
+        .from("human_support_queue" as any)
+        .update({ status: "in_progress", assigned_to: user.id, updated_at: new Date().toISOString() })
+        .eq("id", selected.id);
+      setSelected(prev => prev ? { ...prev, status: "in_progress", assigned_to: user!.id } : null);
+    }
+  }, [selected, user?.id]);
+
+  const handleSendText = useCallback(async (text: string): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
     try {
       const { error } = await supabase.functions.invoke("evolution-api", {
         body: {
           action: "sendText",
           instanceName: selected.instance_name,
-          payload: { number: selected.session_id.replace("@s.whatsapp.net", ""), text: reply.trim() },
+          payload: { number: getRecipientNumber(), text },
         },
       });
-
       if (error) throw error;
-      setReply("");
       toast({ title: "Mensagem enviada" });
-
-      if (selected.status === "waiting") {
-        await supabase
-          .from("human_support_queue" as any)
-          .update({ status: "in_progress", assigned_to: user?.id, updated_at: new Date().toISOString() })
-          .eq("id", selected.id);
-        setSelected(prev => prev ? { ...prev, status: "in_progress", assigned_to: user?.id || null } : null);
-      }
+      await autoClaimIfWaiting();
+      return true;
     } catch (err: any) {
       console.error("[SupportAdmin] send error:", err);
       toast({ title: "Erro ao enviar", description: err.message, variant: "destructive" });
+      return false;
     }
-    setSending(false);
-  };
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      const isAudio = file.type.startsWith("audio/");
+
+      // Upload to storage
+      const path = `support/${selected.workspace_id}/${Date.now()}_${file.name}`;
+      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, file, { contentType: file.type });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
+
+      const action = isImage ? "sendImage" : isVideo ? "sendVideo" : isAudio ? "sendAudio" : "sendDocument";
+      const payload: any = {
+        number: getRecipientNumber(),
+        mediaUrl: urlData.publicUrl,
+        fileName: file.name,
+      };
+      if (caption) payload.caption = caption;
+
+      const { error } = await supabase.functions.invoke("evolution-api", {
+        body: { action, instanceName: selected.instance_name, payload },
+      });
+      if (error) throw error;
+      toast({ title: "Mídia enviada" });
+      await autoClaimIfWaiting();
+      return true;
+    } catch (err: any) {
+      console.error("[SupportAdmin] send media error:", err);
+      toast({ title: "Erro ao enviar mídia", description: err.message, variant: "destructive" });
+      return false;
+    }
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
+    try {
+      const path = `support/${selected.workspace_id}/${Date.now()}_audio.webm`;
+      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, audioBlob, { contentType: "audio/webm" });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
+
+      const { error } = await supabase.functions.invoke("evolution-api", {
+        body: {
+          action: "sendAudio",
+          instanceName: selected.instance_name,
+          payload: { number: getRecipientNumber(), mediaUrl: urlData.publicUrl },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Áudio enviado" });
+      await autoClaimIfWaiting();
+      return true;
+    } catch (err: any) {
+      console.error("[SupportAdmin] send audio error:", err);
+      toast({ title: "Erro ao enviar áudio", description: err.message, variant: "destructive" });
+      return false;
+    }
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4?: boolean) => {
+    if (!selected?.instance_name) return null;
+    try {
+      return await evoDownloadMedia(selected.instance_name, messageId, convertToMp4);
+    } catch {
+      return null;
+    }
+  }, [selected?.instance_name, evoDownloadMedia]);
 
   /* ── Finalize ── */
   const handleFinalize = async () => {
