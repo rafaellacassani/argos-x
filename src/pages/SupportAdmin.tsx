@@ -798,10 +798,11 @@ export default function SupportAdmin() {
                 {msgsLoading ? (
                   <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
                 ) : (() => {
-                  // Merge messages and notes by timestamp
                   const combined: Array<{ kind: "msg"; data: WaMessage; idx: number } | { kind: "note"; data: SupportNote }> = [];
                   messages.forEach((m, idx) => combined.push({ kind: "msg", data: m, idx }));
-                  notes.forEach(n => combined.push({ kind: "note", data: n }));
+                  if (noteMode) {
+                    notes.forEach(n => combined.push({ kind: "note", data: n }));
+                  }
                   combined.sort((a, b) => {
                     const tA = a.kind === "msg" ? new Date(a.data.timestamp).getTime() : new Date(a.data.created_at).getTime();
                     const tB = b.kind === "msg" ? new Date(b.data.timestamp).getTime() : new Date(b.data.created_at).getTime();

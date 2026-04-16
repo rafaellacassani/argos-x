@@ -3846,13 +3846,21 @@ export default function Chats() {
                         className="h-8 text-xs gap-1 border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
                         onClick={async () => {
                           try {
+                            const resolvedSessionId = selectedChat.remoteJidAlt || selectedChat.remoteJid || null;
+                            const resolvedInstanceName =
+                              selectedChat.instanceName && selectedChat.instanceName !== "all"
+                                ? selectedChat.instanceName
+                                : selectedInstance && selectedInstance !== "all"
+                                  ? selectedInstance
+                                  : null;
+
                             const { error } = await supabase.functions.invoke("human-handoff", {
                               body: {
                                 action: "intercept",
                                 workspace_id: workspaceId,
                                 lead_id: chatLead?.id || null,
-                                session_id: null, // backend will resolve
-                                instance_name: selectedChat.instanceName || selectedInstance || null,
+                                session_id: resolvedSessionId,
+                                instance_name: resolvedInstanceName,
                                 reason: "manual",
                               },
                             });
