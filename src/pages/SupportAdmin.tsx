@@ -49,6 +49,12 @@ interface WaMessage {
   message_type: string;
   timestamp: string;
   push_name: string | null;
+  media_url: string | null;
+  media_base64: string | null;
+  file_name: string | null;
+  duration: number | null;
+  remote_jid: string | null;
+  message_id: string | null;
 }
 
 interface TeamMember {
