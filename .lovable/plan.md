@@ -1,72 +1,39 @@
 
 
-## Plano: Notas Internas em Tickets + Chat Interno entre Membros
+### Plano: 5 correções críticas no `ai-agent-chat`
 
-Conforme solicitado, implementação sequencial — Funcionalidade 1 primeiro, aviso para teste, depois Funcionalidade 2.
+**1. Bloquear nome extraído inválido (final)**
+- Reforçar `NAME_BLOCKLIST` com TODAS as palavras vistas: `autônomo, autonomo, de, uma, cliente, vendedor, responsável, responsavel, quero, iniciante, profissional, aluno, interessado, lead, contato, pessoa, atendente, suporte, comprador, novo, novato`
+- Exigir **2 letras maiúsculas iniciais** (forçar Capitalize) E mínimo **3 caracteres**
+- Validação extra: rejeitar se a "palavra-nome" aparecer minúscula em qualquer mensagem do histórico recente
 
----
+**2. Fallback só dispara em falha REAL**
+- Antes de mostrar "instabilidade técnica", verificar se houve resposta válida do modelo (mesmo que tool-call sem texto)
+- Se tool-call sem texto, gerar resposta padrão neutra de transição em vez do fallback genérico
+- Reduzir frequência drasticamente
 
-### FUNCIONALIDADE 1 — Notas Internas em Tickets de Suporte
+**3. Forçar idioma português no Claude (Aria/Iara/master workspaces)**
+- Adicionar instrução absoluta no system prompt: *"SEMPRE responda em português brasileiro, NUNCA em inglês, mesmo ao analisar imagens"*
+- Mesmo quando modelo é Claude Haiku/Sonnet
 
-**Migration SQL:**
-1. Criar tabela `support_notes`:
-   - `id uuid PK default gen_random_uuid()`
-   - `workspace_id uuid NOT NULL`
-   - `queue_item_id uuid NOT NULL` (referência ao ticket na `human_support_queue`)
-   - `user_id uuid NOT NULL`
-   - `content text NOT NULL`
-   - `created_at timestamptz default now()`
-2. RLS: `workspace_id IN (SELECT get_user_workspace_ids(auth.uid()))`
-3. Habilitar realtime: `ALTER PUBLICATION supabase_realtime ADD TABLE public.support_notes;`
+**4. Cap rígido de contexto (anti-explosão de tokens)**
+- Truncar mensagens-imagem do histórico após 5 imagens (manter apenas a última)
+- Forçar summarization quando context_window > 50.000 tokens (não apenas a cada 30 msgs)
+- Limitar tamanho máximo de input enviado ao modelo a 80k tokens hard-cap
 
-**Frontend (`src/pages/SupportAdmin.tsx`):**
-- Adicionar toggle "Nota Interna" / "WhatsApp" acima do `ChatInput`
-- Quando "Nota Interna" ativo:
-  - Exibir textarea simples com botão de enviar (sem emoji/mídia/áudio)
-  - Insert direto na tabela `support_notes` (sem edge function)
-- Carregar notas junto com as mensagens, intercalando por `created_at`
-- Renderizar notas com visual diferenciado: fundo amarelo/dourado, ícone 🔒, nome do autor
-- Subscribir via Supabase Realtime para notas novas no ticket selecionado
+**5. Loop detectado → transferir para humano**
+- Quando `detectAILoop` retorna positivo, em vez de só logar, criar entrada em `human_support_queue` com `reason='ai_loop'`
+- Notificar membro responsável
 
----
+### Não-implementação (responsabilidade do cliente)
+- Configurações de temperatura, tamanho de prompt e qualidade de treinamento são responsabilidade do workspace. Vamos documentar como avisos visuais na UI (já existe na aba Avançadas).
 
-### FUNCIONALIDADE 2 — Chat Interno entre Membros (após aprovação da F1)
+### Comunicação aos clientes afetados
+Após o deploy, sugiro enviar um aviso aos workspaces da lista (Narciso & Ribeiro, Relaxar e Meditar, Jm beauty clinic, Atacadão natural, Herbalife, Le Fiori Grafica, Bem estar bem, Bernardino Advocacia, BeloLar, Imobiliária Vitória Certa, Vantique, JetLub, RC Academy, Federação Cearense, Computer Doctor) confirmando que o problema foi identificado e corrigido.
 
-**Migration SQL:**
-1. Criar tabela `internal_messages`:
-   - `id uuid PK default gen_random_uuid()`
-   - `workspace_id uuid NOT NULL`
-   - `sender_id uuid NOT NULL`
-   - `receiver_id uuid NOT NULL`
-   - `content text NOT NULL`
-   - `read boolean default false`
-   - `created_at timestamptz default now()`
-2. RLS: usuário só vê onde é `sender_id` ou `receiver_id` AND `workspace_id` pertence ao user
-3. Habilitar realtime
-
-**Frontend:**
-- Nova página `src/pages/TeamChat.tsx` com rota `/equipe`
-- Adicionar item "Equipe" no menu lateral (`AppSidebar.tsx`) com ícone `MessageSquare`
-- Layout: lista de membros (esquerda) + conversa (direita)
-- Mensagens em tempo real via Supabase Realtime
-- Badge de não lidas no menu lateral (query `count` onde `receiver_id = auth.uid() AND read = false`)
-- Lazy load + rota em `App.tsx`
-
----
-
-### Arquivos alterados
-
-**Funcionalidade 1:**
-- 1 migration (tabela `support_notes` + RLS + realtime)
-- `src/pages/SupportAdmin.tsx` (toggle nota/WA, render notas, realtime)
-
-**Funcionalidade 2:**
-- 1 migration (tabela `internal_messages` + RLS + realtime)
-- `src/pages/TeamChat.tsx` (nova página)
-- `src/components/layout/AppSidebar.tsx` (menu item + badge)
-- `src/App.tsx` (rota `/equipe`)
+### Arquivos a serem alterados
+- `supabase/functions/ai-agent-chat/index.ts` (único arquivo — todas as 5 correções)
 
 ### Não será alterado
-- Nenhuma edge function existente
-- Nenhuma tabela de suporte existente (human_support_queue, etc.)
+- Nenhum agente, nenhuma configuração de cliente, nenhuma outra função
 
