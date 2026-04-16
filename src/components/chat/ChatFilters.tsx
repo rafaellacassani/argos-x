@@ -18,6 +18,7 @@ import {
   User,
   Send,
   Globe,
+  Headphones,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -81,6 +82,8 @@ export interface ChatFiltersFormData {
   lastMessageSender: "any" | "client" | "team";
   // Tags
   tagIds: string[];
+  // Support status
+  supportStatus: "" | "waiting" | "in_progress" | "any_active";
 }
 
 const defaultValues: ChatFiltersFormData = {
@@ -95,6 +98,7 @@ const defaultValues: ChatFiltersFormData = {
   participantSearch: "",
   lastMessageSender: "any",
   tagIds: [],
+  supportStatus: "",
 };
 
 interface ChatFiltersProps {
