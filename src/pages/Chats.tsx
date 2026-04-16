@@ -2863,21 +2863,8 @@ export default function Chats() {
     }
 
     // Filter by support queue
-    if (showQueueOnly && queue.length > 0) {
-      const queuePhones = new Set(
-        queue
-          .filter(q => q.status === "waiting" || q.status === "in_progress")
-          .map(q => q.lead_phone?.replace(/[^0-9]/g, ""))
-          .filter(Boolean)
-      );
-      result = result.filter(chat => {
-        const chatDigits = cleanPhoneNumber(chat.phone || "");
-        if (!chatDigits || chatDigits.length < 8) return false;
-        return Array.from(queuePhones).some(qp => {
-          if (!qp || qp.length < 8) return false;
-          return chatDigits.slice(-10) === qp.slice(-10) || chatDigits.includes(qp) || qp.includes(chatDigits);
-        });
-      });
+    if (showQueueOnly) {
+      result = result.filter(chat => getChatSupportStatus(chat) !== null);
     }
 
     // Sort pinned chats to the top
@@ -2889,7 +2876,7 @@ export default function Chats() {
     });
 
     return result;
-  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, pinnedChatIds, contentSearchResults, contentSearchTerm]);
+  }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, getChatSupportStatus, pinnedChatIds, contentSearchResults, contentSearchTerm]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
