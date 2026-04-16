@@ -2217,3 +2217,50 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+/* ─── Support tag helper ─── */
+async function addSupportTagFromAgent(supabase: any, workspaceId: string, leadId: string) {
+  try {
+    const TAG_NAME = "Em suporte";
+    const TAG_COLOR = "#EF4444";
+
+    // Get or create tag
+    let { data: tag } = await supabase
+      .from("lead_tags")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("name", TAG_NAME)
+      .limit(1)
+      .maybeSingle();
+
+    if (!tag) {
+      const { data: created } = await supabase
+        .from("lead_tags")
+        .insert({ workspace_id: workspaceId, name: TAG_NAME, color: TAG_COLOR })
+        .select("id")
+        .single();
+      tag = created;
+    }
+    if (!tag) return;
+
+    // Check if already assigned
+    const { data: exists } = await supabase
+      .from("lead_tag_assignments")
+      .select("id")
+      .eq("lead_id", leadId)
+      .eq("tag_id", tag.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (!exists) {
+      await supabase.from("lead_tag_assignments").insert({
+        workspace_id: workspaceId,
+        lead_id: leadId,
+        tag_id: tag.id,
+      });
+      console.log(`[ai-agent-chat] 🏷️ Tag "Em suporte" added to lead ${leadId}`);
+    }
+  } catch (err: any) {
+    console.error("[ai-agent-chat] Failed to add support tag:", err.message);
+  }
+}
