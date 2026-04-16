@@ -27,6 +27,7 @@ import {
   X,
   Headset,
   Building2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -158,9 +159,11 @@ function SidebarNavContent({
 interface AppSidebarProps {
   mobileOpen?: boolean;
   onMobileOpenChange?: (open: boolean) => void;
+  onOpenAssistant?: () => void;
+  onOpenSupport?: () => void;
 }
 
-export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSidebarProps) {
+export function AppSidebar({ mobileOpen = false, onMobileOpenChange, onOpenAssistant, onOpenSupport }: AppSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const location = useLocation();
@@ -206,6 +209,52 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
   ];
 
   const canSwitch = isSuperAdmin && allWorkspaces.length > 1;
+
+  /* ── Widget buttons (Assistente IA + Suporte Chat) ── */
+  const widgetButtons = (showLabel: boolean) => (
+    <div className={cn("space-y-1", showLabel ? "" : "flex flex-col items-center")}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onOpenAssistant}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group w-full",
+              "bg-gradient-to-r from-orange-500/20 to-rose-500/20 border border-orange-500/30 text-orange-300 hover:from-orange-500/30 hover:to-rose-500/30 hover:text-orange-200",
+              "relative"
+            )}
+          >
+            <Sparkles className="w-5 h-5 flex-shrink-0 text-orange-400" />
+            {showLabel && (
+              <span className="font-medium text-sm flex-1 text-left">Assistente IA</span>
+            )}
+            {showLabel && (
+              <span className="text-[9px] font-bold bg-emerald-400 text-emerald-950 px-1.5 py-0.5 rounded-full">
+                Novo
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
+        {!showLabel && <TooltipContent side="right">Assistente IA</TooltipContent>}
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onOpenSupport}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group w-full",
+              "bg-sidebar-primary/15 border border-sidebar-primary/30 text-sidebar-primary hover:bg-sidebar-primary/25"
+            )}
+          >
+            <Headset className="w-5 h-5 flex-shrink-0" />
+            {showLabel && (
+              <span className="font-medium text-sm flex-1 text-left">Suporte</span>
+            )}
+          </button>
+        </TooltipTrigger>
+        {!showLabel && <TooltipContent side="right">Suporte</TooltipContent>}
+      </Tooltip>
+    </div>
+  );
 
   const workspaceBlock = (showLabel: boolean) => {
     if (!workspace) return null;
@@ -292,6 +341,9 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
           <nav className="flex-1 py-4 px-3 overflow-y-auto min-h-0 scrollbar-thin">
             <SidebarNavContent visibleItems={visibleItems} collapsed={false} permissions={permissions} canAccessPage={canAccessPage} planName={planName} onNavigate={() => onMobileOpenChange?.(false)} />
           </nav>
+          <div className="px-3 pb-3">
+            {widgetButtons(true)}
+          </div>
         </SheetContent>
       </Sheet>
     );
@@ -320,6 +372,9 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange }: AppSideba
       <nav className="flex-1 py-6 px-3 overflow-y-auto scrollbar-thin">
         <SidebarNavContent visibleItems={visibleItems} collapsed={collapsed} permissions={permissions} canAccessPage={canAccessPage} planName={planName} />
       </nav>
+      <div className="px-3 pb-2">
+        {widgetButtons(!collapsed)}
+      </div>
       <div className="p-3 border-t border-sidebar-border">
         <button
           onClick={() => setCollapsed(!collapsed)}
