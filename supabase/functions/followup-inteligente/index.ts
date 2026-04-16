@@ -163,7 +163,14 @@ async function generateTextWithModel(
   agentModel: string,
   aiMessages: ConversationMessage[],
 ): Promise<string> {
-  const isAnthropic = agentModel.startsWith("anthropic/");
+  // eslint-disable-next-line prefer-const
+  let _agentModel = agentModel;
+  // 🚨 ANTHROPIC DISABLED — conta Claude banida. Forçar OpenAI/Lovable Gateway.
+  const isAnthropic = false;
+  if (agentModel.startsWith("anthropic/") || agentModel.startsWith("claude")) {
+    console.warn(`[followup-inteligente] 🚨 Anthropic disabled, remapping ${agentModel} -> openai/gpt-4o-mini`);
+    agentModel = "openai/gpt-4o-mini";
+  }
 
   if (isAnthropic) {
     if (!anthropicApiKey) {
