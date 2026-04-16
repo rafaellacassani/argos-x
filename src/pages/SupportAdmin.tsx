@@ -97,7 +97,7 @@ const PAGE_SIZE = 60;
 export default function SupportAdmin() {
   const { user } = useAuth();
   const { workspaceId } = useWorkspace();
-  const { downloadMedia: evoDownloadMedia } = useEvolutionAPI();
+  const { downloadMedia: evoDownloadMedia, sendText: evoSendText, sendMedia: evoSendMedia, sendAudio: evoSendAudio } = useEvolutionAPI();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [selected, setSelected] = useState<QueueItem | null>(null);
   const [messages, setMessages] = useState<WaMessage[]>([]);
@@ -222,7 +222,7 @@ export default function SupportAdmin() {
 
     const { data, error } = await (supabase
       .from("whatsapp_messages")
-      .select("id, content, from_me, direction, message_type, timestamp, push_name, media_url, media_base64, file_name, duration, remote_jid, message_id") as any)
+      .select("*") as any)
       .eq("workspace_id", item.workspace_id)
       .eq("instance_name", item.instance_name)
       .eq("remote_jid", item.session_id)
@@ -379,14 +379,8 @@ export default function SupportAdmin() {
   const handleSendText = useCallback(async (text: string): Promise<boolean> => {
     if (!selected?.session_id || !selected?.instance_name) return false;
     try {
-      const { error } = await supabase.functions.invoke("evolution-api", {
-        body: {
-          action: "sendText",
-          instanceName: selected.instance_name,
-          payload: { number: getRecipientNumber(), text },
-        },
-      });
-      if (error) throw error;
+      const ok = await evoSendText(selected.instance_name, getRecipientNumber(), text);
+      if (!ok) throw new Error("Falha no envio");
       toast({ title: "Mensagem enviada" });
       await autoClaimIfWaiting();
       return true;
@@ -395,34 +389,28 @@ export default function SupportAdmin() {
       toast({ title: "Erro ao enviar", description: err.message, variant: "destructive" });
       return false;
     }
-  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+  }, [selected, getRecipientNumber, autoClaimIfWaiting, evoSendText]);
+
+  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // strip "data:...;base64," prefix
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
     if (!selected?.session_id || !selected?.instance_name) return false;
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "";
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-      const isAudio = file.type.startsWith("audio/");
-
-      // Upload to storage
-      const path = `support/${selected.workspace_id}/${Date.now()}_${file.name}`;
-      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, file, { contentType: file.type });
-      if (uploadErr) throw uploadErr;
-      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
-
-      const action = isImage ? "sendImage" : isVideo ? "sendVideo" : isAudio ? "sendAudio" : "sendDocument";
-      const payload: any = {
-        number: getRecipientNumber(),
-        mediaUrl: urlData.publicUrl,
-        fileName: file.name,
-      };
-      if (caption) payload.caption = caption;
-
-      const { error } = await supabase.functions.invoke("evolution-api", {
-        body: { action, instanceName: selected.instance_name, payload },
-      });
-      if (error) throw error;
+      const mediatype: "image" | "video" | "document" =
+        file.type.startsWith("image/") ? "image" :
+        file.type.startsWith("video/") ? "video" : "document";
+      const base64 = await blobToBase64(file);
+      const ok = await evoSendMedia(selected.instance_name, getRecipientNumber(), mediatype, base64, caption, file.name);
+      if (!ok) throw new Error("Falha no envio");
       toast({ title: "Mídia enviada" });
       await autoClaimIfWaiting();
       return true;
@@ -431,24 +419,14 @@ export default function SupportAdmin() {
       toast({ title: "Erro ao enviar mídia", description: err.message, variant: "destructive" });
       return false;
     }
-  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+  }, [selected, getRecipientNumber, autoClaimIfWaiting, evoSendMedia]);
 
   const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
     if (!selected?.session_id || !selected?.instance_name) return false;
     try {
-      const path = `support/${selected.workspace_id}/${Date.now()}_audio.webm`;
-      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, audioBlob, { contentType: "audio/webm" });
-      if (uploadErr) throw uploadErr;
-      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
-
-      const { error } = await supabase.functions.invoke("evolution-api", {
-        body: {
-          action: "sendAudio",
-          instanceName: selected.instance_name,
-          payload: { number: getRecipientNumber(), mediaUrl: urlData.publicUrl },
-        },
-      });
-      if (error) throw error;
+      const base64 = await blobToBase64(audioBlob);
+      const ok = await evoSendAudio(selected.instance_name, getRecipientNumber(), base64);
+      if (!ok) throw new Error("Falha no envio");
       toast({ title: "Áudio enviado" });
       await autoClaimIfWaiting();
       return true;
@@ -457,7 +435,7 @@ export default function SupportAdmin() {
       toast({ title: "Erro ao enviar áudio", description: err.message, variant: "destructive" });
       return false;
     }
-  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+  }, [selected, getRecipientNumber, autoClaimIfWaiting, evoSendAudio]);
 
   const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4?: boolean) => {
     if (!selected?.instance_name) return null;
@@ -546,7 +524,7 @@ export default function SupportAdmin() {
     // Load messages around the ticket timeframe
     let query = (supabase
       .from("whatsapp_messages")
-      .select("id, content, from_me, direction, message_type, timestamp, push_name, media_url, media_base64, file_name, duration, remote_jid, message_id") as any)
+      .select("*") as any)
       .eq("workspace_id", item.workspace_id)
       .eq("instance_name", item.instance_name)
       .eq("remote_jid", item.session_id)
