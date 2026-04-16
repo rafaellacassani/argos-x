@@ -120,6 +120,11 @@ export default function SupportAdmin() {
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [expandedMessages, setExpandedMessages] = useState<WaMessage[]>([]);
   const [expandedMsgsLoading, setExpandedMsgsLoading] = useState(false);
+  // Internal notes
+  const [noteMode, setNoteMode] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [notes, setNotes] = useState<SupportNote[]>([]);
+  const [sendingNote, setSendingNote] = useState(false);
 
   /* ── Load team members ── */
   useEffect(() => {
