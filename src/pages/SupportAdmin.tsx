@@ -391,10 +391,25 @@ export default function SupportAdmin() {
     }
   }, [selected, getRecipientNumber, autoClaimIfWaiting, evoSendText]);
 
+  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      // strip "data:...;base64," prefix
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+
   const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
     if (!selected?.session_id || !selected?.instance_name) return false;
     try {
-      const ok = await evoSendMedia(selected.instance_name, getRecipientNumber(), file, caption);
+      const mediatype: "image" | "video" | "document" =
+        file.type.startsWith("image/") ? "image" :
+        file.type.startsWith("video/") ? "video" : "document";
+      const base64 = await blobToBase64(file);
+      const ok = await evoSendMedia(selected.instance_name, getRecipientNumber(), mediatype, base64, caption, file.name);
       if (!ok) throw new Error("Falha no envio");
       toast({ title: "Mídia enviada" });
       await autoClaimIfWaiting();
@@ -409,7 +424,8 @@ export default function SupportAdmin() {
   const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
     if (!selected?.session_id || !selected?.instance_name) return false;
     try {
-      const ok = await evoSendAudio(selected.instance_name, getRecipientNumber(), audioBlob);
+      const base64 = await blobToBase64(audioBlob);
+      const ok = await evoSendAudio(selected.instance_name, getRecipientNumber(), base64);
       if (!ok) throw new Error("Falha no envio");
       toast({ title: "Áudio enviado" });
       await autoClaimIfWaiting();
