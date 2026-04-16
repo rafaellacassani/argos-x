@@ -212,23 +212,24 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange, onOpenAssis
 
   /* ── Widget buttons (Assistente IA + Suporte Chat) ── */
   const widgetButtons = (showLabel: boolean) => (
-    <div className={cn("space-y-1", showLabel ? "" : "flex flex-col items-center")}>
+    <div className={cn("space-y-2", showLabel ? "" : "flex flex-col items-center")}>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             onClick={onOpenAssistant}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group w-full",
-              "bg-gradient-to-r from-orange-500/20 to-rose-500/20 border border-orange-500/30 text-orange-300 hover:from-orange-500/30 hover:to-rose-500/30 hover:text-orange-200",
+              "bg-gradient-to-r from-pink-600 to-purple-700 border border-pink-500/50 text-white font-bold shadow-lg shadow-pink-900/20",
+              "hover:from-pink-500 hover:to-purple-600 hover:shadow-pink-900/30",
               "relative"
             )}
           >
-            <Sparkles className="w-5 h-5 flex-shrink-0 text-orange-400" />
+            <Sparkles className="w-5 h-5 flex-shrink-0 text-white" />
             {showLabel && (
-              <span className="font-medium text-sm flex-1 text-left">Assistente IA</span>
+              <span className="font-bold text-sm flex-1 text-left text-white">Assistente IA</span>
             )}
             {showLabel && (
-              <span className="text-[9px] font-bold bg-emerald-400 text-emerald-950 px-1.5 py-0.5 rounded-full">
+              <span className="text-[9px] font-bold bg-white text-pink-600 px-1.5 py-0.5 rounded-full">
                 Novo
               </span>
             )}
@@ -242,12 +243,13 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange, onOpenAssis
             onClick={onOpenSupport}
             className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group w-full",
-              "bg-sidebar-primary/15 border border-sidebar-primary/30 text-sidebar-primary hover:bg-sidebar-primary/25"
+              "bg-gradient-to-r from-orange-600 to-red-700 border border-orange-500/50 text-white font-bold shadow-lg shadow-orange-900/20",
+              "hover:from-orange-500 hover:to-red-600 hover:shadow-orange-900/30"
             )}
           >
-            <Headset className="w-5 h-5 flex-shrink-0" />
+            <Headset className="w-5 h-5 flex-shrink-0 text-white" />
             {showLabel && (
-              <span className="font-medium text-sm flex-1 text-left">Suporte</span>
+              <span className="font-bold text-sm flex-1 text-left text-white">Suporte</span>
             )}
           </button>
         </TooltipTrigger>
