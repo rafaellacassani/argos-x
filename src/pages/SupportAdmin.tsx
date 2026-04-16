@@ -712,42 +712,32 @@ export default function SupportAdmin() {
                 ) : messages.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8 text-sm">Sem mensagens para esta conversa</p>
                 ) : (
-                  <div className="space-y-2">
-                    {messages.map(m => {
+                  <div className="space-y-1">
+                    {messages.map((m, idx) => {
                       const isOutbound = m.from_me || m.direction === "outbound";
+                      const ts = new Date(m.timestamp);
+                      const msgType = (m.message_type || "text") as "text" | "image" | "audio" | "document" | "video" | "contact";
                       return (
-                        <div key={m.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${
-                            isOutbound
-                              ? "bg-primary text-primary-foreground rounded-br-sm"
-                              : "bg-muted text-foreground rounded-bl-sm"
-                          }`}>
-                            {!isOutbound && m.push_name && (
-                              <div className="text-[10px] font-medium opacity-60 mb-0.5 flex items-center gap-1">
-                                <User className="h-3 w-3" /> {m.push_name}
-                              </div>
-                            )}
-                            {isOutbound && (
-                              <div className="text-[10px] font-medium opacity-60 mb-0.5 flex items-center gap-1">
-                                <Bot className="h-3 w-3" /> {m.direction === "outbound" ? "IA/Sistema" : "Enviado"}
-                              </div>
-                            )}
-                            {m.message_type === "image" ? (
-                              <p className="italic opacity-70">📷 Imagem</p>
-                            ) : m.message_type === "audio" ? (
-                              <p className="italic opacity-70">🎵 Áudio</p>
-                            ) : m.message_type === "video" ? (
-                              <p className="italic opacity-70">🎬 Vídeo</p>
-                            ) : m.message_type === "document" ? (
-                              <p className="italic opacity-70">📄 Documento</p>
-                            ) : (
-                              <p className="whitespace-pre-wrap break-words">{m.content || ""}</p>
-                            )}
-                            <div className="text-[10px] opacity-50 mt-1 text-right">
-                              {formatDateTime(m.timestamp)}
-                            </div>
-                          </div>
-                        </div>
+                        <MessageBubble
+                          key={m.id}
+                          id={m.id}
+                          content={m.content || ""}
+                          time={formatDateTime(m.timestamp)}
+                          sent={isOutbound}
+                          read={isOutbound}
+                          type={msgType}
+                          mediaUrl={m.media_url || undefined}
+                          thumbnailBase64={m.media_base64 || undefined}
+                          fileName={m.file_name || undefined}
+                          duration={m.duration || undefined}
+                          index={idx}
+                          instanceName={selected.instance_name || undefined}
+                          messageId={m.message_id || undefined}
+                          remoteJid={m.remote_jid || selected.session_id || undefined}
+                          fromMe={isOutbound}
+                          timestamp={Math.floor(ts.getTime() / 1000)}
+                          onDownloadMedia={handleDownloadMedia}
+                        />
                       );
                     })}
                   </div>
@@ -756,18 +746,13 @@ export default function SupportAdmin() {
 
               {/* Reply input */}
               {(selected.status === "waiting" || selected.status === "in_progress") && (
-                <form onSubmit={(e) => { e.preventDefault(); sendReply(); }} className="flex items-center gap-2 p-3 border-t">
-                  <Input
-                    value={reply}
-                    onChange={e => setReply(e.target.value)}
-                    placeholder="Responder pelo WhatsApp..."
-                    disabled={sending}
-                    className="flex-1 h-9 text-sm"
-                  />
-                  <Button type="submit" size="icon" className="h-9 w-9" disabled={sending || !reply.trim()}>
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </form>
+                <ChatInput
+                  onSendMessage={handleSendText}
+                  onSendMedia={handleSendMedia}
+                  onSendAudio={handleSendAudio}
+                  disabled={sending}
+                  placeholder="Responder pelo WhatsApp..."
+                />
               )}
             </>
           )}
