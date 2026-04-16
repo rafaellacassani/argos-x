@@ -59,6 +59,16 @@ interface WaMessage {
   message_id: string | null;
 }
 
+interface SupportNote {
+  id: string;
+  workspace_id: string;
+  queue_item_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  author_name?: string;
+}
+
 interface TeamMember {
   user_id: string;
   full_name: string;
