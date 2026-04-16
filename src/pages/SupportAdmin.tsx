@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Headset, Send, Loader2, ArrowLeft, CheckCircle, User, Bot, Phone } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Headset, Send, Loader2, ArrowLeft, CheckCircle, User, Bot, Phone, ArrowRightLeft, Eye } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 /* ───────── Types ───────── */
@@ -30,6 +31,7 @@ interface QueueItem {
   lead_name?: string;
   lead_phone?: string;
   workspace_name?: string;
+  assigned_name?: string;
 }
 
 interface WaMessage {
@@ -40,6 +42,11 @@ interface WaMessage {
   message_type: string;
   timestamp: string;
   push_name: string | null;
+}
+
+interface TeamMember {
+  user_id: string;
+  full_name: string;
 }
 
 /* ───────── Constants ───────── */
@@ -63,7 +70,40 @@ export default function SupportAdmin() {
   const [msgsLoading, setMsgsLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [filter, setFilter] = useState("active");
+  const [viewMode, setViewMode] = useState<"mine" | "all">("mine");
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  /* ── Load team members ── */
+  useEffect(() => {
+    if (!workspaceId) return;
+    (async () => {
+      const { data: members } = await supabase
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId)
+        .not("accepted_at", "is", null);
+
+      if (!members || members.length === 0) return;
+
+      const userIds = members.map(m => m.user_id);
+      const { data: profiles } = await supabase
+        .from("user_profiles")
+        .select("user_id, full_name")
+        .in("user_id", userIds);
+
+      if (profiles) {
+        setTeamMembers(profiles.map(p => ({ user_id: p.user_id, full_name: p.full_name || p.user_id })));
+      }
+    })();
+  }, [workspaceId]);
+
+  const getMemberName = useCallback((userId: string | null) => {
+    if (!userId) return "Não atribuído";
+    const member = teamMembers.find(m => m.user_id === userId);
+    return member?.full_name || "Usuário";
+  }, [teamMembers]);
 
   /* ── Load queue items ── */
   const loadItems = useCallback(async () => {
@@ -81,6 +121,11 @@ export default function SupportAdmin() {
       query = query.in("status", ["waiting", "in_progress"]);
     } else if (filter !== "all") {
       query = query.eq("status", filter);
+    }
+
+    // Filter by assigned_to when viewMode is "mine"
+    if (viewMode === "mine" && user?.id) {
+      query = query.eq("assigned_to", user.id);
     }
 
     const { data, error } = await query;
@@ -104,7 +149,7 @@ export default function SupportAdmin() {
       workspace_name: ws?.name || "",
     })));
     setLoading(false);
-  }, [workspaceId, filter]);
+  }, [workspaceId, filter, viewMode, user?.id]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
 
@@ -237,6 +282,28 @@ export default function SupportAdmin() {
     toast({ title: "Atendimento assumido" });
   };
 
+  /* ── Transfer ticket ── */
+  const handleTransfer = async (targetUserId: string) => {
+    if (!selected) return;
+    try {
+      const { error } = await supabase.functions.invoke("human-handoff", {
+        body: {
+          action: "transfer",
+          workspace_id: selected.workspace_id,
+          queue_item_id: selected.id,
+          transfer_to: targetUserId,
+        },
+      });
+      if (error) throw error;
+      setSelected(prev => prev ? { ...prev, assigned_to: targetUserId } : null);
+      setTransferDialogOpen(false);
+      toast({ title: "Ticket transferido", description: `Para ${getMemberName(targetUserId)}` });
+      loadItems();
+    } catch (err: any) {
+      toast({ title: "Erro ao transferir", description: err.message, variant: "destructive" });
+    }
+  };
+
   const activeCount = items.filter(i => i.status === "waiting" || i.status === "in_progress").length;
 
   /* ── Render ── */
@@ -260,19 +327,30 @@ export default function SupportAdmin() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100vh-14rem)]">
         {/* ── Left: Queue list ── */}
         <div className="lg:col-span-1 border rounded-xl flex flex-col bg-background">
-          <div className="p-3 border-b">
-            <Select value={filter} onValueChange={setFilter}>
-              <SelectTrigger className="h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Ativos</SelectItem>
-                <SelectItem value="waiting">Aguardando</SelectItem>
-                <SelectItem value="in_progress">Em atendimento</SelectItem>
-                <SelectItem value="resolved">Finalizados</SelectItem>
-                <SelectItem value="all">Todos</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="p-3 border-b space-y-2">
+            <div className="flex gap-2">
+              <Select value={filter} onValueChange={setFilter}>
+                <SelectTrigger className="h-9 flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Ativos</SelectItem>
+                  <SelectItem value="waiting">Aguardando</SelectItem>
+                  <SelectItem value="in_progress">Em atendimento</SelectItem>
+                  <SelectItem value="resolved">Finalizados</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                variant={viewMode === "all" ? "default" : "outline"}
+                size="sm"
+                className="h-9 text-xs gap-1 whitespace-nowrap"
+                onClick={() => setViewMode(prev => prev === "mine" ? "all" : "mine")}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                {viewMode === "mine" ? "Ver todos" : "Só meus"}
+              </Button>
+            </div>
           </div>
           <ScrollArea className="flex-1">
             {loading ? (
@@ -294,8 +372,9 @@ export default function SupportAdmin() {
                           <Phone className="h-3 w-3" />
                           {item.lead_phone || item.session_id?.replace("@s.whatsapp.net", "") || "—"}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1 truncate" title={item.reason}>
-                          {item.reason.length > 60 ? item.reason.substring(0, 60) + "…" : item.reason}
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <User className="h-3 w-3" />
+                          {getMemberName(item.assigned_to)}
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -335,10 +414,23 @@ export default function SupportAdmin() {
                     <p className="text-sm font-semibold truncate">
                       {selected.lead_name} — {selected.lead_phone || selected.session_id?.replace("@s.whatsapp.net", "")}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">{selected.reason}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Responsável: <span className="font-medium text-foreground">{getMemberName(selected.assigned_to)}</span>
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  {(selected.status === "waiting" || selected.status === "in_progress") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setTransferDialogOpen(true)}
+                      className="h-8 text-xs gap-1"
+                    >
+                      <ArrowRightLeft className="h-3.5 w-3.5" />
+                      Transferir
+                    </Button>
+                  )}
                   {selected.status === "waiting" && (
                     <Button size="sm" variant="outline" onClick={handleClaim} className="h-8 text-xs">
                       Assumir
@@ -424,6 +516,34 @@ export default function SupportAdmin() {
           )}
         </div>
       </div>
+
+      {/* Transfer Dialog */}
+      <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transferir atendimento</DialogTitle>
+            <DialogDescription>Selecione o membro da equipe que receberá este ticket.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            {teamMembers
+              .filter(m => m.user_id !== selected?.assigned_to)
+              .map(m => (
+                <Button
+                  key={m.user_id}
+                  variant="outline"
+                  className="w-full justify-start gap-2 h-10"
+                  onClick={() => handleTransfer(m.user_id)}
+                >
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  {m.full_name}
+                </Button>
+              ))}
+            {teamMembers.filter(m => m.user_id !== selected?.assigned_to).length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum outro membro disponível</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
