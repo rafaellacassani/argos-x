@@ -766,7 +766,7 @@ export default function SupportAdmin() {
                 </div>
               </div>
 
-              {/* Messages */}
+              {/* Messages + Notes interleaved */}
               <ScrollArea className="flex-1 p-4" ref={scrollRef as any}>
                 {/* Load older button */}
                 {hasOlderMsgs && (
@@ -786,50 +786,133 @@ export default function SupportAdmin() {
 
                 {msgsLoading ? (
                   <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-                ) : messages.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8 text-sm">Sem mensagens para esta conversa</p>
-                ) : (
-                  <div className="space-y-1">
-                    {messages.map((m, idx) => {
-                      const isOutbound = m.from_me || m.direction === "outbound";
-                      const ts = new Date(m.timestamp);
-                      const msgType = (m.message_type || "text") as "text" | "image" | "audio" | "document" | "video" | "contact";
-                      return (
-                        <MessageBubble
-                          key={m.id}
-                          id={m.id}
-                          content={m.content || ""}
-                          time={formatDateTime(m.timestamp)}
-                          sent={isOutbound}
-                          read={isOutbound}
-                          type={msgType}
-                          mediaUrl={m.media_url || undefined}
-                          thumbnailBase64={m.media_base64 || undefined}
-                          fileName={m.file_name || undefined}
-                          duration={m.duration || undefined}
-                          index={idx}
-                          instanceName={selected.instance_name || undefined}
-                          messageId={m.message_id || undefined}
-                          remoteJid={m.remote_jid || selected.session_id || undefined}
-                          fromMe={isOutbound}
-                          timestamp={Math.floor(ts.getTime() / 1000)}
-                          onDownloadMedia={handleDownloadMedia}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
+                ) : (() => {
+                  // Merge messages and notes by timestamp
+                  const combined: Array<{ kind: "msg"; data: WaMessage; idx: number } | { kind: "note"; data: SupportNote }> = [];
+                  messages.forEach((m, idx) => combined.push({ kind: "msg", data: m, idx }));
+                  notes.forEach(n => combined.push({ kind: "note", data: n }));
+                  combined.sort((a, b) => {
+                    const tA = a.kind === "msg" ? new Date(a.data.timestamp).getTime() : new Date(a.data.created_at).getTime();
+                    const tB = b.kind === "msg" ? new Date(b.data.timestamp).getTime() : new Date(b.data.created_at).getTime();
+                    return tA - tB;
+                  });
+
+                  if (combined.length === 0) {
+                    return <p className="text-center text-muted-foreground py-8 text-sm">Sem mensagens para esta conversa</p>;
+                  }
+
+                  return (
+                    <div className="space-y-1">
+                      {combined.map(item => {
+                        if (item.kind === "note") {
+                          const n = item.data;
+                          return (
+                            <div key={`note-${n.id}`} className="flex justify-center my-2">
+                              <div className="max-w-[85%] rounded-lg px-3 py-2 bg-amber-100/80 dark:bg-amber-900/30 border border-amber-300/50 dark:border-amber-700/50">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Lock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                                    Nota Interna — {n.author_name}
+                                  </span>
+                                </div>
+                                <p className="text-sm whitespace-pre-wrap break-words text-amber-900 dark:text-amber-100">{n.content}</p>
+                                <span className="text-[9px] text-amber-600/70 dark:text-amber-400/70 mt-1 block">
+                                  {formatDateTime(n.created_at)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        const m = item.data;
+                        const isOutbound = m.from_me || m.direction === "outbound";
+                        const ts = new Date(m.timestamp);
+                        const msgType = (m.message_type || "text") as "text" | "image" | "audio" | "document" | "video" | "contact";
+                        return (
+                          <MessageBubble
+                            key={m.id}
+                            id={m.id}
+                            content={m.content || ""}
+                            time={formatDateTime(m.timestamp)}
+                            sent={isOutbound}
+                            read={isOutbound}
+                            type={msgType}
+                            mediaUrl={m.media_url || undefined}
+                            thumbnailBase64={m.media_base64 || undefined}
+                            fileName={m.file_name || undefined}
+                            duration={m.duration || undefined}
+                            index={item.idx}
+                            instanceName={selected.instance_name || undefined}
+                            messageId={m.message_id || undefined}
+                            remoteJid={m.remote_jid || selected.session_id || undefined}
+                            fromMe={isOutbound}
+                            timestamp={Math.floor(ts.getTime() / 1000)}
+                            onDownloadMedia={handleDownloadMedia}
+                          />
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </ScrollArea>
 
-              {/* Reply input */}
+              {/* Reply input with mode toggle */}
               {(selected.status === "waiting" || selected.status === "in_progress") && (
-                <ChatInput
-                  onSendMessage={handleSendText}
-                  onSendMedia={handleSendMedia}
-                  onSendAudio={handleSendAudio}
-                  disabled={sending}
-                  placeholder="Responder pelo WhatsApp..."
-                />
+                <div className="border-t">
+                  {/* Mode toggle */}
+                  <div className="flex items-center gap-1 px-3 pt-2">
+                    <Button
+                      variant={!noteMode ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => setNoteMode(false)}
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                      WhatsApp
+                    </Button>
+                    <Button
+                      variant={noteMode ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => setNoteMode(true)}
+                    >
+                      <StickyNote className="h-3 w-3" />
+                      Nota Interna
+                    </Button>
+                  </div>
+
+                  {noteMode ? (
+                    <div className="p-3 flex gap-2">
+                      <Textarea
+                        value={noteText}
+                        onChange={e => setNoteText(e.target.value)}
+                        placeholder="Escreva uma nota interna (visível apenas para a equipe)..."
+                        className="min-h-[60px] max-h-[120px] resize-none bg-amber-50/50 dark:bg-amber-950/20 border-amber-300/50 dark:border-amber-700/50 text-sm"
+                        onKeyDown={e => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendNote();
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSendNote}
+                        disabled={!noteText.trim() || sendingNote}
+                        className="h-10 self-end"
+                      >
+                        {sendingNote ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  ) : (
+                    <ChatInput
+                      onSendMessage={handleSendText}
+                      onSendMedia={handleSendMedia}
+                      onSendAudio={handleSendAudio}
+                      disabled={sending}
+                      placeholder="Responder pelo WhatsApp..."
+                    />
+                  )}
+                </div>
               )}
             </>
           )}
