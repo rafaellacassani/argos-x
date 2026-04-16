@@ -85,10 +85,10 @@ const PAGE_SIZE = 60;
 export default function SupportAdmin() {
   const { user } = useAuth();
   const { workspaceId } = useWorkspace();
+  const { downloadMedia: evoDownloadMedia } = useEvolutionAPI();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [selected, setSelected] = useState<QueueItem | null>(null);
   const [messages, setMessages] = useState<WaMessage[]>([]);
-  const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
   const [msgsLoading, setMsgsLoading] = useState(false);
   const [sending, setSending] = useState(false);
