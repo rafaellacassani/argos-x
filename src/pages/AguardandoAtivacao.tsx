@@ -8,6 +8,7 @@ import argosLogoDark from "@/assets/argos-logo-dark.png";
 export default function AguardandoAtivacao() {
   const navigate = useNavigate();
   const [dots, setDots] = useState("");
+  const [attempts, setAttempts] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -27,7 +28,7 @@ export default function AguardandoAtivacao() {
       }
 
       // Auto-accept any pending invite for the logged-in user
-      await supabase.functions.invoke("accept-invite").catch(() => {});
+      const { data: acceptData } = await supabase.functions.invoke("accept-invite").catch(() => ({ data: null }));
 
       const { data } = await supabase
         .from("workspace_members")
@@ -39,6 +40,19 @@ export default function AguardandoAtivacao() {
 
       if (data && !cancelled) {
         navigate("/dashboard", { replace: true });
+        return;
+      }
+
+      // If no invite was found and no workspace after several attempts, redirect to create workspace
+      if (!cancelled) {
+        setAttempts((prev) => {
+          const next = prev + 1;
+          if (next >= 6 && !acceptData?.success) {
+            // ~30s without finding invite or workspace — let user create one
+            navigate("/create-workspace", { replace: true });
+          }
+          return next;
+        });
       }
     };
 
