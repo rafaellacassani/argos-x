@@ -361,7 +361,7 @@ export default function SupportAdmin() {
       .order("created_at", { ascending: false })
       .limit(50);
     
-    const rows = (data || []) as QueueItem[];
+    const rows = (data || []) as any as QueueItem[];
     setLeadHistory(rows);
     setLeadHistoryLoading(false);
   }, []);
