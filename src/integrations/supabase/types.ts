@@ -1750,6 +1750,7 @@ export type Database = {
           session_id: string | null
           status: string
           ticket_id: string | null
+          ticket_number: number | null
           updated_at: string
           workspace_id: string
         }
@@ -1766,6 +1767,7 @@ export type Database = {
           session_id?: string | null
           status?: string
           ticket_id?: string | null
+          ticket_number?: number | null
           updated_at?: string
           workspace_id: string
         }
@@ -1782,6 +1784,7 @@ export type Database = {
           session_id?: string | null
           status?: string
           ticket_id?: string | null
+          ticket_number?: number | null
           updated_at?: string
           workspace_id?: string
         }
