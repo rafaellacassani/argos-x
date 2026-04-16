@@ -3274,7 +3274,18 @@ export default function Chats() {
                         {chat.lastMessageFromMe && <span className="text-muted-foreground/70">Você: </span>}
                         {chat.lastMessage || chat.phone}
                       </p>
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {/* Support queue badge */}
+                        {supportQueueMap.has(chat.remoteJid) && (
+                          <span className={cn(
+                            "text-[9px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap",
+                            supportQueueMap.get(chat.remoteJid) === "waiting"
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                          )}>
+                            {supportQueueMap.get(chat.remoteJid) === "waiting" ? "⏳ Aguardando" : "🔴 Em suporte"}
+                          </span>
+                        )}
                         {chat.isMeta && (
                           <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/10 text-blue-600 whitespace-nowrap">
                             {chat.metaPlatform === "instagram" ? "IG" : chat.metaPlatform === "whatsapp_business" ? "WABA" : "FB"}
