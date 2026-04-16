@@ -6,6 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Default assignee for AI-triggered interceptions (Isabella Mafra)
+const DEFAULT_AI_ASSIGNEE = "db358f6a-8d9c-44c7-8043-42e8a27f695c";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,9 +26,11 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     let userId: string | null = null;
+    let isServiceRole = false;
 
     if (token === supabaseServiceKey) {
       userId = "service_role";
+      isServiceRole = true;
     } else {
       const authClient = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: authHeader } },
@@ -38,7 +43,7 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { action, workspace_id, lead_id, session_id, instance_name, reason, queue_item_id } = body;
+    const { action, workspace_id, lead_id, session_id, instance_name, reason, queue_item_id, transfer_to } = body;
 
     if (!action || !workspace_id) {
       return new Response(JSON.stringify({ error: "action and workspace_id are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -47,11 +52,13 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     if (action === "intercept") {
-      return await handleIntercept(supabase, { workspace_id, lead_id, session_id, instance_name, reason, user_id: userId! });
+      return await handleIntercept(supabase, { workspace_id, lead_id, session_id, instance_name, reason, user_id: userId!, is_service_role: isServiceRole });
     } else if (action === "resume") {
       return await handleResume(supabase, { workspace_id, lead_id, session_id, queue_item_id, user_id: userId! });
+    } else if (action === "transfer") {
+      return await handleTransfer(supabase, { workspace_id, queue_item_id, transfer_to, user_id: userId! });
     } else {
-      return new Response(JSON.stringify({ error: "Invalid action. Use 'intercept' or 'resume'" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Invalid action. Use 'intercept', 'resume' or 'transfer'" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
   } catch (err: any) {
     console.error("[human-handoff] Error:", err);
@@ -66,9 +73,13 @@ async function handleIntercept(supabase: any, params: {
   instance_name?: string;
   reason?: string;
   user_id: string;
+  is_service_role: boolean;
 }) {
-  const { workspace_id, lead_id, session_id, instance_name, reason, user_id } = params;
-  console.log(`[human-handoff] 🛑 INTERCEPT: workspace=${workspace_id}, lead=${lead_id}, session=${session_id}`);
+  const { workspace_id, lead_id, session_id, instance_name, reason, user_id, is_service_role } = params;
+  console.log(`[human-handoff] 🛑 INTERCEPT: workspace=${workspace_id}, lead=${lead_id}, session=${session_id}, service_role=${is_service_role}`);
+
+  // Determine assignee: AI-triggered → Isabella, manual → the user who triggered
+  const assignee = is_service_role ? DEFAULT_AI_ASSIGNEE : user_id;
 
   // 1. Resolve session_id & agent_id from agent_memories
   let resolvedSessionId = session_id || null;
@@ -151,7 +162,7 @@ async function handleIntercept(supabase: any, params: {
     .from("support_tickets")
     .insert({
       workspace_id,
-      user_id: user_id === "service_role" ? "00000000-0000-0000-0000-000000000000" : user_id,
+      user_id: is_service_role ? DEFAULT_AI_ASSIGNEE : user_id,
       subject: `Suporte: ${leadName || leadPhone || "Contato"}${reason ? ` — ${reason.substring(0, 80)}` : ""}`,
       status: "in_progress",
       priority: "high",
@@ -168,20 +179,19 @@ async function handleIntercept(supabase: any, params: {
     console.error("[human-handoff] Ticket creation error:", ticketErr);
   }
 
-  // 6. Create human_support_queue item with full lead data
+  // 6. Create human_support_queue item
   const queuePayload: any = {
     workspace_id,
     lead_id: lead_id || null,
     agent_id: agentId || null,
     session_id: resolvedSessionId || null,
     reason: reason || "manual",
-    status: "in_progress",
-    assigned_to: user_id === "service_role" ? null : user_id,
+    status: is_service_role ? "waiting" : "in_progress",
+    assigned_to: assignee,
     instance_name: instance_name || null,
     ticket_id: ticket?.id || null,
   };
 
-  // Try insert; if unique constraint fails, update existing
   const { data: queueItem, error: queueErr } = await supabase
     .from("human_support_queue")
     .insert(queuePayload)
@@ -190,10 +200,9 @@ async function handleIntercept(supabase: any, params: {
 
   if (queueErr) {
     console.warn("[human-handoff] Queue insert conflict:", queueErr.message);
-    // Update existing active item
     const updatePayload = {
-      status: "in_progress",
-      assigned_to: user_id === "service_role" ? null : user_id,
+      status: is_service_role ? "waiting" : "in_progress",
+      assigned_to: assignee,
       ticket_id: ticket?.id || null,
       updated_at: new Date().toISOString(),
     };
@@ -213,7 +222,7 @@ async function handleIntercept(supabase: any, params: {
     }
   }
 
-  // 7. Also populate lead_id/lead_name/lead_phone on the support_tickets linked to the queue
+  // 7. Backfill support ticket with lead data
   if (ticket?.id && lead_id) {
     await supabase
       .from("support_tickets")
@@ -227,12 +236,12 @@ async function handleIntercept(supabase: any, params: {
       .eq("id", ticket.id);
   }
 
-  // 8. Auto-tag lead with "Em suporte"
+  // 8. Add "Em suporte" tag
   if (lead_id) {
     await addSupportTag(supabase, workspace_id, lead_id);
   }
 
-  console.log(`[human-handoff] ✅ Intercept complete. ticket=${ticket?.id}, queue=${queueItem?.id}, lead=${leadName}/${leadPhone}`);
+  console.log(`[human-handoff] ✅ Intercept complete. ticket=${ticket?.id}, queue=${queueItem?.id}, assignee=${assignee}`);
 
   return new Response(JSON.stringify({
     success: true,
@@ -241,6 +250,7 @@ async function handleIntercept(supabase: any, params: {
     session_id: resolvedSessionId,
     lead_name: leadName,
     lead_phone: leadPhone,
+    assigned_to: assignee,
   }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
@@ -254,7 +264,6 @@ async function handleResume(supabase: any, params: {
   const { workspace_id, lead_id, session_id, queue_item_id } = params;
   console.log(`[human-handoff] ▶️ RESUME: workspace=${workspace_id}, lead=${lead_id}, session=${session_id}, queue=${queue_item_id}`);
 
-  // 1. Find the queue item
   let queueItem: any = null;
 
   if (queue_item_id) {
@@ -287,23 +296,21 @@ async function handleResume(supabase: any, params: {
   const resolvedSessionId = queueItem?.session_id || session_id;
   const resolvedLeadId = queueItem?.lead_id || lead_id;
 
-  // 2. Resume AI — unpause agent_memories
+  // Resume AI
   if (resolvedSessionId) {
     await supabase
       .from("agent_memories")
       .update({ is_paused: false })
       .eq("session_id", resolvedSessionId);
-    console.log(`[human-handoff] ▶️ Resumed memories by session_id: ${resolvedSessionId}`);
   }
   if (resolvedLeadId) {
     await supabase
       .from("agent_memories")
       .update({ is_paused: false })
       .eq("lead_id", resolvedLeadId);
-    console.log(`[human-handoff] ▶️ Resumed memories by lead_id: ${resolvedLeadId}`);
   }
 
-  // 3. Resolve queue item
+  // Resolve queue item
   if (queueItem) {
     await supabase
       .from("human_support_queue")
@@ -314,7 +321,6 @@ async function handleResume(supabase: any, params: {
       })
       .eq("id", queueItem.id);
 
-    // 4. Close associated ticket
     if (queueItem.ticket_id) {
       await supabase
         .from("support_tickets")
@@ -324,14 +330,12 @@ async function handleResume(supabase: any, params: {
           updated_at: new Date().toISOString(),
         })
         .eq("id", queueItem.ticket_id);
-      console.log(`[human-handoff] 🎫 Ticket ${queueItem.ticket_id} resolved`);
     }
   }
 
-  // 5. Remove "Em suporte" tag from lead
+  // Remove "Em suporte" tag
   if (resolvedLeadId) {
-    const wsId = queueItem?.workspace_id || workspace_id;
-    await removeSupportTag(supabase, wsId, resolvedLeadId);
+    await removeSupportTag(supabase, workspace_id, resolvedLeadId);
   }
 
   console.log(`[human-handoff] ✅ Resume complete.`);
@@ -343,75 +347,99 @@ async function handleResume(supabase: any, params: {
   }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
-/* ─── Tag helpers ─── */
+async function handleTransfer(supabase: any, params: {
+  workspace_id: string;
+  queue_item_id?: string;
+  transfer_to?: string;
+  user_id: string;
+}) {
+  const { workspace_id, queue_item_id, transfer_to, user_id } = params;
 
-async function getOrCreateSupportTag(supabase: any, workspaceId: string): Promise<string | null> {
-  const TAG_NAME = "Em suporte";
-  const TAG_COLOR = "#EF4444"; // red
+  if (!queue_item_id || !transfer_to) {
+    return new Response(JSON.stringify({ error: "queue_item_id and transfer_to are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
-  // Check if tag exists
-  const { data: existing } = await supabase
-    .from("lead_tags")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("name", TAG_NAME)
-    .limit(1)
-    .maybeSingle();
+  console.log(`[human-handoff] 🔄 TRANSFER: queue=${queue_item_id}, from=${user_id}, to=${transfer_to}`);
 
-  if (existing) return existing.id;
+  // Update queue item
+  const { error: qErr } = await supabase
+    .from("human_support_queue")
+    .update({ assigned_to: transfer_to, updated_at: new Date().toISOString() })
+    .eq("id", queue_item_id)
+    .eq("workspace_id", workspace_id);
 
-  // Create tag
-  const { data: created, error } = await supabase
-    .from("lead_tags")
-    .insert({ workspace_id: workspaceId, name: TAG_NAME, color: TAG_COLOR })
-    .select("id")
+  if (qErr) {
+    console.error("[human-handoff] Transfer queue error:", qErr);
+    return new Response(JSON.stringify({ error: qErr.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
+  // Also update the linked support ticket
+  const { data: queueItem } = await supabase
+    .from("human_support_queue")
+    .select("ticket_id")
+    .eq("id", queue_item_id)
     .single();
 
-  if (error) {
-    console.error("[human-handoff] Failed to create support tag:", error.message);
-    return null;
+  if (queueItem?.ticket_id) {
+    await supabase
+      .from("support_tickets")
+      .update({ user_id: transfer_to, updated_at: new Date().toISOString() })
+      .eq("id", queueItem.ticket_id);
   }
-  return created.id;
+
+  console.log(`[human-handoff] ✅ Transfer complete.`);
+
+  return new Response(JSON.stringify({ success: true, transferred_to: transfer_to }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 }
 
+/* ── Tag helpers ── */
+
 async function addSupportTag(supabase: any, workspaceId: string, leadId: string) {
-  const tagId = await getOrCreateSupportTag(supabase, workspaceId);
-  if (!tagId) return;
+  try {
+    let { data: tag } = await supabase
+      .from("lead_tags")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("name", "Em suporte")
+      .maybeSingle();
 
-  // Check if already assigned
-  const { data: exists } = await supabase
-    .from("lead_tag_assignments")
-    .select("id")
-    .eq("lead_id", leadId)
-    .eq("tag_id", tagId)
-    .limit(1)
-    .maybeSingle();
+    if (!tag) {
+      const { data: newTag } = await supabase
+        .from("lead_tags")
+        .insert({ workspace_id: workspaceId, name: "Em suporte", color: "#EF4444" })
+        .select("id")
+        .single();
+      tag = newTag;
+    }
 
-  if (exists) return;
-
-  await supabase.from("lead_tag_assignments").insert({
-    workspace_id: workspaceId,
-    lead_id: leadId,
-    tag_id: tagId,
-  });
-  console.log(`[human-handoff] 🏷️ Tag "Em suporte" added to lead ${leadId}`);
+    if (tag) {
+      await supabase
+        .from("lead_tag_assignments")
+        .upsert({ workspace_id: workspaceId, lead_id: leadId, tag_id: tag.id }, { onConflict: "workspace_id,lead_id,tag_id" });
+    }
+  } catch (e) {
+    console.warn("[human-handoff] addSupportTag error:", e);
+  }
 }
 
 async function removeSupportTag(supabase: any, workspaceId: string, leadId: string) {
-  const { data: tag } = await supabase
-    .from("lead_tags")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("name", "Em suporte")
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data: tag } = await supabase
+      .from("lead_tags")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("name", "Em suporte")
+      .maybeSingle();
 
-  if (!tag) return;
-
-  await supabase
-    .from("lead_tag_assignments")
-    .delete()
-    .eq("lead_id", leadId)
-    .eq("tag_id", tag.id);
-  console.log(`[human-handoff] 🏷️ Tag "Em suporte" removed from lead ${leadId}`);
+    if (tag) {
+      await supabase
+        .from("lead_tag_assignments")
+        .delete()
+        .eq("workspace_id", workspaceId)
+        .eq("lead_id", leadId)
+        .eq("tag_id", tag.id);
+    }
+  } catch (e) {
+    console.warn("[human-handoff] removeSupportTag error:", e);
+  }
 }
