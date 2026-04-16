@@ -2,18 +2,20 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  Headset, Send, Loader2, ArrowLeft, CheckCircle, User, Bot, Phone,
-  ArrowRightLeft, Eye, Calendar, Hash, AlertTriangle, ChevronDown, ChevronUp, X,
+  Headset, Loader2, ArrowLeft, CheckCircle, User, Phone,
+  ArrowRightLeft, Eye, Calendar, Hash, AlertTriangle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { MessageBubble } from "@/components/chat/MessageBubble";
+import { ChatInput } from "@/components/chat/ChatInput";
 
 /* ───────── Types ───────── */
 
