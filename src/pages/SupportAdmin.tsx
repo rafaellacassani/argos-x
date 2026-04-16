@@ -306,6 +306,49 @@ export default function SupportAdmin() {
     return () => { supabase.removeChannel(channel); };
   }, [selected?.id, selected?.session_id, selected?.instance_name]);
 
+  // Realtime for notes
+  useEffect(() => {
+    if (!selected?.id) return;
+    const channel = supabase
+      .channel(`support-notes-${selected.id}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "support_notes",
+        filter: `queue_item_id=eq.${selected.id}`,
+      }, (payload: any) => {
+        const note = payload.new as SupportNote;
+        note.author_name = teamMembers.find(m => m.user_id === note.user_id)?.full_name || "Usuário";
+        setNotes(prev => {
+          if (prev.some(n => n.id === note.id)) return prev;
+          return [...prev, note];
+        });
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({ top: scrollRef.current!.scrollHeight, behavior: "smooth" });
+        }, 100);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selected?.id, teamMembers]);
+
+  /* ── Send internal note ── */
+  const handleSendNote = useCallback(async () => {
+    if (!selected || !user || !noteText.trim() || !workspaceId) return;
+    setSendingNote(true);
+    try {
+      const { error } = await supabase.from("support_notes" as any).insert({
+        workspace_id: workspaceId,
+        queue_item_id: selected.id,
+        user_id: user.id,
+        content: noteText.trim(),
+      });
+      if (error) throw error;
+      setNoteText("");
+    } catch (err: any) {
+      toast({ title: "Erro ao salvar nota", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingNote(false);
+    }
+  }, [selected, user, noteText, workspaceId]);
+
   /* ── Send handlers for ChatInput ── */
   const getRecipientNumber = useCallback(() => {
     if (!selected?.session_id) return "";
