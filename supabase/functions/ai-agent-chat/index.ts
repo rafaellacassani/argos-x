@@ -269,12 +269,22 @@ function buildAiFallbackReply(userMessage: string, mediaType?: string | null, ag
   const hasHistory = memoryMessages && memoryMessages.length > 1;
 
   // Extract lead name from history if available
+  // IMPORTANT: must be capitalized AND not a generic word (avoids "sou iniciante" → "iniciante")
+  const NAME_BLOCKLIST = new Set([
+    "iniciante","iniciantes","interessado","interessada","cliente","aluno","aluna",
+    "profissional","novo","nova","aqui","eu","ela","ele","apenas","só","so",
+    "curioso","curiosa","estudante","comprador","compradora","visitante"
+  ]);
   let leadName = "";
   if (memoryMessages) {
     const summaryMessages = memoryMessages.filter(m => m.role === "user");
     for (const m of summaryMessages) {
-      const match = m.content?.match(/(?:sou|meu nome[: é]*|me chamo)\s+([A-ZÀ-Ú][a-zà-ú]+)/i);
-      if (match) { leadName = match[1]; break; }
+      // Case-sensitive on first letter — names start uppercase
+      const match = m.content?.match(/(?:sou|meu nome[: é]*|me chamo)\s+([A-ZÀ-Ú][a-zà-ú]{2,})/);
+      if (match && !NAME_BLOCKLIST.has(match[1].toLowerCase())) {
+        leadName = match[1];
+        break;
+      }
     }
   }
 
