@@ -2,18 +2,20 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspace } from "@/hooks/useWorkspace";
+import { useEvolutionAPI } from "@/hooks/useEvolutionAPI";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
-  Headset, Send, Loader2, ArrowLeft, CheckCircle, User, Bot, Phone,
-  ArrowRightLeft, Eye, Calendar, Hash, AlertTriangle, ChevronDown, ChevronUp, X,
+  Headset, Loader2, ArrowLeft, CheckCircle, User, Phone,
+  ArrowRightLeft, Eye, Calendar, Hash, AlertTriangle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { MessageBubble } from "@/components/chat/MessageBubble";
+import { ChatInput } from "@/components/chat/ChatInput";
 
 /* ───────── Types ───────── */
 
@@ -47,6 +49,12 @@ interface WaMessage {
   message_type: string;
   timestamp: string;
   push_name: string | null;
+  media_url: string | null;
+  media_base64: string | null;
+  file_name: string | null;
+  duration: number | null;
+  remote_jid: string | null;
+  message_id: string | null;
 }
 
 interface TeamMember {
@@ -77,10 +85,10 @@ const PAGE_SIZE = 60;
 export default function SupportAdmin() {
   const { user } = useAuth();
   const { workspaceId } = useWorkspace();
+  const { downloadMedia: evoDownloadMedia } = useEvolutionAPI();
   const [items, setItems] = useState<QueueItem[]>([]);
   const [selected, setSelected] = useState<QueueItem | null>(null);
   const [messages, setMessages] = useState<WaMessage[]>([]);
-  const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
   const [msgsLoading, setMsgsLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -195,9 +203,9 @@ export default function SupportAdmin() {
     if (offset === 0) setMsgsLoading(true);
     else setLoadingOlder(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase
       .from("whatsapp_messages")
-      .select("id, content, from_me, direction, message_type, timestamp, push_name")
+      .select("id, content, from_me, direction, message_type, timestamp, push_name, media_url, media_base64, file_name, duration, remote_jid, message_id") as any)
       .eq("workspace_id", item.workspace_id)
       .eq("instance_name", item.instance_name)
       .eq("remote_jid", item.session_id)
@@ -264,37 +272,113 @@ export default function SupportAdmin() {
     return () => { supabase.removeChannel(channel); };
   }, [selected?.id, selected?.session_id, selected?.instance_name]);
 
-  /* ── Send reply ── */
-  const sendReply = async () => {
-    if (!reply.trim() || !selected?.session_id || !selected?.instance_name || sending) return;
-    setSending(true);
+  /* ── Send handlers for ChatInput ── */
+  const getRecipientNumber = useCallback(() => {
+    if (!selected?.session_id) return "";
+    return selected.session_id.replace("@s.whatsapp.net", "").replace("@lid", "");
+  }, [selected?.session_id]);
 
+  const autoClaimIfWaiting = useCallback(async () => {
+    if (selected?.status === "waiting" && user?.id) {
+      await supabase
+        .from("human_support_queue" as any)
+        .update({ status: "in_progress", assigned_to: user.id, updated_at: new Date().toISOString() })
+        .eq("id", selected.id);
+      setSelected(prev => prev ? { ...prev, status: "in_progress", assigned_to: user!.id } : null);
+    }
+  }, [selected, user?.id]);
+
+  const handleSendText = useCallback(async (text: string): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
     try {
       const { error } = await supabase.functions.invoke("evolution-api", {
         body: {
           action: "sendText",
           instanceName: selected.instance_name,
-          payload: { number: selected.session_id.replace("@s.whatsapp.net", ""), text: reply.trim() },
+          payload: { number: getRecipientNumber(), text },
         },
       });
-
       if (error) throw error;
-      setReply("");
       toast({ title: "Mensagem enviada" });
-
-      if (selected.status === "waiting") {
-        await supabase
-          .from("human_support_queue" as any)
-          .update({ status: "in_progress", assigned_to: user?.id, updated_at: new Date().toISOString() })
-          .eq("id", selected.id);
-        setSelected(prev => prev ? { ...prev, status: "in_progress", assigned_to: user?.id || null } : null);
-      }
+      await autoClaimIfWaiting();
+      return true;
     } catch (err: any) {
       console.error("[SupportAdmin] send error:", err);
       toast({ title: "Erro ao enviar", description: err.message, variant: "destructive" });
+      return false;
     }
-    setSending(false);
-  };
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleSendMedia = useCallback(async (file: File, caption?: string): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+      const isAudio = file.type.startsWith("audio/");
+
+      // Upload to storage
+      const path = `support/${selected.workspace_id}/${Date.now()}_${file.name}`;
+      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, file, { contentType: file.type });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
+
+      const action = isImage ? "sendImage" : isVideo ? "sendVideo" : isAudio ? "sendAudio" : "sendDocument";
+      const payload: any = {
+        number: getRecipientNumber(),
+        mediaUrl: urlData.publicUrl,
+        fileName: file.name,
+      };
+      if (caption) payload.caption = caption;
+
+      const { error } = await supabase.functions.invoke("evolution-api", {
+        body: { action, instanceName: selected.instance_name, payload },
+      });
+      if (error) throw error;
+      toast({ title: "Mídia enviada" });
+      await autoClaimIfWaiting();
+      return true;
+    } catch (err: any) {
+      console.error("[SupportAdmin] send media error:", err);
+      toast({ title: "Erro ao enviar mídia", description: err.message, variant: "destructive" });
+      return false;
+    }
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleSendAudio = useCallback(async (audioBlob: Blob): Promise<boolean> => {
+    if (!selected?.session_id || !selected?.instance_name) return false;
+    try {
+      const path = `support/${selected.workspace_id}/${Date.now()}_audio.webm`;
+      const { error: uploadErr } = await supabase.storage.from("salesbot-media").upload(path, audioBlob, { contentType: "audio/webm" });
+      if (uploadErr) throw uploadErr;
+      const { data: urlData } = supabase.storage.from("salesbot-media").getPublicUrl(path);
+
+      const { error } = await supabase.functions.invoke("evolution-api", {
+        body: {
+          action: "sendAudio",
+          instanceName: selected.instance_name,
+          payload: { number: getRecipientNumber(), mediaUrl: urlData.publicUrl },
+        },
+      });
+      if (error) throw error;
+      toast({ title: "Áudio enviado" });
+      await autoClaimIfWaiting();
+      return true;
+    } catch (err: any) {
+      console.error("[SupportAdmin] send audio error:", err);
+      toast({ title: "Erro ao enviar áudio", description: err.message, variant: "destructive" });
+      return false;
+    }
+  }, [selected, getRecipientNumber, autoClaimIfWaiting]);
+
+  const handleDownloadMedia = useCallback(async (messageId: string, convertToMp4?: boolean) => {
+    if (!selected?.instance_name) return null;
+    try {
+      return await evoDownloadMedia(selected.instance_name, messageId, convertToMp4);
+    } catch {
+      return null;
+    }
+  }, [selected?.instance_name, evoDownloadMedia]);
 
   /* ── Finalize ── */
   const handleFinalize = async () => {
@@ -372,9 +456,9 @@ export default function SupportAdmin() {
     setExpandedMsgsLoading(true);
 
     // Load messages around the ticket timeframe
-    let query = supabase
+    let query = (supabase
       .from("whatsapp_messages")
-      .select("id, content, from_me, direction, message_type, timestamp, push_name")
+      .select("id, content, from_me, direction, message_type, timestamp, push_name, media_url, media_base64, file_name, duration, remote_jid, message_id") as any)
       .eq("workspace_id", item.workspace_id)
       .eq("instance_name", item.instance_name)
       .eq("remote_jid", item.session_id)
@@ -628,42 +712,32 @@ export default function SupportAdmin() {
                 ) : messages.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8 text-sm">Sem mensagens para esta conversa</p>
                 ) : (
-                  <div className="space-y-2">
-                    {messages.map(m => {
+                  <div className="space-y-1">
+                    {messages.map((m, idx) => {
                       const isOutbound = m.from_me || m.direction === "outbound";
+                      const ts = new Date(m.timestamp);
+                      const msgType = (m.message_type || "text") as "text" | "image" | "audio" | "document" | "video" | "contact";
                       return (
-                        <div key={m.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${
-                            isOutbound
-                              ? "bg-primary text-primary-foreground rounded-br-sm"
-                              : "bg-muted text-foreground rounded-bl-sm"
-                          }`}>
-                            {!isOutbound && m.push_name && (
-                              <div className="text-[10px] font-medium opacity-60 mb-0.5 flex items-center gap-1">
-                                <User className="h-3 w-3" /> {m.push_name}
-                              </div>
-                            )}
-                            {isOutbound && (
-                              <div className="text-[10px] font-medium opacity-60 mb-0.5 flex items-center gap-1">
-                                <Bot className="h-3 w-3" /> {m.direction === "outbound" ? "IA/Sistema" : "Enviado"}
-                              </div>
-                            )}
-                            {m.message_type === "image" ? (
-                              <p className="italic opacity-70">📷 Imagem</p>
-                            ) : m.message_type === "audio" ? (
-                              <p className="italic opacity-70">🎵 Áudio</p>
-                            ) : m.message_type === "video" ? (
-                              <p className="italic opacity-70">🎬 Vídeo</p>
-                            ) : m.message_type === "document" ? (
-                              <p className="italic opacity-70">📄 Documento</p>
-                            ) : (
-                              <p className="whitespace-pre-wrap break-words">{m.content || ""}</p>
-                            )}
-                            <div className="text-[10px] opacity-50 mt-1 text-right">
-                              {formatDateTime(m.timestamp)}
-                            </div>
-                          </div>
-                        </div>
+                        <MessageBubble
+                          key={m.id}
+                          id={m.id}
+                          content={m.content || ""}
+                          time={formatDateTime(m.timestamp)}
+                          sent={isOutbound}
+                          read={isOutbound}
+                          type={msgType}
+                          mediaUrl={m.media_url || undefined}
+                          thumbnailBase64={m.media_base64 || undefined}
+                          fileName={m.file_name || undefined}
+                          duration={m.duration || undefined}
+                          index={idx}
+                          instanceName={selected.instance_name || undefined}
+                          messageId={m.message_id || undefined}
+                          remoteJid={m.remote_jid || selected.session_id || undefined}
+                          fromMe={isOutbound}
+                          timestamp={Math.floor(ts.getTime() / 1000)}
+                          onDownloadMedia={handleDownloadMedia}
+                        />
                       );
                     })}
                   </div>
@@ -672,18 +746,13 @@ export default function SupportAdmin() {
 
               {/* Reply input */}
               {(selected.status === "waiting" || selected.status === "in_progress") && (
-                <form onSubmit={(e) => { e.preventDefault(); sendReply(); }} className="flex items-center gap-2 p-3 border-t">
-                  <Input
-                    value={reply}
-                    onChange={e => setReply(e.target.value)}
-                    placeholder="Responder pelo WhatsApp..."
-                    disabled={sending}
-                    className="flex-1 h-9 text-sm"
-                  />
-                  <Button type="submit" size="icon" className="h-9 w-9" disabled={sending || !reply.trim()}>
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </form>
+                <ChatInput
+                  onSendMessage={handleSendText}
+                  onSendMedia={handleSendMedia}
+                  onSendAudio={handleSendAudio}
+                  disabled={sending}
+                  placeholder="Responder pelo WhatsApp..."
+                />
               )}
             </>
           )}

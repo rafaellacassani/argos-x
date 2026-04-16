@@ -2862,7 +2862,17 @@ export default function Chats() {
       }
     }
 
-    // Filter by support queue
+    // Filter by support status from filters drawer
+    if (activeFilters?.supportStatus) {
+      const ss = activeFilters.supportStatus;
+      result = result.filter(chat => {
+        const chatStatus = getChatSupportStatus(chat);
+        if (ss === "any_active") return chatStatus !== null;
+        return chatStatus === ss;
+      });
+    }
+
+    // Filter by support queue (inline toggle)
     if (showQueueOnly) {
       result = result.filter(chat => getChatSupportStatus(chat) !== null);
     }
