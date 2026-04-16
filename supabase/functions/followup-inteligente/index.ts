@@ -160,10 +160,16 @@ function validateOutgoingFollowupMessage(message: string): {
 }
 
 async function generateTextWithModel(
-  agentModel: string,
+  agentModelInput: string,
   aiMessages: ConversationMessage[],
 ): Promise<string> {
-  const isAnthropic = agentModel.startsWith("anthropic/");
+  // 🚨 ANTHROPIC DISABLED — conta Claude banida. Forçar OpenAI/Lovable Gateway.
+  let agentModel = agentModelInput;
+  const isAnthropic = false;
+  if (agentModel.startsWith("anthropic/") || agentModel.startsWith("claude")) {
+    console.warn(`[followup-inteligente] 🚨 Anthropic disabled, remapping ${agentModel} -> openai/gpt-4o-mini`);
+    agentModel = "openai/gpt-4o-mini";
+  }
 
   if (isAnthropic) {
     if (!anthropicApiKey) {
@@ -540,7 +546,7 @@ RESPONDA APENAS com o texto da mensagem final pronta para envio. Sem explicaçõ
         { role: "user", content: "[GERAR MENSAGEM DE FOLLOW-UP AGORA]" },
       ];
 
-      const agentModel = agent.model || "anthropic/claude-haiku-4-5-20251001";
+      const agentModel = agent.model || "openai/gpt-4o-mini";
 
       try {
         const generatedMessage = await generateSafeFollowupMessage(agentModel, aiMessages);

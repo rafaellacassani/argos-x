@@ -22,8 +22,6 @@ const baseModels = [
   { id: "openai/gpt-5-mini", label: "GPT-5 Mini (Avançado)", minPlan: null },
   { id: "openai/gpt-5-nano", label: "GPT-5 Nano (Econômico)", minPlan: null },
   { id: "openai/gpt-5", label: "GPT-5 (Premium)", minPlan: null },
-  { id: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Plano Escala)", minPlan: "escala" },
-  { id: "anthropic/claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Plano Escala)", minPlan: "escala" },
 ];
 
 const MASTER_WORKSPACE_IDS = new Set([

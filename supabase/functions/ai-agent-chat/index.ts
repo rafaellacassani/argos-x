@@ -1574,12 +1574,19 @@ serve(async (req) => {
 
         tokensFromApi = 0;
         const rawModelName = agent.model || "openai/gpt-4o-mini";
+        // 🚨 ANTHROPIC DISABLED — conta Claude banida. Forçar TUDO para OpenAI.
         const deprecatedModelMap: Record<string, string> = {
-          "anthropic/claude-3-haiku-20240307": "anthropic/claude-haiku-4-5-20251001",
-          "claude-3-haiku-20240307": "anthropic/claude-haiku-4-5-20251001",
+          "anthropic/claude-3-haiku-20240307": "openai/gpt-4o-mini",
+          "claude-3-haiku-20240307": "openai/gpt-4o-mini",
+          "anthropic/claude-haiku-4-5-20251001": "openai/gpt-4o-mini",
+          "anthropic/claude-3-5-sonnet-20241022": "openai/gpt-4o-mini",
         };
-        const modelName = deprecatedModelMap[rawModelName] ?? rawModelName;
-        const provider = modelName.split("/")[0]; // "openai", "anthropic", or "google"
+        let modelName = deprecatedModelMap[rawModelName] ?? rawModelName;
+        if (modelName.startsWith("anthropic/") || modelName.startsWith("claude")) {
+          console.warn(`[ai-agent-chat] 🚨 Anthropic disabled, remapping ${modelName} -> openai/gpt-4o-mini`);
+          modelName = "openai/gpt-4o-mini";
+        }
+        const provider = modelName.split("/")[0]; // "openai" or "google"
 
         if (modelName !== rawModelName) {
           console.warn(`[ai-agent-chat] ⚠️ Deprecated model remapped: ${rawModelName} -> ${modelName}`);
@@ -1608,7 +1615,8 @@ serve(async (req) => {
               tool_choice: tools.length > 0 ? "auto" : undefined,
             }),
           });
-        } else if (provider === "anthropic" && anthropicApiKey) {
+        } else if (false && provider === "anthropic" && anthropicApiKey) {
+          // 🚨 ANTHROPIC DISABLED — conta banida, branch inalcançável
           const anthropicModel = modelName.replace("anthropic/", "");
           console.log(`[ai-agent-chat] 🔑 Using Anthropic API directly: ${anthropicModel}`);
 
