@@ -764,7 +764,64 @@ export function ChatFilters({
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Search Section */}
+            {/* Support Section */}
+            <Collapsible
+              open={expandedSections.includes("support")}
+              onOpenChange={() => toggleSection("support")}
+            >
+              <CollapsibleTrigger className="flex items-center justify-between w-full py-2 group">
+                <div className="flex items-center gap-2">
+                  <Headphones className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-display font-semibold text-sm">Suporte</span>
+                </div>
+                {expandedSections.includes("support") ? (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                )}
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-2 pt-2"
+                >
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+                    Status de Suporte
+                  </Label>
+                  <Controller
+                    name="supportStatus"
+                    control={control}
+                    render={({ field }) => (
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { id: "", label: "Todos" },
+                          { id: "waiting", label: "⏳ Aguardando" },
+                          { id: "in_progress", label: "🔴 Em atendimento" },
+                          { id: "any_active", label: "Qualquer ativo" },
+                        ].map((opt) => (
+                          <Button
+                            key={opt.id}
+                            type="button"
+                            variant={field.value === opt.id ? "default" : "outline"}
+                            size="sm"
+                            className={cn(
+                              field.value === opt.id && "bg-secondary hover:bg-secondary/90"
+                            )}
+                            onClick={() => field.onChange(opt.id)}
+                          >
+                            {opt.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  />
+                </motion.div>
+              </CollapsibleContent>
+            </Collapsible>
+
             <Collapsible
               open={expandedSections.includes("search")}
               onOpenChange={() => toggleSection("search")}
@@ -867,6 +924,7 @@ export function countActiveFilters(filters: ChatFiltersFormData): number {
   if (filters.participantSearch) count++;
   if (filters.lastMessageSender !== "any") count++;
   if (filters.tagIds.length > 0) count++;
+  if (filters.supportStatus) count++;
   
   return count;
 }
