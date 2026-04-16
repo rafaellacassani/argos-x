@@ -1181,7 +1181,58 @@ serve(async (req) => {
           latency_ms: Date.now() - startTime,
           workspace_id: agent.workspace_id,
         });
-        
+
+        // ✨ FIX 5: Auto-handoff to human support queue when loop is detected
+        try {
+          // Fetch lead data for ticket
+          let loopLeadName: string | null = null;
+          let loopLeadPhone: string | null = null;
+          const loopLeadId = lead_id && isValidUUID(lead_id) ? lead_id : null;
+          if (loopLeadId) {
+            const { data: lld } = await supabase.from("leads").select("name, phone").eq("id", loopLeadId).single();
+            if (lld) { loopLeadName = lld.name; loopLeadPhone = lld.phone; }
+          }
+
+          // Avoid duplicate tickets — check for an existing waiting/in_progress entry for this session
+          const { data: existingQ } = await supabase
+            .from("human_support_queue")
+            .select("id")
+            .eq("session_id", session_id)
+            .in("status", ["waiting", "in_progress"])
+            .limit(1);
+
+          if (!existingQ || existingQ.length === 0) {
+            const { data: loopTicket } = await supabase.from("support_tickets").insert({
+              workspace_id: agent.workspace_id,
+              user_id: "00000000-0000-0000-0000-000000000000",
+              subject: `Suporte: ${loopLeadName || loopLeadPhone || "Contato"} — IA travada (loop)`,
+              status: "open",
+              priority: "high",
+              lead_id: loopLeadId,
+              lead_name: loopLeadName,
+              lead_phone: loopLeadPhone,
+              session_id,
+              instance_name: reqInstanceName || agent.instance_name || null,
+            }).select("id").single();
+
+            await supabase.from("human_support_queue").insert({
+              workspace_id: agent.workspace_id,
+              lead_id: loopLeadId,
+              agent_id,
+              session_id,
+              reason: `ai_loop: ${loopDetected}`,
+              status: "waiting",
+              instance_name: reqInstanceName || agent.instance_name || null,
+              ticket_id: loopTicket?.id || null,
+            });
+            console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (ai_loop)`);
+          } else {
+            console.log(`[ai-agent-chat] ℹ️ Loop ticket already exists for session ${session_id}, skipping enqueue`);
+          }
+        } catch (handoffErr) {
+          console.error(`[ai-agent-chat] ⚠️ Loop handoff failed:`, handoffErr);
+        }
+
         console.log(`[ai-agent-chat] ⏸️ Session ${session_id} paused due to loop: ${loopDetected}`);
         return new Response(JSON.stringify({ response: null, paused: true, reason: "loop_detected", detail: loopDetected }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
