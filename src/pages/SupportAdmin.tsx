@@ -205,7 +205,7 @@ export default function SupportAdmin() {
 
     const { data, error } = await supabase
       .from("whatsapp_messages")
-      .select("id, content, from_me, direction, message_type, timestamp, push_name")
+      .select("id, content, from_me, direction, message_type, timestamp, push_name, media_url, media_base64, file_name, duration, remote_jid, message_id")
       .eq("workspace_id", item.workspace_id)
       .eq("instance_name", item.instance_name)
       .eq("remote_jid", item.session_id)
