@@ -52,6 +52,7 @@ const TourGuiado = lazy(() => import("./pages/TourGuiado"));
 const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
 const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
+const TeamChat = lazy(() => import("./pages/TeamChat"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -157,6 +158,7 @@ const App = () => (
                             <Route path="/tour-guiado" element={<TourGuiado />} />
                             <Route path="/suporte" element={<SupportAdmin />} />
                             <Route path="/clients" element={<ClientsPage />} />
+                            <Route path="/equipe" element={<TeamChat />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>

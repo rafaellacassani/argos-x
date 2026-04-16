@@ -28,6 +28,7 @@ import {
   Headset,
   Building2,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import argosIcon from "@/assets/argos-icon.png";
@@ -38,6 +39,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useMemberPermissions } from "@/hooks/useMemberPermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useInternalMessagesUnread } from "@/hooks/useInternalMessagesUnread";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -52,6 +54,8 @@ interface MenuItem {
   requiredPermission?: 'canManageSalesBots' | 'canManageCampaigns' | 'canManageIntegrations' | 'canManageWorkspaceSettings';
   /** Plans where this item is locked */
   blockedPlans?: string[];
+  /** Optional badge count (e.g. unread messages) */
+  badgeCount?: number;
 }
 
 const menuItems: MenuItem[] = [
@@ -126,6 +130,16 @@ function SidebarNavContent({
             {!collapsed && (
               <span className="font-medium text-sm flex-1">{item.label}</span>
             )}
+            {!collapsed && !isLocked && (item.badgeCount ?? 0) > 0 && (
+              <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] px-1.5 flex items-center justify-center">
+                {item.badgeCount! > 99 ? "99+" : item.badgeCount}
+              </span>
+            )}
+            {collapsed && !isLocked && (item.badgeCount ?? 0) > 0 && (
+              <span className="absolute top-1 right-1 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-[16px] px-1 flex items-center justify-center">
+                {item.badgeCount! > 9 ? "9+" : item.badgeCount}
+              </span>
+            )}
             {isLocked && !collapsed && (
               <Lock className="w-3.5 h-3.5 text-white/40 flex-shrink-0" />
             )}
@@ -173,6 +187,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange, onOpenAssis
   const { canAccessPage } = useMemberPermissions();
   const { planName } = usePlanLimits();
   const isMobile = useIsMobile();
+  const { unreadCount: internalUnread } = useInternalMessagesUnread();
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -194,6 +209,7 @@ export function AppSidebar({ mobileOpen = false, onMobileOpenChange, onOpenAssis
 
   const visibleItems: MenuItem[] = [
     ...menuItems,
+    { icon: MessageSquare, label: "Equipe", path: "/equipe", badgeCount: internalUnread } as MenuItem,
     // Available for all admins
     { icon: GraduationCap, label: "Treinamento", path: "/treinamento" } as MenuItem,
     ...(permissions.isAdmin ? [
