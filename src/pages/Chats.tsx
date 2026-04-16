@@ -2759,16 +2759,28 @@ export default function Chats() {
     return () => clearTimeout(timer);
   }, [searchTerm, workspaceId]);
 
-  // Build support queue lookup by session_id (remote_jid)
+  // Build support queue lookup by session_id AND lead_id
   const supportQueueMap = useMemo(() => {
-    const map = new Map<string, "waiting" | "in_progress">();
+    const bySession = new Map<string, "waiting" | "in_progress">();
+    const byLeadId = new Map<string, "waiting" | "in_progress">();
     for (const q of queue) {
-      if ((q.status === "waiting" || q.status === "in_progress") && q.session_id) {
-        map.set(q.session_id, q.status as "waiting" | "in_progress");
-      }
+      const st = q.status as "waiting" | "in_progress";
+      if (st !== "waiting" && st !== "in_progress") continue;
+      if (q.session_id) bySession.set(q.session_id, st);
+      if (q.lead_id) byLeadId.set(q.lead_id, st);
     }
-    return map;
+    return { bySession, byLeadId };
   }, [queue]);
+
+  // Helper: get support status for a chat (checks session_id + lead_id)
+  const getChatSupportStatus = useCallback((chat: Chat): "waiting" | "in_progress" | null => {
+    // 1) Direct session_id match (remoteJid)
+    if (supportQueueMap.bySession.has(chat.remoteJid)) return supportQueueMap.bySession.get(chat.remoteJid)!;
+    // 2) Lead-based match
+    const chatLead = findLeadByChat(chat.remoteJid, chat.remoteJidAlt, chat.phone);
+    if (chatLead?.id && supportQueueMap.byLeadId.has(chatLead.id)) return supportQueueMap.byLeadId.get(chatLead.id)!;
+    return null;
+  }, [supportQueueMap, findLeadByChat]);
 
   // Apply filters to chats
   const filteredChats = useMemo(() => {
