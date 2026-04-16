@@ -946,6 +946,28 @@ serve(async (req) => {
           .eq("session_id", session_id)
           .eq("status", "pending");
 
+        // Fetch lead data for ticket
+        let mediaLeadName: string | null = null;
+        let mediaLeadPhone: string | null = null;
+        if (lead_id) {
+          const { data: ld } = await supabase.from("leads").select("name, phone").eq("id", lead_id).single();
+          if (ld) { mediaLeadName = ld.name; mediaLeadPhone = ld.phone; }
+        }
+
+        // Create support ticket linked to lead
+        const { data: mediaTicket } = await supabase.from("support_tickets").insert({
+          workspace_id: agent.workspace_id,
+          user_id: "00000000-0000-0000-0000-000000000000",
+          subject: `Suporte: ${mediaLeadName || mediaLeadPhone || "Contato"} — Mídia recebida`,
+          status: "open",
+          priority: "medium",
+          lead_id: lead_id || null,
+          lead_name: mediaLeadName,
+          lead_phone: mediaLeadPhone,
+          session_id,
+          instance_name: agent.instance_name || reqInstanceName || null,
+        }).select("id").single();
+
         // Insert into human support queue
         await supabase.from("human_support_queue").insert({
           workspace_id: agent.workspace_id,
@@ -955,6 +977,7 @@ serve(async (req) => {
           instance_name: agent.instance_name || reqInstanceName || null,
           reason: `Mídia recebida (${mediaLabel.toLowerCase()})`,
           status: "waiting",
+          ticket_id: mediaTicket?.id || null,
         });
 
         // Log execution
@@ -1657,20 +1680,46 @@ serve(async (req) => {
               }
               break;
             }
-            case "pausar_ia":
+            case "pausar_ia": {
               await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
-              // Internal note saved to human_support_queue.reason only — NOT sent to client
+              // Fetch lead data for linked ticket
+              let pauseLeadName: string | null = null;
+              let pauseLeadPhone: string | null = null;
+              const pauseLeadId = lead_id && isValidUUID(lead_id) ? lead_id : null;
+              if (pauseLeadId) {
+                const { data: pld } = await supabase.from("leads").select("name, phone").eq("id", pauseLeadId).single();
+                if (pld) { pauseLeadName = pld.name; pauseLeadPhone = pld.phone; }
+              }
+              const pauseReason = `pausar_ia: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}`;
+
+              // Create linked support ticket
+              const { data: pauseTicket } = await supabase.from("support_tickets").insert({
+                workspace_id: agent.workspace_id,
+                user_id: "00000000-0000-0000-0000-000000000000",
+                subject: `Suporte: ${pauseLeadName || pauseLeadPhone || "Contato"} — IA escalou`,
+                status: "open",
+                priority: "high",
+                lead_id: pauseLeadId,
+                lead_name: pauseLeadName,
+                lead_phone: pauseLeadPhone,
+                session_id,
+                instance_name: reqInstanceName || agent.instance_name || null,
+              }).select("id").single();
+
               // Enqueue for human support
               await supabase.from("human_support_queue").insert({
                 workspace_id: agent.workspace_id,
-                lead_id: lead_id && isValidUUID(lead_id) ? lead_id : null,
+                lead_id: pauseLeadId,
                 agent_id,
                 session_id,
-                reason: `pausar_ia: ${typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "N/A"}`,
+                reason: pauseReason,
                 status: "waiting",
                 instance_name: reqInstanceName || agent.instance_name || null,
+                ticket_id: pauseTicket?.id || null,
               }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support:", error); });
               console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (pausar_ia)`);
+              break;
+            }
               break;
             case "agendar_followup": {
               const targetLeadId = lead_id || toolArgs.lead_id;
