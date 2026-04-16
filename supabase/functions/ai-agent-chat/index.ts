@@ -1330,10 +1330,19 @@ serve(async (req) => {
         const MAX_CONTEXT_MESSAGES = 30;
         const contextWindow = Math.min(memory.context_window || MAX_CONTEXT_MESSAGES, MAX_CONTEXT_MESSAGES);
 
+        // ✨ FIX 4b: Estimate total context size — force summarize if > 50k tokens (~200k chars)
+        // This prevents token explosion from long histories with images/long messages.
+        const estimateChars = messages.reduce((acc, m) => acc + (typeof m.content === "string" ? m.content.length : 1000), 0);
+        const estimatedTokens = Math.ceil(estimateChars / 4); // rough: 4 chars/token
+        const forceSummarize = estimatedTokens > 50000;
+        if (forceSummarize) {
+          console.warn(`[ai-agent-chat] ⚠️ Context exceeds 50k tokens (~${estimatedTokens}), forcing summarization`);
+        }
+
         // --- CONTEXT SUMMARIZATION ---
-        // If messages exceed the context window, summarize older messages to preserve context while saving tokens
+        // If messages exceed the context window OR estimated tokens > 50k, summarize older messages
         let summaryPrefix = "";
-        if (messages.length > contextWindow && lovableApiKey) {
+        if ((messages.length > contextWindow || forceSummarize) && lovableApiKey) {
           const olderMessages = messages.slice(0, messages.length - contextWindow);
           const existingSummaryData = memory.summary ? JSON.parse(memory.summary || "{}") : {};
           const previousSummary = existingSummaryData.context_summary || "";
