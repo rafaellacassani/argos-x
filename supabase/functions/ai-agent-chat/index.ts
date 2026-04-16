@@ -1962,7 +1962,10 @@ serve(async (req) => {
                         body: JSON.stringify({ eventId: newEvent.id }),
                       });
                       const syncData = await syncRes.json();
-                      if (syncData.meetLink) meetLink = syncData.meetLink;
+                      if (syncData.meetLink) {
+                        meetLink = syncData.meetLink;
+                        internalNotes += `\n[INSTRUÇÃO INTERNA: Inclua TAMBÉM este link da reunião na confirmação: ${meetLink}]`;
+                      }
                       console.log(`[ai-agent-chat] 📅 Synced to Google, meetLink: ${meetLink}`);
                     }
                   } catch (syncErr) {
