@@ -76,9 +76,9 @@ Deno.serve(async (req) => {
 
     if (!invite) {
       return new Response(
-        JSON.stringify({ error: "No pending invite found" }),
+        JSON.stringify({ success: false, message: "No pending invite found" }),
         {
-          status: 404,
+          status: 200,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
