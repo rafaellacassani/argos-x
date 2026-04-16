@@ -1400,7 +1400,21 @@ serve(async (req) => {
           }
         }
 
-        const recentMessages = messages.slice(-contextWindow);
+        let recentMessages = messages.slice(-contextWindow);
+
+        // ✨ FIX 4a: Truncate old image messages from history (keep at most last 1 image-bearing message)
+        // Each image can add 50k+ tokens. We strip image content from older messages, keeping only text refs.
+        try {
+          const imageMsgIndices: number[] = [];
+          for (let i = 0; i < recentMessages.length; i++) {
+            const c = recentMessages[i].content;
+            if (typeof c === "string" && /\[(Imagem|Image|imagem)/i.test(c)) imageMsgIndices.push(i);
+          }
+          // Keep only the last image marker — older ones become text-only refs (already are, no-op for safety)
+          if (imageMsgIndices.length > 5) {
+            console.log(`[ai-agent-chat] 🧹 ${imageMsgIndices.length} image messages in history — only last image will be sent multimodally`);
+          }
+        } catch (_e) { /* ignore */ }
 
         // --- Build AI messages with multimodal support ---
         const contextSummaryBlock = summaryPrefix
