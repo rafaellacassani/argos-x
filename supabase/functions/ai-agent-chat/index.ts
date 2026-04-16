@@ -991,6 +991,9 @@ serve(async (req) => {
           workspace_id: agent.workspace_id,
         });
 
+        // Auto-tag lead "Em suporte"
+        if (lead_id) await addSupportTagFromAgent(supabase, agent.workspace_id, lead_id);
+
         console.log(`[ai-agent-chat] ✅ Media handoff complete — session paused, support ticket created`);
         return new Response(JSON.stringify({
           response: handoffReply,
@@ -1717,10 +1720,11 @@ serve(async (req) => {
                 instance_name: reqInstanceName || agent.instance_name || null,
                 ticket_id: pauseTicket?.id || null,
               }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support:", error); });
+              // Auto-tag lead "Em suporte"
+              if (pauseLeadId) await addSupportTagFromAgent(supabase, agent.workspace_id, pauseLeadId);
               console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (pausar_ia)`);
               break;
             }
-              break;
             case "agendar_followup": {
               const targetLeadId = lead_id || toolArgs.lead_id;
               if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.scheduled_at === "string" && typeof toolArgs.message === "string") {
@@ -2091,6 +2095,8 @@ serve(async (req) => {
           status: "waiting",
           instance_name: reqInstanceName || agent.instance_name || null,
         }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support (fallback):", error); });
+        // Auto-tag lead "Em suporte"
+        if (lead_id && isValidUUID(lead_id)) await addSupportTagFromAgent(supabase, agent.workspace_id, lead_id);
         console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (fallback_limit)`);
 
         await supabase.from("agent_executions").insert({
