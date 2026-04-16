@@ -254,8 +254,25 @@ export default function SupportAdmin() {
     if (selected) {
       setMsgOffset(0);
       loadMessages(selected);
+      setNoteMode(false);
+      setNoteText("");
+      // Load notes for selected ticket
+      (async () => {
+        const { data } = await supabase
+          .from("support_notes" as any)
+          .select("*")
+          .eq("queue_item_id", selected.id)
+          .order("created_at", { ascending: true });
+        const rows = (data || []) as any as SupportNote[];
+        // enrich with author names
+        setNotes(rows.map(n => ({
+          ...n,
+          author_name: teamMembers.find(m => m.user_id === n.user_id)?.full_name || "Usuário",
+        })));
+      })();
     } else {
       setMessages([]);
+      setNotes([]);
     }
   }, [selected?.id]);
 
