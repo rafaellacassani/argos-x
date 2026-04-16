@@ -2759,6 +2759,17 @@ export default function Chats() {
     return () => clearTimeout(timer);
   }, [searchTerm, workspaceId]);
 
+  // Build support queue lookup by session_id (remote_jid)
+  const supportQueueMap = useMemo(() => {
+    const map = new Map<string, "waiting" | "in_progress">();
+    for (const q of queue) {
+      if ((q.status === "waiting" || q.status === "in_progress") && q.session_id) {
+        map.set(q.session_id, q.status as "waiting" | "in_progress");
+      }
+    }
+    return map;
+  }, [queue]);
+
   // Apply filters to chats
   const filteredChats = useMemo(() => {
     const normalizedSearchDigits = normalizeDigits(searchTerm);
