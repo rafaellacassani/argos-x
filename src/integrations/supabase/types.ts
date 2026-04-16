@@ -1749,6 +1749,7 @@ export type Database = {
           resolved_at: string | null
           session_id: string | null
           status: string
+          ticket_id: string | null
           updated_at: string
           workspace_id: string
         }
@@ -1764,6 +1765,7 @@ export type Database = {
           resolved_at?: string | null
           session_id?: string | null
           status?: string
+          ticket_id?: string | null
           updated_at?: string
           workspace_id: string
         }
@@ -1779,6 +1781,7 @@ export type Database = {
           resolved_at?: string | null
           session_id?: string | null
           status?: string
+          ticket_id?: string | null
           updated_at?: string
           workspace_id?: string
         }
@@ -1805,6 +1808,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      human_support_queue_backup_20260416: {
+        Row: {
+          agent_id: string | null
+          assigned_to: string | null
+          created_at: string | null
+          id: string | null
+          instance_name: string | null
+          lead_id: string | null
+          notes: string | null
+          reason: string | null
+          resolved_at: string | null
+          session_id: string | null
+          status: string | null
+          updated_at: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          agent_id?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string | null
+          instance_name?: string | null
+          lead_id?: string | null
+          notes?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          agent_id?: string | null
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string | null
+          instance_name?: string | null
+          lead_id?: string | null
+          notes?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: []
       }
       lead_attribution: {
         Row: {
@@ -3275,8 +3326,14 @@ export type Database = {
           assigned_to: string | null
           created_at: string
           id: string
+          instance_name: string | null
+          lead_id: string | null
+          lead_name: string | null
+          lead_phone: string | null
           priority: string
+          queue_item_id: string | null
           resolved_at: string | null
+          session_id: string | null
           status: string
           subject: string
           updated_at: string
@@ -3287,8 +3344,14 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           id?: string
+          instance_name?: string | null
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
           priority?: string
+          queue_item_id?: string | null
           resolved_at?: string | null
+          session_id?: string | null
           status?: string
           subject?: string
           updated_at?: string
@@ -3299,8 +3362,14 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           id?: string
+          instance_name?: string | null
+          lead_id?: string | null
+          lead_name?: string | null
+          lead_phone?: string | null
           priority?: string
+          queue_item_id?: string | null
           resolved_at?: string | null
+          session_id?: string | null
           status?: string
           subject?: string
           updated_at?: string
@@ -3316,6 +3385,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      support_tickets_backup_20260416: {
+        Row: {
+          assigned_to: string | null
+          created_at: string | null
+          id: string | null
+          priority: string | null
+          resolved_at: string | null
+          status: string | null
+          subject: string | null
+          updated_at: string | null
+          user_id: string | null
+          workspace_id: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string | null
+          priority?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          subject?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string | null
+          id?: string | null
+          priority?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          subject?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          workspace_id?: string | null
+        }
+        Relationships: []
       }
       tag_rules: {
         Row: {
