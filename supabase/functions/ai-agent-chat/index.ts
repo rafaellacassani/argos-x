@@ -272,19 +272,37 @@ function buildAiFallbackReply(userMessage: string, mediaType?: string | null, ag
   // IMPORTANT: must be capitalized AND not a generic word (avoids "sou iniciante" → "iniciante")
   const NAME_BLOCKLIST = new Set([
     "iniciante","iniciantes","interessado","interessada","cliente","aluno","aluna",
-    "profissional","novo","nova","aqui","eu","ela","ele","apenas","só","so",
-    "curioso","curiosa","estudante","comprador","compradora","visitante"
+    "profissional","profissionais","novo","nova","novato","novata","aqui","eu","ela","ele","apenas","só","so",
+    "curioso","curiosa","estudante","comprador","compradora","visitante",
+    "autônomo","autonomo","autônoma","autonoma","de","uma","um","vendedor","vendedora",
+    "responsável","responsavel","quero","lead","contato","pessoa","atendente","suporte",
+    "comprador","compradora","novato","novata","gerente","diretor","diretora","dono","dona",
+    "empresário","empresario","empresária","empresaria","funcionário","funcionario",
+    "moça","moca","senhor","senhora","sr","sra","amigo","amiga","colega"
   ]);
   let leadName = "";
   if (memoryMessages) {
     const summaryMessages = memoryMessages.filter(m => m.role === "user");
+    // Build a lowercased corpus to detect if a candidate appears in lowercase elsewhere (= common word, not name)
+    const corpusLower = summaryMessages.map(m => (m.content || "").toLowerCase()).join(" ");
     for (const m of summaryMessages) {
-      // Case-sensitive on first letter — names start uppercase
-      const match = m.content?.match(/(?:sou|meu nome[: é]*|me chamo)\s+([A-ZÀ-Ú][a-zà-ú]{2,})/);
-      if (match && !NAME_BLOCKLIST.has(match[1].toLowerCase())) {
-        leadName = match[1];
-        break;
-      }
+      // Stricter: requires "sou/me chamo/meu nome" + Capitalized word ≥3 chars
+      // Also tries 2-word names (Maria Silva)
+      const match = m.content?.match(/(?:sou\s+(?:o|a)?\s*|meu nome[: é]*\s*|me chamo\s+)([A-ZÀ-Ú][a-zà-ú]{2,}(?:\s+[A-ZÀ-Ú][a-zà-ú]{2,})?)/);
+      if (!match) continue;
+      const candidate = match[1].trim();
+      const firstWord = candidate.split(/\s+/)[0];
+      const firstWordLower = firstWord.toLowerCase();
+      if (NAME_BLOCKLIST.has(firstWordLower)) continue;
+      if (firstWord.length < 3) continue;
+      // Reject if first letter is not uppercase (defensive — regex already enforces but double-check)
+      if (firstWord[0] !== firstWord[0].toUpperCase()) continue;
+      // Reject if same word appears in lowercase elsewhere in corpus (means it's a common word, not a name)
+      const lowerOccurrences = (corpusLower.match(new RegExp(`\\b${firstWordLower}\\b`, "g")) || []).length;
+      const upperOccurrences = (m.content?.match(new RegExp(`\\b${firstWord}\\b`, "g")) || []).length;
+      if (lowerOccurrences > upperOccurrences) continue;
+      leadName = firstWord;
+      break;
     }
   }
 
