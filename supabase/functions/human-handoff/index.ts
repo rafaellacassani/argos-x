@@ -214,7 +214,6 @@ async function handleIntercept(supabase: any, params: {
   }
 
   // 7. Also populate lead_id/lead_name/lead_phone on the support_tickets linked to the queue
-  // (backfill for existing queue items that got updated instead of inserted)
   if (ticket?.id && lead_id) {
     await supabase
       .from("support_tickets")
@@ -226,6 +225,11 @@ async function handleIntercept(supabase: any, params: {
         instance_name: instance_name || null,
       })
       .eq("id", ticket.id);
+  }
+
+  // 8. Auto-tag lead with "Em suporte"
+  if (lead_id) {
+    await addSupportTag(supabase, workspace_id, lead_id);
   }
 
   console.log(`[human-handoff] ✅ Intercept complete. ticket=${ticket?.id}, queue=${queueItem?.id}, lead=${leadName}/${leadPhone}`);
@@ -324,6 +328,12 @@ async function handleResume(supabase: any, params: {
     }
   }
 
+  // 5. Remove "Em suporte" tag from lead
+  if (resolvedLeadId) {
+    const wsId = queueItem?.workspace_id || workspace_id;
+    await removeSupportTag(supabase, wsId, resolvedLeadId);
+  }
+
   console.log(`[human-handoff] ✅ Resume complete.`);
 
   return new Response(JSON.stringify({
@@ -331,4 +341,77 @@ async function handleResume(supabase: any, params: {
     resumed_session: resolvedSessionId,
     resumed_lead: resolvedLeadId,
   }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+
+/* ─── Tag helpers ─── */
+
+async function getOrCreateSupportTag(supabase: any, workspaceId: string): Promise<string | null> {
+  const TAG_NAME = "Em suporte";
+  const TAG_COLOR = "#EF4444"; // red
+
+  // Check if tag exists
+  const { data: existing } = await supabase
+    .from("lead_tags")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("name", TAG_NAME)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  // Create tag
+  const { data: created, error } = await supabase
+    .from("lead_tags")
+    .insert({ workspace_id: workspaceId, name: TAG_NAME, color: TAG_COLOR })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[human-handoff] Failed to create support tag:", error.message);
+    return null;
+  }
+  return created.id;
+}
+
+async function addSupportTag(supabase: any, workspaceId: string, leadId: string) {
+  const tagId = await getOrCreateSupportTag(supabase, workspaceId);
+  if (!tagId) return;
+
+  // Check if already assigned
+  const { data: exists } = await supabase
+    .from("lead_tag_assignments")
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("tag_id", tagId)
+    .limit(1)
+    .maybeSingle();
+
+  if (exists) return;
+
+  await supabase.from("lead_tag_assignments").insert({
+    workspace_id: workspaceId,
+    lead_id: leadId,
+    tag_id: tagId,
+  });
+  console.log(`[human-handoff] 🏷️ Tag "Em suporte" added to lead ${leadId}`);
+}
+
+async function removeSupportTag(supabase: any, workspaceId: string, leadId: string) {
+  const { data: tag } = await supabase
+    .from("lead_tags")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("name", "Em suporte")
+    .limit(1)
+    .maybeSingle();
+
+  if (!tag) return;
+
+  await supabase
+    .from("lead_tag_assignments")
+    .delete()
+    .eq("lead_id", leadId)
+    .eq("tag_id", tag.id);
+  console.log(`[human-handoff] 🏷️ Tag "Em suporte" removed from lead ${leadId}`);
 }

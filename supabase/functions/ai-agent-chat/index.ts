@@ -991,6 +991,9 @@ serve(async (req) => {
           workspace_id: agent.workspace_id,
         });
 
+        // Auto-tag lead "Em suporte"
+        if (lead_id) await addSupportTagFromAgent(supabase, agent.workspace_id, lead_id);
+
         console.log(`[ai-agent-chat] ✅ Media handoff complete — session paused, support ticket created`);
         return new Response(JSON.stringify({
           response: handoffReply,
@@ -1717,10 +1720,11 @@ serve(async (req) => {
                 instance_name: reqInstanceName || agent.instance_name || null,
                 ticket_id: pauseTicket?.id || null,
               }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support:", error); });
+              // Auto-tag lead "Em suporte"
+              if (pauseLeadId) await addSupportTagFromAgent(supabase, agent.workspace_id, pauseLeadId);
               console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (pausar_ia)`);
               break;
             }
-              break;
             case "agendar_followup": {
               const targetLeadId = lead_id || toolArgs.lead_id;
               if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.scheduled_at === "string" && typeof toolArgs.message === "string") {
@@ -2091,6 +2095,8 @@ serve(async (req) => {
           status: "waiting",
           instance_name: reqInstanceName || agent.instance_name || null,
         }).then(({ error }) => { if (error) console.error("[ai-agent-chat] ❌ Failed to enqueue support (fallback):", error); });
+        // Auto-tag lead "Em suporte"
+        if (lead_id && isValidUUID(lead_id)) await addSupportTagFromAgent(supabase, agent.workspace_id, lead_id);
         console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (fallback_limit)`);
 
         await supabase.from("agent_executions").insert({
@@ -2211,3 +2217,50 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Internal server error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+/* ─── Support tag helper ─── */
+async function addSupportTagFromAgent(supabase: any, workspaceId: string, leadId: string) {
+  try {
+    const TAG_NAME = "Em suporte";
+    const TAG_COLOR = "#EF4444";
+
+    // Get or create tag
+    let { data: tag } = await supabase
+      .from("lead_tags")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("name", TAG_NAME)
+      .limit(1)
+      .maybeSingle();
+
+    if (!tag) {
+      const { data: created } = await supabase
+        .from("lead_tags")
+        .insert({ workspace_id: workspaceId, name: TAG_NAME, color: TAG_COLOR })
+        .select("id")
+        .single();
+      tag = created;
+    }
+    if (!tag) return;
+
+    // Check if already assigned
+    const { data: exists } = await supabase
+      .from("lead_tag_assignments")
+      .select("id")
+      .eq("lead_id", leadId)
+      .eq("tag_id", tag.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (!exists) {
+      await supabase.from("lead_tag_assignments").insert({
+        workspace_id: workspaceId,
+        lead_id: leadId,
+        tag_id: tag.id,
+      });
+      console.log(`[ai-agent-chat] 🏷️ Tag "Em suporte" added to lead ${leadId}`);
+    }
+  } catch (err: any) {
+    console.error("[ai-agent-chat] Failed to add support tag:", err.message);
+  }
+}
