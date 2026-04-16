@@ -30,11 +30,11 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const [tourActive, setTourActive] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [supportOpen, setSupportOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && workspace) {
-      // Only show tour if never started (step 0 or null) AND not completed
-      // Also don't show if workspace is blocked/expired
       const neverStarted = !workspace.onboarding_step || workspace.onboarding_step === 0;
       const notCompleted = workspace.onboarding_completed === false;
       const isAllowed = allowed !== false;
@@ -42,7 +42,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       if (notCompleted && neverStarted && isAllowed) {
         setTourActive(true);
       } else if (notCompleted && !neverStarted) {
-        // User started tour before but didn't finish — auto-complete it
         import("@/integrations/supabase/client").then(({ supabase }) => {
           supabase
             .from("workspaces")
@@ -83,7 +82,12 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex min-h-screen w-full bg-background">
-      <AppSidebar mobileOpen={mobileOpen} onMobileOpenChange={setMobileOpen} />
+      <AppSidebar
+        mobileOpen={mobileOpen}
+        onMobileOpenChange={setMobileOpen}
+        onOpenAssistant={() => { setAssistantOpen(true); setSupportOpen(false); }}
+        onOpenSupport={() => { setSupportOpen(true); setAssistantOpen(false); }}
+      />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar mobileMenuSlot={mobileMenuSlot} />
         {isAdminViewing && (
@@ -113,8 +117,8 @@ export function AppLayout({ children }: AppLayoutProps) {
         initialStep={workspace?.onboarding_step || 0}
         onComplete={handleTourComplete}
       />
-      <WorkspaceAssistantWidget />
-      <SupportChatWidget />
+      <WorkspaceAssistantWidget open={assistantOpen} onOpenChange={setAssistantOpen} />
+      <SupportChatWidget open={supportOpen} onOpenChange={setSupportOpen} />
     </div>
   );
 }

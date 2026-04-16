@@ -17,8 +17,16 @@ const SUGGESTIONS = [
   "Resumo do meu workspace",
 ];
 
-export function WorkspaceAssistantWidget() {
-  const [open, setOpen] = useState(false);
+interface WorkspaceAssistantWidgetProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function WorkspaceAssistantWidget({ open: externalOpen, onOpenChange }: WorkspaceAssistantWidgetProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = externalOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -111,21 +119,7 @@ export function WorkspaceAssistantWidget() {
     }
   };
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-20 right-6 z-50 flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 text-white px-4 py-2.5 shadow-lg hover:shadow-xl transition-all hover:scale-105 active:scale-95 text-sm font-medium"
-        aria-label="Abrir assistente IA"
-      >
-        <Sparkles className="h-4 w-4" />
-        <span className="hidden sm:inline">Assistente IA</span>
-        <span className="absolute -top-3 -right-3 bg-emerald-400 text-emerald-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-[0_0_8px_2px_rgba(52,211,153,0.7)] animate-[pulse_1s_ease-in-out_infinite]">
-          ✨ Novo
-        </span>
-      </button>
-    );
-  }
+  if (!open) return null;
 
   return (
     <div className="fixed bottom-20 right-6 z-50 w-[400px] max-w-[calc(100vw-2rem)] h-[540px] max-h-[calc(100vh-8rem)] rounded-2xl border bg-background shadow-2xl flex flex-col overflow-hidden">

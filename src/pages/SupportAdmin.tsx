@@ -285,6 +285,13 @@ export default function SupportAdmin() {
     }
   }, [msgsLoading, messages.length, msgOffset]);
 
+  // Scroll to bottom when switching reply mode
+  useEffect(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current?.scrollHeight || 0, behavior: "smooth" });
+    }, 50);
+  }, [noteMode]);
+
   // Realtime for new messages
   useEffect(() => {
     if (!selected?.session_id || !selected?.instance_name) return;
