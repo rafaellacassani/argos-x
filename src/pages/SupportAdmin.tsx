@@ -9,9 +9,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Headset, Loader2, ArrowLeft, CheckCircle, User, Phone,
   ArrowRightLeft, Eye, Calendar, Hash, AlertTriangle, ChevronDown, ChevronUp,
+  Lock, Send, MessageSquare, StickyNote,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { MessageBubble } from "@/components/chat/MessageBubble";
