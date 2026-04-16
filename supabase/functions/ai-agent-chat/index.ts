@@ -1936,8 +1936,20 @@ serve(async (req) => {
 
                 if (calErr) {
                   console.error("[ai-agent-chat] ❌ Calendar insert error:", calErr);
+                  internalNotes += `\n\n[INSTRUÇÃO INTERNA: Houve um problema ao registrar o agendamento. Peça desculpas brevemente ao lead e sugira tentar novamente em instantes.]`;
                 } else {
                   console.log(`[ai-agent-chat] 📅 Event created: ${newEvent.id}`);
+
+                  // Format human-friendly confirmation for the AI to relay to the lead
+                  const fmtDate = startDate.toLocaleString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                  internalNotes += `\n\n[INSTRUÇÃO INTERNA: O agendamento foi criado com SUCESSO no calendário (${fmtDate}). CONFIRME ao lead de forma natural e amigável que o compromisso foi marcado, repetindo data e horário, e diga que ele receberá lembretes. NÃO diga que vai agendar — diga que JÁ está agendado.]`;
 
                   // Try to push to Google Calendar and get Meet link
                   let meetLink: string | null = null;
