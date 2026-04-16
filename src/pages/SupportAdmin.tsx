@@ -285,11 +285,15 @@ export default function SupportAdmin() {
     }
   }, [msgsLoading, messages.length, msgOffset]);
 
-  // Scroll to bottom when switching reply mode
+  // Reload messages + scroll when switching back to WhatsApp mode
   useEffect(() => {
+    if (!noteMode && selected) {
+      // Re-fetch messages to ensure they're present
+      loadMessages(selected);
+    }
     setTimeout(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current?.scrollHeight || 0, behavior: "smooth" });
-    }, 50);
+    }, 150);
   }, [noteMode]);
 
   // Realtime for new messages
