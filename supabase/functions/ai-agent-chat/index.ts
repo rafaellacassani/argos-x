@@ -1723,9 +1723,19 @@ serve(async (req) => {
           console.log(`[ai-agent-chat] 📊 Tokens used: ${tokensFromApi}`);
         }
 
+        // ✨ FIX 2: Only use fallback "instabilidade técnica" on REAL failure (no content AND no tool calls).
+        // If model returned tool_calls but no text, use a neutral transition message instead — NOT the error fallback.
         if (!responseContent?.trim()) {
-          responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
-          usedFallback = true;
+          if (toolCalls && toolCalls.length > 0) {
+            // Model called a tool silently — generate a neutral acknowledgement, not an error message
+            responseContent = "Só um instante…";
+            console.log(`[ai-agent-chat] ℹ️ Tool-call without text — using neutral placeholder (no fallback)`);
+          } else {
+            // True empty response — log it before falling back so we can monitor
+            console.warn(`[ai-agent-chat] ⚠️ Truly empty AI response — using fallback. Model: ${rawModelName}, provider: ${provider}, status was OK`);
+            responseContent = buildAiFallbackReply(messageText, media_type, agent, messages);
+            usedFallback = true;
+          }
         }
 
         // internalNotes already declared above
