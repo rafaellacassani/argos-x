@@ -214,7 +214,6 @@ async function handleIntercept(supabase: any, params: {
   }
 
   // 7. Also populate lead_id/lead_name/lead_phone on the support_tickets linked to the queue
-  // (backfill for existing queue items that got updated instead of inserted)
   if (ticket?.id && lead_id) {
     await supabase
       .from("support_tickets")
@@ -226,6 +225,11 @@ async function handleIntercept(supabase: any, params: {
         instance_name: instance_name || null,
       })
       .eq("id", ticket.id);
+  }
+
+  // 8. Auto-tag lead with "Em suporte"
+  if (lead_id) {
+    await addSupportTag(supabase, workspace_id, lead_id);
   }
 
   console.log(`[human-handoff] ✅ Intercept complete. ticket=${ticket?.id}, queue=${queueItem?.id}, lead=${leadName}/${leadPhone}`);
