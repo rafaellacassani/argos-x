@@ -53,6 +53,7 @@ const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
 const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const TeamChat = lazy(() => import("./pages/TeamChat"));
+const Departments = lazy(() => import("./pages/Departments"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -159,6 +160,7 @@ const App = () => (
                             <Route path="/suporte" element={<SupportAdmin />} />
                             <Route path="/clients" element={<ClientsPage />} />
                             <Route path="/equipe" element={<TeamChat />} />
+                            <Route path="/departamentos" element={<PageAccessGuard path="/ai-agents"><Departments /></PageAccessGuard>} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
                         </Suspense>
