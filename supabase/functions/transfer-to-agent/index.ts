@@ -19,18 +19,21 @@ serve(async (req) => {
     const rawEvolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionApiUrl = rawEvolutionUrl.replace(/\/manager\/?$/, "");
 
-    // Auth check
+    // Auth check — accept service-role token (internal calls from ai-agent-chat) or user JWT
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await authClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const isServiceRole = token === supabaseServiceKey;
+    if (!isServiceRole) {
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userError } = await authClient.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -335,6 +338,52 @@ Responda APENAS com a mensagem, sem aspas ou prefixos.`;
       });
     }
 
+    // 8. Atomic lock: claim active_agent_id on lead + bump transfer_count + log
+    await supabase.rpc("claim_lead_agent", {
+      _lead_id: lead_id,
+      _agent_id: target_agent_id,
+      _department_id: targetAgent.department_id || null,
+    });
+
+    if (source_agent_id) {
+      // Bump transfer_count on source memory (we already paused above)
+      await supabase.rpc as any; // noop, just to keep sequence
+      const { data: srcMem2 } = await supabase
+        .from("agent_memories")
+        .select("id, transfer_count")
+        .eq("agent_id", source_agent_id)
+        .eq("lead_id", lead_id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (srcMem2 && srcMem2.length > 0) {
+        await supabase
+          .from("agent_memories")
+          .update({
+            transfer_count: ((srcMem2[0] as any).transfer_count || 0) + 1,
+            last_transfer_at: new Date().toISOString(),
+          })
+          .eq("id", srcMem2[0].id);
+      }
+    }
+
+    // Log transfer
+    let sourceDeptId: string | null = null;
+    if (source_agent_id) {
+      const { data: srcAgent } = await supabase
+        .from("ai_agents").select("department_id").eq("id", source_agent_id).single();
+      sourceDeptId = (srcAgent as any)?.department_id || null;
+    }
+    await supabase.from("department_transfers").insert({
+      workspace_id: lead.workspace_id,
+      lead_id,
+      from_agent_id: source_agent_id || null,
+      to_agent_id: target_agent_id,
+      from_department_id: sourceDeptId,
+      to_department_id: targetAgent.department_id || null,
+      reason: reason || null,
+      triggered_by: triggered_by || (isServiceRole ? "ai_auto" : "human"),
+    });
+
     console.log(`[transfer-to-agent] ✅ Transfer complete: ${sourceAgentName} → ${targetAgent.name} for lead ${leadName} (sent: ${messageSent})`);
 
     return new Response(JSON.stringify({
@@ -342,6 +391,7 @@ Responda APENAS com a mensagem, sem aspas ou prefixos.`;
       message_sent: messageSent,
       intro_message: introMessage,
       target_agent: targetAgent.name,
+      target_agent_id,
       source_agent: sourceAgentName,
     }), {
       status: 200,
