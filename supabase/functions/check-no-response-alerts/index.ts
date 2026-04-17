@@ -886,10 +886,18 @@ Deno.serve(async (req) => {
 
         const { data: memory } = await supabase
           .from("agent_memories")
-          .select("messages")
+          .select("messages, is_paused")
           .eq("agent_id", agent.id)
           .eq("session_id", item.session_id)
           .single();
+
+        // ⏸️ Cancel if session is paused (human took over, opt-out, etc.)
+        if (memory?.is_paused) {
+          await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "session_paused" }).eq("id", item.id);
+          followupsProcessed++;
+          console.log(`[followup-queue] ⏭️ Canceled — session paused: ${lead.name}`);
+          continue;
+        }
 
         if (memory?.messages && Array.isArray(memory.messages) && memory.messages.length > 0) {
           const lastMsg = memory.messages[memory.messages.length - 1];
@@ -899,6 +907,48 @@ Deno.serve(async (req) => {
             console.log(`[followup-queue] ⏭️ Canceled — lead responded: ${lead.name}`);
             continue;
           }
+
+          // 🔑 NEW: Cancel if the lead replied AFTER this follow-up was scheduled.
+          // This catches the case where the conversation ended naturally
+          // (user → assistant ack like "Perfeito!") but a follow-up was already in queue.
+          const itemCreatedAt = new Date(item.created_at).getTime();
+          const userRepliedAfterScheduling = memory.messages.some((m: any) => {
+            if (m.role !== "user") return false;
+            const ts = m.timestamp ? new Date(m.timestamp).getTime() : 0;
+            return ts > itemCreatedAt;
+          });
+          if (userRepliedAfterScheduling) {
+            await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "lead_responded_after_scheduling" }).eq("id", item.id);
+            followupsProcessed++;
+            console.log(`[followup-queue] ⏭️ Canceled — lead replied after follow-up was scheduled: ${lead.name}`);
+            continue;
+          }
+        }
+
+        // 🔑 Extra guard: check raw whatsapp_messages for any inbound from this lead
+        // after the follow-up was scheduled (covers cases where memory was not updated).
+        try {
+          const phoneDigits = (lead.phone || "").replace(/\D/g, "");
+          if (phoneDigits.length >= 10) {
+            const last10 = phoneDigits.slice(-10);
+            const { data: recentInbound } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("workspace_id", item.workspace_id)
+              .eq("direction", "inbound")
+              .gte("created_at", item.created_at)
+              .ilike("remote_jid", `%${last10}%`)
+              .limit(1)
+              .maybeSingle();
+            if (recentInbound) {
+              await supabase.from("agent_followup_queue").update({ status: "canceled", canceled_reason: "inbound_after_scheduling" }).eq("id", item.id);
+              followupsProcessed++;
+              console.log(`[followup-queue] ⏭️ Canceled — inbound message after scheduling: ${lead.name}`);
+              continue;
+            }
+          }
+        } catch (e) {
+          console.warn(`[followup-queue] inbound check failed:`, e);
         }
 
         const sequence = agent.followup_sequence || [];
