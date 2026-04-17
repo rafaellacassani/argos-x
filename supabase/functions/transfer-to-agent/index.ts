@@ -19,45 +19,99 @@ serve(async (req) => {
     const rawEvolutionUrl = Deno.env.get("EVOLUTION_API_URL") || "";
     const evolutionApiUrl = rawEvolutionUrl.replace(/\/manager\/?$/, "");
 
-    // Auth check
+    // Auth check — accept service-role token (internal calls from ai-agent-chat) or user JWT
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const token = authHeader.replace("Bearer ", "");
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userError } = await authClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const isServiceRole = token === supabaseServiceKey;
+    if (!isServiceRole) {
+      const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: userError } = await authClient.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { lead_id, target_agent_id, source_agent_id } = await req.json();
+    const body = await req.json();
+    const { lead_id, source_agent_id, reason, triggered_by } = body;
+    let { target_agent_id, target_department_name } = body;
 
-    if (!lead_id || !target_agent_id) {
-      return new Response(JSON.stringify({ error: "lead_id and target_agent_id are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!lead_id || (!target_agent_id && !target_department_name)) {
+      return new Response(JSON.stringify({ error: "lead_id and (target_agent_id or target_department_name) are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // 1. Get lead info
     const { data: lead, error: leadErr } = await supabase
       .from("leads")
-      .select("id, name, phone, whatsapp_jid, instance_name, source, workspace_id")
+      .select("id, name, phone, whatsapp_jid, instance_name, source, workspace_id, active_agent_id")
       .eq("id", lead_id)
       .single();
     if (leadErr || !lead) {
       return new Response(JSON.stringify({ error: "Lead not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // 1b. Resolve target agent by department name if needed
+    if (!target_agent_id && target_department_name) {
+      const { data: deptAgents } = await supabase
+        .from("ai_agents")
+        .select("id, ai_departments!inner(name, workspace_id)")
+        .eq("ai_departments.workspace_id", lead.workspace_id)
+        .ilike("ai_departments.name", target_department_name)
+        .eq("is_active", true)
+        .limit(1);
+      if (deptAgents && deptAgents.length > 0) {
+        target_agent_id = deptAgents[0].id;
+      } else {
+        return new Response(JSON.stringify({ error: `No active agent found in department "${target_department_name}"` }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     // 2. Get target agent
     const { data: targetAgent, error: taErr } = await supabase
       .from("ai_agents")
-      .select("id, name, system_prompt, model, temperature, max_tokens, instance_name, workspace_id, message_split_enabled, message_split_length, knowledge_products, knowledge_faq, knowledge_rules, knowledge_extra, main_objective, tone_of_voice, agent_role, use_emojis, response_length, company_info")
+      .select("id, name, system_prompt, model, temperature, max_tokens, instance_name, workspace_id, message_split_enabled, message_split_length, knowledge_products, knowledge_faq, knowledge_rules, knowledge_extra, main_objective, tone_of_voice, agent_role, use_emojis, response_length, company_info, department_id")
       .eq("id", target_agent_id)
       .single();
     if (taErr || !targetAgent) {
       return new Response(JSON.stringify({ error: "Target agent not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // 2b. Anti-loop: check transfer count in source memory
+    if (source_agent_id) {
+      const { data: srcMem } = await supabase
+        .from("agent_memories")
+        .select("id, transfer_count, last_transfer_at")
+        .eq("agent_id", source_agent_id)
+        .eq("lead_id", lead_id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (srcMem && srcMem.length > 0) {
+        const m = srcMem[0];
+        const recentWindow = m.last_transfer_at && (Date.now() - new Date(m.last_transfer_at).getTime() < 10 * 60 * 1000);
+        if (recentWindow && (m.transfer_count || 0) >= 3) {
+          // Too many transfers — escalate to human instead
+          await supabase.from("human_support_queue").insert({
+            workspace_id: lead.workspace_id,
+            lead_id: lead.id,
+            reason: "transfer_loop_detected",
+            priority: "high",
+            status: "pending",
+            metadata: { transfer_count: m.transfer_count, source_agent_id, attempted_target: target_agent_id },
+          });
+          // Pause source agent
+          await supabase.from("agent_memories").update({ is_paused: true }).eq("id", m.id);
+          return new Response(JSON.stringify({
+            success: false,
+            escalated_to_human: true,
+            message: "Loop de transferência detectado. Atendimento escalado para humano.",
+          }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      }
     }
 
     // 3. Get source agent info (optional, for context)
@@ -284,6 +338,52 @@ Responda APENAS com a mensagem, sem aspas ou prefixos.`;
       });
     }
 
+    // 8. Atomic lock: claim active_agent_id on lead + bump transfer_count + log
+    await supabase.rpc("claim_lead_agent", {
+      _lead_id: lead_id,
+      _agent_id: target_agent_id,
+      _department_id: targetAgent.department_id || null,
+    });
+
+    if (source_agent_id) {
+      // Bump transfer_count on source memory (we already paused above)
+      await supabase.rpc as any; // noop, just to keep sequence
+      const { data: srcMem2 } = await supabase
+        .from("agent_memories")
+        .select("id, transfer_count")
+        .eq("agent_id", source_agent_id)
+        .eq("lead_id", lead_id)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (srcMem2 && srcMem2.length > 0) {
+        await supabase
+          .from("agent_memories")
+          .update({
+            transfer_count: ((srcMem2[0] as any).transfer_count || 0) + 1,
+            last_transfer_at: new Date().toISOString(),
+          })
+          .eq("id", srcMem2[0].id);
+      }
+    }
+
+    // Log transfer
+    let sourceDeptId: string | null = null;
+    if (source_agent_id) {
+      const { data: srcAgent } = await supabase
+        .from("ai_agents").select("department_id").eq("id", source_agent_id).single();
+      sourceDeptId = (srcAgent as any)?.department_id || null;
+    }
+    await supabase.from("department_transfers").insert({
+      workspace_id: lead.workspace_id,
+      lead_id,
+      from_agent_id: source_agent_id || null,
+      to_agent_id: target_agent_id,
+      from_department_id: sourceDeptId,
+      to_department_id: targetAgent.department_id || null,
+      reason: reason || null,
+      triggered_by: triggered_by || (isServiceRole ? "ai_auto" : "human"),
+    });
+
     console.log(`[transfer-to-agent] ✅ Transfer complete: ${sourceAgentName} → ${targetAgent.name} for lead ${leadName} (sent: ${messageSent})`);
 
     return new Response(JSON.stringify({
@@ -291,6 +391,7 @@ Responda APENAS com a mensagem, sem aspas ou prefixos.`;
       message_sent: messageSent,
       intro_message: introMessage,
       target_agent: targetAgent.name,
+      target_agent_id,
       source_agent: sourceAgentName,
     }), {
       status: 200,

@@ -1344,16 +1344,67 @@ NOVAS CAPACIDADES:
     // --- STEP 1: Check for active AI Agent ---
     const { data: agents } = await supabase
       .from("ai_agents")
-      .select("id, instance_name, respond_to, respond_to_stages")
+      .select("id, instance_name, respond_to, respond_to_stages, department_id")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true);
 
     console.log(`[whatsapp-webhook] 🤖 Active agents found: ${agents?.length || 0}`);
 
     if (agents && agents.length > 0) {
-      const matchingAgent = agents.find((a: any) => {
-        return !a.instance_name || a.instance_name === "" || a.instance_name === instanceName;
-      });
+      // 🔒 STEP 1a: If there is already an active_agent_id locked on the lead, USE IT (department transfer in progress)
+      let lockedAgentId: string | null = null;
+      try {
+        const lockOrFilters = [`whatsapp_jid.eq.${remoteJid}`];
+        if (resolvedRemoteJid !== remoteJid) lockOrFilters.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
+        if (phoneNumber.length >= 10 && phoneNumber.length <= 15) {
+          lockOrFilters.push(`phone.like.%${phoneNumber.slice(-10)}`);
+        }
+        const { data: lockedLead } = await supabase
+          .from("leads")
+          .select("active_agent_id, active_agent_set_at")
+          .eq("workspace_id", workspaceId)
+          .or(lockOrFilters.join(","))
+          .limit(1)
+          .single();
+        if (lockedLead?.active_agent_id) {
+          // Expire lock if older than 24h
+          const setAt = lockedLead.active_agent_set_at ? new Date(lockedLead.active_agent_set_at).getTime() : 0;
+          if (Date.now() - setAt < 24 * 60 * 60 * 1000) {
+            lockedAgentId = lockedLead.active_agent_id;
+          }
+        }
+      } catch { /* no lead yet, that's fine */ }
+
+      // 🏢 STEP 1b: Department-aware matching with priority:
+      //    1) Locked agent (already in conversation)
+      //    2) Reception department agent for this instance
+      //    3) Any agent matching this instance (legacy)
+      let matchingAgent = null as any;
+      if (lockedAgentId) {
+        matchingAgent = agents.find((a: any) => a.id === lockedAgentId) || null;
+        if (matchingAgent) console.log(`[whatsapp-webhook] 🔒 Using locked agent ${lockedAgentId}`);
+      }
+      if (!matchingAgent) {
+        // Try reception department first
+        const candidates = agents.filter((a: any) => !a.instance_name || a.instance_name === "" || a.instance_name === instanceName);
+        if (candidates.length > 1) {
+          const deptIds = candidates.map((a: any) => a.department_id).filter(Boolean);
+          if (deptIds.length > 0) {
+            const { data: receptionDepts } = await supabase
+              .from("ai_departments")
+              .select("id")
+              .eq("workspace_id", workspaceId)
+              .eq("is_reception", true)
+              .in("id", deptIds);
+            const receptionId = receptionDepts?.[0]?.id;
+            if (receptionId) {
+              matchingAgent = candidates.find((a: any) => a.department_id === receptionId) || null;
+              if (matchingAgent) console.log(`[whatsapp-webhook] 🌟 Using reception department agent ${matchingAgent.id}`);
+            }
+          }
+        }
+        if (!matchingAgent) matchingAgent = candidates[0] || null;
+      }
 
       if (matchingAgent) {
         console.log(`[whatsapp-webhook] 🎯 Agent matched: ${matchingAgent.id} (instance filter: "${matchingAgent.instance_name || 'all'}")`);

@@ -411,9 +411,27 @@ function getToolDefinitions(enabledTools: string[]) {
         }
       }
     },
+    {
+      type: "function",
+      function: {
+        name: "transferir_departamento",
+        description: "Transfere o atendimento para outro departamento da empresa quando o assunto fugir do seu escopo. Use APENAS quando o cliente perguntar sobre algo de OUTRO departamento (ex: você é Suporte e ele pergunta sobre cobrança/financeiro).",
+        parameters: {
+          type: "object",
+          properties: {
+            department_name: { type: "string", description: "Nome exato do departamento de destino (ex: 'Financeiro', 'Suporte', 'Comercial')" },
+            reason: { type: "string", description: "Motivo curto da transferência" },
+          },
+          required: ["department_name", "reason"],
+        },
+      },
+    },
   ];
-  if (!enabledTools || enabledTools.length === 0) return [];
-  return allTools.filter(t => enabledTools.includes(t.function.name));
+  // transferir_departamento sempre disponível se agente tem departamento — adiciona automaticamente
+  const baseEnabled = enabledTools || [];
+  const effectiveEnabled = baseEnabled.includes("transferir_departamento") ? baseEnabled : [...baseEnabled, "transferir_departamento"];
+  if (effectiveEnabled.length === 0) return [];
+  return allTools.filter(t => effectiveEnabled.includes(t.function.name));
 }
 
 function isValidUUID(str: string): boolean {
@@ -1325,7 +1343,22 @@ serve(async (req) => {
             calendarInstruction = "\n\nGERENCIAMENTO DE CALENDÁRIO: Você pode agendar, reagendar e cancelar reuniões no calendário usando a tool gerenciar_calendario. Use quando o lead quiser marcar uma demonstração, reunião ou compromisso. Ao criar um evento, lembretes automáticos serão enviados antes da reunião." + (generateMeetLink ? " Um link do Google Meet será gerado automaticamente e incluído nos lembretes." : "") + " Calcule a data/hora ISO 8601 usando timezone America/Sao_Paulo (UTC-3). A data/hora atual é: " + new Date().toISOString() + ". Para reagendar ou cancelar, você precisa do event_id (fornecido ao consultar eventos). Ações: 'criar' (novo evento), 'reagendar' (alterar data/hora), 'cancelar' (remover evento), 'consultar' (ver eventos do lead). Para demonstrações, use duração padrão de 15 minutos.";
           }
         }
-        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + GUARDRAILS;
+        // 🏢 Departamentos: se este agente faz parte de um departamento, listar os outros para transferência
+        let departmentBlock = "";
+        if ((agent as any).department_id) {
+          const { data: depts } = await supabase
+            .from("ai_departments")
+            .select("id, name, description, is_reception")
+            .eq("workspace_id", agent.workspace_id);
+          const myDept = depts?.find((d: any) => d.id === (agent as any).department_id);
+          const otherDepts = (depts || []).filter((d: any) => d.id !== (agent as any).department_id);
+          if (myDept && otherDepts.length > 0) {
+            const list = otherDepts.map((d: any) => `- **${d.name}**${d.description ? `: ${d.description}` : ""}`).join("\n");
+            departmentBlock = `\n\n🏢 DEPARTAMENTOS DA EMPRESA\nVocê faz parte do departamento **${myDept.name}**${myDept.description ? ` (${myDept.description})` : ""}.\n\nOutros departamentos disponíveis:\n${list}\n\nSe o cliente perguntar algo que claramente NÃO é do seu escopo (ex: você é Suporte e ele pergunta sobre cobrança), use a tool **transferir_departamento** passando o nome do departamento certo. NÃO transfira por dúvidas pequenas — só quando for outro assunto. Não fale "vou te transferir" antes de chamar a tool; a tool já cuida da apresentação.`;
+          }
+        }
+
+        const systemPrompt = agent.system_prompt + buildKnowledgeBlock(agent) + getResponseLengthInstruction(agent.response_length || "medium") + getObjectiveInstruction(agent) + followupInstruction + calendarInstruction + departmentBlock + GUARDRAILS;
 
         const MAX_CONTEXT_MESSAGES = 30;
         const contextWindow = Math.min(memory.context_window || MAX_CONTEXT_MESSAGES, MAX_CONTEXT_MESSAGES);
@@ -1840,7 +1873,44 @@ serve(async (req) => {
               console.log(`[ai-agent-chat] 🎫 Lead enqueued for human support (pausar_ia)`);
               break;
             }
+            case "transferir_departamento": {
+              const targetDeptName = typeof toolArgs.department_name === "string" ? toolArgs.department_name.substring(0, 100) : "";
+              const transferReason = typeof toolArgs.reason === "string" ? toolArgs.reason.substring(0, 200) : "";
+              const transferLeadId = lead_id && isValidUUID(lead_id) ? lead_id : null;
+              if (transferLeadId && targetDeptName) {
+                try {
+                  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+                  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+                  const transferRes = await fetch(`${supabaseUrl}/functions/v1/transfer-to-agent`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+                    body: JSON.stringify({
+                      lead_id: transferLeadId,
+                      target_department_name: targetDeptName,
+                      source_agent_id: agent_id,
+                      reason: transferReason,
+                      triggered_by: "ai_auto",
+                    }),
+                  });
+                  const transferData = await transferRes.json();
+                  if (transferData.success) {
+                    console.log(`[ai-agent-chat] 🔀 IA transferiu para departamento ${targetDeptName}`);
+                    // Pause this agent — the new one took over
+                    await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
+                    // Suppress further response from current agent (transfer-to-agent already sent intro message)
+                    responseContent = "";
+                  } else if (transferData.escalated_to_human) {
+                    console.log(`[ai-agent-chat] ⚠️ Transferência escalou para humano (loop detectado)`);
+                    responseContent = "";
+                  } else {
+                    console.warn(`[ai-agent-chat] ⚠️ Transfer failed:`, transferData.error);
+                  }
+                } catch (e) {
+                  console.error(`[ai-agent-chat] ❌ Transfer call failed:`, e);
+                }
+              }
               break;
+            }
             case "agendar_followup": {
               const targetLeadId = lead_id || toolArgs.lead_id;
               if (targetLeadId && isValidUUID(targetLeadId) && typeof toolArgs.scheduled_at === "string" && typeof toolArgs.message === "string") {
