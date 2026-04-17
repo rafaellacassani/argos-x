@@ -831,36 +831,37 @@ serve(async (req) => {
       }
 
       // --- HUMAN SUPPORT QUEUE GUARD ---
-      // Check if there's an active human intercept for this session or lead
-      // This is the definitive source of truth, not just memory.is_paused
+      // Check if there's an active human intercept for THIS SPECIFIC session or lead.
+      // CRITICAL: a ticket with NULL lead_id AND a non-matching session_id must NOT block this lead.
+      // Tickets with both lead_id=NULL and session_id=NULL are "ghost tickets" and ignored.
       {
-        let humanQueueActive = false;
+        let blockingTicket: { id: string; ticket_number: number | null; lead_id: string | null; session_id: string | null } | null = null;
         if (session_id) {
           const { data: hsq } = await supabase
             .from("human_support_queue")
-            .select("id")
+            .select("id, ticket_number, lead_id, session_id")
             .eq("session_id", session_id)
             .in("status", ["waiting", "in_progress"])
             .limit(1)
             .maybeSingle();
-          if (hsq) humanQueueActive = true;
+          if (hsq) blockingTicket = hsq as any;
         }
-        if (!humanQueueActive && lead_id) {
+        if (!blockingTicket && lead_id) {
           const { data: hsq } = await supabase
             .from("human_support_queue")
-            .select("id")
+            .select("id, ticket_number, lead_id, session_id")
             .eq("lead_id", lead_id)
             .in("status", ["waiting", "in_progress"])
             .limit(1)
             .maybeSingle();
-          if (hsq) humanQueueActive = true;
+          if (hsq) blockingTicket = hsq as any;
         }
-        if (humanQueueActive) {
+        if (blockingTicket) {
           // Ensure memory is also paused for consistency
           if (!memory.is_paused) {
             await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
           }
-          console.log("[ai-agent-chat] ⏸️ Human support queue active — blocking AI response");
+          console.log(`[ai-agent-chat] ⏸️ Human support queue active — blocking AI. Ticket #${blockingTicket.ticket_number} (id=${blockingTicket.id}, ticket.lead_id=${blockingTicket.lead_id}, ticket.session_id=${blockingTicket.session_id}) for current lead=${lead_id} session=${session_id}`);
           return new Response(JSON.stringify({ response: null, paused: true, message: "Conversa em atendimento humano." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
       }
