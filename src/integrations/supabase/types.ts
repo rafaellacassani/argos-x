@@ -208,11 +208,13 @@ export type Database = {
           is_paused: boolean | null
           is_processing: boolean | null
           last_message_id: string | null
+          last_transfer_at: string | null
           lead_id: string | null
           messages: Json
           processing_started_at: string | null
           session_id: string
           summary: string | null
+          transfer_count: number
           updated_at: string
           workspace_id: string
         }
@@ -224,11 +226,13 @@ export type Database = {
           is_paused?: boolean | null
           is_processing?: boolean | null
           last_message_id?: string | null
+          last_transfer_at?: string | null
           lead_id?: string | null
           messages?: Json
           processing_started_at?: string | null
           session_id: string
           summary?: string | null
+          transfer_count?: number
           updated_at?: string
           workspace_id: string
         }
@@ -240,11 +244,13 @@ export type Database = {
           is_paused?: boolean | null
           is_processing?: boolean | null
           last_message_id?: string | null
+          last_transfer_at?: string | null
           lead_id?: string | null
           messages?: Json
           processing_started_at?: string | null
           session_id?: string
           summary?: string | null
+          transfer_count?: number
           updated_at?: string
           workspace_id?: string
         }
@@ -279,6 +285,7 @@ export type Database = {
           cloud_24h_window_only: boolean | null
           company_info: Json | null
           created_at: string
+          department_id: string | null
           description: string | null
           fallback_config: Json | null
           followup_enabled: boolean | null
@@ -330,6 +337,7 @@ export type Database = {
           cloud_24h_window_only?: boolean | null
           company_info?: Json | null
           created_at?: string
+          department_id?: string | null
           description?: string | null
           fallback_config?: Json | null
           followup_enabled?: boolean | null
@@ -381,6 +389,7 @@ export type Database = {
           cloud_24h_window_only?: boolean | null
           company_info?: Json | null
           created_at?: string
+          department_id?: string | null
           description?: string | null
           fallback_config?: Json | null
           followup_enabled?: boolean | null
@@ -428,7 +437,61 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "ai_agents_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "ai_departments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "ai_agents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_departments: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          is_reception: boolean
+          name: string
+          position: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_reception?: boolean
+          name: string
+          position?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_reception?: boolean
+          name?: string
+          position?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_departments_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1304,6 +1367,60 @@ export type Database = {
             columns: ["connection_id"]
             isOneToOne: false
             referencedRelation: "whatsapp_cloud_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      department_transfers: {
+        Row: {
+          created_at: string
+          from_agent_id: string | null
+          from_department_id: string | null
+          id: string
+          lead_id: string | null
+          reason: string | null
+          to_agent_id: string | null
+          to_department_id: string | null
+          triggered_by: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_agent_id?: string | null
+          from_department_id?: string | null
+          id?: string
+          lead_id?: string | null
+          reason?: string | null
+          to_agent_id?: string | null
+          to_department_id?: string | null
+          triggered_by?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          from_agent_id?: string | null
+          from_department_id?: string | null
+          id?: string
+          lead_id?: string | null
+          reason?: string | null
+          to_agent_id?: string | null
+          to_department_id?: string | null
+          triggered_by?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_transfers_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "department_transfers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -2366,6 +2483,9 @@ export type Database = {
       }
       leads: {
         Row: {
+          active_agent_id: string | null
+          active_agent_set_at: string | null
+          active_department_id: string | null
           ai_score: number | null
           ai_score_label: string | null
           ai_scored_at: string | null
@@ -2391,6 +2511,9 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          active_agent_id?: string | null
+          active_agent_set_at?: string | null
+          active_department_id?: string | null
           ai_score?: number | null
           ai_score_label?: string | null
           ai_scored_at?: string | null
@@ -2416,6 +2539,9 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          active_agent_id?: string | null
+          active_agent_set_at?: string | null
+          active_department_id?: string | null
           ai_score?: number | null
           ai_score_label?: string | null
           ai_scored_at?: string | null
@@ -4196,6 +4322,10 @@ export type Database = {
       }
     }
     Functions: {
+      claim_lead_agent: {
+        Args: { _agent_id: string; _department_id?: string; _lead_id: string }
+        Returns: boolean
+      }
       clone_workspace: {
         Args: {
           _new_name: string
