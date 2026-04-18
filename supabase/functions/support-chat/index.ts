@@ -548,6 +548,42 @@ serve(async (req) => {
       });
     }
 
+    // Tee stream: one to client, one to accumulate for persistence (only if we have ticket)
+    if (ticketId && response.body) {
+      const [a, b] = response.body.tee();
+      (async () => {
+        try {
+          const reader = b.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          let full = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buf.indexOf("\n")) !== -1) {
+              const line = buf.slice(0, idx).trim();
+              buf = buf.slice(idx + 1);
+              if (!line.startsWith("data: ")) continue;
+              const json = line.slice(6).trim();
+              if (json === "[DONE]") continue;
+              try {
+                const c = JSON.parse(json).choices?.[0]?.delta?.content;
+                if (c) full += c;
+              } catch { /* partial */ }
+            }
+          }
+          if (full.trim()) {
+            await supabase.from("support_messages").insert({
+              ticket_id: ticketId, workspace_id: workspaceId, sender_type: "ai", content: full,
+            });
+          }
+        } catch (e) { console.error("[support-chat] persist failed:", e); }
+      })();
+      return new Response(a, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+    }
+
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
