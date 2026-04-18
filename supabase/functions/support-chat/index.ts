@@ -52,7 +52,9 @@ O Argos X possui 3 planos:
 
 ### WhatsApp Business (Evolution API)
 - Vá em **Configurações** > aba **Equipe** > seção "Instâncias WhatsApp"
-- Clique em **"Nova instância"**, dê um nome e escaneie o **QR Code** com o WhatsApp
+- Clique em **"Nova instância"**, dê um nome e escolha o método de conexão:
+  - **QR Code** (padrão, ideal para quem está no computador): basta abrir o WhatsApp no celular → Aparelhos conectados → Conectar aparelho → escanear o QR.
+  - **Código de pareamento de 8 dígitos** (ideal para quem está usando o Argos pelo CELULAR e não consegue escanear o próprio QR): clique em "Conectar via código", informe o número (com DDI+DDD, ex.: 5511999999999) e o sistema gera um código de 8 caracteres. No WhatsApp do celular: Aparelhos conectados → Conectar aparelho → "Conectar com número de telefone" → digite o código exibido. ⚠️ Requer Evolution API v2.2.2+ (já configurado no Argos X).
 - Após conectar, o status fica verde "Conectado"
 - Para **reconectar**: clique no botão "Reconectar" na instância
 - Disponível em **todos os planos**
