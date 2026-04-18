@@ -86,6 +86,7 @@ export function SupportChatWindow({ escalateSignal }: { escalateSignal?: number 
           ticketId,
           workspaceId: workspace?.id,
           userId: user?.id,
+          forceEscalate: force === true,
         }),
       });
 
