@@ -17,7 +17,7 @@ const WELCOME_MSG: Msg = {
   content: "Olá! 👋 Sou a **Aria**, assistente de suporte do Argos X.\n\nComo posso ajudar? Algumas sugestões:\n\n- 📱 Como conectar o WhatsApp\n- 📊 Como usar o funil de vendas\n- 🤖 Como configurar agentes de IA\n- 📢 Como disparar campanhas\n- ⏰ Como agendar mensagens\n\nOu me diga sua dúvida!",
 };
 
-export function SupportChatWindow() {
+export function SupportChatWindow({ escalateSignal }: { escalateSignal?: number }) {
   const { workspace } = useWorkspace();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Msg[]>([WELCOME_MSG]);
