@@ -1,0 +1,4 @@
+UPDATE public.ai_agents
+SET knowledge_extra = COALESCE(knowledge_extra, '') || E'\n\n## CONEXÃO WHATSAPP — CÓDIGO DE PAREAMENTO (8 dígitos)\nAlém do QR Code tradicional, o Argos X suporta conexão de WhatsApp Business via **Código de Pareamento** — ideal para clientes que usam o Argos no celular e não conseguem escanear o próprio QR.\n\n**Como usar:**\n1. Em **Configurações > Equipe > Instâncias WhatsApp**, clique em **Nova instância**.\n2. Escolha **"Conectar via código"** e informe o número (com DDI+DDD, ex.: 5511999999999).\n3. O sistema gera um código de 8 caracteres.\n4. No WhatsApp do celular: **Aparelhos conectados > Conectar aparelho > Conectar com número de telefone** > digite o código.\n\nRequisito técnico (já atendido na infra do Argos X): Evolution API v2.2.2+.',
+    updated_at = now()
+WHERE id IN ('9a7b9a96-0d29-4101-bd83-952603bef19a','8d0a9ecf-217a-4fac-a002-fa477c54c5d4','50b7ec73-dd69-40df-9ce1-6c4169588c25');
