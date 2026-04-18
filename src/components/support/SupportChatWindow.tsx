@@ -52,6 +52,13 @@ export function SupportChatWindow({ escalateSignal }: { escalateSignal?: number 
     return () => { supabase.removeChannel(channel); };
   }, [ticketId]);
 
+  // Header "Humano" button → force escalate
+  useEffect(() => {
+    if (!escalateSignal || escalated || loading) return;
+    send("Quero falar com um atendente humano", true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escalateSignal]);
+
   const send = async (overrideText?: string, force?: boolean) => {
     const text = (overrideText ?? input).trim();
     if (!text || loading) return;
