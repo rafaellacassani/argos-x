@@ -1,64 +1,40 @@
 
 
-## Diagnóstico — IAs do Argos X não respondendo
+## Estado da Aria (agente de suporte do widget)
 
-### O que está acontecendo (causa raiz)
+### Está funcionando? **Sim, parcialmente — mas com limitações importantes.**
 
-Existem **5 tickets de suporte humano abertos** no Argos X que estão **sem `lead_id` ou sem `session_id` específico**, mas o código do `ai-agent-chat` faz a checagem assim:
+**O que ela faz hoje (`support-chat` edge function):**
+- Roda no widget de "Suporte" (ícone de fone) acessível pelo sidebar
+- Usa **GPT-4o-mini** (OpenAI direto) com fallback para `gpt-5-nano` via Lovable AI
+- Tem um **system prompt gigante** (400 linhas) cobrindo praticamente toda a documentação: planos, conexões WhatsApp/WABA, agentes IA, chat, funil, contatos, calendário, salesbot, campanhas, templates
+- Streaming SSE no chat (resposta em tempo real)
+- **Escalation para humano**: detecta palavras-chave (`humano`, `atendente`, `falar com pessoa`...) → cria ticket em `support_tickets` e notifica via WhatsApp configurado no workspace
 
-```ts
-// linha 848: 
-if (!humanQueueActive && lead_id) {
-  // busca em human_support_queue por lead_id
-}
-```
+**Pontos fortes:**
+- Cobertura de conteúdo é boa — sabe responder navegação, preços, planos, como criar agente, conectar WhatsApp, etc.
+- Markdown bem formatado no widget (`SupportChatWindow` renderiza com `react-markdown`)
+- Realtime: quando atendente responde no painel, aparece no chat do cliente
 
-Olhando os tickets abertos:
-| Ticket | lead_id | Razão | Criado |
-|--------|---------|-------|--------|
-| #127 | **NULL** | manual | hoje 14:41 |
-| #126 | ef1d593d... | ai_loop | hoje 14:26 |
-| #121 | **NULL** | pausar_ia | ontem 19:24 |
-| #117 | **NULL** | manual | ontem |
-| #109 | **NULL** | pausar_ia | ontem |
+**Limitações reais (bugs/gaps):**
 
-**Por enquanto a checagem está OK** (filtra por lead_id quando o ticket tem lead_id). Mas vejo nos logs **DEZENAS de leads diferentes** sendo bloqueados pelo "Human support queue active" agora. Isso indica que algo está marcando `lead_id` em tickets ou está casando errado.
+| # | Problema | Impacto |
+|---|----------|---------|
+| 1 | **Não tem acesso aos dados do workspace** — diferente da `workspace-assistant`, ela não consulta leads, agentes, instâncias do cliente. Só responde teoria. | Não consegue responder "minha IA está respondendo?" ou "quantos leads recebi hoje?" |
+| 2 | **System prompt estático** — não sabe o plano nem o nome do cliente que está perguntando | Pode sugerir features que o plano não tem (ex: API no Essencial) |
+| 3 | **Tickets escalados nunca são auto-atribuídos à Isabella** (regra que existe pra outros caminhos de suporte) — todos os 93 tickets `open` estão `assigned_to=NULL` | Cliente abre ticket pelo widget e ninguém é notificado no painel admin |
+| 4 | **Modelo fraco (gpt-4o-mini/nano)** vs Iara/Aria do WhatsApp que usam GPT-5 | Respostas menos precisas em casos complexos |
+| 5 | **Sem histórico persistente** — cada sessão começa do zero, mensagens não são salvas em `support_messages` exceto quando escala | Cliente não vê conversas anteriores, suporte humano não vê o que a IA já tentou |
+| 6 | **Sem ferramentas (tools)** — não consegue executar nada (ex: testar conexão, ver status de instância, abrir doc) | É puramente conversacional |
 
-Olhando o log de mensagens pausadas (>20 sessões diferentes pausadas nas últimas 2h), e o ticket #126 do **ef1d593d** que entrou em loop — esse lead específico está bloqueado **corretamente** (loop detectado).
+**Veredicto prático:** Ela responde dúvidas **conceituais e de navegação** bem (90% das perguntas comuns: "como conecto WhatsApp", "qual plano tenho", "como crio campanha"). Mas trava em qualquer dúvida que precise olhar **dados do cliente** ("por que minha IA não respondeu fulano?") — nesses casos ela só consegue escalar para humano, e o ticket fica órfão sem responsável.
 
-**O verdadeiro problema:** os tickets #127 e #121 com `lead_id=NULL` e `session_id=NULL` provavelmente têm campo errado ou a lógica está casando algo a mais. Preciso verificar a coluna `session_id` desses tickets e se algum trigger/automação está marcando todos os leads novos como "paused" pela migration de departamentos de ontem.
+### Se quiser deixá-la "boa de verdade", recomendo (não fazer agora, só listar):
 
-**Suspeita secundária (alta):** a migration de ontem (`ai_departments`) adicionou `claim_lead_agent` que pode estar setando `leads.active_agent_id` e algum fluxo está confundindo isso com "atendimento humano". Preciso confirmar.
+1. Atribuir tickets escalados automaticamente à Isabella (já é regra documentada na memory)
+2. Subir modelo para GPT-5-mini (gateway Lovable, sem custo extra de API key)
+3. Dar acesso ao contexto do workspace (plano, nome, métricas básicas) — copiar lógica de `workspace-assistant`
+4. Persistir todas as mensagens em `support_messages` (não só escalações)
+5. Adicionar tools mínimas: `verificar_status_instancia`, `verificar_meu_plano`, `listar_meus_agentes`
+6. Adicionar atalho no header do widget mostrando: "Falar com humano"
 
-### Plano de correção
-
-**1. Investigação adicional (10s)**
-- Verificar `session_id` dos tickets abertos
-- Cruzar com os leads bloqueados nos logs para entender o match
-- Confirmar se a tabela `agent_memories.is_paused=true` em massa veio da migration de ontem
-
-**2. Correção do bug (se confirmado)**
-- **Hipótese A — tickets antigos órfãos**: resolver/fechar tickets #109, #117, #121 (de ontem, abandonados sem lead_id) para liberar
-- **Hipótese B — bug no guard**: se a query estiver retornando ticket de OUTRO lead por engano, ajustar a condição
-- **Hipótese C — pause em massa pela migration**: rodar UPDATE liberando `is_paused=false` para sessões que NÃO têm ticket ativo correspondente
-
-**3. Hot-fix imediato no `ai-agent-chat`**
-- Adicionar log mostrando **qual ticket** está bloqueando (ID + lead_id) para futura debug
-- Garantir que ticket com `lead_id=NULL` E `session_id=NULL` **não bloqueia ninguém** (ticket fantasma)
-
-**4. Verificação**
-- Forçar reprocessamento das mensagens perdidas via `reprocess-missed-leads`
-- Confirmar nos logs que IA voltou a responder
-
-### O que vou entregar
-
-- Liberar imediatamente as conversas travadas
-- Corrigir o guard para não bloquear leads por tickets órfãos
-- Reprocessar as últimas 6h de mensagens não respondidas do Argos X
-- Adicionar log diagnóstico para a próxima vez
-
-<lov-actions>
-<lov-suggestion message="Execute o plano: investigue, libere as conversas travadas, corrija o guard e reprocesse as mensagens perdidas das últimas 6h.">Executar correção completa</lov-suggestion>
-<lov-suggestion message="Apenas libere as conversas travadas agora (resolver tickets órfãos + despausar memórias) e reprocesse as mensagens. A correção de código fazemos depois.">Só desbloquear agora</lov-suggestion>
-<lov-suggestion message="Antes de qualquer ação, mostre exatamente quais conversas estão bloqueadas e por qual ticket, pra eu validar caso a caso.">Mostrar lista antes</lov-suggestion>
-</lov-actions>
