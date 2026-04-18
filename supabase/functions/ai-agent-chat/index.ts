@@ -1650,8 +1650,8 @@ serve(async (req) => {
             body: JSON.stringify({
               model: openaiModel,
               messages: aiMessages,
-              temperature: agent.temperature || 0.7,
-              max_tokens: agent.max_tokens || 2048,
+              ...tempParam,
+              ...tokenParam,
               tools: tools.length > 0 ? tools : undefined,
               tool_choice: tools.length > 0 ? "auto" : undefined,
             }),
