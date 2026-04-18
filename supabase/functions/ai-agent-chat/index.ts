@@ -1714,8 +1714,7 @@ serve(async (req) => {
             body: JSON.stringify({
               model: gatewayModel,
               messages: aiMessages,
-              temperature: agent.temperature || 0.7,
-              max_tokens: agent.max_tokens || 2048,
+              ...(/^(openai\/)?(gpt-5|o1|o3)/.test(gatewayModel) ? { max_completion_tokens: agent.max_tokens || 2048 } : { temperature: agent.temperature || 0.7, max_tokens: agent.max_tokens || 2048 }),
               tools: tools.length > 0 ? tools : undefined,
               tool_choice: tools.length > 0 ? "auto" : undefined,
             }),
