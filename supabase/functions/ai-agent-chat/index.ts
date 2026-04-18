@@ -1634,6 +1634,13 @@ serve(async (req) => {
         const GATEWAY_ONLY_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.2", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"];
         const openaiModel = modelName.replace("openai/", "");
         const isGatewayOnly = GATEWAY_ONLY_MODELS.some(m => openaiModel === m || openaiModel.startsWith(m + "-"));
+        // gpt-5*, o1*, o3* exigem max_completion_tokens e NÃO aceitam temperature customizada
+        const useNewParams = /^(gpt-5|o1|o3)/.test(openaiModel);
+        const tokenLimit = agent.max_tokens || 2048;
+        const tokenParam: Record<string, number> = useNewParams
+          ? { max_completion_tokens: tokenLimit }
+          : { max_tokens: tokenLimit };
+        const tempParam: Record<string, number> = useNewParams ? {} : { temperature: agent.temperature || 0.7 };
 
         if (provider === "openai" && openaiApiKey && !isGatewayOnly) {
           console.log(`[ai-agent-chat] 🔑 Using OpenAI API directly: ${openaiModel}`);
@@ -1643,8 +1650,8 @@ serve(async (req) => {
             body: JSON.stringify({
               model: openaiModel,
               messages: aiMessages,
-              temperature: agent.temperature || 0.7,
-              max_tokens: agent.max_tokens || 2048,
+              ...tempParam,
+              ...tokenParam,
               tools: tools.length > 0 ? tools : undefined,
               tool_choice: tools.length > 0 ? "auto" : undefined,
             }),
@@ -1707,8 +1714,7 @@ serve(async (req) => {
             body: JSON.stringify({
               model: gatewayModel,
               messages: aiMessages,
-              temperature: agent.temperature || 0.7,
-              max_tokens: agent.max_tokens || 2048,
+              ...(/^(openai\/)?(gpt-5|o1|o3)/.test(gatewayModel) ? { max_completion_tokens: agent.max_tokens || 2048 } : { temperature: agent.temperature || 0.7, max_tokens: agent.max_tokens || 2048 }),
               tools: tools.length > 0 ? tools : undefined,
               tool_choice: tools.length > 0 ? "auto" : undefined,
             }),
