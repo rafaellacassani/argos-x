@@ -17,7 +17,7 @@ const WELCOME_MSG: Msg = {
   content: "Olá! 👋 Sou a **Aria**, assistente de suporte do Argos X.\n\nComo posso ajudar? Algumas sugestões:\n\n- 📱 Como conectar o WhatsApp\n- 📊 Como usar o funil de vendas\n- 🤖 Como configurar agentes de IA\n- 📢 Como disparar campanhas\n- ⏰ Como agendar mensagens\n\nOu me diga sua dúvida!",
 };
 
-export function SupportChatWindow() {
+export function SupportChatWindow({ escalateSignal }: { escalateSignal?: number }) {
   const { workspace } = useWorkspace();
   const { user } = useAuth();
   const [messages, setMessages] = useState<Msg[]>([WELCOME_MSG]);
@@ -52,8 +52,15 @@ export function SupportChatWindow() {
     return () => { supabase.removeChannel(channel); };
   }, [ticketId]);
 
-  const send = async () => {
-    const text = input.trim();
+  // Header "Humano" button → force escalate
+  useEffect(() => {
+    if (!escalateSignal || escalated || loading) return;
+    send("Quero falar com um atendente humano", true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [escalateSignal]);
+
+  const send = async (overrideText?: string, force?: boolean) => {
+    const text = (overrideText ?? input).trim();
     if (!text || loading) return;
     setInput("");
 
@@ -86,6 +93,7 @@ export function SupportChatWindow() {
           ticketId,
           workspaceId: workspace?.id,
           userId: user?.id,
+          forceEscalate: force === true,
         }),
       });
 

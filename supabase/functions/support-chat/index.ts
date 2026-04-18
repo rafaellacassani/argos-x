@@ -397,13 +397,50 @@ Acesse **WhatsApp Templates** no menu lateral (aparece apenas com conexão WABA 
 7. Use emojis com moderação para ser amigável 😊
 8. Quando explicar caminhos de navegação, use setas: **Menu** > **Submenu** > **Botão**
 9. Se o usuário mencionar que algo "não funciona", peça detalhes antes de sugerir soluções
-10. Nunca invente funcionalidades que não existem no Argos X`;
+10. Nunca invente funcionalidades que não existem no Argos X
+11. Use o CONTEXTO DO WORKSPACE abaixo para personalizar respostas (mencione o nome do cliente, plano atual, métricas reais quando relevante)`;
+
+const ISABELLA_USER_ID = "f6dfb5a3-ca9f-45e8-9bfd-219ef8f7f69a";
+
+async function buildWorkspaceContext(supabase: any, workspaceId: string, userId: string): Promise<string> {
+  if (!workspaceId) return "\n\n## CONTEXTO DO WORKSPACE\n(Cliente não autenticado — responda apenas dúvidas gerais.)";
+  try {
+    const [wsRes, profileRes, agentsRes, instancesRes, leadsCountRes, leadsTodayRes] = await Promise.all([
+      supabase.from("workspaces").select("name, plan_type, plan_name, subscription_status, lead_limit, trial_end, blocked_at").eq("id", workspaceId).maybeSingle(),
+      userId ? supabase.from("user_profiles").select("full_name, email").eq("id", userId).maybeSingle() : Promise.resolve({ data: null }),
+      supabase.from("ai_agents").select("name, is_active, model, instance_name").eq("workspace_id", workspaceId).limit(20),
+      supabase.from("whatsapp_instances").select("instance_name, status").eq("workspace_id", workspaceId).limit(20),
+      supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId),
+      supabase.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", workspaceId).gte("created_at", new Date(Date.now() - 86400000).toISOString()),
+    ]);
+    const ws = wsRes.data;
+    const profile = profileRes.data;
+    const agents = agentsRes.data || [];
+    const instances = instancesRes.data || [];
+    const activeAgents = agents.filter((a: any) => a.is_active).length;
+    const connectedInstances = instances.filter((i: any) => i.status === "open" || i.status === "connected").length;
+    return `
+
+## CONTEXTO DO WORKSPACE (use para personalizar — não recite tudo, só o relevante)
+- Cliente: ${profile?.full_name || "—"} (${profile?.email || "—"})
+- Workspace: ${ws?.name || "—"}
+- Plano: ${ws?.plan_name || ws?.plan_type || "—"} | Status: ${ws?.subscription_status || "—"}${ws?.blocked_at ? " | ⚠️ BLOQUEADO" : ""}
+- Limite de leads: ${ws?.lead_limit || "—"} | Total atual: ${leadsCountRes.count ?? 0} | Novos nas últimas 24h: ${leadsTodayRes.count ?? 0}
+- Agentes IA: ${agents.length} cadastrados, ${activeAgents} ativos${agents.length ? " — " + agents.map((a: any) => `${a.name}(${a.is_active ? "on" : "off"}/${a.model || "?"})`).join(", ") : ""}
+- Instâncias WhatsApp: ${instances.length} cadastradas, ${connectedInstances} conectadas${instances.length ? " — " + instances.map((i: any) => `${i.instance_name}(${i.status})`).join(", ") : ""}
+
+⚠️ Se o cliente perguntar sobre features fora do plano dele, avise antes de instruir.`;
+  } catch (e) {
+    console.error("[support-chat] context build failed:", e);
+    return "";
+  }
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, ticketId, workspaceId, userId } = await req.json();
+    const { messages, ticketId, workspaceId, userId, forceEscalate } = await req.json();
     
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -416,21 +453,23 @@ serve(async (req) => {
 
     // Check if user wants to escalate
     const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
-    const wantsHuman = ["humano", "pessoa real", "atendente", "suporte humano", "falar com alguém", "falar com alguem", "falar com pessoa"].some(k => lastMsg.includes(k));
+    const wantsHuman = forceEscalate === true || ["humano", "pessoa real", "atendente", "suporte humano", "falar com alguém", "falar com alguem", "falar com pessoa"].some(k => lastMsg.includes(k));
 
     if (wantsHuman) {
-      // Create or update ticket to open for human
+      // Create or update ticket — auto-assign to Isabella
       let activeTicketId = ticketId;
       if (!activeTicketId) {
         const { data: ticket } = await supabase.from("support_tickets").insert({
           workspace_id: workspaceId,
           user_id: userId,
-          subject: messages[messages.length - 1]?.content?.slice(0, 100) || "Suporte",
+          subject: messages[messages.length - 1]?.content?.slice(0, 100) || "Suporte (widget)",
           status: "open",
           priority: "normal",
+          assigned_to: ISABELLA_USER_ID,
         }).select("id").single();
         activeTicketId = ticket?.id;
       } else {
+        await supabase.from("support_tickets").update({ status: "open", assigned_to: ISABELLA_USER_ID }).eq("id", activeTicketId).is("assigned_to", null);
         await supabase.from("support_tickets").update({ status: "open" }).eq("id", activeTicketId);
       }
 
@@ -454,23 +493,37 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Stream AI response
-    const useOpenAIDirect = !!OPENAI_API_KEY;
-    const aiUrl = useOpenAIDirect 
-      ? "https://api.openai.com/v1/chat/completions"
-      : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const aiModel = useOpenAIDirect ? "gpt-4o-mini" : "openai/gpt-5-nano";
+    // Build workspace context (per-request, fresh)
+    const workspaceContext = await buildWorkspaceContext(supabase, workspaceId, userId);
+
+    // Persist user message immediately if we have a ticket (history)
+    if (ticketId) {
+      const userText = messages[messages.length - 1]?.content;
+      if (userText) {
+        await supabase.from("support_messages").insert({
+          ticket_id: ticketId,
+          workspace_id: workspaceId,
+          sender_type: "user",
+          sender_id: userId,
+          content: userText,
+        }).then(() => {}, () => {});
+      }
+    }
+
+    // Use Lovable AI Gateway with GPT-5-mini (better reasoning, no extra cost)
+    const aiUrl = "https://ai.gateway.lovable.dev/v1/chat/completions";
+    const aiModel = "openai/gpt-5-mini";
 
     const response = await fetch(aiUrl, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${useOpenAIDirect ? OPENAI_API_KEY : LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: aiModel,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: SYSTEM_PROMPT + workspaceContext },
           ...messages,
         ],
         stream: true,
@@ -493,6 +546,42 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Erro na IA" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Tee stream: one to client, one to accumulate for persistence (only if we have ticket)
+    if (ticketId && response.body) {
+      const [a, b] = response.body.tee();
+      (async () => {
+        try {
+          const reader = b.getReader();
+          const decoder = new TextDecoder();
+          let buf = "";
+          let full = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buf.indexOf("\n")) !== -1) {
+              const line = buf.slice(0, idx).trim();
+              buf = buf.slice(idx + 1);
+              if (!line.startsWith("data: ")) continue;
+              const json = line.slice(6).trim();
+              if (json === "[DONE]") continue;
+              try {
+                const c = JSON.parse(json).choices?.[0]?.delta?.content;
+                if (c) full += c;
+              } catch { /* partial */ }
+            }
+          }
+          if (full.trim()) {
+            await supabase.from("support_messages").insert({
+              ticket_id: ticketId, workspace_id: workspaceId, sender_type: "ai", content: full,
+            });
+          }
+        } catch (e) { console.error("[support-chat] persist failed:", e); }
+      })();
+      return new Response(a, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
     }
 
     return new Response(response.body, {
