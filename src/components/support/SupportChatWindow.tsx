@@ -52,8 +52,8 @@ export function SupportChatWindow({ escalateSignal }: { escalateSignal?: number 
     return () => { supabase.removeChannel(channel); };
   }, [ticketId]);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (overrideText?: string, force?: boolean) => {
+    const text = (overrideText ?? input).trim();
     if (!text || loading) return;
     setInput("");
 
