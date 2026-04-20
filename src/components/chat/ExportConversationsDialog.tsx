@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { useEffect, useMemo, useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,13 @@ import { Loader2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { toast } from "@/hooks/use-toast";
-import { downloadTextFile, formatDateTimeBR, sanitizeFilename } from "@/lib/exportUtils";
+import { downloadTextFile, sanitizeFilename } from "@/lib/exportUtils";
+import {
+  buildConversationExportText,
+  normalizeConversationPhone,
+  resolveConversationContent,
+  type ConversationExportGroup,
+} from "@/lib/chatExportUtils";
 
 interface ExportConversationsDialogProps {
   open: boolean;
@@ -18,6 +24,29 @@ interface ExportConversationsDialogProps {
 interface InstanceOption {
   value: string;
   label: string;
+  kind: "all" | "whatsapp" | "meta";
+  instanceName?: string;
+  metaPageId?: string;
+}
+
+interface WhatsAppExportRow {
+  instance_name: string;
+  remote_jid: string;
+  from_me: boolean | null;
+  content: string | null;
+  message_type: string | null;
+  timestamp: string;
+  push_name: string | null;
+}
+
+interface MetaExportRow {
+  meta_page_id: string;
+  sender_id: string;
+  sender_name: string | null;
+  direction: string;
+  content: string | null;
+  message_type: string | null;
+  timestamp: string;
 }
 
 export function ExportConversationsDialog({ open, onOpenChange }: ExportConversationsDialogProps) {
@@ -30,145 +59,243 @@ export function ExportConversationsDialog({ open, onOpenChange }: ExportConversa
   const [endDate, setEndDate] = useState(today);
   const [loading, setLoading] = useState(false);
 
+  const selectedOption = useMemo(
+    () => instances.find((option) => option.value === selectedInstance),
+    [instances, selectedInstance]
+  );
+
   useEffect(() => {
     if (!open || !workspaceId) return;
+
     (async () => {
-      const { data } = await supabase
-        .from("whatsapp_instances")
-        .select("instance_name, display_name")
-        .eq("workspace_id", workspaceId)
-        .neq("instance_type", "alerts");
-      const opts: InstanceOption[] = [{ value: "all", label: "Todas as instâncias" }];
-      (data || []).forEach((i: any) => {
-        opts.push({ value: i.instance_name, label: i.display_name || i.instance_name });
+      const [whatsappResult, metaPagesResult] = await Promise.all([
+        supabase
+          .from("whatsapp_instances")
+          .select("instance_name, display_name")
+          .eq("workspace_id", workspaceId)
+          .neq("instance_type", "alerts"),
+        supabase
+          .from("meta_pages")
+          .select("id, page_name, platform")
+          .eq("workspace_id", workspaceId)
+          .eq("is_active", true),
+      ]);
+
+      const options: InstanceOption[] = [{ value: "all", label: "Todas as origens", kind: "all" }];
+
+      (whatsappResult.data || []).forEach((instance: any) => {
+        options.push({
+          value: `wa:${instance.instance_name}`,
+          label: instance.display_name || instance.instance_name,
+          kind: "whatsapp",
+          instanceName: instance.instance_name,
+        });
       });
-      setInstances(opts);
+
+      (metaPagesResult.data || []).forEach((page: any) => {
+        const suffix = page.platform === "whatsapp_business" ? "WhatsApp Business" : "Meta";
+        options.push({
+          value: `meta:${page.id}`,
+          label: `${page.page_name} (${suffix})`,
+          kind: "meta",
+          metaPageId: page.id,
+        });
+      });
+
+      setInstances(options);
+      setSelectedInstance((current) => (options.some((option) => option.value === current) ? current : "all"));
     })();
   }, [open, workspaceId]);
 
   const handleExport = async () => {
     if (!workspaceId) return;
+
     setLoading(true);
+
     try {
       const startISO = new Date(startDate + "T00:00:00").toISOString();
       const endISO = new Date(endDate + "T23:59:59").toISOString();
-
-      // Fetch all messages in range, paginated
-      const allRows: any[] = [];
+      const includeWhatsApp = selectedInstance === "all" || selectedOption?.kind === "whatsapp";
+      const includeMeta = selectedInstance === "all" || selectedOption?.kind === "meta";
+      const selectedWhatsAppInstance = selectedOption?.kind === "whatsapp" ? selectedOption.instanceName : null;
+      const selectedMetaPageId = selectedOption?.kind === "meta" ? selectedOption.metaPageId : null;
       const pageSize = 1000;
-      let from = 0;
-      while (true) {
-        let q = supabase
-          .from("whatsapp_messages")
-          .select("instance_name, remote_jid, from_me, content, message_type, timestamp, push_name")
-          .eq("workspace_id", workspaceId)
-          .gte("timestamp", startISO)
-          .lte("timestamp", endISO)
-          .order("timestamp", { ascending: true })
-          .range(from, from + pageSize - 1);
-        if (selectedInstance !== "all") q = q.eq("instance_name", selectedInstance);
-        const { data, error } = await q;
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allRows.push(...data);
-        if (data.length < pageSize) break;
-        from += pageSize;
+
+      const whatsappRows: WhatsAppExportRow[] = [];
+      const metaRows: MetaExportRow[] = [];
+      const metaPageLabelMap = new Map<string, string>();
+
+      instances.forEach((option) => {
+        if (option.kind === "meta" && option.metaPageId) {
+          metaPageLabelMap.set(option.metaPageId, option.label);
+        }
+      });
+
+      if (includeWhatsApp) {
+        let from = 0;
+
+        while (true) {
+          let query = supabase
+            .from("whatsapp_messages")
+            .select("instance_name, remote_jid, from_me, content, message_type, timestamp, push_name")
+            .eq("workspace_id", workspaceId)
+            .gte("timestamp", startISO)
+            .lte("timestamp", endISO)
+            .order("timestamp", { ascending: true })
+            .range(from, from + pageSize - 1);
+
+          if (selectedWhatsAppInstance) query = query.eq("instance_name", selectedWhatsAppInstance);
+
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+
+          whatsappRows.push(...(data as WhatsAppExportRow[]));
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
       }
 
-      if (allRows.length === 0) {
+      if (includeMeta) {
+        let from = 0;
+
+        while (true) {
+          let query = supabase
+            .from("meta_conversations")
+            .select("meta_page_id, sender_id, sender_name, direction, content, message_type, timestamp")
+            .eq("workspace_id", workspaceId)
+            .gte("timestamp", startISO)
+            .lte("timestamp", endISO)
+            .order("timestamp", { ascending: true })
+            .range(from, from + pageSize - 1);
+
+          if (selectedMetaPageId) query = query.eq("meta_page_id", selectedMetaPageId);
+
+          const { data, error } = await query;
+          if (error) throw error;
+          if (!data || data.length === 0) break;
+
+          metaRows.push(...(data as MetaExportRow[]));
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
+      }
+
+      if (whatsappRows.length === 0 && metaRows.length === 0) {
         toast({ title: "Nenhuma conversa encontrada", description: "Não há mensagens no período selecionado." });
-        setLoading(false);
         return;
       }
 
-      // Group by instance + remote_jid
-      const groups = new Map<string, any[]>();
-      for (const m of allRows) {
-        const key = `${m.instance_name}|${m.remote_jid}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key)!.push(m);
-      }
-
-      // Resolve lead names per phone
-      const phones = Array.from(new Set(Array.from(groups.values()).map(g => {
-        const phone = (g[0].remote_jid || "").split("@")[0];
-        return phone;
-      }).filter(Boolean)));
-
       const phoneToName = new Map<string, string>();
-      if (phones.length > 0) {
-        const { data: leads } = await supabase
+      let leadFrom = 0;
+
+      while (true) {
+        const { data: leads, error } = await supabase
           .from("leads")
-          .select("name, phone")
+          .select("name, phone, whatsapp_jid")
           .eq("workspace_id", workspaceId)
-          .in("phone", phones);
-        (leads || []).forEach((l: any) => phoneToName.set(l.phone, l.name));
+          .range(leadFrom, leadFrom + pageSize - 1);
+
+        if (error) throw error;
+        if (!leads || leads.length === 0) break;
+
+        (leads as any[]).forEach((lead) => {
+          const phone = normalizeConversationPhone(lead.phone);
+          const jid = normalizeConversationPhone(lead.whatsapp_jid);
+          if (phone) phoneToName.set(phone, lead.name);
+          if (jid) phoneToName.set(jid, lead.name);
+        });
+
+        if (leads.length < pageSize) break;
+        leadFrom += pageSize;
       }
 
-      // Build TXT
-      const wsName = workspace?.name || "Workspace";
-      const header = [
-        "═══════════════════════════════════════════════════════════════",
-        `  EXPORTAÇÃO DE CONVERSAS — ${wsName}`,
-        `  Período: ${formatDateTimeBR(startISO)} até ${formatDateTimeBR(endISO)}`,
-        `  Instância: ${selectedInstance === "all" ? "Todas" : selectedInstance}`,
-        `  Total de conversas: ${groups.size}`,
-        `  Total de mensagens: ${allRows.length}`,
-        `  Gerado em: ${formatDateTimeBR(new Date())}`,
-        "═══════════════════════════════════════════════════════════════",
-        "",
-      ].join("\n");
+      const groupsMap = new Map<string, ConversationExportGroup>();
 
-      const sections: string[] = [];
-      const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
-        const aTs = new Date(a[1][0].timestamp).getTime();
-        const bTs = new Date(b[1][0].timestamp).getTime();
-        return aTs - bTs;
+      for (const row of whatsappRows) {
+        const phone = normalizeConversationPhone(row.remote_jid);
+        const contactName = phoneToName.get(phone) || row.push_name || phone || "Desconhecido";
+        const key = `wa|${row.instance_name}|${row.remote_jid}`;
+
+        if (!groupsMap.has(key)) {
+          groupsMap.set(key, {
+            key,
+            sourceLabel: row.instance_name,
+            contactName,
+            contactId: row.remote_jid,
+            messages: [],
+          });
+        }
+
+        groupsMap.get(key)!.messages.push({
+          timestamp: row.timestamp,
+          sender: row.from_me ? "EU" : contactName.toUpperCase(),
+          content: resolveConversationContent(row.content, row.message_type),
+        });
+      }
+
+      for (const row of metaRows) {
+        const phone = normalizeConversationPhone(row.sender_id);
+        const contactName = phoneToName.get(phone) || row.sender_name || phone || "Desconhecido";
+        const key = `meta|${row.meta_page_id}|${row.sender_id}`;
+
+        if (!groupsMap.has(key)) {
+          groupsMap.set(key, {
+            key,
+            sourceLabel: metaPageLabelMap.get(row.meta_page_id) || "WhatsApp Business",
+            contactName,
+            contactId: row.sender_id,
+            messages: [],
+          });
+        }
+
+        groupsMap.get(key)!.messages.push({
+          timestamp: row.timestamp,
+          sender: row.direction === "outbound" ? "EU" : contactName.toUpperCase(),
+          content: resolveConversationContent(row.content, row.message_type),
+        });
+      }
+
+      const groups = Array.from(groupsMap.values())
+        .map((group) => ({
+          ...group,
+          messages: [...group.messages].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+          ),
+        }))
+        .sort((a, b) => {
+          const aTs = a.messages[0] ? new Date(a.messages[0].timestamp).getTime() : 0;
+          const bTs = b.messages[0] ? new Date(b.messages[0].timestamp).getTime() : 0;
+          return aTs - bTs;
+        });
+
+      const totalMessages = groups.reduce((sum, group) => sum + group.messages.length, 0);
+      const workspaceName = workspace?.name || "Workspace";
+      const sourceLabel = selectedOption?.label || "Todas as origens";
+      const finalText = buildConversationExportText({
+        workspaceName,
+        startISO,
+        endISO,
+        sourceLabel,
+        groups,
+        totalMessages,
       });
 
-      for (const [key, msgs] of sortedGroups) {
-        const [instanceName, remoteJid] = key.split("|");
-        const phone = (remoteJid || "").split("@")[0];
-        const contactName = phoneToName.get(phone) || msgs.find(m => m.push_name)?.push_name || phone || "Desconhecido";
-
-        sections.push("");
-        sections.push("───────────────────────────────────────────────────────────────");
-        sections.push(`CONTATO: ${contactName}`);
-        sections.push(`Telefone/JID: ${remoteJid}`);
-        sections.push(`Instância: ${instanceName}`);
-        sections.push(`Mensagens: ${msgs.length}`);
-        sections.push("───────────────────────────────────────────────────────────────");
-
-        let lastDay = "";
-        for (const m of msgs) {
-          const ts = new Date(m.timestamp);
-          const day = ts.toLocaleDateString("pt-BR");
-          if (day !== lastDay) {
-            sections.push("");
-            sections.push(`📅 ${day}`);
-            lastDay = day;
-          }
-          const time = ts.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-          const sender = m.from_me ? "EU" : contactName.toUpperCase();
-          let content = (m.content || "").trim();
-          if (!content && m.message_type && m.message_type !== "text") {
-            content = `[${m.message_type}]`;
-          }
-          if (!content) content = "(mensagem vazia)";
-          sections.push(`[${time}] ${sender}: ${content}`);
-        }
-        sections.push("");
-      }
-
-      const finalText = header + sections.join("\n");
-      const filename = `conversas_${sanitizeFilename(wsName)}_${startDate}_a_${endDate}.txt`;
+      const filename = `conversas_${sanitizeFilename(workspaceName)}_${sanitizeFilename(sourceLabel)}_${startDate}_a_${endDate}.txt`;
       downloadTextFile(filename, finalText);
 
-      toast({ title: "Exportação concluída", description: `${groups.size} conversas (${allRows.length} mensagens) exportadas.` });
+      toast({
+        title: "Exportação concluída",
+        description: `${groups.length} conversas (${totalMessages} mensagens) exportadas.`,
+      });
       onOpenChange(false);
     } catch (err: any) {
       console.error("[ExportConversations] error:", err);
-      toast({ title: "Erro ao exportar", description: err.message || "Falha desconhecida", variant: "destructive" });
+      toast({
+        title: "Erro ao exportar",
+        description: err.message || "Falha desconhecida",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -183,18 +310,22 @@ export function ExportConversationsDialog({ open, onOpenChange }: ExportConversa
             Exportar Conversas
           </DialogTitle>
           <DialogDescription>
-            Baixe um arquivo .txt com todas as conversas do período selecionado.
+            Baixe um arquivo .txt com o histórico completo e organizado do período selecionado.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label>Instância</Label>
+            <Label>Instância / canal</Label>
             <Select value={selectedInstance} onValueChange={setSelectedInstance}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
-                {instances.map(i => (
-                  <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                {instances.map((instance) => (
+                  <SelectItem key={instance.value} value={instance.value}>
+                    {instance.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -203,21 +334,23 @@ export function ExportConversationsDialog({ open, onOpenChange }: ExportConversa
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Data início</Label>
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} max={endDate} />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} max={endDate} />
             </div>
             <div className="space-y-2">
               <Label>Data fim</Label>
-              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={startDate} max={today} />
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} min={startDate} max={today} />
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            O arquivo conterá apenas mensagens de texto, organizadas por contato e em ordem cronológica com data e hora.
+            O TXT sai em ordem cronológica, com data, hora, tudo que você enviou e tudo que o lead respondeu; mídias entram como etiqueta textual.
           </p>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+            Cancelar
+          </Button>
           <Button onClick={handleExport} disabled={loading} className="gap-2">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             Exportar TXT
