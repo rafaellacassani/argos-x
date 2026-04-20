@@ -57,6 +57,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ExportConversationsDialog } from "@/components/chat/ExportConversationsDialog";
+
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
 
 interface Chat {
   id: string;
