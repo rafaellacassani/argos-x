@@ -32,6 +32,25 @@ const connectionStateInFlight = new Map<string, Promise<unknown>>();
 // Connect call frequency tracking (cooldown)
 const connectCallLog = new Map<string, number[]>();
 
+/**
+ * Normalizes Brazilian phone numbers to international format expected by Evolution API.
+ * - Strips non-digits
+ * - Adds country code 55 when missing
+ * - Preserves already-international numbers (other DDIs) untouched
+ */
+function normalizeBrazilianNumber(input: string): string {
+  if (!input) return input;
+  // If it already includes a JID suffix or other formatting, just strip non-digits
+  const digits = String(input).replace(/\D/g, "");
+  if (!digits) return input;
+  // Brazilian local formats: 10 (fixo) or 11 (celular) digits → prepend 55
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  // Already with DDI 55 (12 fixo or 13 celular)
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits;
+  // Other international numbers — leave as-is
+  return digits;
+}
+
 // Circuit breaker: tracks when an instance first entered "connecting" state
 const connectingStartedAt = new Map<string, number>();
 // When circuit is open, we return cached "close" until this timestamp
@@ -456,7 +475,8 @@ app.post("/send-media/:instanceName", async (c) => {
     const { number, mediatype, media, caption, fileName } = await c.req.json();
     if (!number || !media || !mediatype) return c.json({ error: "number, mediatype, and media are required" }, 400, corsHeaders);
     if (!["image", "video", "document", "audio"].includes(mediatype)) return c.json({ error: "Invalid mediatype" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/message/sendMedia/${instanceName}`, "POST", { number, mediatype, media, caption: caption || "", fileName: fileName || undefined });
+    const normalizedNumber = normalizeBrazilianNumber(number);
+    const result = await evolutionRequest(`/message/sendMedia/${instanceName}`, "POST", { number: normalizedNumber, mediatype, media, caption: caption || "", fileName: fileName || undefined });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to send media" }, 500, corsHeaders);
@@ -469,7 +489,8 @@ app.post("/send-audio/:instanceName", async (c) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const { number, audio } = await c.req.json();
     if (!number || !audio) return c.json({ error: "number and audio are required" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, "POST", { number, audio, delay: 0, encoding: true });
+    const normalizedNumber = normalizeBrazilianNumber(number);
+    const result = await evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, "POST", { number: normalizedNumber, audio, delay: 0, encoding: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to send audio" }, 500, corsHeaders);
