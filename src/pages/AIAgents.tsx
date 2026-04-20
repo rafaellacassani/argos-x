@@ -6,6 +6,13 @@ import { useAIAgents, useAgentStats, AIAgent } from "@/hooks/useAIAgents";
 import { AgentCard } from "@/components/agents/AgentCard";
 import { CreateAgentDialog, CreateAgentWizardData } from "@/components/agents/CreateAgentDialog";
 import { AgentDetailDialog } from "@/components/agents/AgentDetailDialog";
+import { ExportAgentsButton } from "@/components/agents/ExportAgentsButton";
+import { useWorkspace } from "@/hooks/useWorkspace";
+
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,6 +26,8 @@ import {
 
 export default function AIAgents() {
   const { agents, isLoading, createAgent, updateAgent, deleteAgent, toggleAgent } = useAIAgents();
+  const { workspaceId } = useWorkspace();
+  const isMasterWorkspace = !!workspaceId && MASTER_WORKSPACE_IDS.has(workspaceId);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
@@ -76,6 +85,11 @@ export default function AIAgents() {
           Novo Agente
         </Button>
       </div>
+      {isMasterWorkspace && (
+        <div className="flex justify-end -mt-2">
+          <ExportAgentsButton />
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

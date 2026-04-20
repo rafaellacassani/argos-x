@@ -23,6 +23,7 @@ import {
   UserX,
   Pin,
   PinOff,
+  Download,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ExportConversationsDialog } from "@/components/chat/ExportConversationsDialog";
+
+const MASTER_WORKSPACE_IDS = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
 
 interface Chat {
   id: string;
@@ -476,6 +483,8 @@ export default function Chats() {
   const isMobile = useIsMobile();
   const { queue, waitingCount, claimItem, resolveItem, fetchQueue } = useHumanSupportQueue();
   const [showQueueOnly, setShowQueueOnly] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const isMasterWorkspace = !!workspaceId && MASTER_WORKSPACE_IDS.has(workspaceId);
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
@@ -3126,6 +3135,17 @@ export default function Chats() {
                 onFiltersChange={handleFiltersChange}
                 activeFiltersCount={activeFiltersCount}
               />
+              {isMasterWorkspace && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setExportDialogOpen(true)}
+                  title="Exportar conversas"
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Archive className="w-4 h-4" />
               </Button>
@@ -4239,6 +4259,7 @@ export default function Chats() {
         onRemoveTag={removeTagFromLead}
         canDelete={true}
       />
+      <ExportConversationsDialog open={exportDialogOpen} onOpenChange={setExportDialogOpen} />
     </div>
   );
 }
