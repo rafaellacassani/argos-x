@@ -3150,17 +3150,6 @@ export default function Chats() {
                 onFiltersChange={handleFiltersChange}
                 activeFiltersCount={activeFiltersCount}
               />
-              {isMasterWorkspace && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setExportDialogOpen(true)}
-                  title="Exportar conversas"
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-              )}
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Archive className="w-4 h-4" />
               </Button>
