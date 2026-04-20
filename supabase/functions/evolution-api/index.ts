@@ -441,7 +441,8 @@ app.post("/send-text/:instanceName", async (c) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const { number, text } = await c.req.json();
     if (!number || !text || typeof text !== "string" || text.length > 4000) return c.json({ error: "number and text (max 4000 chars) are required" }, 400, corsHeaders);
-    const result = await evolutionRequest(`/message/sendText/${instanceName}`, "POST", { number, text, delay: 0, linkPreview: true });
+    const normalizedNumber = normalizeBrazilianNumber(number);
+    const result = await evolutionRequest(`/message/sendText/${instanceName}`, "POST", { number: normalizedNumber, text, delay: 0, linkPreview: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : "Failed to send message" }, 500, corsHeaders);
