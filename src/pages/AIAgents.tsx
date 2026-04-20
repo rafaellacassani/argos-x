@@ -84,14 +84,12 @@ export default function AIAgents() {
           <Plus className="w-4 h-4" />
           Novo Agente
         </Button>
-        </div>
       </div>
       {isMasterWorkspace && (
         <div className="flex justify-end -mt-2">
           <ExportAgentsButton />
         </div>
       )}
-      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
