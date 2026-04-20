@@ -4263,6 +4263,7 @@ export default function Chats() {
         onRemoveTag={removeTagFromLead}
         canDelete={true}
       />
+      </div>
       <ExportConversationsDialog open={exportDialogOpen} onOpenChange={setExportDialogOpen} />
     </div>
   );
