@@ -412,6 +412,8 @@ app.post("/chats/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
+    const body = await c.req.json().catch(() => ({}));
+    const safeLimit = Math.min(Math.max(1, Number(body?.limit) || 200), 1000);
     const result = await evolutionRequest(`/chat/findChats/${instanceName}`, "POST", {}, false);
     if (!result) return c.json([], 200, corsHeaders);
     const chats = Array.isArray(result) ? result : [];
@@ -420,7 +422,7 @@ app.post("/chats/:instanceName", async (c) => {
       const tsB = b.lastMessage?.messageTimestamp || 0;
       return tsB - tsA;
     });
-    return c.json(chats.slice(0, 200), 200, corsHeaders);
+    return c.json(chats.slice(0, safeLimit), 200, corsHeaders);
   } catch (error) {
     return c.json([], 200, corsHeaders);
   }
@@ -430,10 +432,11 @@ app.post("/messages/:instanceName", async (c) => {
   try {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
-    const { remoteJid, limit = 50 } = await c.req.json();
+    const { remoteJid, limit = 50, page = 1 } = await c.req.json();
     if (!remoteJid || typeof remoteJid !== "string" || remoteJid.length > 100) return c.json({ error: "Invalid remoteJid" }, 400, corsHeaders);
     const safeLimit = Math.min(Math.max(1, Number(limit) || 50), 200);
-    const result = await evolutionRequest(`/chat/findMessages/${instanceName}`, "POST", { where: { key: { remoteJid } }, limit: safeLimit }, false);
+    const safePage = Math.max(1, Number(page) || 1);
+    const result = await evolutionRequest(`/chat/findMessages/${instanceName}`, "POST", { where: { key: { remoteJid } }, limit: safeLimit, page: safePage }, false);
     if (!result) return c.json({ messages: { records: [] } }, 200, corsHeaders);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
