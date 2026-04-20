@@ -482,6 +482,8 @@ export default function Chats() {
   const isMobile = useIsMobile();
   const { queue, waitingCount, claimItem, resolveItem, fetchQueue } = useHumanSupportQueue();
   const [showQueueOnly, setShowQueueOnly] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const isMasterWorkspace = !!workspaceId && MASTER_WORKSPACE_IDS.has(workspaceId);
   const [leadPanelOpen, setLeadPanelOpen] = useState(false);
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [leadModalLead, setLeadModalLead] = useState<any>(null);
@@ -3132,6 +3134,17 @@ export default function Chats() {
                 onFiltersChange={handleFiltersChange}
                 activeFiltersCount={activeFiltersCount}
               />
+              {isMasterWorkspace && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setExportDialogOpen(true)}
+                  title="Exportar conversas"
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Archive className="w-4 h-4" />
               </Button>
