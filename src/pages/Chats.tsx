@@ -3040,10 +3040,25 @@ export default function Chats() {
   }
 
   return (
-    <div className={cn("h-[calc(100vh-8rem)] flex rounded-xl overflow-hidden border border-border bg-background", isMobile && "h-[calc(100vh-4rem)] rounded-none border-0")} data-tour="chat-section">
+    <div className={cn("h-[calc(100vh-8rem)] flex flex-col", isMobile && "h-[calc(100vh-4rem)]")}>
+      {/* Top action bar (outside chat container) */}
+      {isMasterWorkspace && !isMobile && (
+        <div className="flex items-center justify-end mb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setExportDialogOpen(true)}
+          >
+            <Download className="w-4 h-4" />
+            Exportar conversas
+          </Button>
+        </div>
+      )}
+      <div className={cn("flex-1 flex rounded-xl overflow-hidden border border-border bg-background min-h-0", isMobile && "rounded-none border-0")} data-tour="chat-section">
       {/* Chat List */}
       <div className={cn(
-        "w-[320px] border-r border-border flex flex-col bg-card",
+        "w-[360px] border-r border-border flex flex-col bg-card",
         isMobile && "w-full border-r-0",
         isMobile && selectedChat && "hidden"
       )}>
@@ -3135,17 +3150,6 @@ export default function Chats() {
                 onFiltersChange={handleFiltersChange}
                 activeFiltersCount={activeFiltersCount}
               />
-              {isMasterWorkspace && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setExportDialogOpen(true)}
-                  title="Exportar conversas"
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-              )}
               <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Archive className="w-4 h-4" />
               </Button>
@@ -4259,6 +4263,7 @@ export default function Chats() {
         onRemoveTag={removeTagFromLead}
         canDelete={true}
       />
+      </div>
       <ExportConversationsDialog open={exportDialogOpen} onOpenChange={setExportDialogOpen} />
     </div>
   );
