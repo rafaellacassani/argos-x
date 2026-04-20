@@ -636,6 +636,23 @@ serve(async (req) => {
 
       case "PAYMENT_DELETED":
       case "PAYMENT_REFUNDED": {
+        // CRITICAL FIX: Don't cancel the workspace if the subscription is still ACTIVE
+        // in Asaas. PAYMENT_DELETED/REFUNDED can be triggered for a single charge
+        // (e.g. trial pre-auth removed, refund on a single invoice) without meaning
+        // the whole subscription was canceled. Previously, this was cancelling
+        // workspaces ~1h after signup because Asaas removes the trial pre-auth
+        // charge, breaking trials for valid paying customers.
+        const subStatus = (subscription.status || "").toUpperCase();
+        const subDeleted = subscription.deleted === true;
+        const isSubscriptionDead = subDeleted || ["INACTIVE", "EXPIRED", "CANCELED", "CANCELLED"].includes(subStatus);
+
+        if (!isSubscriptionDead) {
+          console.log(
+            `[asaas-webhook] ${event} received but subscription ${subscriptionId} is still ${subStatus || "ACTIVE"} — NOT cancelling workspace.`
+          );
+          break;
+        }
+
         await supabaseAdmin
           .from("workspaces")
           .update({
