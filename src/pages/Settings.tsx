@@ -1334,6 +1334,45 @@ export default function Settings() {
         instanceToReconnect={reconnectingInstance ?? undefined}
       />
 
+      {/* Disconnect Meta Page Confirmation */}
+      <AlertDialog
+        open={!!pageToDisconnect}
+        onOpenChange={(open) => { if (!open) setPageToDisconnect(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desconectar página Meta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pageToDisconnect && (
+                <>
+                  A página <strong>{pageToDisconnect.page_name}</strong>
+                  {pageToDisconnect.instagram_username && <> (@{pageToDisconnect.instagram_username})</>} será removida.
+                  Você deixará de receber novas mensagens dela. As conversas anteriores permanecem no histórico.
+                  Pode reconectar a qualquer momento.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!disconnectingPageId}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (pageToDisconnect) handleDisconnectMetaPage(pageToDisconnect);
+              }}
+              disabled={!!disconnectingPageId}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {disconnectingPageId ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Desconectando...</>
+              ) : (
+                "Desconectar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Cloud API Modal */}
       <CloudAPIConnectionModal
         open={showCloudAPIModal}
