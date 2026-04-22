@@ -1155,6 +1155,42 @@ export type Database = {
           },
         ]
       }
+      cleanup_log: {
+        Row: {
+          archived_count: number
+          archived_workspace_ids: Json
+          deleted_count: number
+          deleted_workspace_ids: Json
+          details: Json
+          error_message: string | null
+          executed_at: string
+          id: string
+          trigger_source: string
+        }
+        Insert: {
+          archived_count?: number
+          archived_workspace_ids?: Json
+          deleted_count?: number
+          deleted_workspace_ids?: Json
+          details?: Json
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          trigger_source?: string
+        }
+        Update: {
+          archived_count?: number
+          archived_workspace_ids?: Json
+          deleted_count?: number
+          deleted_workspace_ids?: Json
+          details?: Json
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          trigger_source?: string
+        }
+        Relationships: []
+      }
       client_invites: {
         Row: {
           checkout_url: string | null
@@ -3121,6 +3157,44 @@ export type Database = {
           },
         ]
       }
+      reactivation_watch: {
+        Row: {
+          added_at: string
+          archive_deadline: string
+          contact_attempts: number
+          last_contact_at: string | null
+          notes: string | null
+          reason: string
+          workspace_id: string
+        }
+        Insert: {
+          added_at?: string
+          archive_deadline: string
+          contact_attempts?: number
+          last_contact_at?: string | null
+          notes?: string | null
+          reason: string
+          workspace_id: string
+        }
+        Update: {
+          added_at?: string
+          archive_deadline?: string
+          contact_attempts?: number
+          last_contact_at?: string | null
+          notes?: string | null
+          reason?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reactivation_watch_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salesbot_wait_queue: {
         Row: {
           bot_id: string
@@ -4184,6 +4258,7 @@ export type Database = {
           ai_interactions_used: number | null
           ai_reset_at: string | null
           alert_instance_name: string | null
+          archived_at: string | null
           asaas_customer_id: string | null
           asaas_subscription_id: string | null
           blocked_at: string | null
@@ -4224,6 +4299,7 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          archived_at?: string | null
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
           blocked_at?: string | null
@@ -4264,6 +4340,7 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          archived_at?: string | null
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
           blocked_at?: string | null
