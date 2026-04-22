@@ -247,6 +247,32 @@ export default function Settings() {
     }
   }, []);
 
+  const handleDisconnectMetaPage = async (page: MetaPage) => {
+    setDisconnectingPageId(page.id);
+    try {
+      const { error } = await supabase
+        .from("meta_pages")
+        .update({ is_active: false })
+        .eq("id", page.id);
+      if (error) throw error;
+      toast({
+        title: "Página desconectada",
+        description: `${page.page_name} foi removida das integrações.`,
+      });
+      setMetaPages((prev) => prev.filter((p) => p.id !== page.id));
+    } catch (err) {
+      console.error("Error disconnecting meta page:", err);
+      toast({
+        title: "Erro ao desconectar",
+        description: "Não foi possível desconectar a página.",
+        variant: "destructive",
+      });
+    } finally {
+      setDisconnectingPageId(null);
+      setPageToDisconnect(null);
+    }
+  };
+
   const fetchCloudConnections = async () => {
     if (!workspaceId) return;
     try {
