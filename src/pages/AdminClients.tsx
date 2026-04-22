@@ -157,6 +157,8 @@ interface InviteData {
 export default function AdminClients() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { workspace } = useWorkspace();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientData[]>([]);
