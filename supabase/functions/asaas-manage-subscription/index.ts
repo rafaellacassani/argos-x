@@ -177,7 +177,7 @@ serve(async (req) => {
     // Get workspace
     const { data: workspace, error: wsError } = await supabaseAdmin
       .from("workspaces")
-      .select("id, payment_provider, asaas_customer_id, asaas_subscription_id, plan_name")
+      .select("id, payment_provider, asaas_customer_id, asaas_subscription_id, plan_name, promo_campaign, is_promo_trial, promo_locked_until")
       .eq("id", workspaceId)
       .single();
 
@@ -204,6 +204,19 @@ serve(async (req) => {
       const config = PLAN_CONFIGS[plan];
       const previousPlan = workspace.plan_name;
       const previousSubId = workspace.asaas_subscription_id;
+
+      // Promo Escala 47: bloqueia downgrade no 1º mês promocional.
+      // Permite mudança apenas para o mesmo plano "escala" (no-op) ou após o término do lock.
+      if (workspace.is_promo_trial && workspace.promo_campaign === "escala_47" && plan !== "escala") {
+        const unlockDate = workspace.promo_locked_until
+          ? new Date(workspace.promo_locked_until).toLocaleDateString("pt-BR")
+          : "o término da promoção";
+        return new Response(JSON.stringify({
+          error: `Você está na promoção Escala R$47,90. Mudanças de plano serão liberadas em ${unlockDate}.`,
+        }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       if (!workspace.asaas_customer_id) {
         return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado a este workspace." }), {

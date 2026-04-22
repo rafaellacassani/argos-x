@@ -4194,6 +4194,7 @@ export type Database = {
           form_field_mapping: Json | null
           form_webhook_token: string | null
           id: string
+          is_promo_trial: boolean | null
           lead_limit: number | null
           logo_url: string | null
           meta_conversions_token: string | null
@@ -4204,6 +4205,9 @@ export type Database = {
           payment_provider: string | null
           plan_name: string | null
           plan_type: string
+          promo_campaign: string | null
+          promo_locked_until: string | null
+          promo_starts_at: string | null
           slug: string
           stripe_customer_id: string | null
           stripe_price_id: string | null
@@ -4230,6 +4234,7 @@ export type Database = {
           form_field_mapping?: Json | null
           form_webhook_token?: string | null
           id?: string
+          is_promo_trial?: boolean | null
           lead_limit?: number | null
           logo_url?: string | null
           meta_conversions_token?: string | null
@@ -4240,6 +4245,9 @@ export type Database = {
           payment_provider?: string | null
           plan_name?: string | null
           plan_type?: string
+          promo_campaign?: string | null
+          promo_locked_until?: string | null
+          promo_starts_at?: string | null
           slug: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null
@@ -4266,6 +4274,7 @@ export type Database = {
           form_field_mapping?: Json | null
           form_webhook_token?: string | null
           id?: string
+          is_promo_trial?: boolean | null
           lead_limit?: number | null
           logo_url?: string | null
           meta_conversions_token?: string | null
@@ -4276,6 +4285,9 @@ export type Database = {
           payment_provider?: string | null
           plan_name?: string | null
           plan_type?: string
+          promo_campaign?: string | null
+          promo_locked_until?: string | null
+          promo_starts_at?: string | null
           slug?: string
           stripe_customer_id?: string | null
           stripe_price_id?: string | null

@@ -147,3 +147,9 @@ verify_jwt = false
 
 [functions.send-reactivation-campaign]
 verify_jwt = false
+
+[functions.asaas-checkout-escala47]
+verify_jwt = false
+
+[functions.escala47-activate-fullprice]
+verify_jwt = false
