@@ -681,19 +681,38 @@ export default function Settings() {
                       {integration.metaPages && integration.metaPages.length > 0 && (
                         <div className="mb-4 space-y-1">
                           {integration.metaPages.slice(0, 2).map((page) => (
-                            <p key={page.id} className="text-sm font-medium text-foreground flex items-center gap-2">
-                              {integration.id === "instagram" ? (
-                                <>
-                                  <Instagram className="w-4 h-4 text-pink-500" />
-                                  @{page.instagram_username || page.page_name}
-                                </>
-                              ) : (
-                                <>
-                                  <Facebook className="w-4 h-4 text-blue-600" />
-                                  {page.page_name}
-                                </>
-                              )}
-                            </p>
+                            <div key={page.id} className="flex items-center justify-between gap-2 group">
+                              <p className="text-sm font-medium text-foreground flex items-center gap-2 min-w-0 flex-1">
+                                {integration.id === "instagram" ? (
+                                  <>
+                                    <Instagram className="w-4 h-4 text-pink-500 shrink-0" />
+                                    <span className="truncate">@{page.instagram_username || page.page_name}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Facebook className="w-4 h-4 text-blue-600 shrink-0" />
+                                    <span className="truncate">{page.page_name}</span>
+                                  </>
+                                )}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 shrink-0 opacity-60 hover:opacity-100 hover:text-destructive"
+                                disabled={disconnectingPageId === page.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPageToDisconnect(page);
+                                }}
+                                title="Desconectar página"
+                              >
+                                {disconnectingPageId === page.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            </div>
                           ))}
                           {integration.metaPages.length > 2 && (
                             <p className="text-xs text-muted-foreground">
