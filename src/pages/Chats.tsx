@@ -2725,8 +2725,10 @@ export default function Chats() {
     const timer = setTimeout(async () => {
       try {
         const term = `%${searchTerm}%`;
-        // Query whatsapp_messages and meta_conversations in parallel
-        const [waResult, metaResult] = await Promise.all([
+        const searchDigits = normalizeDigits(searchTerm);
+        // Query whatsapp_messages, meta_conversations, AND leads in parallel
+        // Leads search ensures we find old chats whose messages fall outside the 1000-msg DB window.
+        const [waResult, metaResult, leadsResult] = await Promise.all([
           workspaceId
             ? supabase
                 .from("whatsapp_messages")
@@ -2744,6 +2746,18 @@ export default function Chats() {
                 .ilike("content", term)
                 .order("timestamp", { ascending: false })
                 .limit(200)
+            : Promise.resolve({ data: [] as any[], error: null }),
+          workspaceId
+            ? supabase
+                .from("leads")
+                .select("id, name, phone, whatsapp_jid")
+                .eq("workspace_id", workspaceId)
+                .or(
+                  searchDigits.length >= 4
+                    ? `name.ilike.${term},phone.ilike.%${searchDigits}%`
+                    : `name.ilike.${term}`
+                )
+                .limit(50)
             : Promise.resolve({ data: [] as any[], error: null }),
         ]);
 
@@ -2765,6 +2779,60 @@ export default function Chats() {
           }
         }
 
+        // For lead matches that aren't in the current chat list, fetch their last message
+        // from any instance and inject as a "virtual chat" so the user can find old conversations.
+        const leadRows = (leadsResult.data || []) as Array<{ id: string; name: string; phone: string; whatsapp_jid: string | null }>;
+        if (leadRows.length > 0 && workspaceId) {
+          const existingDigits = new Set<string>();
+          for (const c of chats) {
+            const d = cleanPhoneNumber(c.phone || c.remoteJid);
+            if (d.length >= 10) existingDigits.add(d.slice(-10));
+          }
+
+          const newVirtualChats: Chat[] = [];
+          for (const lead of leadRows) {
+            const phoneDigits = (lead.phone || "").replace(/[^0-9]/g, "");
+            if (phoneDigits.length < 10) continue;
+            if (existingDigits.has(phoneDigits.slice(-10))) continue;
+
+            // Fetch most recent message for this lead's phone (across all instances)
+            const jidGuess = lead.whatsapp_jid || `${phoneDigits}@s.whatsapp.net`;
+            const { data: lastMsg } = await supabase
+              .from("whatsapp_messages")
+              .select("remote_jid, instance_name, content, timestamp, from_me, push_name")
+              .eq("workspace_id", workspaceId)
+              .or(`remote_jid.eq.${jidGuess},remote_jid.ilike.${phoneDigits}@%`)
+              .order("timestamp", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (!lastMsg) continue;
+
+            const ts = new Date(lastMsg.timestamp).getTime() / 1000;
+            newVirtualChats.push({
+              id: `inst:${lastMsg.instance_name}:phone:${phoneDigits.slice(-10)}`,
+              remoteJid: lastMsg.remote_jid,
+              name: lead.name || lastMsg.push_name || formatPhoneDisplay(phoneDigits),
+              lastMessage: lastMsg.content || "",
+              time: formatTime(ts),
+              unread: 0,
+              online: false,
+              phone: formatPhoneDisplay(phoneDigits),
+              lastMessageFromMe: !!lastMsg.from_me,
+              instanceName: lastMsg.instance_name,
+            });
+            matchedIds.add(lastMsg.remote_jid);
+          }
+
+          if (newVirtualChats.length > 0) {
+            setChats((prev) => {
+              const existingIds = new Set(prev.map((c) => c.id));
+              const toAdd = newVirtualChats.filter((c) => !existingIds.has(c.id));
+              return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+            });
+          }
+        }
+
         setContentSearchResults(matchedIds);
         setContentSearchTerm(searchTerm);
       } catch (err) {
@@ -2775,6 +2843,7 @@ export default function Chats() {
     }, 500);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm, workspaceId]);
 
   // Build support queue lookup by session_id AND lead_id
