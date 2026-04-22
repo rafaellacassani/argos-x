@@ -2095,6 +2095,17 @@ export default function AdminClients() {
                 </div>
               </div>
 
+              {(selectedClient.owner?.personal_whatsapp || selectedClient.owner?.phone) && (
+                <Button
+                  onClick={() => handleStartConversation(selectedClient)}
+                  className="w-full"
+                  variant="default"
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Abrir conversa com este cliente
+                </Button>
+              )}
+
               <Separator />
 
               {/* Plan & status */}
