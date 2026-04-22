@@ -224,7 +224,7 @@ app.get("/", async (c) => {
             for (let i = 1; i < connIgs.length; i++) {
               const extraIg = connIgs[i];
               if (!savedIgIds.has(extraIg.id)) {
-                const { error: extraErr } = await supabase.from("meta_pages").insert({
+                const { error: extraErr } = await supabase.from("meta_pages").upsert({
                   meta_account_id: metaAccount.id,
                   page_id: extraIg.id,
                   page_name: `@${extraIg.username || extraIg.id}`,
@@ -233,7 +233,8 @@ app.get("/", async (c) => {
                   instagram_username: extraIg.username || extraIg.id,
                   platform: "instagram",
                   workspace_id: workspaceId,
-                });
+                  is_active: true,
+                }, { onConflict: "page_id" });
                 if (!extraErr) {
                   savedIgIds.add(extraIg.id);
                   console.log(`[Facebook OAuth] ✅ Extra IG saved: @${extraIg.username || extraIg.id}`);
@@ -248,7 +249,7 @@ app.get("/", async (c) => {
 
       const { error: pageError } = await supabase
         .from("meta_pages")
-        .insert({
+        .upsert({
           meta_account_id: metaAccount.id,
           page_id: page.id,
           page_name: page.name,
@@ -257,12 +258,13 @@ app.get("/", async (c) => {
           instagram_username: instagramUsername,
           platform: platform,
           workspace_id: workspaceId,
-        });
+          is_active: true,
+        }, { onConflict: "page_id" });
 
       if (pageError) {
         console.error(`[Facebook OAuth] Failed to save page ${page.name}:`, pageError);
       } else {
-        console.log(`[Facebook OAuth] ✅ Page saved: ${page.name}`);
+        console.log(`[Facebook OAuth] ✅ Page upserted: ${page.name} (platform=${platform}, ig=${instagramUsername || "none"})`);
         if (instagramAccountId) savedIgIds.add(instagramAccountId);
 
         // Subscribe page to webhook so Meta sends events to our endpoint
@@ -333,7 +335,7 @@ app.get("/", async (c) => {
 
         const { error: igPageError } = await supabase
           .from("meta_pages")
-          .insert({
+          .upsert({
             meta_account_id: metaAccount.id,
             page_id: ig.id,
             page_name: `@${igUsername}`,
@@ -342,7 +344,8 @@ app.get("/", async (c) => {
             instagram_username: igUsername,
             platform: "instagram",
             workspace_id: workspaceId,
-          });
+            is_active: true,
+          }, { onConflict: "page_id" });
 
         if (igPageError) {
           console.error(`[Facebook OAuth] Failed to save IG @${igUsername}:`, igPageError);
