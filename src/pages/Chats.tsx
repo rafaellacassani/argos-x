@@ -782,8 +782,8 @@ export default function Chats() {
 
     // Meta chat - send via Graph API
     if (selectedChat.isMeta && selectedChat.metaPageId && selectedChat.metaSenderId) {
-      const success = await sendMetaMessage(selectedChat.metaPageId, selectedChat.metaSenderId, text);
-      if (success) {
+      const result = await sendMetaMessage(selectedChat.metaPageId, selectedChat.metaSenderId, text);
+      if (result.success) {
         const newMessage: Message = {
           id: `local-${Date.now()}`,
           content: text,
@@ -799,9 +799,18 @@ export default function Chats() {
         });
         requestAnimationFrame(() => scrollToBottom());
       } else {
-        toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
+        const raw = result.errorMessage || "";
+        // Friendly translation of common Meta errors
+        let friendly = raw || "Não foi possível enviar a mensagem.";
+        if (/outside.*allowed window|24[- ]?hour|message.*window/i.test(raw) || /\(#10\)/.test(raw) || /\(#100\)/.test(raw)) {
+          friendly =
+            "A janela de 24h do Messenger/Instagram expirou. O Meta só permite responder até 24h após a última mensagem do contato. Aguarde uma nova mensagem dele para responder.";
+        } else if (/token.*expir|reconecte|OAuth/i.test(raw)) {
+          friendly = "Token da página Meta expirou. Reconecte em Configurações → Conexões.";
+        }
+        toast({ title: "Erro ao enviar", description: friendly, variant: "destructive" });
       }
-      return success;
+      return result.success;
     }
 
     // WhatsApp chat - send via Evolution API
