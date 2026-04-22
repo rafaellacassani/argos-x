@@ -142,6 +142,8 @@ export default function Settings() {
   const [metaPages, setMetaPages] = useState<MetaPage[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const [disconnectingPageId, setDisconnectingPageId] = useState<string | null>(null);
+  const [pageToDisconnect, setPageToDisconnect] = useState<MetaPage | null>(null);
   const [showCloudAPIModal, setShowCloudAPIModal] = useState(false);
   const [showEmbeddedSignup, setShowEmbeddedSignup] = useState(false);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
