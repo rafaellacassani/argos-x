@@ -169,7 +169,11 @@ export function useMetaChat() {
 
   // Send a message via meta-send-message edge function
   const sendMessage = useCallback(
-    async (metaPageId: string, recipientId: string, text: string): Promise<boolean> => {
+    async (
+      metaPageId: string,
+      recipientId: string,
+      text: string,
+    ): Promise<{ success: boolean; errorMessage?: string }> => {
       try {
         const { data, error } = await supabase.functions.invoke("meta-send-message", {
           body: { metaPageId, recipientId, message: text },
@@ -177,18 +181,33 @@ export function useMetaChat() {
 
         if (error) {
           console.error("[useMetaChat] Error sending message:", error);
-          return false;
+          // FunctionsHttpError exposes the response body via context
+          let bodyMsg: string | undefined;
+          try {
+            const ctx = (error as any)?.context;
+            if (ctx && typeof ctx.json === "function") {
+              const parsed = await ctx.json();
+              bodyMsg = parsed?.message || parsed?.error || parsed?.details?.error?.message;
+            }
+          } catch (_) { /* ignore */ }
+          return { success: false, errorMessage: bodyMsg || (error as any)?.message };
         }
         if (data?.error) {
           console.error("[useMetaChat] Send error:", data.error);
-          return false;
+          return {
+            success: false,
+            errorMessage:
+              data.message ||
+              data.details?.error?.message ||
+              (typeof data.error === "string" ? data.error : "Erro desconhecido"),
+          };
         }
 
         console.log("[useMetaChat] Message sent successfully:", data.message_id);
-        return true;
+        return { success: true };
       } catch (err) {
         console.error("[useMetaChat] sendMessage error:", err);
-        return false;
+        return { success: false, errorMessage: (err as Error)?.message };
       }
     },
     []
