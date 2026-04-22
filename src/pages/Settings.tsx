@@ -46,6 +46,16 @@ import { CloudAPIConnectionModal } from "@/components/whatsapp/CloudAPIConnectio
 import { WABAConnectionCard } from "@/components/whatsapp/WABAConnectionCard";
 import { WhatsAppEmbeddedSignup } from "@/components/whatsapp/WhatsAppEmbeddedSignup";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 import { useEvolutionAPI, type EvolutionInstance } from "@/hooks/useEvolutionAPI";
 import { toast } from "@/hooks/use-toast";
