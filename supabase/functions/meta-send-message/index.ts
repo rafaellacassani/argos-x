@@ -152,6 +152,24 @@ Deno.serve(async (req) => {
     const graphData = await graphRes.json();
 
     if (!graphRes.ok) {
+      const errCode = graphData?.error?.code;
+      const errSubcode = graphData?.error?.error_subcode;
+      // 190 = OAuthException (token expired/invalid). Subcodes 463/467 = expired/invalid session.
+      const isTokenExpired = errCode === 190 || errSubcode === 463 || errSubcode === 467;
+      if (isTokenExpired) {
+        // Mark page as needing reconnection so UI can surface the alert
+        try {
+          await supabase.from("meta_pages").update({ is_active: false }).eq("id", page.id);
+        } catch (_e) { /* non-fatal */ }
+        return new Response(
+          JSON.stringify({
+            error: "token_expired",
+            message: "Token da página Meta expirou. Reconecte sua conta em Configurações → Integrações.",
+            details: graphData,
+          }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       return new Response(JSON.stringify({ error: "Graph API error", details: graphData }), { status: graphRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
