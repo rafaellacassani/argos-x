@@ -3180,7 +3180,12 @@ export default function Chats() {
               ))}
               {metaPages.map((page) => (
                 <option key={page.id} value={`meta:${page.id}`}>
-                  {page.platform === "instagram" ? "📸" : "💬"} {page.page_name}
+                  {page.platform === "instagram"
+                    ? "📸"
+                    : page.platform === "both"
+                      ? "📸💬"
+                      : "💬"}{" "}
+                  {page.page_name}
                   {page.instagram_username ? ` (@${page.instagram_username})` : ""}
                 </option>
               ))}
