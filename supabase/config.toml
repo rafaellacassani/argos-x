@@ -153,3 +153,6 @@ verify_jwt = false
 
 [functions.escala47-activate-fullprice]
 verify_jwt = false
+
+[functions.cleanup-inactive-workspaces]
+verify_jwt = false
