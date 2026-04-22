@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -156,6 +157,8 @@ interface InviteData {
 export default function AdminClients() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { workspace } = useWorkspace();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [clients, setClients] = useState<ClientData[]>([]);
@@ -482,6 +485,70 @@ export default function AdminClients() {
       });
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  // Open or create a chat with this client's owner inside the CURRENT workspace.
+  // Creates a lead with the owner's WhatsApp number (preferring personal_whatsapp,
+  // falling back to phone) and navigates to /chats with the phone pre-searched.
+  const handleStartConversation = async (client: ClientData) => {
+    if (!workspace?.id) {
+      toast({ title: "Sem workspace ativo", variant: "destructive" });
+      return;
+    }
+    const rawPhone = client.owner?.personal_whatsapp || client.owner?.phone || "";
+    const digits = (rawPhone || "").replace(/[^0-9]/g, "");
+    if (digits.length < 10) {
+      toast({
+        title: "Telefone inválido",
+        description: "O proprietário deste cliente não possui WhatsApp/telefone cadastrado.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Look for an existing lead in the current workspace with this phone
+      const { data: existing } = await supabase
+        .from("leads")
+        .select("id, phone")
+        .eq("workspace_id", workspace.id)
+        .or(`phone.eq.${digits},phone.ilike.%${digits.slice(-10)}%`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!existing) {
+        // Find the first stage of the default funnel in current workspace
+        const { data: stage } = await supabase
+          .from("funnel_stages")
+          .select("id")
+          .eq("workspace_id", workspace.id)
+          .order("position", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        const { error: insertError } = await supabase.from("leads").insert({
+          workspace_id: workspace.id,
+          name: client.owner?.full_name || client.name,
+          phone: digits,
+          whatsapp_jid: `${digits}@s.whatsapp.net`,
+          stage_id: stage?.id || null,
+          source: "admin-clients",
+        } as any);
+
+        if (insertError) throw insertError;
+        toast({ title: "Lead criado", description: "Abrindo conversa..." });
+      }
+
+      setSelectedClient(null);
+      // Navigate to chat with the phone pre-searched so it auto-loads the conversation
+      navigate(`/chats?search=${encodeURIComponent(digits)}`);
+    } catch (err: any) {
+      toast({
+        title: "Erro ao iniciar conversa",
+        description: err.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -2027,6 +2094,17 @@ export default function AdminClients() {
                   )}
                 </div>
               </div>
+
+              {(selectedClient.owner?.personal_whatsapp || selectedClient.owner?.phone) && (
+                <Button
+                  onClick={() => handleStartConversation(selectedClient)}
+                  className="w-full"
+                  variant="default"
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Abrir conversa com este cliente
+                </Button>
+              )}
 
               <Separator />
 
