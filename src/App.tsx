@@ -48,6 +48,7 @@ const AgentTrainingDoc = lazy(() => import("./pages/AgentTrainingDoc"));
 const ProfileSettings = lazy(() => import("./pages/ProfileSettings"));
 const Cadastro = lazy(() => import("./pages/Cadastro"));
 const CadastroSucesso = lazy(() => import("./pages/CadastroSucesso"));
+const CadastroEscala47 = lazy(() => import("./pages/CadastroEscala47"));
 const TourGuiado = lazy(() => import("./pages/TourGuiado"));
 const WhatsAppTemplates = lazy(() => import("./pages/WhatsAppTemplates"));
 const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
@@ -105,6 +106,7 @@ const App = () => (
                   <Route path="/terms" element={<TermsOfService />} />
                   <Route path="/cadastro" element={<Cadastro />} />
                   <Route path="/cadastro/sucesso" element={<CadastroSucesso />} />
+                  <Route path="/escala-47" element={<CadastroEscala47 />} />
                   <Route path="/admin/panel" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <AdminPanel />
