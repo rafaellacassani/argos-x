@@ -98,7 +98,7 @@ app.get("/", async (c) => {
   try {
     // Step 1: Exchange code for access token
     console.log("[Facebook OAuth] Exchanging code for access token...");
-    const tokenUrl = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
+    const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
     tokenUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
     tokenUrl.searchParams.set("redirect_uri", REDIRECT_URI);
     tokenUrl.searchParams.set("client_secret", FACEBOOK_APP_SECRET);
@@ -122,7 +122,7 @@ app.get("/", async (c) => {
 
     // Step 2: Get long-lived token
     console.log("[Facebook OAuth] Exchanging for long-lived token...");
-    const longLivedUrl = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
+    const longLivedUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
     longLivedUrl.searchParams.set("grant_type", "fb_exchange_token");
     longLivedUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
     longLivedUrl.searchParams.set("client_secret", FACEBOOK_APP_SECRET);
@@ -158,7 +158,7 @@ app.get("/", async (c) => {
 
     // Step 4: Get user's pages
     console.log("[Facebook OAuth] Fetching user pages...");
-    const pagesUrl = new URL("https://graph.facebook.com/v18.0/me/accounts");
+    const pagesUrl = new URL("https://graph.facebook.com/v21.0/me/accounts");
     pagesUrl.searchParams.set("access_token", finalUserToken);
     pagesUrl.searchParams.set("fields", "id,name,access_token,instagram_business_account");
 
@@ -186,7 +186,7 @@ app.get("/", async (c) => {
       if (page.instagram_business_account?.id) {
         instagramAccountId = page.instagram_business_account.id;
         
-        const igUrl = new URL(`https://graph.facebook.com/v18.0/${instagramAccountId}`);
+        const igUrl = new URL(`https://graph.facebook.com/v21.0/${instagramAccountId}`);
         igUrl.searchParams.set("fields", "username");
         igUrl.searchParams.set("access_token", page.access_token);
         
@@ -203,7 +203,7 @@ app.get("/", async (c) => {
       // Method 2: connected_instagram_accounts (fallback — works even if not "business account")
       if (!instagramAccountId) {
         try {
-          const connIgUrl = new URL(`https://graph.facebook.com/v18.0/${page.id}`);
+          const connIgUrl = new URL(`https://graph.facebook.com/v21.0/${page.id}`);
           connIgUrl.searchParams.set("fields", "connected_instagram_accounts{id,username}");
           connIgUrl.searchParams.set("access_token", page.access_token);
 
@@ -268,7 +268,7 @@ app.get("/", async (c) => {
         // Subscribe page to webhook so Meta sends events to our endpoint
         try {
           const subscribeRes = await fetch(
-            `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps`,
+            `https://graph.facebook.com/v21.0/${page.id}/subscribed_apps`,
             {
               method: "POST",
               headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -287,7 +287,7 @@ app.get("/", async (c) => {
 
           if (instagramAccountId) {
             const igSubscribeRes = await fetch(
-              `https://graph.facebook.com/v18.0/${page.id}/subscribed_apps`,
+              `https://graph.facebook.com/v21.0/${page.id}/subscribed_apps`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -309,7 +309,7 @@ app.get("/", async (c) => {
     // Step 6: Detect Instagram accounts via me/instagram_accounts (additional fallback)
     console.log("[Facebook OAuth] Step 6: Fetching Instagram accounts via me/instagram_accounts...");
     try {
-      const igAccountsUrl = new URL("https://graph.facebook.com/v18.0/me/instagram_accounts");
+      const igAccountsUrl = new URL("https://graph.facebook.com/v21.0/me/instagram_accounts");
       igAccountsUrl.searchParams.set("fields", "id,username,profile_picture_url");
       igAccountsUrl.searchParams.set("access_token", finalUserToken);
 
@@ -360,7 +360,7 @@ app.get("/", async (c) => {
     console.log("[Facebook OAuth] Step 7: Detecting WABAs...");
     try {
       // Get all businesses the user manages
-      const bizUrl = new URL("https://graph.facebook.com/v18.0/me/businesses");
+      const bizUrl = new URL("https://graph.facebook.com/v21.0/me/businesses");
       bizUrl.searchParams.set("access_token", finalUserToken);
       bizUrl.searchParams.set("fields", "id,name");
 
@@ -372,7 +372,7 @@ app.get("/", async (c) => {
 
       for (const biz of businesses) {
         // Get WABAs owned by this business
-        const wabaUrl = new URL(`https://graph.facebook.com/v18.0/${biz.id}/owned_whatsapp_business_accounts`);
+        const wabaUrl = new URL(`https://graph.facebook.com/v21.0/${biz.id}/owned_whatsapp_business_accounts`);
         wabaUrl.searchParams.set("access_token", finalUserToken);
         wabaUrl.searchParams.set("fields", "id,name,phone_numbers{id,display_phone_number,verified_name}");
 
@@ -386,7 +386,7 @@ app.get("/", async (c) => {
           // Subscribe WABA to our app's webhook
           try {
             const subscribeRes = await fetch(
-              `https://graph.facebook.com/v18.0/${waba.id}/subscribed_apps`,
+              `https://graph.facebook.com/v21.0/${waba.id}/subscribed_apps`,
               {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -413,7 +413,7 @@ app.get("/", async (c) => {
             // Register phone number on Cloud API
             try {
               const regRes = await fetch(
-                `https://graph.facebook.com/v18.0/${phone.id}/register`,
+                `https://graph.facebook.com/v21.0/${phone.id}/register`,
                 {
                   method: "POST",
                   headers: {
@@ -547,7 +547,7 @@ app.post("/url", async (c) => {
 
   const state = await generateState(workspaceId);
 
-  const oauthUrl = new URL("https://www.facebook.com/v18.0/dialog/oauth");
+  const oauthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
   oauthUrl.searchParams.set("client_id", FACEBOOK_APP_ID);
   oauthUrl.searchParams.set("redirect_uri", REDIRECT_URI);
   oauthUrl.searchParams.set("scope", scopes.join(","));
