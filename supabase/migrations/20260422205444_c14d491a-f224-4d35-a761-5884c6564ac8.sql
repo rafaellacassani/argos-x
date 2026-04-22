@@ -1,0 +1,23 @@
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON public.user_roles (user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_role ON public.user_roles (user_id, role);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_instances_workspace ON public.whatsapp_instances (workspace_id);
+CREATE INDEX IF NOT EXISTS idx_meta_pages_workspace ON public.meta_pages (workspace_id);
+CREATE INDEX IF NOT EXISTS idx_lead_packs_workspace_active ON public.lead_packs (workspace_id, active);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_workspace_date ON public.agent_executions (workspace_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_agent_date ON public.agent_executions (agent_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_workspace_ts ON public.whatsapp_messages (workspace_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_instance_jid_ts ON public.whatsapp_messages (instance_name, remote_jid, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_leads_workspace_stage ON public.leads (workspace_id, stage_id);
+CREATE INDEX IF NOT EXISTS idx_leads_workspace_updated ON public.leads (workspace_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user_accepted ON public.workspace_members (user_id) WHERE accepted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_alert_log_workspace_sent ON public.alert_log (workspace_id, sent_at DESC);
+
+ANALYZE public.user_roles;
+ANALYZE public.whatsapp_instances;
+ANALYZE public.meta_pages;
+ANALYZE public.lead_packs;
+ANALYZE public.agent_executions;
+ANALYZE public.whatsapp_messages;
+ANALYZE public.leads;
+ANALYZE public.workspace_members;
+ANALYZE public.alert_log;
