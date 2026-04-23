@@ -63,6 +63,7 @@ export default function FollowupInteligenteTab() {
     pauseFollowup,
     resumeFollowup,
     cancelFollowup,
+    resumeCampaignFromHistory,
     isPaused,
   } = useFollowupCampaigns();
 
