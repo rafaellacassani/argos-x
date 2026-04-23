@@ -955,9 +955,37 @@ Deno.serve(async (req) => {
         const stepNum = item.step_index + 1;
         const totalSteps = sequence.length;
 
-        const followupPrompt = `Você é ${agent.agent_role || "Atendente"}, ${agent.name}. O lead "${lead.name}" parou de responder. Esta é a tentativa ${stepNum} de ${totalSteps} de recontato. Crie uma mensagem CURTA, criativa e natural de reativação. Não seja repetitivo — seja diferente das tentativas anteriores. Tom: ${agent.tone_of_voice || "consultivo"}. ${agent.use_emojis ? "Pode usar emojis." : "Não use emojis."} Máximo 2 frases. Retorne apenas a mensagem, sem explicações.`;
+        // Build a short transcript of the most recent exchange so the AI can
+        // write a contextual follow-up (instead of a repetitive template).
+        const recentMessages = Array.isArray(memory?.messages)
+          ? memory!.messages.slice(-12)
+          : [];
+        const transcript = recentMessages
+          .map((m: any) => {
+            const who = m.role === "user" ? `Cliente (${lead.name})` : "Você";
+            const text = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+            return `${who}: ${text}`;
+          })
+          .join("\n");
 
-        let followupMessage = `Oi ${lead.name}, tudo bem? Vi que ficou alguma dúvida, posso ajudar? 😊`;
+        const followupPrompt = `Você é ${agent.agent_role || "Atendente"}, ${agent.name}.
+Tom: ${agent.tone_of_voice || "consultivo"}. ${agent.use_emojis ? "Pode usar emojis com moderação." : "Não use emojis."}
+
+Histórico recente da conversa com "${lead.name}":
+---
+${transcript || "(sem histórico disponível)"}
+---
+
+Esta é a tentativa ${stepNum} de ${totalSteps} de follow-up automático porque o cliente parou de responder.
+
+REGRAS OBRIGATÓRIAS:
+1. Leia o histórico acima com atenção. Se o cliente JÁ confirmou que resolveu, que está usando, que já criou/configurou o que foi pedido, ou que não precisa mais de ajuda, NÃO mande follow-up — responda EXATAMENTE com o token: __SKIP__
+2. Se ainda faz sentido reengajar, escreva UMA mensagem curta (máximo 2 frases), natural, que faça referência ao último ponto da conversa. Nunca repita exatamente as mensagens anteriores.
+3. Não mande textos genéricos do tipo "vi que ficou alguma dúvida". Seja específico ao contexto.
+4. Retorne SOMENTE a mensagem final (ou __SKIP__), sem aspas, sem explicações.`;
+
+        let followupMessage = "";
+        let aiDecidedSkip = false;
 
         if (lovableApiKey) {
           try {
@@ -967,18 +995,48 @@ Deno.serve(async (req) => {
               body: JSON.stringify({
                 model: (() => { const m = agent.model || "openai/gpt-4o-mini"; return (!m.includes("/") || m.startsWith("anthropic/")) ? "openai/gpt-4o-mini" : m; })(),
                 messages: [{ role: "user", content: followupPrompt }],
-                temperature: 0.9,
-                max_tokens: 200,
+                temperature: 0.8,
+                max_tokens: 250,
               }),
             });
             if (aiRes.ok) {
               const aiData = await aiRes.json();
               const content = aiData.choices?.[0]?.message?.content;
-              if (content) followupMessage = content.trim();
+              if (content) {
+                const trimmed = content.trim();
+                if (/^__SKIP__/i.test(trimmed) || /__SKIP__/.test(trimmed)) {
+                  aiDecidedSkip = true;
+                } else {
+                  followupMessage = trimmed.replace(/^["']|["']$/g, "");
+                }
+              }
             }
           } catch (aiErr) {
             console.error("[followup-queue] AI generation error:", aiErr);
           }
+        }
+
+        // 🛑 AI determined the conversation goal was already met — cancel the
+        // entire remaining sequence so we don't keep nagging this lead.
+        if (aiDecidedSkip) {
+          await supabase
+            .from("agent_followup_queue")
+            .update({ status: "canceled", canceled_reason: "objective_completed_by_ai" })
+            .eq("id", item.id);
+          await supabase
+            .from("agent_followup_queue")
+            .update({ status: "canceled", canceled_reason: "objective_completed_by_ai" })
+            .eq("lead_id", lead.id)
+            .eq("agent_id", agent.id)
+            .eq("status", "pending");
+          followupsProcessed++;
+          console.log(`[followup-queue] 🛑 Sequence canceled by AI — objective already met for lead: ${lead.name}`);
+          continue;
+        }
+
+        // Safety fallback if AI key is missing or response was empty.
+        if (!followupMessage) {
+          followupMessage = `Oi ${lead.name}, tudo bem? Posso ajudar com alguma coisa?`;
         }
 
         const isWabaSession = item.session_id?.startsWith("waba_");
