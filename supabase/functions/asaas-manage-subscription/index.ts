@@ -119,20 +119,20 @@ async function ensureAsaasCustomer(
   // Buscar dados do dono para criar o customer
   const { data: profile } = await supabaseAdmin
     .from("user_profiles")
-    .select("full_name, email, phone, cpf_cnpj")
+    .select("full_name, email, phone")
     .eq("user_id", userId)
     .maybeSingle();
 
   const { data: ws } = await supabaseAdmin
     .from("workspaces")
-    .select("name, owner_email, owner_phone, owner_cpf_cnpj")
+    .select("name")
     .eq("id", workspace.id)
     .maybeSingle();
 
   const name = profile?.full_name || ws?.name || "Cliente Argos X";
-  const email = profile?.email || ws?.owner_email;
-  const phone = profile?.phone || ws?.owner_phone || undefined;
-  const cpfCnpj = profile?.cpf_cnpj || ws?.owner_cpf_cnpj || undefined;
+  const email = profile?.email;
+  const phone = profile?.phone || undefined;
+  const cpfCnpj = undefined;
 
   if (!email) {
     throw new Error("Não foi possível criar o cliente: e-mail do responsável não encontrado.");
