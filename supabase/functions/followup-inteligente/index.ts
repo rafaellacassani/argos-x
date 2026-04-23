@@ -212,18 +212,29 @@ async function generateTextWithModel(
     throw new Error("LOVABLE_API_KEY not configured");
   }
 
+  // Detect new-generation models that require max_completion_tokens and don't accept custom temperature
+  const isNewGenModel = /gpt-5|gpt-4\.1|o1|o3|gemini-2\.5|gemini-3/i.test(agentModel);
+
+  const requestBody: Record<string, unknown> = {
+    model: agentModel,
+    messages: aiMessages,
+  };
+
+  if (isNewGenModel) {
+    requestBody.max_completion_tokens = 500;
+    // Do not set temperature — these models only support default (1)
+  } else {
+    requestBody.max_tokens = 500;
+    requestBody.temperature = 0.35;
+  }
+
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${lovableApiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: agentModel,
-      messages: aiMessages,
-      temperature: 0.35,
-      max_tokens: 500,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!aiResponse.ok) {
