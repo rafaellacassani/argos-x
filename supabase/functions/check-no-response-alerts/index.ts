@@ -989,15 +989,22 @@ REGRAS OBRIGATÓRIAS:
 
         if (lovableApiKey) {
           try {
+            const followupModel = (() => { const m = agent.model || "openai/gpt-4o-mini"; return (!m.includes("/") || m.startsWith("anthropic/")) ? "openai/gpt-4o-mini" : m; })();
+            const isNewGenModel = /gpt-5|gpt-4\.1|o1|o3|gemini-2\.5|gemini-3/i.test(followupModel);
+            const followupBody: Record<string, unknown> = {
+              model: followupModel,
+              messages: [{ role: "user", content: followupPrompt }],
+            };
+            if (isNewGenModel) {
+              followupBody.max_completion_tokens = 250;
+            } else {
+              followupBody.max_tokens = 250;
+              followupBody.temperature = 0.8;
+            }
             const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
               method: "POST",
               headers: { "Authorization": `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: (() => { const m = agent.model || "openai/gpt-4o-mini"; return (!m.includes("/") || m.startsWith("anthropic/")) ? "openai/gpt-4o-mini" : m; })(),
-                messages: [{ role: "user", content: followupPrompt }],
-                temperature: 0.8,
-                max_tokens: 250,
-              }),
+              body: JSON.stringify(followupBody),
             });
             if (aiRes.ok) {
               const aiData = await aiRes.json();

@@ -116,8 +116,7 @@ Responda APENAS com um JSON no formato: {"score": <numero>, "label": "<quente|mo
           { role: "system", content: "Você é um classificador de leads. Responda apenas com JSON válido." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.3,
-        max_tokens: 200,
+        max_completion_tokens: 200,
       }),
     });
 

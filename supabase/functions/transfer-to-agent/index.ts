@@ -192,18 +192,24 @@ Gere UMA ÚNICA mensagem de apresentação curta e natural para o lead, menciona
 IMPORTANTE: Seja breve (2-3 frases). Não invente informações. Se não houver contexto claro, apenas se apresente e pergunte como pode ajudar.
 Responda APENAS com a mensagem, sem aspas ou prefixos.`;
 
+    const isNewGenModel = /gpt-5|gpt-4\.1|o1|o3|gemini-2\.5|gemini-3/i.test(aiModel);
+    const aiBody: Record<string, unknown> = {
+      model: aiModel,
+      messages: [{ role: "user", content: contextPrompt }],
+    };
+    if (isNewGenModel) {
+      aiBody.max_completion_tokens = 300;
+    } else {
+      aiBody.max_tokens = 300;
+      aiBody.temperature = 0.7;
+    }
     const aiRes = await fetch(aiUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: aiModel,
-        messages: [{ role: "user", content: contextPrompt }],
-        temperature: 0.7,
-        max_tokens: 300,
-      }),
+      body: JSON.stringify(aiBody),
     });
 
     let introMessage = `Olá ${leadName}! Sou ${targetAgent.name}, ${sourceAgentName} me passou seu contato. Como posso te ajudar?`;
