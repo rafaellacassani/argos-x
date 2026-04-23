@@ -329,7 +329,9 @@ serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           customer: workspace.asaas_customer_id,
-          billingType: "CREDIT_CARD",
+          // UNDEFINED = cliente escolhe PIX, boleto ou cartão no portal Asaas.
+          // Trial (asaas-checkout) continua hardcoded em CREDIT_CARD.
+          billingType: "UNDEFINED",
           value: config.price,
           cycle: "MONTHLY",
           nextDueDate: nextDueDate.toISOString().split("T")[0],
@@ -418,7 +420,8 @@ serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           customer: workspace.asaas_customer_id,
-          billingType: "CREDIT_CARD",
+          // UNDEFINED = PIX, boleto ou cartão (escolha do cliente)
+          billingType: "UNDEFINED",
           value: price,
           cycle: "MONTHLY",
           nextDueDate: nextDueDate.toISOString().split("T")[0],
@@ -478,7 +481,8 @@ serve(async (req) => {
         method: "POST",
         body: JSON.stringify({
           customer: workspace.asaas_customer_id,
-          billingType: "CREDIT_CARD",
+          // UNDEFINED = PIX, boleto ou cartão (escolha do cliente)
+          billingType: "UNDEFINED",
           value: userPrice,
           cycle: "MONTHLY",
           nextDueDate: nextDueDate.toISOString().split("T")[0],
