@@ -464,15 +464,27 @@ export function useFollowupCampaigns() {
     }
   }, [workspaceId, fetchCampaigns, invokeWithRetry]);
 
-  const pauseFollowup = useCallback(() => {
+  const pauseFollowup = useCallback(async () => {
     pausedRef.current = true;
+    if (currentCampaignId) {
+      await supabase
+        .from('followup_campaigns')
+        .update({ status: 'paused', updated_at: new Date().toISOString() } as any)
+        .eq('id', currentCampaignId);
+    }
     toast.info('Follow-up pausado');
-  }, []);
+  }, [currentCampaignId]);
 
-  const resumeFollowup = useCallback(() => {
+  const resumeFollowup = useCallback(async () => {
     pausedRef.current = false;
+    if (currentCampaignId) {
+      await supabase
+        .from('followup_campaigns')
+        .update({ status: 'running', updated_at: new Date().toISOString() } as any)
+        .eq('id', currentCampaignId);
+    }
     toast.info('Follow-up retomado');
-  }, []);
+  }, [currentCampaignId]);
 
   const cancelFollowup = useCallback(async (campaignId?: string) => {
     const targetCampaignId = campaignId || currentCampaignId;
