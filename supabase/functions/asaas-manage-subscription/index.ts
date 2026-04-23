@@ -102,6 +102,80 @@ async function cancelSubscriptionSafe(subscriptionId: string): Promise<boolean> 
   }
 }
 
+/**
+ * Garante que o workspace tenha um asaas_customer_id válido.
+ * Se não tiver, cria automaticamente no Asaas usando dados do user_profile
+ * e do workspace, e persiste o id na tabela workspaces.
+ * Resolve o problema de contas antigas/migradas que ficam sem customer vinculado
+ * e não conseguem fazer upgrade ou contratar pacotes.
+ */
+async function ensureAsaasCustomer(
+  supabaseAdmin: any,
+  workspace: any,
+  userId: string
+): Promise<string> {
+  if (workspace.asaas_customer_id) return workspace.asaas_customer_id;
+
+  // Buscar dados do dono para criar o customer
+  const { data: profile } = await supabaseAdmin
+    .from("user_profiles")
+    .select("full_name, email, phone, cpf_cnpj")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const { data: ws } = await supabaseAdmin
+    .from("workspaces")
+    .select("name, owner_email, owner_phone, owner_cpf_cnpj")
+    .eq("id", workspace.id)
+    .maybeSingle();
+
+  const name = profile?.full_name || ws?.name || "Cliente Argos X";
+  const email = profile?.email || ws?.owner_email;
+  const phone = profile?.phone || ws?.owner_phone || undefined;
+  const cpfCnpj = profile?.cpf_cnpj || ws?.owner_cpf_cnpj || undefined;
+
+  if (!email) {
+    throw new Error("Não foi possível criar o cliente: e-mail do responsável não encontrado.");
+  }
+
+  // Tenta reaproveitar customer existente no Asaas pelo e-mail
+  try {
+    const existing = await asaasFetch(`/customers?email=${encodeURIComponent(email)}&limit=1`);
+    if (existing?.data?.[0]?.id) {
+      const id = existing.data[0].id;
+      await supabaseAdmin
+        .from("workspaces")
+        .update({ asaas_customer_id: id })
+        .eq("id", workspace.id);
+      workspace.asaas_customer_id = id;
+      console.log(`[asaas-manage] Reused existing Asaas customer ${id} for workspace ${workspace.id}`);
+      return id;
+    }
+  } catch (e: any) {
+    console.warn(`[asaas-manage] Lookup by email failed (continuing to create): ${e.message}`);
+  }
+
+  const created = await asaasFetch("/customers", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      email,
+      mobilePhone: phone,
+      cpfCnpj,
+      notificationDisabled: false,
+    }),
+  });
+
+  await supabaseAdmin
+    .from("workspaces")
+    .update({ asaas_customer_id: created.id })
+    .eq("id", workspace.id);
+
+  workspace.asaas_customer_id = created.id;
+  console.log(`[asaas-manage] Created Asaas customer ${created.id} for workspace ${workspace.id}`);
+  return created.id;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
