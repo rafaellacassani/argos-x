@@ -1,0 +1,35 @@
+<!--
+  Cole estas chaves dentro de <dict>...</dict> em ios/App/App/Info.plist
+  (depois de rodar `npx cap add ios` no seu Mac).
+  Estas permissões são EXIGIDAS pela Apple quando o app pede acesso a
+  câmera, microfone ou biblioteca de fotos. Sem elas, o app crasha.
+-->
+<key>NSCameraUsageDescription</key>
+<string>O Argos X usa a câmera para você enviar fotos nos chats com seus leads.</string>
+
+<key>NSMicrophoneUsageDescription</key>
+<string>O Argos X usa o microfone para você gravar áudios nos chats com seus leads.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>O Argos X acessa suas fotos para você anexar imagens nos chats com seus leads.</string>
+
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>O Argos X salva mídias recebidas nos chats na sua biblioteca de fotos.</string>
+
+<key>NSUserTrackingUsageDescription</key>
+<string>Usamos dados de uso anônimos para melhorar sua experiência no Argos X.</string>
+
+<!-- Permite carregar conteúdo da nossa API e CDN do Supabase -->
+<key>NSAppTransportSecurity</key>
+<dict>
+  <key>NSAllowsArbitraryLoads</key>
+  <false/>
+  <key>NSExceptionDomains</key>
+  <dict>
+    <key>argosx.com.br</key>
+    <dict>
+      <key>NSIncludesSubdomains</key><true/>
+      <key>NSExceptionAllowsInsecureHTTPLoads</key><false/>
+    </dict>
+  </dict>
+</dict>
