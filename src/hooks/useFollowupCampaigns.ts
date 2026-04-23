@@ -422,8 +422,12 @@ export function useFollowupCampaigns() {
         }
       }
 
-      // Finalize campaign
-      const finalStatus = canceledRef.current ? 'canceled' : 'completed';
+      // Finalize campaign — respect paused state (don't override with completed)
+      const finalStatus = canceledRef.current
+        ? 'canceled'
+        : pausedRef.current
+          ? 'paused'
+          : 'completed';
       await supabase
         .from('followup_campaigns')
         .update({
@@ -435,11 +439,13 @@ export function useFollowupCampaigns() {
         } as any)
         .eq('id', campaignId);
 
-      toast.success(
-        canceledRef.current
-          ? `Follow-up cancelado: ${sentCount} enviados`
-          : `Follow-up concluído: ${sentCount} enviados, ${failedCount} falhas`
-      );
+      if (canceledRef.current) {
+        toast.success(`Follow-up cancelado: ${sentCount} enviados`);
+      } else if (pausedRef.current) {
+        toast.info(`Follow-up pausado: ${sentCount} enviados, ${failedCount} falhas. Você pode retomar pelo histórico.`);
+      } else {
+        toast.success(`Follow-up concluído: ${sentCount} enviados, ${failedCount} falhas`);
+      }
 
     } catch (err: any) {
       console.error('Followup error:', err);
