@@ -136,6 +136,24 @@ export function PersonalityTab({ formData, updateField }: Props) {
           <Label className="text-sm">Negócio 100% digital — sem endereço físico</Label>
         </div>
       </div>
+
+      <Separator />
+
+      <div>
+        <h3 className="font-display font-semibold text-foreground mb-1">Mensagem de boas-vindas</h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Quando alguém mandar a primeira mensagem, a IA envia essa saudação antes de tudo. Deixe em branco para não enviar nada.
+        </p>
+        <div className="space-y-2">
+          <Label>Mensagem inicial (opcional)</Label>
+          <Textarea
+            value={greetingMessage}
+            onChange={(e) => updateGreeting(e.target.value)}
+            placeholder={"Olá! 👋 Bem-vindo à [sua empresa]!\nComo posso te ajudar hoje?"}
+            className="min-h-[100px]"
+          />
+        </div>
+      </div>
     </div>
   );
 }
