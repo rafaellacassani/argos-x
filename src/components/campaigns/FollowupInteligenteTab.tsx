@@ -63,6 +63,7 @@ export default function FollowupInteligenteTab() {
     pauseFollowup,
     resumeFollowup,
     cancelFollowup,
+    resumeCampaignFromHistory,
     isPaused,
   } = useFollowupCampaigns();
 
@@ -119,7 +120,7 @@ export default function FollowupInteligenteTab() {
   };
 
   const handlePauseToggle = () => {
-    if (isPaused()) { resumeFollowup(); setPaused(false); } else { pauseFollowup(); setPaused(true); }
+    if (isPaused()) { void resumeFollowup(); setPaused(false); } else { void pauseFollowup(); setPaused(true); }
   };
 
   const handleCampaignClick = async (campaignId: string) => {
@@ -381,13 +382,38 @@ export default function FollowupInteligenteTab() {
                       <span className="text-success">{c.sent_count} ✓</span>
                       <span className="text-destructive">{c.failed_count} ✗</span>
                       <Badge variant="outline">
-                        {c.status === "completed" ? "Concluído" : c.status === "running" ? "Executando" : c.status}
+                        {c.status === "completed"
+                          ? "Concluído"
+                          : c.status === "running"
+                          ? "Executando"
+                          : c.status === "paused"
+                          ? "Pausado"
+                          : c.status === "canceled"
+                          ? "Cancelado"
+                          : c.status}
                       </Badge>
                       {expandedCampaignId === c.id ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <Eye className="w-4 h-4 text-muted-foreground" />}
                     </div>
                   </button>
 
-                  {c.status === "running" && (
+                  {c.status === "paused" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="gap-1.5 shrink-0"
+                      disabled={executing}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void resumeCampaignFromHistory(c.id);
+                      }}
+                      title={executing ? "Aguarde a execução atual terminar" : "Retomar de onde parou"}
+                    >
+                      <Play className="w-4 h-4" />
+                      Retomar
+                    </Button>
+                  )}
+                  {(c.status === "running" || c.status === "paused") && (
                     <Button
                       type="button"
                       size="sm"
