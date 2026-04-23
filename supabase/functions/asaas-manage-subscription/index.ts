@@ -396,8 +396,10 @@ serve(async (req) => {
         });
       }
 
-      if (!workspace.asaas_customer_id) {
-        return new Response(JSON.stringify({ error: "Nenhum cliente Asaas vinculado a este workspace." }), {
+      try {
+        await ensureAsaasCustomer(supabaseAdmin, workspace, user.id);
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
