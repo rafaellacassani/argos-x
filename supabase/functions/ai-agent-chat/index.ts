@@ -1214,10 +1214,46 @@ serve(async (req) => {
           // Fetch lead data for ticket
           let loopLeadName: string | null = null;
           let loopLeadPhone: string | null = null;
-          const loopLeadId = lead_id && isValidUUID(lead_id) ? lead_id : null;
+          let loopLeadId = lead_id && isValidUUID(lead_id) ? lead_id : null;
           if (loopLeadId) {
             const { data: lld } = await supabase.from("leads").select("name, phone").eq("id", loopLeadId).single();
             if (lld) { loopLeadName = lld.name; loopLeadPhone = lld.phone; }
+          }
+
+          // 🔍 FALLBACK: try to resolve lead via session_id (remote_jid / phone) when lead_id is missing
+          if (!loopLeadId && session_id) {
+            try {
+              // session_id frequently is the WhatsApp remote_jid (e.g. "5511999999999@s.whatsapp.net")
+              const phoneFromSession = String(session_id).replace(/@.*$/, "").replace(/\D/g, "");
+              if (phoneFromSession.length >= 10) {
+                // Try multiple normalization variants
+                const variants = Array.from(new Set([
+                  phoneFromSession,
+                  phoneFromSession.startsWith("55") ? phoneFromSession.slice(2) : `55${phoneFromSession}`,
+                ]));
+                const { data: matchedLead } = await supabase
+                  .from("leads")
+                  .select("id, name, phone")
+                  .eq("workspace_id", agent.workspace_id)
+                  .in("phone", variants)
+                  .limit(1)
+                  .maybeSingle();
+                if (matchedLead?.id) {
+                  loopLeadId = matchedLead.id;
+                  loopLeadName = matchedLead.name;
+                  loopLeadPhone = matchedLead.phone;
+                  console.log(`[ai-agent-chat] 🔗 Loop ticket: resolved lead ${loopLeadId} via session_id fallback`);
+                }
+              }
+            } catch (resolveErr) {
+              console.error(`[ai-agent-chat] ⚠️ Loop lead resolution failed:`, resolveErr);
+            }
+          }
+
+          // 🚫 GUARDRAIL: do NOT create orphan tickets (invisible in support UI)
+          if (!loopLeadId) {
+            console.log(`[ai-agent-chat] ⏭️ Loop detected but no lead resolvable for session ${session_id} — skipping ticket creation (logged only)`);
+            return new Response(JSON.stringify({ response: null, paused: true, reason: "loop_detected_no_lead", detail: loopDetected }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
           }
 
           // Avoid duplicate tickets — check for an existing waiting/in_progress entry for this session
