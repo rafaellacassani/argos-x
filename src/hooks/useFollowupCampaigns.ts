@@ -758,6 +758,7 @@ export function useFollowupCampaigns() {
     startFollowup,
     pauseFollowup,
     resumeFollowup,
+    resumeCampaignFromHistory,
     cancelFollowup,
     isPaused,
   };
