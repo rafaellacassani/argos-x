@@ -1387,6 +1387,25 @@ NOVAS CAPACIDADES:
       if (!matchingAgent) {
         // Try reception department first
         const candidates = agents.filter((a: any) => !a.instance_name || a.instance_name === "" || a.instance_name === instanceName);
+        // 🎯 Pre-check if lead already exists to bias agent selection by respond_to
+        let leadExistsForSelection = false;
+        if (candidates.length > 1) {
+          try {
+            const selOr = [`whatsapp_jid.eq.${remoteJid}`];
+            if (resolvedRemoteJid !== remoteJid) selOr.push(`whatsapp_jid.eq.${resolvedRemoteJid}`);
+            if (phoneNumber.length >= 10 && phoneNumber.length <= 15) {
+              selOr.push(`phone.like.%${phoneNumber.slice(-10)}`);
+            }
+            const { data: probe } = await supabase
+              .from("leads")
+              .select("id")
+              .eq("workspace_id", workspaceId)
+              .or(selOr.join(","))
+              .limit(1)
+              .maybeSingle();
+            leadExistsForSelection = !!probe?.id;
+          } catch { /* ignore */ }
+        }
         if (candidates.length > 1) {
           const deptIds = candidates.map((a: any) => a.department_id).filter(Boolean);
           if (deptIds.length > 0) {
@@ -1401,6 +1420,21 @@ NOVAS CAPACIDADES:
               matchingAgent = candidates.find((a: any) => a.department_id === receptionId) || null;
               if (matchingAgent) console.log(`[whatsapp-webhook] 🌟 Using reception department agent ${matchingAgent.id}`);
             }
+          }
+          // 🛡️ Bug fix: when multiple agents share an instance, prefer one whose
+          // respond_to filter actually accepts this message. Avoids picking a
+          // 'new_leads' agent that will silently drop replies from existing leads.
+          if (!matchingAgent) {
+            if (leadExistsForSelection) {
+              matchingAgent = candidates.find((a: any) => a.respond_to === "all")
+                || candidates.find((a: any) => a.respond_to === "specific_stages")
+                || null;
+            } else {
+              matchingAgent = candidates.find((a: any) => a.respond_to === "new_leads")
+                || candidates.find((a: any) => a.respond_to === "all")
+                || null;
+            }
+            if (matchingAgent) console.log(`[whatsapp-webhook] 🧭 Selected agent by respond_to fit: ${matchingAgent.id} (leadExists=${leadExistsForSelection}, respond_to=${matchingAgent.respond_to})`);
           }
         }
         if (!matchingAgent) matchingAgent = candidates[0] || null;
