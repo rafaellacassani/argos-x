@@ -1,5 +1,6 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,6 +16,25 @@ export function PersonalityTab({ formData, updateField }: Props) {
   const ci = formData.company_info || {};
   const updateCompanyInfo = (key: string, value: any) => {
     updateField("company_info", { ...ci, [key]: value });
+  };
+
+  const onStartActions: any[] = Array.isArray(formData.on_start_actions) ? formData.on_start_actions : [];
+  const greetingIndex = onStartActions.findIndex((a) => a?.type === "send_message");
+  const greetingMessage = greetingIndex >= 0 ? (onStartActions[greetingIndex]?.message || "") : "";
+
+  const updateGreeting = (value: string) => {
+    const next = [...onStartActions];
+    const trimmed = value;
+    if (greetingIndex >= 0) {
+      if (trimmed.trim()) {
+        next[greetingIndex] = { ...next[greetingIndex], type: "send_message", message: trimmed };
+      } else {
+        next.splice(greetingIndex, 1);
+      }
+    } else if (trimmed.trim()) {
+      next.unshift({ type: "send_message", message: trimmed });
+    }
+    updateField("on_start_actions", next);
   };
 
   return (
