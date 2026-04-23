@@ -393,6 +393,11 @@ export function useFollowupCampaigns() {
           // Auto-pause after MAX_CONSECUTIVE_FAILURES consecutive failures
           if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES && !pausedRef.current) {
             pausedRef.current = true;
+            // Persist pause state in DB so user can resume from history
+            await supabase
+              .from('followup_campaigns')
+              .update({ status: 'paused', updated_at: new Date().toISOString() } as any)
+              .eq('id', campaignId);
             toast.error(
               `Follow-up pausado automaticamente: ${MAX_CONSECUTIVE_FAILURES} falhas consecutivas. Verifique os erros e retome manualmente.`,
               { duration: 10000 }
