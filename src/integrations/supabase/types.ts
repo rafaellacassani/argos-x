@@ -4415,6 +4415,7 @@ export type Database = {
         Args: { _agent_id: string; _department_id?: string; _lead_id: string }
         Returns: boolean
       }
+      cleanup_stuck_agents: { Args: never; Returns: Json }
       clone_workspace: {
         Args: {
           _new_name: string
