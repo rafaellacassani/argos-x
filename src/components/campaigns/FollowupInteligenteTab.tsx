@@ -120,7 +120,7 @@ export default function FollowupInteligenteTab() {
   };
 
   const handlePauseToggle = () => {
-    if (isPaused()) { resumeFollowup(); setPaused(false); } else { pauseFollowup(); setPaused(true); }
+    if (isPaused()) { void resumeFollowup(); setPaused(false); } else { void pauseFollowup(); setPaused(true); }
   };
 
   const handleCampaignClick = async (campaignId: string) => {
