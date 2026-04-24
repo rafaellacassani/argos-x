@@ -296,7 +296,7 @@ app.post("/pairing/:instanceName", async (c) => {
     const body = await c.req.json();
     const number = body?.number;
     if (!number || typeof number !== "string") return c.json({ error: "Missing phone number" }, 400, corsHeaders);
-    const sanitizedNumber = number.replace(/\D/g, "");
+    const sanitizedNumber = normalizeBrazilianNumber(number);
     if (sanitizedNumber.length < 10 || sanitizedNumber.length > 15) {
       return c.json({ error: "Invalid phone number" }, 400, corsHeaders);
     }
@@ -343,12 +343,15 @@ app.get("/connect/:instanceName", async (c) => {
     // User explicitly asked for a fresh QR (e.g. clicked "Atualizar QR Code")
     if (refresh) {
       connectResponseCache.delete(instanceName);
+      connectionStateCache.delete(instanceName);
+      connectingStartedAt.delete(instanceName);
       circuitOpenUntil.delete(instanceName);
+      connectCallLog.delete(instanceName);
     }
 
     if (number) {
       // Pairing code mode: pass phone number to Evolution API
-      const sanitizedNumber = number.replace(/\D/g, "");
+      const sanitizedNumber = normalizeBrazilianNumber(number);
       if (sanitizedNumber.length < 10 || sanitizedNumber.length > 15) {
         return c.json({ error: "Invalid phone number" }, 400, corsHeaders);
       }

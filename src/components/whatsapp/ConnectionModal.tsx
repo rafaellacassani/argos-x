@@ -49,8 +49,10 @@ export function ConnectionModal({
   const [connectMode, setConnectMode] = useState<ConnectMode>("qrcode");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [autoHealAttempted, setAutoHealAttempted] = useState(false);
+  const connectingCountRef = useRef(0);
 
-  const { createInstance, getQRCode, getPairingCode, getConnectionState, error } =
+  const { createInstance, getQRCode, getPairingCode, getConnectionState, restartInstance, error } =
     useEvolutionAPI();
 
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,6 +79,8 @@ export function ConnectionModal({
         setConnectMode("qrcode");
         setPhoneNumber("");
         setErrorMessage(null);
+        setAutoHealAttempted(false);
+        connectingCountRef.current = 0;
         currentUniqueNameRef.current = "";
         if (pollingRef.current) clearInterval(pollingRef.current);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -91,6 +95,13 @@ export function ConnectionModal({
           // Force fresh QR — bypass server cache. Old reconnect attempts may
           // have left a stale (already-expired) QR code cached.
           const qrResult = await getQRCode(instanceToReconnect, true);
+          if (qrResult?.instance?.state === "open") {
+            setStep("success");
+            toast({ title: "WhatsApp já conectado", description: "Essa conexão já estava ativa." });
+            onSuccess?.();
+            setTimeout(() => onOpenChange(false), 1200);
+            return;
+          }
           if (qrResult?.base64) {
             setQrCodeBase64(qrResult.base64);
             setStep("qrcode");
@@ -137,12 +148,27 @@ export function ConnectionModal({
       const result = await createInstance(uniqueName);
       if (!result) throw new Error(error || "Erro ao criar conexão");
 
+      if ((result as any)?.instance?.state === "open") {
+        setStep("success");
+        toast({ title: "WhatsApp já conectado", description: "A conexão foi criada e já está ativa." });
+        onSuccess?.();
+        setTimeout(() => onOpenChange(false), 1200);
+        return;
+      }
+
       if (result.qrcode?.base64) {
         setQrCodeBase64(result.qrcode.base64);
         setStep("qrcode");
         startPolling(uniqueName);
       } else {
         const qrResult = await getQRCode(uniqueName);
+        if (qrResult?.instance?.state === "open") {
+          setStep("success");
+          toast({ title: "WhatsApp já conectado", description: "A conexão já está ativa." });
+          onSuccess?.();
+          setTimeout(() => onOpenChange(false), 1200);
+          return;
+        }
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
           setStep("qrcode");
@@ -220,8 +246,7 @@ export function ConnectionModal({
 
     timeoutRef.current = setTimeout(() => {
       if (pollingRef.current) clearInterval(pollingRef.current);
-      setErrorMessage("Tempo esgotado. O código expirou.");
-      setStep("error");
+      void handleAutoHeal(name, "O código expirou antes da conexão ser concluída.");
     }, 120000);
 
     pollingRef.current = setInterval(async () => {
@@ -276,7 +301,18 @@ export function ConnectionModal({
             onSuccess?.();
             onOpenChange(false);
           }, 2000);
+          return;
         }
+
+        if (state?.instance?.state === "connecting") {
+          connectingCountRef.current += 1;
+          if (connectingCountRef.current >= 3) {
+            await handleAutoHeal(name, "A conexão ficou presa em reconexão.");
+          }
+          return;
+        }
+
+        connectingCountRef.current = 0;
       } catch (err) {
         console.error("[ConnectionModal] Polling error:", err);
       } finally {
@@ -288,8 +324,11 @@ export function ConnectionModal({
   const handleRefreshQR = async () => {
     const targetName = instanceToReconnect || currentUniqueNameRef.current;
     setStep("creating");
+    setErrorMessage(null);
 
     try {
+      const restarted = await restartInstance(targetName);
+
       if (connectMode === "pairing" && phoneNumber) {
         const result = await getPairingCode(targetName, phoneNumber);
         if (result?.pairingCode) {
@@ -300,11 +339,18 @@ export function ConnectionModal({
           throw new Error("Não foi possível obter o código");
         }
       } else {
-        // Force refresh — bypass server-side QR cache, otherwise the backend
-        // may return the same expired QR the user just tried to scan.
-        const qrResult = await getQRCode(targetName, true);
+        const qrResult = restarted?.qrcode?.base64 ? restarted.qrcode : await getQRCode(targetName, true);
+        if (qrResult?.instance?.state === "open") {
+          setStep("success");
+          toast({ title: "WhatsApp já conectado", description: "A conexão já está ativa." });
+          onSuccess?.();
+          setTimeout(() => onOpenChange(false), 1200);
+          return;
+        }
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
+          setAutoHealAttempted(false);
+          connectingCountRef.current = 0;
           setStep("qrcode");
           startPolling(targetName);
         } else {
@@ -323,6 +369,52 @@ export function ConnectionModal({
     setQrCodeBase64(null);
     setPairingCode(null);
     setConnectMode("qrcode");
+    setAutoHealAttempted(false);
+    connectingCountRef.current = 0;
+  };
+
+  const handleAutoHeal = async (instanceName: string, fallbackMessage: string) => {
+    if (pollingRef.current) clearInterval(pollingRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    if (autoHealAttempted) {
+      setErrorMessage(fallbackMessage);
+      setStep("error");
+      return;
+    }
+
+    setAutoHealAttempted(true);
+    connectingCountRef.current = 0;
+    setStep("creating");
+
+    try {
+      const restarted = await restartInstance(instanceName);
+      const qrResult = restarted?.qrcode?.base64 ? restarted.qrcode : await getQRCode(instanceName, true);
+
+      if (qrResult?.instance?.state === "open") {
+        setStep("success");
+        toast({ title: "WhatsApp reconectado", description: "A conexão voltou sem precisar de novo QR Code." });
+        onSuccess?.();
+        setTimeout(() => onOpenChange(false), 1200);
+        return;
+      }
+
+      if (qrResult?.base64) {
+        setQrCodeBase64(qrResult.base64);
+        setPairingCode(null);
+        setConnectMode("qrcode");
+        toast({ title: "Conexão reiniciada", description: "Geramos um novo QR Code para destravar a conexão." });
+        setStep("qrcode");
+        startPolling(instanceName);
+        return;
+      }
+
+      throw new Error("Não foi possível gerar um novo QR Code");
+    } catch (err) {
+      console.error("[ConnectionModal] Auto-heal error:", err);
+      setErrorMessage(err instanceof Error ? err.message : fallbackMessage);
+      setStep("error");
+    }
   };
 
   const formatPairingCode = (code: string) => {
