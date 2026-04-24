@@ -1477,6 +1477,72 @@ export default function AdminClients() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Convites Pendentes — seção colapsável dentro da aba Clientes */}
+          <Accordion type="single" collapsible className="border rounded-lg bg-card">
+            <AccordionItem value="invites" className="border-0">
+              <AccordionTrigger className="px-4 hover:no-underline">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  Convites Pendentes ({invites.length})
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-0 pb-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>E-mail</TableHead>
+                      <TableHead>Plano</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Criado em</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invites.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-sm">
+                          Nenhum convite pendente.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      invites.map((invite) => (
+                        <TableRow key={invite.id}>
+                          <TableCell className="font-medium">{invite.full_name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{invite.email}</TableCell>
+                          <TableCell><Badge variant="outline" className="capitalize">{invite.plan}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={invite.invite_type === "checkout" ? "secondary" : "outline"}>
+                              {invite.invite_type === "checkout" ? "Stripe" : "Gratuito"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {format(new Date(invite.created_at), "dd/MM/yyyy HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            {invite.checkout_url && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(invite.checkout_url!);
+                                  toast({ title: "Link de checkout copiado!" });
+                                }}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </TabsContent>
 
         {/* ───────── TAB: CONVITES PENDENTES ───────── */}
