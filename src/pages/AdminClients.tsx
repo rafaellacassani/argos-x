@@ -260,6 +260,16 @@ export default function AdminClients() {
   const [bulkInstance, setBulkInstance] = useState("");
   const [bulkSending, setBulkSending] = useState(false);
 
+  // New client modal state
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [newClientMode, setNewClientMode] = useState<"checkout" | "free">("checkout");
+
+  // Communication sub-tab state
+  const [commSubTab, setCommSubTab] = useState<"cadence" | "prebilling">("cadence");
+
+  // Clients sub-tab state (clients vs invites)
+  const [clientsSubTab, setClientsSubTab] = useState<"all" | "invites">("all");
+
   useEffect(() => {
     if (!user) return;
     checkAccess();
@@ -977,38 +987,33 @@ export default function AdminClients() {
 
       <Tabs defaultValue="new-client" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="new-client" className="gap-2">
-            <UserPlus className="w-4 h-4" />
-            Novo Cliente
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Visão Geral
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-2">
             <Users className="w-4 h-4" />
             Clientes ({clients.length})
           </TabsTrigger>
-          <TabsTrigger value="invites" className="gap-2">
-            <Mail className="w-4 h-4" />
-            Convites Pendentes ({invites.length})
-          </TabsTrigger>
-          <TabsTrigger value="cadence" className="gap-2">
-            <CalendarClock className="w-4 h-4" />
-            Cadência
-          </TabsTrigger>
-          <TabsTrigger value="pre-billing" className="gap-2">
-            <CreditCard className="w-4 h-4" />
-            Pré-Cobrança
-          </TabsTrigger>
           <TabsTrigger value="health" className="gap-2">
             <Activity className="w-4 h-4" />
-            Saúde & Monitoramento
+            Saúde
           </TabsTrigger>
-          <TabsTrigger value="executive" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Dashboard Executivo
+          <TabsTrigger value="communication" className="gap-2">
+            <CalendarClock className="w-4 h-4" />
+            Comunicação
           </TabsTrigger>
         </TabsList>
 
-        {/* ───────── TAB: NOVO CLIENTE ───────── */}
-        <TabsContent value="new-client" className="space-y-6">
+        {/* ───────── TAB: VISÃO GERAL (Dashboard Executivo) ───────── */}
+        <TabsContent value="overview">
+          <ExecutiveDashboardTab />
+        </TabsContent>
+
+        {/* ───────── (REMOVIDO) TAB NOVO CLIENTE — agora vive em modal acionado pelo botão "Novo Cliente" no header da aba Clientes ───────── */}
+        <div className="hidden">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
