@@ -27,6 +27,10 @@ export interface QRCodeResponse {
   code?: string;
   base64?: string;
   count?: number;
+  instance?: {
+    instanceName: string;
+    state: "open" | "close" | "connecting";
+  };
 }
 
 export interface EvolutionChat {
