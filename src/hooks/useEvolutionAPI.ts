@@ -546,13 +546,18 @@ export function useEvolutionAPI() {
         body: { number, text },
       });
 
-      if (fnError) {
-        throw new Error(fnError.message);
+      // Try to extract structured error body even when status >= 400
+      const ctx: any = (fnError as any)?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const errBody = await ctx.json();
+          if (errBody?.error) throw new Error(errBody.error);
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message) throw parseErr;
+        }
       }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
 
       return true;
     } catch (err) {
@@ -584,13 +589,17 @@ export function useEvolutionAPI() {
         body: { number, mediatype, media, caption, fileName },
       });
 
-      if (fnError) {
-        throw new Error(fnError.message);
+      const ctx: any = (fnError as any)?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const errBody = await ctx.json();
+          if (errBody?.error) throw new Error(errBody.error);
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message) throw parseErr;
+        }
       }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
 
       return true;
     } catch (err) {
@@ -615,13 +624,17 @@ export function useEvolutionAPI() {
         body: { number, audio },
       });
 
-      if (fnError) {
-        throw new Error(fnError.message);
+      const ctx: any = (fnError as any)?.context;
+      if (ctx && typeof ctx.json === "function") {
+        try {
+          const errBody = await ctx.json();
+          if (errBody?.error) throw new Error(errBody.error);
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message) throw parseErr;
+        }
       }
-
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (fnError) throw new Error(fnError.message);
+      if (data?.error) throw new Error(data.error);
 
       return true;
     } catch (err) {

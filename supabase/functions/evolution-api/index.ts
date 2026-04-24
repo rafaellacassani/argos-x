@@ -51,6 +51,40 @@ function normalizeBrazilianNumber(input: string): string {
   return digits;
 }
 
+// Map low-level Evolution API errors to user-friendly responses
+function classifySendError(err: unknown): { status: number; body: { error: string; code: string; reconnect_required?: boolean } } {
+  const msg = (err instanceof Error ? err.message : String(err || "")).toLowerCase();
+  // Connection closed / not opened / precondition required (428) — instance disconnected from WhatsApp
+  if (
+    msg.includes("connection closed") ||
+    msg.includes("connection is not open") ||
+    msg.includes("precondition required") ||
+    msg.includes("cannot read properties of undefined (reading 'id')") ||
+    msg.includes("instance not connected") ||
+    msg.includes("connection not opened")
+  ) {
+    return {
+      status: 409,
+      body: {
+        error: "WhatsApp desconectado. Reconecte sua instância em Configurações → Conexões e tente novamente.",
+        code: "INSTANCE_DISCONNECTED",
+        reconnect_required: true,
+      },
+    };
+  }
+  // Number not on WhatsApp
+  if (msg.includes("exists\":false") || msg.includes("not exists") || msg.includes("not on whatsapp")) {
+    return {
+      status: 422,
+      body: { error: "Este número não possui WhatsApp ativo.", code: "NUMBER_NOT_ON_WHATSAPP" },
+    };
+  }
+  return {
+    status: 500,
+    body: { error: err instanceof Error ? err.message : "Falha ao enviar mensagem", code: "SEND_FAILED" },
+  };
+}
+
 // Circuit breaker: tracks when an instance first entered "connecting" state
 const connectingStartedAt = new Map<string, number>();
 // When circuit is open, we return cached "close" until this timestamp
@@ -467,7 +501,8 @@ app.post("/send-text/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendText/${instanceName}`, "POST", { number: normalizedNumber, text, delay: 0, linkPreview: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send message" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
@@ -482,7 +517,8 @@ app.post("/send-media/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendMedia/${instanceName}`, "POST", { number: normalizedNumber, mediatype, media, caption: caption || "", fileName: fileName || undefined });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send media" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
@@ -496,7 +532,8 @@ app.post("/send-audio/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, "POST", { number: normalizedNumber, audio, delay: 0, encoding: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send audio" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
