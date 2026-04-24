@@ -841,7 +841,7 @@ export default function Chats() {
       });
       requestAnimationFrame(() => scrollToBottom());
     } else {
-      toast({ title: "Erro ao enviar", description: "Não foi possível enviar a mensagem.", variant: "destructive" });
+      toast({ title: "Erro ao enviar", description: apiError || "Não foi possível enviar a mensagem.", variant: "destructive" });
     }
     
     if (success) {
@@ -979,7 +979,7 @@ export default function Chats() {
     } else {
       toast({
         title: "Erro ao enviar mídia",
-        description: `Não foi possível enviar ${file.name}.`,
+        description: apiError || `Não foi possível enviar ${file.name}.`,
         variant: "destructive",
       });
     }
@@ -1075,7 +1075,7 @@ export default function Chats() {
     } else {
       toast({
         title: "Erro ao enviar áudio",
-        description: "Não foi possível enviar o áudio.",
+        description: apiError || "Não foi possível enviar o áudio.",
         variant: "destructive",
       });
     }
