@@ -1072,27 +1072,23 @@ serve(async (req) => {
         executions30dRes,
         profilesRes,
       ] = await Promise.all([
-        supabaseAdmin.from("leads").select("workspace_id", { count: "exact" }).in("workspace_id", wsIds),
+        supabaseAdmin.from("leads").select("workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("workspace_members").select("workspace_id, user_id, role").in("workspace_id", wsIds).not("accepted_at", "is", null),
         supabaseAdmin.from("ai_agents").select("id, name, model, is_active, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_instances").select("instance_name, display_name, workspace_id").in("workspace_id", wsIds),
         supabaseAdmin.from("whatsapp_cloud_connections").select("id, inbox_name, phone_number, workspace_id, status, is_active").in("workspace_id", wsIds),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, executed_at, status").in("workspace_id", wsIds).gte("executed_at", yesterday.toISOString()),
-        supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds),
+        supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds).gte("executed_at", thirtyDaysAgo.toISOString()),
         supabaseAdmin.from("agent_executions").select("agent_id, workspace_id, tokens_used").in("workspace_id", wsIds).gte("executed_at", thirtyDaysAgo.toISOString()),
         supabaseAdmin.from("user_profiles").select("user_id, full_name, phone, email"),
       ]);
 
-      // Count leads per workspace
-      // We need individual counts, so let's do it differently
+      // Count leads per workspace IN MEMORY (no per-workspace round-trips)
       const leadCountsMap = new Map<string, number>();
-      const memberCountsMap = new Map<string, number>();
-      
-      // Get leads count per workspace
-      for (const wsId of wsIds) {
-        const { count } = await supabaseAdmin.from("leads").select("*", { count: "exact", head: true }).eq("workspace_id", wsId);
-        leadCountsMap.set(wsId, count || 0);
+      for (const l of (leadsRes.data || [])) {
+        leadCountsMap.set(l.workspace_id, (leadCountsMap.get(l.workspace_id) || 0) + 1);
       }
+      const memberCountsMap = new Map<string, number>();
 
       // Count members per workspace & find owner (admin) per workspace
       const membersData = membersRes.data || [];
