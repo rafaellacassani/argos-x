@@ -1141,7 +1141,9 @@ export default function AdminClients() {
               )}
             </CardContent>
           </Card>
+              </TabsContent>
 
+              <TabsContent value="free" className="space-y-4 mt-2">
           {/* ───── CRIAR WORKSPACE GRATUITO ───── */}
           <Card className="max-w-xl">
             <CardHeader>
@@ -1250,7 +1252,10 @@ export default function AdminClients() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
 
         {/* ───────── TAB: CLIENTES ───────── */}
         <TabsContent value="clients" className="space-y-4">
