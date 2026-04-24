@@ -2083,21 +2083,13 @@ export default function AdminClients() {
           ) : (
             <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
           )}
-        </TabsContent>
-
-        {/* ───────── TAB: PRÉ-COBRANÇA ───────── */}
-        <TabsContent value="pre-billing">
-          <PreBillingCadencePanel />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
         <TabsContent value="health">
           <WorkspaceHealthTab />
-        </TabsContent>
-
-        {/* ───────── TAB: DASHBOARD EXECUTIVO ───────── */}
-        <TabsContent value="executive">
-          <ExecutiveDashboardTab />
         </TabsContent>
       </Tabs>
 
