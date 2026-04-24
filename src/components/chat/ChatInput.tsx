@@ -55,6 +55,8 @@ export function ChatInput({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isCancelledRef = useRef<boolean>(false);
+  const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string } | null>(null);
 
   // Handle sending text message
   const handleSendMessage = async () => {
@@ -166,20 +168,27 @@ export function ChatInput({
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         stream.getTracks().forEach((track) => track.stop());
 
+        // If recording was cancelled, discard chunks and do NOT send
+        if (isCancelledRef.current) {
+          audioChunksRef.current = [];
+          isCancelledRef.current = false;
+          return;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        audioChunksRef.current = [];
+
         if (audioBlob.size > 0) {
-          setIsSending(true);
-          try {
-            await onSendAudio(audioBlob);
-          } finally {
-            setIsSending(false);
-          }
+          // Show preview and wait for user confirmation before sending
+          const url = URL.createObjectURL(audioBlob);
+          setAudioPreview({ blob: audioBlob, url });
         }
       };
 
       mediaRecorderRef.current = mediaRecorder;
+      isCancelledRef.current = false;
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingTime(0);
@@ -196,6 +205,7 @@ export function ChatInput({
   // Stop audio recording
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      isCancelledRef.current = false;
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (recordingIntervalRef.current) {
@@ -208,13 +218,41 @@ export function ChatInput({
   // Cancel recording
   const cancelRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
+      // Mark as cancelled BEFORE stopping so onstop discards the audio
+      isCancelledRef.current = true;
+      audioChunksRef.current = [];
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // ignore
+      }
       mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
       setIsRecording(false);
-      audioChunksRef.current = [];
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
         recordingIntervalRef.current = null;
       }
+    }
+  };
+
+  // Discard recorded audio preview (do NOT send)
+  const discardAudioPreview = () => {
+    if (audioPreview) {
+      URL.revokeObjectURL(audioPreview.url);
+      setAudioPreview(null);
+    }
+  };
+
+  // Confirm and send recorded audio
+  const sendAudioPreview = async () => {
+    if (!audioPreview) return;
+    setIsSending(true);
+    try {
+      await onSendAudio(audioPreview.blob);
+      URL.revokeObjectURL(audioPreview.url);
+      setAudioPreview(null);
+    } finally {
+      setIsSending(false);
     }
   };
 
