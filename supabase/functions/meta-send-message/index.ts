@@ -72,10 +72,21 @@ Deno.serve(async (req) => {
     const { metaPageId, recipientId, message, messageType = "text", mediaUrl } = body;
 
     // --- INPUT VALIDATION ---
-    if (!metaPageId || !recipientId || !message) {
-      return new Response(JSON.stringify({ error: "metaPageId, recipientId, and message are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const isMediaType = messageType && messageType !== "text";
+    if (!metaPageId || !recipientId) {
+      return new Response(JSON.stringify({ error: "metaPageId and recipientId are required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (typeof message !== "string" || message.length > 4000) {
+    // For media (audio/image/document/video) message text is optional (caption); mediaUrl is required.
+    if (isMediaType) {
+      if (!mediaUrl) {
+        return new Response(JSON.stringify({ error: "mediaUrl is required for media messages" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    } else {
+      if (!message || typeof message !== "string") {
+        return new Response(JSON.stringify({ error: "message is required for text messages" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+    if (message && (typeof message !== "string" || message.length > 4000)) {
       return new Response(JSON.stringify({ error: "Message must be under 4000 characters" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     if (mediaUrl && (typeof mediaUrl !== "string" || !mediaUrl.startsWith("https://"))) {
