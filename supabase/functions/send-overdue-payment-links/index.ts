@@ -58,7 +58,9 @@ async function asaasGet(path: string) {
   const res = await fetch(`${ASAAS_BASE}${path}`, {
     headers: { "Content-Type": "application/json", access_token: apiKey },
   });
-  return res.json();
+  const text = await res.text();
+  if (!text) return { _empty: true, _status: res.status };
+  try { return JSON.parse(text); } catch { return { _parse_error: true, _raw: text.slice(0, 200), _status: res.status }; }
 }
 
 async function asaasUpdateBilling(paymentId: string) {
@@ -71,7 +73,8 @@ async function asaasUpdateBilling(paymentId: string) {
       headers: { "Content-Type": "application/json", access_token: apiKey },
       body: JSON.stringify({ billingType: "UNDEFINED" }),
     });
-    return await res.json();
+    const t = await res.text();
+    try { return t ? JSON.parse(t) : null; } catch { return null; }
   } catch {
     return null;
   }
