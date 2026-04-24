@@ -99,20 +99,27 @@ serve(async (req) => {
       });
     }
 
-    // Optional dry-run preview (via query param ?dryRun=1 or JSON body)
+    // Optional flags via query params:
+    //   ?dryRun=1    -> preview only
+    //   ?only=ID,ID  -> filter to specific payment_id(s)
     let dryRun = false;
+    let onlyIds: string[] | null = null;
     const url = new URL(req.url);
     if (url.searchParams.get("dryRun") === "1" || url.searchParams.get("dryRun") === "true") {
       dryRun = true;
-    } else {
-      try {
-        const text = await req.text();
-        if (text) {
-          const body = JSON.parse(text);
-          dryRun = !!body?.dryRun;
-        }
-      } catch {}
     }
+    const onlyParam = url.searchParams.get("only");
+    if (onlyParam) {
+      onlyIds = onlyParam.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    try {
+      const text = await req.text();
+      if (text) {
+        const body = JSON.parse(text);
+        if (body?.dryRun) dryRun = true;
+        if (Array.isArray(body?.only)) onlyIds = body.only.map(String);
+      }
+    } catch {}
 
     // Pick instance for sending (cadence config)
     const { data: cfg } = await supabaseAdmin
@@ -132,7 +139,8 @@ serve(async (req) => {
     const results: any[] = [];
     let sent = 0, failed = 0, skipped = 0;
 
-    for (const item of OVERDUE) {
+    const targetList = onlyIds ? OVERDUE.filter((o) => onlyIds!.includes(o.payment_id)) : OVERDUE;
+    for (const item of targetList) {
       // 1. Fetch payment from Asaas to get invoiceUrl
       const payment = await asaasGet(`/payments/${item.payment_id}`);
       if (!payment || payment.errors) {
