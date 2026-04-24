@@ -158,12 +158,15 @@ export function useEvolutionAPI() {
     }
   }, []);
 
-  const getQRCode = useCallback(async (instanceName: string): Promise<QRCodeResponse | null> => {
+  const getQRCode = useCallback(async (instanceName: string, forceRefresh = false): Promise<QRCodeResponse | null> => {
     setLoading(true);
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(`evolution-api/connect/${instanceName}`, {
+      const path = forceRefresh
+        ? `evolution-api/connect/${instanceName}?refresh=1`
+        : `evolution-api/connect/${instanceName}`;
+      const { data, error: fnError } = await supabase.functions.invoke(path, {
         method: "GET",
       });
 
