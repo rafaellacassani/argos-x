@@ -1535,8 +1535,23 @@ export default function AdminClients() {
           </div>
         </TabsContent>
 
-        {/* ───────── TAB: CADÊNCIA DE REATIVAÇÃO ───────── */}
-        <TabsContent value="cadence" className="space-y-6">
+        {/* ───────── TAB: COMUNICAÇÃO (Cadência + Pré-Cobrança em sub-abas) ───────── */}
+        <TabsContent value="communication" className="space-y-6">
+          <Tabs value={commSubTab} onValueChange={(v) => setCommSubTab(v as "cadence" | "prebilling")} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="cadence" className="gap-2">
+                <CalendarClock className="w-4 h-4" />
+                Cadência de Reativação
+              </TabsTrigger>
+              <TabsTrigger value="prebilling" className="gap-2">
+                <CreditCard className="w-4 h-4" />
+                Pré-Cobrança
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="prebilling" className="mt-2">
+              <PreBillingCadencePanel />
+            </TabsContent>
+            <TabsContent value="cadence" className="mt-2 space-y-6">
           {cadenceLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
