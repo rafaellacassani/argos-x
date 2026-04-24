@@ -386,8 +386,49 @@ export function ChatInput({
         )}
       </AnimatePresence>
 
+      {/* Audio Preview (after stopping, before sending) */}
+      <AnimatePresence>
+        {audioPreview && !isRecording && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="flex items-center gap-3 max-w-3xl mx-auto p-2 bg-muted/50 rounded-lg"
+          >
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive shrink-0"
+              onClick={discardAudioPreview}
+              disabled={isSending}
+              title="Descartar áudio"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+            <audio
+              src={audioPreview.url}
+              controls
+              className="flex-1 h-10"
+            />
+            <Button
+              size="icon"
+              className="bg-secondary hover:bg-secondary/90 shrink-0"
+              onClick={sendAudioPreview}
+              disabled={isSending}
+              title="Enviar áudio"
+            >
+              {isSending ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Normal Input UI */}
-      {!isRecording && (
+      {!isRecording && !audioPreview && (
         <div className="flex items-center gap-2 max-w-3xl mx-auto relative">
           {/* Emoji Picker */}
           <div className="relative">
