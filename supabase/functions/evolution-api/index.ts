@@ -16,7 +16,9 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // --- Cache & concurrency settings ---
-const CONNECT_QR_CACHE_MS = 120_000; // 2 min cache for QR codes
+// QR codes from WhatsApp expire in ~40s. Cache must be SHORTER than that
+// otherwise users see a stale QR after clicking "Refresh" and can never connect.
+const CONNECT_QR_CACHE_MS = 25_000; // 25s cache for QR codes (below WA's ~40s TTL)
 const CONNECTION_STATE_CACHE_MS = 5_000;
 const CONNECT_COOLDOWN_MS = 300_000; // 5 min cooldown after too many calls
 const MAX_CONNECT_CALLS_IN_WINDOW = 3;
