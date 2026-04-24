@@ -107,11 +107,8 @@ const App = () => (
                   <Route path="/cadastro" element={<Cadastro />} />
                   <Route path="/cadastro/sucesso" element={<CadastroSucesso />} />
                   <Route path="/escala-47" element={<CadastroEscala47 />} />
-                  <Route path="/admin/panel" element={
-                    <ProtectedRoute skipWorkspaceCheck>
-                      <AdminPanel />
-                    </ProtectedRoute>
-                  } />
+                  {/* Rota antiga consolidada — redireciona para a nova área unificada */}
+                  <Route path="/admin/panel" element={<Navigate to="/admin/clients" replace />} />
                   <Route path="/create-workspace" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <CreateWorkspace />
