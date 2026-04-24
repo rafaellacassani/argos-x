@@ -96,12 +96,20 @@ serve(async (req) => {
       });
     }
 
-    // Optional dry-run preview
+    // Optional dry-run preview (via query param ?dryRun=1 or JSON body)
     let dryRun = false;
-    try {
-      const body = await req.json();
-      dryRun = !!body?.dryRun;
-    } catch {}
+    const url = new URL(req.url);
+    if (url.searchParams.get("dryRun") === "1" || url.searchParams.get("dryRun") === "true") {
+      dryRun = true;
+    } else {
+      try {
+        const text = await req.text();
+        if (text) {
+          const body = JSON.parse(text);
+          dryRun = !!body?.dryRun;
+        }
+      } catch {}
+    }
 
     // Pick instance for sending (cadence config)
     const { data: cfg } = await supabaseAdmin
