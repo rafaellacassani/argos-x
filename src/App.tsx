@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/hooks/useAuth";
 import { WorkspaceProvider } from "@/hooks/useWorkspace";
@@ -107,11 +107,8 @@ const App = () => (
                   <Route path="/cadastro" element={<Cadastro />} />
                   <Route path="/cadastro/sucesso" element={<CadastroSucesso />} />
                   <Route path="/escala-47" element={<CadastroEscala47 />} />
-                  <Route path="/admin/panel" element={
-                    <ProtectedRoute skipWorkspaceCheck>
-                      <AdminPanel />
-                    </ProtectedRoute>
-                  } />
+                  {/* Rota antiga consolidada — redireciona para a nova área unificada */}
+                  <Route path="/admin/panel" element={<Navigate to="/admin/clients" replace />} />
                   <Route path="/create-workspace" element={
                     <ProtectedRoute skipWorkspaceCheck>
                       <CreateWorkspace />

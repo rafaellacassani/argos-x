@@ -260,6 +260,16 @@ export default function AdminClients() {
   const [bulkInstance, setBulkInstance] = useState("");
   const [bulkSending, setBulkSending] = useState(false);
 
+  // New client modal state
+  const [newClientOpen, setNewClientOpen] = useState(false);
+  const [newClientMode, setNewClientMode] = useState<"checkout" | "free">("checkout");
+
+  // Communication sub-tab state
+  const [commSubTab, setCommSubTab] = useState<"cadence" | "prebilling">("cadence");
+
+  // Clients sub-tab state (clients vs invites)
+  const [clientsSubTab, setClientsSubTab] = useState<"all" | "invites">("all");
+
   useEffect(() => {
     if (!user) return;
     checkAccess();
@@ -973,42 +983,58 @@ export default function AdminClients() {
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchClients} disabled={refreshing}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+          <Button size="sm" onClick={() => { setNewClientMode("checkout"); setNewClientOpen(true); }}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Novo Cliente
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="new-client" className="space-y-6">
+      <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="new-client" className="gap-2">
-            <UserPlus className="w-4 h-4" />
-            Novo Cliente
+          <TabsTrigger value="overview" className="gap-2">
+            <BarChart3 className="w-4 h-4" />
+            Visão Geral
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-2">
             <Users className="w-4 h-4" />
             Clientes ({clients.length})
           </TabsTrigger>
-          <TabsTrigger value="invites" className="gap-2">
-            <Mail className="w-4 h-4" />
-            Convites Pendentes ({invites.length})
-          </TabsTrigger>
-          <TabsTrigger value="cadence" className="gap-2">
-            <CalendarClock className="w-4 h-4" />
-            Cadência
-          </TabsTrigger>
-          <TabsTrigger value="pre-billing" className="gap-2">
-            <CreditCard className="w-4 h-4" />
-            Pré-Cobrança
-          </TabsTrigger>
           <TabsTrigger value="health" className="gap-2">
             <Activity className="w-4 h-4" />
-            Saúde & Monitoramento
+            Saúde
           </TabsTrigger>
-          <TabsTrigger value="executive" className="gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Dashboard Executivo
+          <TabsTrigger value="communication" className="gap-2">
+            <CalendarClock className="w-4 h-4" />
+            Comunicação
           </TabsTrigger>
         </TabsList>
 
-        {/* ───────── TAB: NOVO CLIENTE ───────── */}
-        <TabsContent value="new-client" className="space-y-6">
+        {/* ───────── TAB: VISÃO GERAL (Dashboard Executivo) ───────── */}
+        <TabsContent value="overview">
+          <ExecutiveDashboardTab />
+        </TabsContent>
+
+        {/* Conteúdo "Novo Cliente" — agora dentro do Dialog acionado pelo botão no header da aba Clientes */}
+        <Dialog open={newClientOpen} onOpenChange={setNewClientOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Novo Cliente</DialogTitle>
+              <DialogDescription>
+                Crie via link de pagamento (Stripe) ou um workspace gratuito direto.
+              </DialogDescription>
+            </DialogHeader>
+            <Tabs value={newClientMode} onValueChange={(v) => setNewClientMode(v as "checkout" | "free")} className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="checkout">Link Stripe</TabsTrigger>
+                <TabsTrigger value="free">Workspace Gratuito</TabsTrigger>
+              </TabsList>
+              <TabsContent value="checkout" className="space-y-4 mt-2">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -1125,7 +1151,9 @@ export default function AdminClients() {
               )}
             </CardContent>
           </Card>
+              </TabsContent>
 
+              <TabsContent value="free" className="space-y-4 mt-2">
           {/* ───── CRIAR WORKSPACE GRATUITO ───── */}
           <Card className="max-w-xl">
             <CardHeader>
@@ -1234,7 +1262,10 @@ export default function AdminClients() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+              </TabsContent>
+            </Tabs>
+          </DialogContent>
+        </Dialog>
 
         {/* ───────── TAB: CLIENTES ───────── */}
         <TabsContent value="clients" className="space-y-4">
@@ -1446,6 +1477,72 @@ export default function AdminClients() {
               </TableBody>
             </Table>
           </div>
+
+          {/* Convites Pendentes — seção colapsável dentro da aba Clientes */}
+          <Accordion type="single" collapsible className="border rounded-lg bg-card">
+            <AccordionItem value="invites" className="border-0">
+              <AccordionTrigger className="px-4 hover:no-underline">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Mail className="w-4 h-4 text-muted-foreground" />
+                  Convites Pendentes ({invites.length})
+                </span>
+              </AccordionTrigger>
+              <AccordionContent className="px-0 pb-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>E-mail</TableHead>
+                      <TableHead>Plano</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Criado em</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invites.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-6 text-muted-foreground text-sm">
+                          Nenhum convite pendente.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      invites.map((invite) => (
+                        <TableRow key={invite.id}>
+                          <TableCell className="font-medium">{invite.full_name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{invite.email}</TableCell>
+                          <TableCell><Badge variant="outline" className="capitalize">{invite.plan}</Badge></TableCell>
+                          <TableCell>
+                            <Badge variant={invite.invite_type === "checkout" ? "secondary" : "outline"}>
+                              {invite.invite_type === "checkout" ? "Stripe" : "Gratuito"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {format(new Date(invite.created_at), "dd/MM/yyyy HH:mm")}
+                          </TableCell>
+                          <TableCell>
+                            {invite.checkout_url && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(invite.checkout_url!);
+                                  toast({ title: "Link de checkout copiado!" });
+                                }}
+                              >
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </TabsContent>
 
         {/* ───────── TAB: CONVITES PENDENTES ───────── */}
@@ -1514,8 +1611,23 @@ export default function AdminClients() {
           </div>
         </TabsContent>
 
-        {/* ───────── TAB: CADÊNCIA DE REATIVAÇÃO ───────── */}
-        <TabsContent value="cadence" className="space-y-6">
+        {/* ───────── TAB: COMUNICAÇÃO (Cadência + Pré-Cobrança em sub-abas) ───────── */}
+        <TabsContent value="communication" className="space-y-6">
+          <Tabs value={commSubTab} onValueChange={(v) => setCommSubTab(v as "cadence" | "prebilling")} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="cadence" className="gap-2">
+                <CalendarClock className="w-4 h-4" />
+                Cadência de Reativação
+              </TabsTrigger>
+              <TabsTrigger value="prebilling" className="gap-2">
+                <CreditCard className="w-4 h-4" />
+                Pré-Cobrança
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="prebilling" className="mt-2">
+              <PreBillingCadencePanel />
+            </TabsContent>
+            <TabsContent value="cadence" className="mt-2 space-y-6">
           {cadenceLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -2047,21 +2159,13 @@ export default function AdminClients() {
           ) : (
             <p className="text-muted-foreground text-center py-8">Erro ao carregar configuração.</p>
           )}
-        </TabsContent>
-
-        {/* ───────── TAB: PRÉ-COBRANÇA ───────── */}
-        <TabsContent value="pre-billing">
-          <PreBillingCadencePanel />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         {/* ───────── TAB: SAÚDE & MONITORAMENTO ───────── */}
         <TabsContent value="health">
           <WorkspaceHealthTab />
-        </TabsContent>
-
-        {/* ───────── TAB: DASHBOARD EXECUTIVO ───────── */}
-        <TabsContent value="executive">
-          <ExecutiveDashboardTab />
         </TabsContent>
       </Tabs>
 
