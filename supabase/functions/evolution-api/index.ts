@@ -501,7 +501,8 @@ app.post("/send-text/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendText/${instanceName}`, "POST", { number: normalizedNumber, text, delay: 0, linkPreview: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send message" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
@@ -516,7 +517,8 @@ app.post("/send-media/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendMedia/${instanceName}`, "POST", { number: normalizedNumber, mediatype, media, caption: caption || "", fileName: fileName || undefined });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send media" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
@@ -530,7 +532,8 @@ app.post("/send-audio/:instanceName", async (c) => {
     const result = await evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, "POST", { number: normalizedNumber, audio, delay: 0, encoding: true });
     return c.json(result, 200, corsHeaders);
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : "Failed to send audio" }, 500, corsHeaders);
+    const { status, body } = classifySendError(error);
+    return c.json(body, status as any, corsHeaders);
   }
 });
 
