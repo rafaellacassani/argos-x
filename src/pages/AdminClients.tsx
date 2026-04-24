@@ -985,8 +985,6 @@ export default function AdminClients() {
         </div>
       </div>
 
-      <Tabs defaultValue="new-client" className="space-y-6">
-        <TabsList>
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview" className="gap-2">
@@ -1012,8 +1010,21 @@ export default function AdminClients() {
           <ExecutiveDashboardTab />
         </TabsContent>
 
-        {/* ───────── (REMOVIDO) TAB NOVO CLIENTE — agora vive em modal acionado pelo botão "Novo Cliente" no header da aba Clientes ───────── */}
-        <div className="hidden">
+        {/* Conteúdo "Novo Cliente" — agora dentro do Dialog acionado pelo botão no header da aba Clientes */}
+        <Dialog open={newClientOpen} onOpenChange={setNewClientOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Novo Cliente</DialogTitle>
+              <DialogDescription>
+                Crie via link de pagamento (Stripe) ou um workspace gratuito direto.
+              </DialogDescription>
+            </DialogHeader>
+            <Tabs value={newClientMode} onValueChange={(v) => setNewClientMode(v as "checkout" | "free")} className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="checkout">Link Stripe</TabsTrigger>
+                <TabsTrigger value="free">Workspace Gratuito</TabsTrigger>
+              </TabsList>
+              <TabsContent value="checkout" className="space-y-4 mt-2">
           <Card className="max-w-xl">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
