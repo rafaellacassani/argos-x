@@ -262,7 +262,13 @@ app.post("/create-instance", async (c) => {
     if (!instanceName || typeof instanceName !== "string" || instanceName.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(instanceName)) {
       return c.json({ error: "Invalid instanceName" }, 400, corsHeaders);
     }
-    
+
+    // Always start a fresh QR session for create-instance — drop any stale caches
+    connectResponseCache.delete(instanceName);
+    connectionStateCache.delete(instanceName);
+    circuitOpenUntil.delete(instanceName);
+    connectingStartedAt.delete(instanceName);
+
     let result;
     try {
       result = await evolutionRequest("/instance/create", "POST", { instanceName, qrcode: true, integration: "WHATSAPP-BAILEYS" });
@@ -332,6 +338,14 @@ app.get("/connect/:instanceName", async (c) => {
     const instanceName = c.req.param("instanceName");
     if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) return c.json({ error: "Invalid instance name" }, 400, corsHeaders);
     const number = c.req.query("number");
+    const refresh = c.req.query("refresh");
+
+    // User explicitly asked for a fresh QR (e.g. clicked "Atualizar QR Code")
+    if (refresh) {
+      connectResponseCache.delete(instanceName);
+      circuitOpenUntil.delete(instanceName);
+    }
+
     if (number) {
       // Pairing code mode: pass phone number to Evolution API
       const sanitizedNumber = number.replace(/\D/g, "");
