@@ -298,7 +298,9 @@ export function ConnectionModal({
           throw new Error("Não foi possível obter o código");
         }
       } else {
-        const qrResult = await getQRCode(targetName);
+        // Force refresh — bypass server-side QR cache, otherwise the backend
+        // may return the same expired QR the user just tried to scan.
+        const qrResult = await getQRCode(targetName, true);
         if (qrResult?.base64) {
           setQrCodeBase64(qrResult.base64);
           setStep("qrcode");
