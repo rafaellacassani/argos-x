@@ -1,56 +1,140 @@
 
+# Reestruturação do Admin Clientes (Argos X)
 
-# Diagnóstico — Agente da Rosana (Instituto Método SIC) "trava e para de responder"
+## Diagnóstico do que existe hoje
 
-## O que encontrei no banco
+A página `/admin/clients` tem **7 abas** com bastante sobreposição:
 
-**Workspace:** `Instituto método SIC` (`968f07cf-b48e-4697-9c6b-1457a8645094`) — plano `active`, sem bloqueio.
-**Agente:** `Morfeu` (`5510150a-f234-4a7b-8588-8e7e8c28abcb`).
-**Instância WhatsApp:** `968f07cf-instituto-m-todo-sic` (Evolution).
+1. **Novo Cliente** — 2 formulários (link Stripe + workspace gratuito)
+2. **Clientes** — tabela principal com filtros, ações em massa, edição, limites, plano, exclusão
+3. **Convites Pendentes** — lista de invites Stripe não concluídos
+4. **Cadência** — config de reativação + mensagens por dia + log
+5. **Pré-Cobrança** — config de e-mails D-3, D-1, dia da cobrança + log
+6. **Saúde & Monitoramento** — tabela de saúde por workspace (agentes, tokens, instâncias, alertas) — **NÃO ABRE (timeout)**
+7. **Dashboard Executivo** — MRR, churn, gráficos
 
-## Causas reais — em ordem de impacto
+Além disso existe `/admin/panel` (rota separada, antiga) com uma tabela duplicada de workspaces + ativar trial/bloquear/desbloquear — **não está nem no menu**, mas continua acessível e duplica funções já presentes em "Clientes".
 
-### 1. **O agente `Morfeu` está DESATIVADO** (`is_active = false`) 🔴 raiz do problema
-Não é "travamento" — está desligado. Por isso não responde ninguém. Foi atualizado pela última vez em **09/abr** e desde então `is_active=false`.
+### Por que "Saúde & Monitoramento" não abre
 
-Evidência reforçando:
-- **Última execução do agente: 09/abr/2026 18:02** (34 execuções no total, todas até essa data).
-- **Zero mensagens WhatsApp nos últimos 7 dias** na instância (`whatsapp_messages` vazia no período) — combinando com instância possivelmente desconectada também.
-- Há 4 memórias de sessão antigas, **2 ainda marcadas como `is_paused=true`** (de 09/abr e 20/abr) — mesmo que ela reative o agente, esses 2 leads específicos continuam pausados até reset manual.
+Na edge function `admin-clients` (action `health-monitoring`), depois de já carregar dados em paralelo, há um loop **sequencial** que faz uma query `count` por workspace:
 
-### 2. **Modelo configurado é `openai/gpt-5`** (premium) com `temperature 0.5` e `response_delay_seconds = -1`
-- `gpt-5` no plano `active` (Essencial/Negócio) gera custo alto e latência maior — não é a causa do "travamento", mas vai voltar a queimar tokens rápido quando reativar.
-- `response_delay_seconds = -1` é um valor não-padrão (UI normalmente usa 0/30/60/120). Pode estar sendo interpretado como "delay infinito" em algum caminho — preciso confirmar olhando `ai-agent-chat`.
+```
+for (const wsId of wsIds) {
+  const { count } = await supabaseAdmin.from("leads").select(... count: "exact", head: true).eq("workspace_id", wsId);
+}
+```
 
-### 3. **Instância WhatsApp pode estar desconectada**
-Zero mensagens em 7d numa conta `active` é forte sinal de instância caída na Evolution. Precisa validar o estado real chamando `evolution-api`.
+Com ~50–150 workspaces, isso vira 50–150 round-trips serializados → estoura o timeout. Além disso, carrega `user_profiles` inteiro sem filtrar pelos `wsIds`.
 
-## O que vou fazer (ordem de execução)
+---
 
-1. **Reativar o agente Morfeu** (`is_active=true`) via update SQL — destrava 100% do fluxo.
-2. **Resetar `is_paused=false`** nas 2 memórias travadas (`5527996542806` e `5521986124103`) e zerar `is_processing` em qualquer memória presa (não há nenhuma agora, mas confirmo).
-3. **Trocar modelo `gpt-5` → `openai/gpt-4o-mini`** (recomendado oficial, mesma qualidade para SDR, custo ~10x menor) — evita estouro de tokens/custo quando ela reativar o volume.
-4. **Normalizar `response_delay_seconds`** de `-1` para `0` (resposta imediata, padrão).
-5. **Verificar estado da instância Evolution** `968f07cf-instituto-m-todo-sic` chamando `connection-state` — se estiver `close`, abrir QR code para ela reconectar (vou só diagnosticar e te avisar — reconectar precisa ser ela escaneando).
-6. **Checar logs do `ai-agent-chat`** para o agente nos últimos dias a fim de confirmar se não há erro silencioso (timeout, prompt malformado, tool quebrada) que tenha originalmente desativado o agente.
+## Nova estrutura proposta (de 7 abas → 4)
 
-## O que NÃO vou mexer
-- Conteúdo do system prompt / personalidade.
-- Configurações de follow-up, qualificação, FAQ, conexões.
-- Departamentos / roteamento.
+```text
+Admin Clientes
+├── 1. Visão Geral        (antes: Dashboard Executivo + cards de saúde no topo)
+├── 2. Clientes           (antes: Clientes + Convites + Saúde + AdminPanel + Novo Cliente)
+├── 3. Comunicação        (antes: Cadência + Pré-Cobrança)
+└── 4. Configurações      (limites padrão por plano + acessos rápidos)
+```
 
-## Como confirmar com a Rosana depois do fix
-Pedir para ela mandar uma mensagem de teste no número conectado. Espero ver:
-- Mensagem aparece em `whatsapp_messages`.
-- Execução nova em `agent_executions` em <30s.
-- Resposta enviada na Evolution.
+### 1. Visão Geral
+- KPIs em cards no topo: MRR, Clientes ativos, Trials ativos, Churn 30d, Workspaces com alertas, Tokens 30d.
+- 2 gráficos compactos: receita por mês e novos clientes por mês.
+- Lista "Precisam de atenção" (top 10): trials expirando ≤3d, pagamento pendente, instância desconectada, consumo >90%.
+- Botão "Ver tudo" leva à aba **Clientes** com filtro pré-aplicado.
+- Substitui a aba "Dashboard Executivo" atual e o topo poluído da tabela.
+
+### 2. Clientes (aba unificada — o coração)
+Uma única tabela poderosa que funde **Clientes + Convites + Saúde + AdminPanel**.
+
+Colunas:
+- Workspace + dono (nome/email/whatsapp)
+- Plano (badge) + status (ativo/trial/expirado/bloqueado/convite pendente)
+- Uso (Leads X/Y, IA X/Y) — barra mini
+- Instâncias conectadas (✓/total) com cor
+- Atividade 24h (✓ se houve execução)
+- Última ação
+- Menu de ações (⋯)
+
+Filtros no topo (chips):
+- Status (todos / ativos / trial / trial expirando ≤3d / bloqueados / convite pendente / cancelados)
+- Plano
+- Saúde (todos / com alertas / sem agente / instância off / consumo crítico / inativos)
+- Busca (nome/email/whatsapp)
+- Data de criação
+
+Ações no menu de cada linha (consolidam tudo que hoje está espalhado):
+- Ver detalhes (drawer com saúde completa: agentes, instâncias, tokens 30d, custo estimado, alertas) — **substitui o Sheet de "Saúde"**
+- Abrir conversa (já existe)
+- Editar dados
+- Mudar plano
+- Editar limites
+- Ativar trial manual / Bloquear / Desbloquear (vindos do AdminPanel)
+- Reenviar convite (para invites pendentes)
+- Copiar link de checkout
+- Excluir workspace
+
+Ações em massa (já existentes): WhatsApp em massa + seleção.
+
+Botões no header da aba:
+- "+ Novo Cliente" → abre modal com 2 tabs internas (Link Stripe / Workspace Gratuito) — tira o formulário sempre visível
+- "Atualizar"
+
+### 3. Comunicação (aba unificada)
+Sub-abas internas leves:
+- **Cadência de Reativação** (atual aba Cadência)
+- **Pré-Cobrança** (atual aba Pré-Cobrança)
+- **Métricas de Cadência** (mini painel `CadenceMetricsPanel` que hoje fica perdido)
+
+Mesma lógica e dados, só agrupados — nada de migração de dados.
+
+### 4. Configurações
+- Limites padrão por plano (referência rápida — read-only puxando de `PLAN_DEFINITIONS`)
+- Atalhos: Suporte (`/suporte`), Mapa Operacional (`/admin/mindmap`), Documentação
+
+### Remoções / depreciação
+- **Rota `/admin/panel`**: redirecionar para `/admin/clients` (funções já estão dentro do menu de cada linha). Sem perda de funcionalidade.
+- Aba "Dashboard Executivo" separada: vira "Visão Geral".
+- Aba "Saúde & Monitoramento" separada: vira filtros + drawer de detalhe na aba "Clientes".
+- Aba "Convites Pendentes" separada: vira filtro de status na aba "Clientes" + linha com badge "Convite pendente".
+
+---
+
+## Correção do bug "Saúde não abre" (crítico)
+
+Na edge function `supabase/functions/admin-clients/index.ts`, action `health-monitoring`:
+
+1. Substituir o loop `for (const wsId of wsIds)` por **um único `select` com group by** ou contar em memória a partir de um `select workspace_id from leads where workspace_id in (...)`.
+2. Filtrar `user_profiles` por `in('user_id', creatorIds)` em vez de carregar tudo.
+3. Adicionar `console.time` para futuras medições.
+4. Garantir que retorna mesmo se um sub-select falhar (não derrubar tudo).
+
+Isso sozinho destrava a aba antes mesmo da reestruturação visual.
+
+---
 
 ## Detalhes técnicos
 
-- Updates SQL: `UPDATE ai_agents SET is_active=true, model='openai/gpt-4o-mini', response_delay_seconds=0 WHERE id='5510150a...'` + `UPDATE agent_memories SET is_paused=false, is_processing=false WHERE workspace_id='968f07cf...' AND is_paused=true`.
-- Diagnóstico instância: `supabase functions invoke evolution-api → /connection-state/968f07cf-instituto-m-todo-sic`.
-- Logs: `edge_function_logs` para `ai-agent-chat` filtrando `968f07cf` ou `5510150a`.
+**Arquivos a editar:**
+- `src/pages/AdminClients.tsx` — refatorar para 4 abas, mover modais do "Novo Cliente" para Dialog, integrar filtros de saúde, adicionar drawer "Ver detalhes" reutilizando o conteúdo já presente em `WorkspaceHealthTab`.
+- `src/components/admin/WorkspaceHealthTab.tsx` — quebrar em 2 partes: `WorkspaceHealthDrawer` (reutilizado pela tabela unificada) e remover a tabela duplicada.
+- `src/components/admin/ExecutiveDashboardTab.tsx` — virar `OverviewTab` com layout mais enxuto + lista "Precisam de atenção".
+- `src/components/admin/CommunicationTab.tsx` — **novo**, agrupa Cadência + Pré-Cobrança + Métricas de cadência via sub-tabs.
+- `src/App.tsx` — redirecionar `/admin/panel` → `/admin/clients`.
+- `supabase/functions/admin-clients/index.ts` — corrigir handler `health-monitoring` (perf).
 
-## Observação sobre o discurso da cliente
-A cliente diz "trava no meio do atendimento". O dado real mostra que o agente **parou de operar há quase 2 semanas** (último uso 09/abr) e está desligado. Provavelmente alguém (ela ou um membro) clicou em "desativar" e esqueceu, ou o sistema desativou após algum erro/limite — vou conferir nos logs se há trace de auto-desativação. De qualquer forma, depois de reativado e validado, comunicar a ela com clareza: "o agente estava desativado, reativamos e ajustamos o modelo para a versão recomendada".
+**Sem mudança de schema do banco.** Tudo é reorganização de UI + um patch de performance na edge function.
 
+**Sem perda de funcionalidade.** Toda ação hoje disponível continua existindo, só fica em local mais óbvio.
+
+---
+
+## Resultado esperado
+
+- De **7 abas → 4 abas**.
+- De **2 telas admin (`/admin/panel` + `/admin/clients`) → 1 só**.
+- "Saúde & Monitoramento" passa a abrir em <2s e vira parte natural da tabela de Clientes (filtro + drawer de detalhe).
+- "Novo Cliente" sai do caminho principal (vira botão + modal) — você não precisa ver dois formulários toda vez que entra na tela.
+- Comunicação (cadência + pré-cobrança + métricas) vira um lugar só.
