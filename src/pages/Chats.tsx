@@ -651,7 +651,8 @@ export default function Chats() {
     editMessage: evolutionEditMessage,
     reactToMessage: evolutionReactToMessage,
     blockContact,
-    loading: apiLoading 
+    loading: apiLoading,
+    error: apiError,
   } = useEvolutionAPI();
 
   // Reply state
