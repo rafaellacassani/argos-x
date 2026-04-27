@@ -1,140 +1,126 @@
 
-# Reestruturação do Admin Clientes (Argos X)
+## Objetivo
 
-## Diagnóstico do que existe hoje
+Impedir que workspaces clientes ultrapassem o limite mensal de interações com Agentes de IA (campo `ai_interactions_limit` que já existe em `workspaces`). Se estourar, o agente para de responder e o cliente recebe uma mensagem amigável sugerindo upgrade. Argos X e ECX Company nunca são bloqueados. Contador zera no dia 1 de cada mês.
 
-A página `/admin/clients` tem **7 abas** com bastante sobreposição:
+## Estado atual (já existe)
 
-1. **Novo Cliente** — 2 formulários (link Stripe + workspace gratuito)
-2. **Clientes** — tabela principal com filtros, ações em massa, edição, limites, plano, exclusão
-3. **Convites Pendentes** — lista de invites Stripe não concluídos
-4. **Cadência** — config de reativação + mensagens por dia + log
-5. **Pré-Cobrança** — config de e-mails D-3, D-1, dia da cobrança + log
-6. **Saúde & Monitoramento** — tabela de saúde por workspace (agentes, tokens, instâncias, alertas) — **NÃO ABRE (timeout)**
-7. **Dashboard Executivo** — MRR, churn, gráficos
+- Tabela `workspaces` já tem `ai_interactions_limit` e `ai_interactions_used`.
+- Limites por plano já definidos: Gratuito 100, Essencial 500, Negócio 2.000, Escala 10.000+.
+- A função `ai-agent-chat` já tem a lista `MASTER_WORKSPACE_IDS` (Argos X + ECX) usada para a chave OpenAI direta — vamos reaproveitar.
+- `ai_interactions_used` está em 0 em todas as 374 workspaces (nunca foi incrementado). Vamos começar a contar do zero a partir de agora.
+- Cron `check-overdue-workspaces-hourly` já roda de hora em hora — vamos pendurar o reset mensal nele para não criar nova infra.
 
-Além disso existe `/admin/panel` (rota separada, antiga) com uma tabela duplicada de workspaces + ativar trial/bloquear/desbloquear — **não está nem no menu**, mas continua acessível e duplica funções já presentes em "Clientes".
+## O que vai ser feito
 
-### Por que "Saúde & Monitoramento" não abre
+### 1. Edge function `ai-agent-chat` — checagem ANTES de processar
 
-Na edge function `admin-clients` (action `health-monitoring`), depois de já carregar dados em paralelo, há um loop **sequencial** que faz uma query `count` por workspace:
-
-```
-for (const wsId of wsIds) {
-  const { count } = await supabaseAdmin.from("leads").select(... count: "exact", head: true).eq("workspace_id", wsId);
-}
-```
-
-Com ~50–150 workspaces, isso vira 50–150 round-trips serializados → estoura o timeout. Além disso, carrega `user_profiles` inteiro sem filtrar pelos `wsIds`.
-
----
-
-## Nova estrutura proposta (de 7 abas → 4)
+No início do handler, depois de buscar o `agent` e validar workspace bloqueada (já existe), adicionar:
 
 ```text
-Admin Clientes
-├── 1. Visão Geral        (antes: Dashboard Executivo + cards de saúde no topo)
-├── 2. Clientes           (antes: Clientes + Convites + Saúde + AdminPanel + Novo Cliente)
-├── 3. Comunicação        (antes: Cadência + Pré-Cobrança)
-└── 4. Configurações      (limites padrão por plano + acessos rápidos)
+Se workspace_id NÃO está em MASTER_WORKSPACE_IDS:
+  buscar workspaces.ai_interactions_used e ai_interactions_limit
+  se used >= limit (e limit > 0):
+    - Logar em agent_executions com status="quota_exceeded"
+    - Enviar UMA mensagem amigável via Evolution/WABA para o lead:
+      "Olá! 👋 No momento não consigo continuar o atendimento automático
+      porque o limite mensal de interações do plano foi atingido.
+      Em breve um atendente humano falará com você. Obrigado pela paciência!"
+      (Só envia 1 vez por sessão usando agent_memories.is_paused para não spammar.)
+    - Pausar a sessão (agent_memories.is_paused = true) para o agente não tentar de novo no resto do mês
+    - Retornar 200 { skipped: true, reason: "quota_exceeded" }
 ```
 
-### 1. Visão Geral
-- KPIs em cards no topo: MRR, Clientes ativos, Trials ativos, Churn 30d, Workspaces com alertas, Tokens 30d.
-- 2 gráficos compactos: receita por mês e novos clientes por mês.
-- Lista "Precisam de atenção" (top 10): trials expirando ≤3d, pagamento pendente, instância desconectada, consumo >90%.
-- Botão "Ver tudo" leva à aba **Clientes** com filtro pré-aplicado.
-- Substitui a aba "Dashboard Executivo" atual e o topo poluído da tabela.
+A mensagem para o lead usa o mesmo helper de envio (`sendViaEvolution` / WABA) já presente na função. Se preferir não notificar o lead (apenas silenciar), deixo isso como flag — confirme abaixo.
 
-### 2. Clientes (aba unificada — o coração)
-Uma única tabela poderosa que funde **Clientes + Convites + Saúde + AdminPanel**.
+### 2. Edge function `ai-agent-chat` — incremento APÓS sucesso
 
-Colunas:
-- Workspace + dono (nome/email/whatsapp)
-- Plano (badge) + status (ativo/trial/expirado/bloqueado/convite pendente)
-- Uso (Leads X/Y, IA X/Y) — barra mini
-- Instâncias conectadas (✓/total) com cor
-- Atividade 24h (✓ se houve execução)
-- Última ação
-- Menu de ações (⋯)
+No ponto onde a função registra `agent_executions` com `status: "success"` (após receber resposta da OpenAI/Lovable Gateway), adicionar:
 
-Filtros no topo (chips):
-- Status (todos / ativos / trial / trial expirando ≤3d / bloqueados / convite pendente / cancelados)
-- Plano
-- Saúde (todos / com alertas / sem agente / instância off / consumo crítico / inativos)
-- Busca (nome/email/whatsapp)
-- Data de criação
+```text
+Se workspace_id NÃO está em MASTER_WORKSPACE_IDS:
+  UPDATE workspaces SET ai_interactions_used = ai_interactions_used + 1
+  WHERE id = agent.workspace_id
+```
 
-Ações no menu de cada linha (consolidam tudo que hoje está espalhado):
-- Ver detalhes (drawer com saúde completa: agentes, instâncias, tokens 30d, custo estimado, alertas) — **substitui o Sheet de "Saúde"**
-- Abrir conversa (já existe)
-- Editar dados
-- Mudar plano
-- Editar limites
-- Ativar trial manual / Bloquear / Desbloquear (vindos do AdminPanel)
-- Reenviar convite (para invites pendentes)
-- Copiar link de checkout
-- Excluir workspace
+Usado um `rpc` atômico (`increment_ai_interactions(workspace_id)`) para evitar race condition entre execuções paralelas do mesmo workspace.
 
-Ações em massa (já existentes): WhatsApp em massa + seleção.
+### 3. Função SQL `increment_ai_interactions`
 
-Botões no header da aba:
-- "+ Novo Cliente" → abre modal com 2 tabs internas (Link Stripe / Workspace Gratuito) — tira o formulário sempre visível
-- "Atualizar"
+Migração nova:
 
-### 3. Comunicação (aba unificada)
-Sub-abas internas leves:
-- **Cadência de Reativação** (atual aba Cadência)
-- **Pré-Cobrança** (atual aba Pré-Cobrança)
-- **Métricas de Cadência** (mini painel `CadenceMetricsPanel` que hoje fica perdido)
+```sql
+CREATE OR REPLACE FUNCTION public.increment_ai_interactions(_workspace_id uuid)
+RETURNS integer
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE workspaces
+  SET ai_interactions_used = COALESCE(ai_interactions_used, 0) + 1
+  WHERE id = _workspace_id
+  RETURNING ai_interactions_used;
+$$;
+```
 
-Mesma lógica e dados, só agrupados — nada de migração de dados.
+### 4. Reset mensal automático
 
-### 4. Configurações
-- Limites padrão por plano (referência rápida — read-only puxando de `PLAN_DEFINITIONS`)
-- Atalhos: Suporte (`/suporte`), Mapa Operacional (`/admin/mindmap`), Documentação
+Criar função SQL + cron job dedicado (não misturar com `check-overdue-workspaces`):
 
-### Remoções / depreciação
-- **Rota `/admin/panel`**: redirecionar para `/admin/clients` (funções já estão dentro do menu de cada linha). Sem perda de funcionalidade.
-- Aba "Dashboard Executivo" separada: vira "Visão Geral".
-- Aba "Saúde & Monitoramento" separada: vira filtros + drawer de detalhe na aba "Clientes".
-- Aba "Convites Pendentes" separada: vira filtro de status na aba "Clientes" + linha com badge "Convite pendente".
+```sql
+CREATE OR REPLACE FUNCTION public.reset_ai_interactions_monthly()
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+  UPDATE workspaces SET ai_interactions_used = 0;
+$$;
 
----
+-- Cron: dia 1 de cada mês às 00:05
+SELECT cron.schedule(
+  'reset-ai-interactions-monthly',
+  '5 0 1 * *',
+  $$ SELECT public.reset_ai_interactions_monthly(); $$
+);
+```
 
-## Correção do bug "Saúde não abre" (crítico)
+Argos X e ECX são incluídos no reset (não faz mal, eles nunca são checados nem incrementados de qualquer forma).
 
-Na edge function `supabase/functions/admin-clients/index.ts`, action `health-monitoring`:
+### 5. Banner visual no frontend (opcional, recomendado)
 
-1. Substituir o loop `for (const wsId of wsIds)` por **um único `select` com group by** ou contar em memória a partir de um `select workspace_id from leads where workspace_id in (...)`.
-2. Filtrar `user_profiles` por `in('user_id', creatorIds)` em vez de carregar tudo.
-3. Adicionar `console.time` para futuras medições.
-4. Garantir que retorna mesmo se um sub-select falhar (não derrubar tudo).
+O hook `usePlanLimits.ts` já expõe `aiInteractionsUsed` e `aiInteractionsLimit`, e o `ActivePlanCard` já mostra a barra. Como agora os números vão começar a se mexer de verdade, adicionar:
 
-Isso sozinho destrava a aba antes mesmo da reestruturação visual.
+- Um aviso laranja quando o uso passar de 80%.
+- Um aviso vermelho com CTA "Fazer upgrade" quando passar de 100%.
 
----
+Aproveitando o componente `PlanExcessBanner.tsx` já existente para incluir mais essa categoria de excesso.
 
-## Detalhes técnicos
+## Master workspaces (nunca bloqueados, nunca contados)
 
-**Arquivos a editar:**
-- `src/pages/AdminClients.tsx` — refatorar para 4 abas, mover modais do "Novo Cliente" para Dialog, integrar filtros de saúde, adicionar drawer "Ver detalhes" reutilizando o conteúdo já presente em `WorkspaceHealthTab`.
-- `src/components/admin/WorkspaceHealthTab.tsx` — quebrar em 2 partes: `WorkspaceHealthDrawer` (reutilizado pela tabela unificada) e remover a tabela duplicada.
-- `src/components/admin/ExecutiveDashboardTab.tsx` — virar `OverviewTab` com layout mais enxuto + lista "Precisam de atenção".
-- `src/components/admin/CommunicationTab.tsx` — **novo**, agrupa Cadência + Pré-Cobrança + Métricas de cadência via sub-tabs.
-- `src/App.tsx` — redirecionar `/admin/panel` → `/admin/clients`.
-- `supabase/functions/admin-clients/index.ts` — corrigir handler `health-monitoring` (perf).
+```text
+Argos X     → 41efdc6d-d4ba-4589-9761-7438a5911d57
+ECX Company → 6a8540c9-6eb5-42ce-8d20-960002d85bac
+```
 
-**Sem mudança de schema do banco.** Tudo é reorganização de UI + um patch de performance na edge function.
+Já estão na constante `MASTER_WORKSPACE_IDS` dentro de `ai-agent-chat`. Reaproveitamos.
 
-**Sem perda de funcionalidade.** Toda ação hoje disponível continua existindo, só fica em local mais óbvio.
+## Arquivos afetados
 
----
+- `supabase/functions/ai-agent-chat/index.ts` — adicionar checagem + incremento (~30 linhas)
+- Migração SQL — função `increment_ai_interactions` + função `reset_ai_interactions_monthly`
+- Cron via SQL insert (não migração, conforme regra) — `reset-ai-interactions-monthly`
+- `src/components/layout/PlanExcessBanner.tsx` — incluir alerta de IA
+- `src/hooks/usePlanExcess.ts` — incluir IA na detecção (opcional)
 
-## Resultado esperado
+## Validação pós-deploy
 
-- De **7 abas → 4 abas**.
-- De **2 telas admin (`/admin/panel` + `/admin/clients`) → 1 só**.
-- "Saúde & Monitoramento" passa a abrir em <2s e vira parte natural da tabela de Clientes (filtro + drawer de detalhe).
-- "Novo Cliente" sai do caminho principal (vira botão + modal) — você não precisa ver dois formulários toda vez que entra na tela.
-- Comunicação (cadência + pré-cobrança + métricas) vira um lugar só.
+1. Rodar uma chamada de teste em workspace cliente → verificar que `ai_interactions_used` incrementa de 1.
+2. Rodar uma chamada de teste em Argos X → verificar que `ai_interactions_used` NÃO incrementa.
+3. Forçar `ai_interactions_used = ai_interactions_limit` numa workspace de teste → próxima mensagem deve retornar `quota_exceeded` e o cliente recebe o aviso amigável.
+4. Verificar `cron.job` para confirmar que `reset-ai-interactions-monthly` está agendado.
+
+## Pontos para confirmar antes de implementar
+
+1. **Quando o limite é atingido, o lead recebe a mensagem amigável via WhatsApp** ou prefere **silenciar (apenas o agente para de responder, sem texto para o lead)**? O texto sugerido é:
+   > "Olá! 👋 No momento não consigo continuar o atendimento automático porque o limite mensal de interações do plano foi atingido. Em breve um atendente humano falará com você."
+
+2. **Limite do plano Gratuito (100/mês) é muito baixo** — uma única conversa de 5 minutos pode estourar. Confirma que está ok manter 100, ou prefere subir? (Recomendo subir Gratuito para 300 e Essencial para 1.000.)
+
+Se confirmar essas duas perguntas, sigo direto para implementação.
