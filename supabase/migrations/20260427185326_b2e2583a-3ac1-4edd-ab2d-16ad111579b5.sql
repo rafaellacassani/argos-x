@@ -1,0 +1,1 @@
+UPDATE public.ai_agents SET model = 'openai/gpt-5.2', updated_at = now() WHERE workspace_id = '41efdc6d-d4ba-4589-9761-7438a5911d57' AND model = 'openai/gpt-5.5';
