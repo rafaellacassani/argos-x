@@ -2514,6 +2514,20 @@ serve(async (req) => {
 
       await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: finalResponse, tools_used: toolsUsed, tokens_used: tokensUsed, latency_ms: latencyMs, status: finalStatus, workspace_id: agent.workspace_id });
 
+      // ============ INCREMENT MONTHLY AI INTERACTION COUNTER ============
+      // Master workspaces (Argos X, ECX Company) are not counted — they are unlimited.
+      const MASTER_WS_INCREMENT_BYPASS = new Set<string>([
+        "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+        "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+      ]);
+      if (!MASTER_WS_INCREMENT_BYPASS.has(agent.workspace_id)) {
+        try {
+          await supabase.rpc("increment_ai_interactions", { _workspace_id: agent.workspace_id });
+        } catch (incErr) {
+          console.warn("[ai-agent-chat] increment_ai_interactions failed:", incErr);
+        }
+      }
+
       console.log(`[ai-agent-chat] ✅ Response generated (${latencyMs}ms, ${finalResponse.length} chars, ${responseChunks.length} chunks, trainer=${isTrainer})`);
 
       return new Response(JSON.stringify({ response: finalResponse, chunks: responseChunks, latency_ms: latencyMs }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
