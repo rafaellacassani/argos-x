@@ -134,7 +134,11 @@ export default function Settings() {
   const { workspaceId } = useWorkspace();
   const planLimits = usePlanLimits();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("integrations");
+  const initialTab =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("tab") || "integrations"
+      : "integrations";
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [showConnectionModal, setShowConnectionModal] = useState(false);
   const [reconnectingInstance, setReconnectingInstance] = useState<string | null>(null);
   const [instances, setInstances] = useState<EvolutionInstance[]>([]);
