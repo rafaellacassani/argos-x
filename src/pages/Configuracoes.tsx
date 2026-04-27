@@ -35,6 +35,10 @@ function PlanLockedState({ feature }: { feature: string }) {
 export default function Configuracoes() {
   const { planName } = usePlanLimits();
   const isEscala = planName === "escala" || planName === "escala_semestral";
+  const initialTab =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("tab") || "team"
+      : "team";
 
   return (
     <div className="space-y-6" data-tour="team-section">
@@ -49,7 +53,7 @@ export default function Configuracoes() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="team" className="space-y-6">
+      <Tabs defaultValue={initialTab} className="space-y-6">
         <TabsList className="grid w-full max-w-5xl grid-cols-8">
           <TabsTrigger value="team" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
