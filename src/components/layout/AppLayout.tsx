@@ -15,6 +15,9 @@ import { PaymentPendingBanner } from "./PaymentPendingBanner";
 import { useInstanceHealth } from "@/hooks/useInstanceHealth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu } from "lucide-react";
+import { usePlanExcess, isExcessResolvePath } from "@/hooks/usePlanExcess";
+import { PlanExcessBlockScreen } from "./PlanExcessBlockScreen";
+import { PlanExcessBanner } from "./PlanExcessBanner";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -27,6 +30,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { disconnected: disconnectedInstances } = useInstanceHealth();
+  const { hasExcess, items: excessItems, planName: excessPlanName, loading: excessLoading } = usePlanExcess();
 
   const [tourActive, setTourActive] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -63,6 +67,15 @@ export function AppLayout({ children }: AppLayoutProps) {
   if (!loading && !allowed && !isAdminViewing && !isPlansPage) {
     return <WorkspaceBlockedScreen reason={reason as "blocked" | "canceled" | "past_due"} />;
   }
+
+  // Plan-excess soft block: allow only resolve pages; block everything else with the excess screen.
+  const allowResolvePage = isExcessResolvePath(location.pathname);
+  const showExcessBlock =
+    !loading &&
+    !excessLoading &&
+    hasExcess &&
+    !isAdminViewing &&
+    !allowResolvePage;
 
   const showTrialBanner =
     !loading &&
@@ -104,11 +117,18 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         )}
         {showTrialBanner && !isAdminViewing && <TrialBanner daysRemaining={daysRemaining} />}
+        {hasExcess && !isAdminViewing && (
+          <PlanExcessBanner items={excessItems} planName={excessPlanName} />
+        )}
         {!isAdminViewing && <LeadLimitBanner />}
         {!isAdminViewing && <DisconnectedInstanceBanner instances={disconnectedInstances} />}
         {!isAdminViewing && <PaymentPendingBanner />}
         <main className="flex-1 overflow-auto p-4 md:p-6">
-          {children}
+          {showExcessBlock ? (
+            <PlanExcessBlockScreen items={excessItems} planName={excessPlanName} />
+          ) : (
+            children
+          )}
         </main>
       </div>
 
