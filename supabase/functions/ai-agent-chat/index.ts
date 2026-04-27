@@ -1664,6 +1664,21 @@ serve(async (req) => {
           console.warn(`[ai-agent-chat] 🚨 Anthropic disabled, remapping ${modelName} -> openai/gpt-4o-mini`);
           modelName = "openai/gpt-4o-mini";
         }
+
+        // 🎯 Workspace-level model policy
+        // - Master workspaces (Argos X + ECX Company) → forçar gpt-5.5 (top OpenAI) usando OPENAI_API_KEY direto
+        // - Demais clientes → forçar gpt-5-mini via Lovable Gateway (estável, sem fallback de instabilidade)
+        const MASTER_WORKSPACE_IDS = new Set<string>([
+          "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+          "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+        ]);
+        const isMasterWorkspace = MASTER_WORKSPACE_IDS.has(agent.workspace_id);
+        const forcedModel = isMasterWorkspace ? "openai/gpt-5.5" : "openai/gpt-5-mini";
+        if (modelName !== forcedModel) {
+          console.log(`[ai-agent-chat] 🎯 Policy override (${isMasterWorkspace ? "master" : "client"}): ${modelName} -> ${forcedModel}`);
+          modelName = forcedModel;
+        }
+
         const provider = modelName.split("/")[0]; // "openai" or "google"
 
         if (modelName !== rawModelName) {
@@ -1674,10 +1689,15 @@ serve(async (req) => {
 
         let aiResponse: Response;
 
-        // Models that only exist on the Lovable gateway (not direct OpenAI/Anthropic)
-        const GATEWAY_ONLY_MODELS = ["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.2", "gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"];
+        // Models that only exist on the Lovable gateway (not on the user's direct OpenAI key).
+        // gpt-5.x is now available on the master OPENAI_API_KEY, so we route master workspaces directly.
+        const GATEWAY_ONLY_MODELS = ["gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"];
         const openaiModel = modelName.replace("openai/", "");
-        const isGatewayOnly = GATEWAY_ONLY_MODELS.some(m => openaiModel === m || openaiModel.startsWith(m + "-"));
+        // Master workspaces ALWAYS use the direct OpenAI key when provider=openai (top performance, no gateway hops).
+        // Non-master workspaces ALWAYS use the gateway (cost control via Lovable AI), regardless of model name.
+        const isGatewayOnly = !isMasterWorkspace
+          ? true
+          : GATEWAY_ONLY_MODELS.some(m => openaiModel === m || openaiModel.startsWith(m + "-"));
         // gpt-5*, o1*, o3* exigem max_completion_tokens e NÃO aceitam temperature customizada
         const useNewParams = /^(gpt-5|o1|o3)/.test(openaiModel);
         const tokenLimit = agent.max_tokens || 2048;
