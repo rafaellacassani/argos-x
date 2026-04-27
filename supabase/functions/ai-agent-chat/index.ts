@@ -629,7 +629,7 @@ serve(async (req) => {
     // ============ WORKSPACE BLOCKED CHECK ============
     const { data: wsCheck } = await supabase
       .from("workspaces")
-      .select("plan_type, blocked_at, trial_end")
+      .select("plan_type, blocked_at, trial_end, ai_interactions_used, ai_interactions_limit, plan_name")
       .eq("id", agent.workspace_id)
       .single();
 
@@ -642,6 +642,52 @@ serve(async (req) => {
         // Auto-deactivate the agent to prevent future attempts
         await supabase.from("ai_agents").update({ is_active: false }).eq("id", agent_id);
         return new Response(JSON.stringify({ error: "Workspace blocked", paused: true }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // ============ MONTHLY AI INTERACTION QUOTA GUARDRAIL ============
+      // Master workspaces (Argos X, ECX Company) are unlimited and bypass this check.
+      const MASTER_WS_QUOTA_BYPASS = new Set<string>([
+        "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+        "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+      ]);
+      const aiUsed = wsCheck.ai_interactions_used ?? 0;
+      const aiLimit = wsCheck.ai_interactions_limit ?? 0;
+      const isMasterBypass = MASTER_WS_QUOTA_BYPASS.has(agent.workspace_id);
+
+      if (!isMasterBypass && aiLimit > 0 && aiUsed >= aiLimit) {
+        console.log(`[ai-agent-chat] 🚫 AI quota exceeded for workspace=${agent.workspace_id} (used=${aiUsed}/${aiLimit}, plan=${wsCheck.plan_name})`);
+
+        // Log the blocked attempt
+        await supabase.from("agent_executions").insert({
+          agent_id,
+          lead_id,
+          session_id,
+          input_message: messageText || `[${media_type}]`,
+          output_message: null,
+          status: "quota_exceeded",
+          latency_ms: Date.now() - startTime,
+          workspace_id: agent.workspace_id,
+        });
+
+        // Pause the session so the agent stops trying for this lead until the next reset
+        // (or until a human resolves the support ticket / manually unpauses).
+        await supabase
+          .from("agent_memories")
+          .update({ is_paused: true, updated_at: new Date().toISOString() })
+          .eq("session_id", session_id)
+          .eq("workspace_id", agent.workspace_id);
+
+        return new Response(
+          JSON.stringify({
+            response: null,
+            skipped: true,
+            reason: "quota_exceeded",
+            message: "Limite mensal de interações de IA do plano atingido.",
+            ai_used: aiUsed,
+            ai_limit: aiLimit,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
