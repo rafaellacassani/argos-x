@@ -4442,11 +4442,16 @@ export type Database = {
         Args: { agent_id_param: string }
         Returns: undefined
       }
+      increment_ai_interactions: {
+        Args: { _workspace_id: string }
+        Returns: number
+      }
       is_any_workspace_admin: { Args: { _user_id: string }; Returns: boolean }
       is_workspace_admin: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      reset_ai_interactions_monthly: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "manager" | "seller"
