@@ -270,16 +270,62 @@ app.delete("/disconnect", async (c) => {
     return c.json({ error: "Unauthorized" }, 401, corsHeaders);
   }
 
+  // Find the workspace(s) linked to this user's Google token before deleting
+  const { data: tokenRows } = await supabaseAdmin
+    .from("google_calendar_tokens")
+    .select("workspace_id")
+    .eq("user_id", userId);
+
+  const workspaceIds = (tokenRows || [])
+    .map((r: any) => r.workspace_id)
+    .filter((id: string | null) => !!id);
+
+  // Remove the OAuth token
   const { error } = await supabaseAdmin
     .from("google_calendar_tokens")
     .delete()
     .eq("user_id", userId);
 
   if (error) {
+    console.error("[Google Calendar OAuth] Failed to delete token:", error);
     return c.json({ error: "Failed to disconnect" }, 500, corsHeaders);
   }
 
-  return c.json({ success: true }, 200, corsHeaders);
+  // 🧹 Always purge any imported Google events for the affected workspace(s)
+  // so that disconnecting truly cleans up the calendar (no leftover events
+  // from a wrong Google account).
+  let deletedEvents = 0;
+  try {
+    if (workspaceIds.length > 0) {
+      const { count, error: delErr } = await supabaseAdmin
+        .from("calendar_events")
+        .delete({ count: "exact" })
+        .in("workspace_id", workspaceIds)
+        .not("google_event_id", "is", null);
+      if (delErr) {
+        console.error("[Google Calendar OAuth] Cleanup error (workspace scope):", delErr);
+      } else {
+        deletedEvents = count || 0;
+      }
+    } else {
+      // Fallback: clean by user_id when no workspace is known
+      const { count, error: delErr } = await supabaseAdmin
+        .from("calendar_events")
+        .delete({ count: "exact" })
+        .eq("user_id", userId)
+        .not("google_event_id", "is", null);
+      if (delErr) {
+        console.error("[Google Calendar OAuth] Cleanup error (user scope):", delErr);
+      } else {
+        deletedEvents = count || 0;
+      }
+    }
+    console.log(`[Google Calendar OAuth] 🧹 Disconnected user ${userId}, purged ${deletedEvents} imported events`);
+  } catch (cleanupErr) {
+    console.error("[Google Calendar OAuth] Unexpected cleanup error:", cleanupErr);
+  }
+
+  return c.json({ success: true, deleted_events: deletedEvents }, 200, corsHeaders);
 });
 
 // OPTIONS - CORS preflight
