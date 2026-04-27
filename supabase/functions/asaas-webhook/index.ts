@@ -653,6 +653,30 @@ serve(async (req) => {
           break;
         }
 
+        // CRITICAL FIX (upgrade race condition): When a customer upgrades plans,
+        // asaas-manage-subscription cancels the OLD subscription and creates a NEW one.
+        // Asaas then fires PAYMENT_DELETED for the old invoice — its `subscription` payload
+        // points to the dead old sub. If we cancel the workspace based on that, we wipe out
+        // a perfectly valid active customer (this happened with Bernardino Advocacia).
+        // So before cancelling, check if the customer has ANY other ACTIVE subscription.
+        try {
+          const subsList = await fetch(
+            `https://api.asaas.com/v3/subscriptions?customer=${asaasCustomerId}&status=ACTIVE&limit=10`,
+            { headers: { access_token: Deno.env.get("ASAAS_API_KEY")!, "Content-Type": "application/json" } }
+          ).then((r) => r.json());
+          const activeOther = (subsList?.data || []).find(
+            (s: any) => s?.id && s.id !== subscriptionId && (s.status || "").toUpperCase() === "ACTIVE" && s.deleted !== true
+          );
+          if (activeOther) {
+            console.log(
+              `[asaas-webhook] ${event} for dead sub ${subscriptionId}, but customer ${asaasCustomerId} has another ACTIVE sub ${activeOther.id} — NOT cancelling workspace (upgrade in progress).`
+            );
+            break;
+          }
+        } catch (e) {
+          console.warn("[asaas-webhook] Failed to check for other active subs, proceeding with cancellation:", e);
+        }
+
         await supabaseAdmin
           .from("workspaces")
           .update({
