@@ -30,7 +30,14 @@ export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { disconnected: disconnectedInstances } = useInstanceHealth();
-  const { hasExcess, items: excessItems, planName: excessPlanName, loading: excessLoading } = usePlanExcess();
+  const { hasExcess, items: excessItems, planName: excessPlanName, loading: excessLoading, refetch: refetchExcess } = usePlanExcess();
+
+  // Re-check excess whenever the route changes — keeps the block in sync after the user
+  // removes leads / agents / connections / users from a resolve page.
+  useEffect(() => {
+    refetchExcess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const [tourActive, setTourActive] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
