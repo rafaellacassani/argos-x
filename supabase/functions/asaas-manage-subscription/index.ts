@@ -38,9 +38,48 @@ async function asaasFetch(path: string, options: RequestInit = {}) {
   const data = await res.json();
   if (!res.ok) {
     console.error("Asaas API error:", JSON.stringify(data));
-    throw new Error(data.errors?.[0]?.description || `Asaas error: ${res.status}`);
+    const desc = data.errors?.[0]?.description || `Asaas error: ${res.status}`;
+    const err: any = new Error(desc);
+    err.asaasErrors = data.errors;
+    throw err;
   }
   return data;
+}
+
+/**
+ * Detecta se o erro do Asaas é por falta de CPF/CNPJ no cadastro do cliente.
+ */
+function isMissingCpfError(e: any): boolean {
+  const msg = (e?.message || "").toString().toLowerCase();
+  return msg.includes("cpf") || msg.includes("cnpj");
+}
+
+/**
+ * Cria um Payment Link recorrente no Asaas. O próprio checkout do Asaas
+ * coleta o CPF/CNPJ do cliente, resolvendo upgrades para contas migradas
+ * que ficaram sem CPF cadastrado.
+ */
+async function createAsaasPaymentLink(opts: {
+  name: string;
+  description: string;
+  value: number;
+  recurrent: boolean;
+}): Promise<string> {
+  const body: any = {
+    name: opts.name,
+    description: opts.description,
+    billingType: "UNDEFINED",
+    chargeType: opts.recurrent ? "RECURRENT" : "DETACHED",
+    value: opts.value,
+    dueDateLimitDays: 5,
+    notificationEnabled: true,
+  };
+  if (opts.recurrent) body.subscriptionCycle = "MONTHLY";
+  const link = await asaasFetch("/paymentLinks", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return link.url;
 }
 
 /**
@@ -325,20 +364,39 @@ serve(async (req) => {
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 1);
 
-      const newSub = await asaasFetch("/subscriptions", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: workspace.asaas_customer_id,
-          // UNDEFINED = cliente escolhe PIX, boleto ou cartão no portal Asaas.
-          // Trial (asaas-checkout) continua hardcoded em CREDIT_CARD.
-          billingType: "UNDEFINED",
-          value: config.price,
-          cycle: "MONTHLY",
-          nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Plano ${config.display}`,
-          externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
-        }),
-      });
+      let newSub: any;
+      try {
+        newSub = await asaasFetch("/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: workspace.asaas_customer_id,
+            billingType: "UNDEFINED",
+            value: config.price,
+            cycle: "MONTHLY",
+            nextDueDate: nextDueDate.toISOString().split("T")[0],
+            description: `Argos X - Plano ${config.display}`,
+            externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
+          }),
+        });
+      } catch (e: any) {
+        if (isMissingCpfError(e)) {
+          // Cliente Asaas sem CPF: gera Payment Link que coleta CPF no checkout.
+          const checkoutUrl = await createAsaasPaymentLink({
+            name: `Argos X - Plano ${config.display}`,
+            description: `Assinatura mensal Plano ${config.display} - Argos X`,
+            value: config.price,
+            recurrent: true,
+          });
+          console.log(`[asaas-manage] Missing CPF - generated payment link for ${workspaceId}: ${checkoutUrl}`);
+          return new Response(JSON.stringify({
+            success: true,
+            requires_checkout: true,
+            checkout_url: checkoutUrl,
+            message: `Para concluir o upgrade para ${config.display}, complete o pagamento (precisamos do seu CPF para a fatura).`,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        throw e;
+      }
       newSubId = newSub.id;
       console.log(`[asaas-manage] New subscription created: ${newSubId}`);
 
@@ -416,19 +474,38 @@ serve(async (req) => {
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 1);
 
-      const subscription = await asaasFetch("/subscriptions", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: workspace.asaas_customer_id,
-          // UNDEFINED = PIX, boleto ou cartão (escolha do cliente)
-          billingType: "UNDEFINED",
-          value: price,
-          cycle: "MONTHLY",
-          nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
-          externalReference,
-        }),
-      });
+      let subscription: any;
+      try {
+        subscription = await asaasFetch("/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: workspace.asaas_customer_id,
+            billingType: "UNDEFINED",
+            value: price,
+            cycle: "MONTHLY",
+            nextDueDate: nextDueDate.toISOString().split("T")[0],
+            description: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
+            externalReference,
+          }),
+        });
+      } catch (e: any) {
+        if (isMissingCpfError(e)) {
+          const checkoutUrl = await createAsaasPaymentLink({
+            name: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
+            description: `Pacote mensal de +${packSize.toLocaleString()} leads - Argos X`,
+            value: price,
+            recurrent: true,
+          });
+          console.log(`[asaas-manage] Missing CPF (lead_pack) - link for ${workspaceId}: ${checkoutUrl}`);
+          return new Response(JSON.stringify({
+            success: true,
+            requires_checkout: true,
+            checkout_url: checkoutUrl,
+            message: `Para contratar o pacote, complete o pagamento (precisamos do seu CPF para a fatura).`,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        throw e;
+      }
 
       await supabaseAdmin.from("lead_packs").insert({
         workspace_id: workspaceId,
