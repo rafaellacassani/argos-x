@@ -364,20 +364,39 @@ serve(async (req) => {
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 1);
 
-      const newSub = await asaasFetch("/subscriptions", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: workspace.asaas_customer_id,
-          // UNDEFINED = cliente escolhe PIX, boleto ou cartão no portal Asaas.
-          // Trial (asaas-checkout) continua hardcoded em CREDIT_CARD.
-          billingType: "UNDEFINED",
-          value: config.price,
-          cycle: "MONTHLY",
-          nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Plano ${config.display}`,
-          externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
-        }),
-      });
+      let newSub: any;
+      try {
+        newSub = await asaasFetch("/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: workspace.asaas_customer_id,
+            billingType: "UNDEFINED",
+            value: config.price,
+            cycle: "MONTHLY",
+            nextDueDate: nextDueDate.toISOString().split("T")[0],
+            description: `Argos X - Plano ${config.display}`,
+            externalReference: JSON.stringify({ type: "plan", plan: config.plan_name, workspace_id: workspaceId }),
+          }),
+        });
+      } catch (e: any) {
+        if (isMissingCpfError(e)) {
+          // Cliente Asaas sem CPF: gera Payment Link que coleta CPF no checkout.
+          const checkoutUrl = await createAsaasPaymentLink({
+            name: `Argos X - Plano ${config.display}`,
+            description: `Assinatura mensal Plano ${config.display} - Argos X`,
+            value: config.price,
+            recurrent: true,
+          });
+          console.log(`[asaas-manage] Missing CPF - generated payment link for ${workspaceId}: ${checkoutUrl}`);
+          return new Response(JSON.stringify({
+            success: true,
+            requires_checkout: true,
+            checkout_url: checkoutUrl,
+            message: `Para concluir o upgrade para ${config.display}, complete o pagamento (precisamos do seu CPF para a fatura).`,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        throw e;
+      }
       newSubId = newSub.id;
       console.log(`[asaas-manage] New subscription created: ${newSubId}`);
 
@@ -455,19 +474,38 @@ serve(async (req) => {
       const nextDueDate = new Date();
       nextDueDate.setDate(nextDueDate.getDate() + 1);
 
-      const subscription = await asaasFetch("/subscriptions", {
-        method: "POST",
-        body: JSON.stringify({
-          customer: workspace.asaas_customer_id,
-          // UNDEFINED = PIX, boleto ou cartão (escolha do cliente)
-          billingType: "UNDEFINED",
-          value: price,
-          cycle: "MONTHLY",
-          nextDueDate: nextDueDate.toISOString().split("T")[0],
-          description: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
-          externalReference,
-        }),
-      });
+      let subscription: any;
+      try {
+        subscription = await asaasFetch("/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            customer: workspace.asaas_customer_id,
+            billingType: "UNDEFINED",
+            value: price,
+            cycle: "MONTHLY",
+            nextDueDate: nextDueDate.toISOString().split("T")[0],
+            description: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
+            externalReference,
+          }),
+        });
+      } catch (e: any) {
+        if (isMissingCpfError(e)) {
+          const checkoutUrl = await createAsaasPaymentLink({
+            name: `Argos X - Pacote +${packSize.toLocaleString()} leads`,
+            description: `Pacote mensal de +${packSize.toLocaleString()} leads - Argos X`,
+            value: price,
+            recurrent: true,
+          });
+          console.log(`[asaas-manage] Missing CPF (lead_pack) - link for ${workspaceId}: ${checkoutUrl}`);
+          return new Response(JSON.stringify({
+            success: true,
+            requires_checkout: true,
+            checkout_url: checkoutUrl,
+            message: `Para contratar o pacote, complete o pagamento (precisamos do seu CPF para a fatura).`,
+          }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        throw e;
+      }
 
       await supabaseAdmin.from("lead_packs").insert({
         workspace_id: workspaceId,
