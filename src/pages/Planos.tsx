@@ -87,6 +87,11 @@ export default function Planos() {
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
+        if (data?.requires_checkout && data?.checkout_url) {
+          toast({ title: "Redirecionando para o checkout", description: data.message });
+          window.location.href = data.checkout_url;
+          return;
+        }
         toast({ title: "Plano atualizado!", description: data.message || "Seu plano foi alterado com sucesso." });
         planLimits.refetch();
       } else {
@@ -123,6 +128,11 @@ export default function Planos() {
         });
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
+        if (data?.requires_checkout && data?.checkout_url) {
+          toast({ title: "Redirecionando para o checkout", description: data.message });
+          window.location.href = data.checkout_url;
+          return;
+        }
         toast({ title: "Pacote contratado!", description: data.message || "Pacote de leads adicionado com sucesso." });
         planLimits.refetch();
       } else {
