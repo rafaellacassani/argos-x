@@ -20,6 +20,7 @@ function computeLocalAccess(workspace: {
   plan_type?: string;
   trial_end?: string | null;
   blocked_at?: string | null;
+  annual_promo_expires_at?: string | null;
 }): Omit<WorkspaceAccess, "loading"> {
   const now = new Date();
   const trialEnd = workspace.trial_end ? new Date(workspace.trial_end) : null;
@@ -32,6 +33,12 @@ function computeLocalAccess(workspace: {
   // If blocked_at is set, always blocked
   if (workspace.blocked_at) {
     return { allowed: false, reason: "blocked", trialEnd: workspace.trial_end || null, daysRemaining };
+  }
+
+  // Annual promo overrides plan checks (until expiration)
+  const promoExp = workspace.annual_promo_expires_at ? new Date(workspace.annual_promo_expires_at) : null;
+  if (promoExp && promoExp > now) {
+    return { allowed: true, reason: "active", trialEnd: workspace.trial_end || null, daysRemaining };
   }
 
   switch (planType) {

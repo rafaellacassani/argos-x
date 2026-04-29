@@ -430,6 +430,75 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
+    // ========================================================================
+    // ANNUAL PROMO 2026-04-29 — one-off charge (no subscription)
+    // Intercepted BEFORE the "no subscription" early return so it never falls
+    // through to the regular subscription-based flow.
+    // ========================================================================
+    const paymentExternalRef: string = payment.externalReference || "";
+    if (paymentExternalRef.startsWith("annual_promo_20260429_")) {
+      const promoWorkspaceId = paymentExternalRef.replace("annual_promo_20260429_", "");
+      console.log(`[asaas-webhook] ANNUAL PROMO event=${event} ws=${promoWorkspaceId}`);
+
+      if (event === "PAYMENT_CONFIRMED" || event === "PAYMENT_RECEIVED") {
+        const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Load workspace to get current subscription to cancel
+        const { data: promoWs } = await supabaseAdmin
+          .from("workspaces")
+          .select("id, asaas_subscription_id")
+          .eq("id", promoWorkspaceId)
+          .maybeSingle();
+
+        if (!promoWs) {
+          console.warn(`[asaas-webhook] Annual promo: workspace ${promoWorkspaceId} not found`);
+          return new Response(JSON.stringify({ received: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Activate annual promo
+        await supabaseAdmin
+          .from("workspaces")
+          .update({
+            annual_promo_expires_at: expiresAt,
+            subscription_status: "active",
+            plan_type: "active",
+            blocked_at: null,
+          })
+          .eq("id", promoWorkspaceId);
+
+        // Cancel existing monthly subscription on Asaas (if any)
+        if (promoWs.asaas_subscription_id) {
+          try {
+            const apiKey = Deno.env.get("ASAAS_API_KEY");
+            if (apiKey) {
+              const cancelRes = await fetch(
+                `${ASAAS_BASE}/subscriptions/${promoWs.asaas_subscription_id}`,
+                { method: "DELETE", headers: { "Content-Type": "application/json", access_token: apiKey } }
+              );
+              console.log(`[asaas-webhook] Annual promo: cancelled monthly sub ${promoWs.asaas_subscription_id} status=${cancelRes.status}`);
+            }
+          } catch (e) {
+            console.warn("[asaas-webhook] Annual promo: failed to cancel monthly sub:", e);
+          }
+
+          await supabaseAdmin
+            .from("workspaces")
+            .update({ asaas_subscription_id: null })
+            .eq("id", promoWorkspaceId);
+        }
+
+        console.log(`[asaas-webhook] Annual promo activated for ws=${promoWorkspaceId} until ${expiresAt}`);
+      } else {
+        console.log(`[asaas-webhook] Annual promo: ignoring event ${event}`);
+      }
+
+      return new Response(JSON.stringify({ received: true, annual_promo: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Get subscription details to find externalReference
     const subscriptionId = payment.subscription;
     if (!subscriptionId) {

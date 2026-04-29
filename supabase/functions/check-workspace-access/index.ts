@@ -51,7 +51,7 @@ serve(async (req) => {
 
     const { data: workspace, error: wsError } = await supabaseAdmin
       .from("workspaces")
-      .select("plan_type, trial_end, subscription_status, blocked_at")
+      .select("plan_type, trial_end, subscription_status, blocked_at, annual_promo_expires_at")
       .eq("id", workspaceId)
       .single();
 
@@ -67,6 +67,22 @@ serve(async (req) => {
     const daysRemaining = trialEnd
       ? Math.ceil((trialEnd.getTime() - now.getTime()) / 86400000)
       : null;
+
+    // Annual promo overrides everything except explicit block
+    const promoExp = (workspace as any).annual_promo_expires_at
+      ? new Date((workspace as any).annual_promo_expires_at)
+      : null;
+    if (!workspace.blocked_at && promoExp && promoExp > now) {
+      return new Response(
+        JSON.stringify({
+          allowed: true,
+          reason: "active",
+          trial_end: workspace.trial_end,
+          days_remaining: daysRemaining,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // If workspace is explicitly blocked, deny immediately
     if (workspace.blocked_at) {

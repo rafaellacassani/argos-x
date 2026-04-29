@@ -4258,6 +4258,7 @@ export type Database = {
           ai_interactions_used: number | null
           ai_reset_at: string | null
           alert_instance_name: string | null
+          annual_promo_expires_at: string | null
           archived_at: string | null
           asaas_customer_id: string | null
           asaas_subscription_id: string | null
@@ -4299,6 +4300,7 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          annual_promo_expires_at?: string | null
           archived_at?: string | null
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
@@ -4340,6 +4342,7 @@ export type Database = {
           ai_interactions_used?: number | null
           ai_reset_at?: string | null
           alert_instance_name?: string | null
+          annual_promo_expires_at?: string | null
           archived_at?: string | null
           asaas_customer_id?: string | null
           asaas_subscription_id?: string | null
