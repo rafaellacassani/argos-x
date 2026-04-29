@@ -169,6 +169,14 @@ export function LeadSidePanel({
   const [summaryOpen, setSummaryOpen] = useState(true);
   // If the lead's stage isn't in the provided stages (different funnel), fetch its funnel's stages
   const [crossFunnelStages, setCrossFunnelStages] = useState<FunnelStage[]>([]);
+  // Optimistic local stage_id to reflect immediate UI feedback when user changes the funnel stage
+  const [optimisticStageId, setOptimisticStageId] = useState<string | null>(lead?.stage_id || null);
+  const [movingStage, setMovingStage] = useState(false);
+
+  // Keep optimistic state in sync with the lead prop
+  useEffect(() => {
+    setOptimisticStageId(lead?.stage_id || null);
+  }, [lead?.id, lead?.stage_id]);
 
   useEffect(() => {
     if (!lead?.stage_id) {
@@ -240,8 +248,8 @@ export function LeadSidePanel({
 
   // Current stage info
   const currentStage = useMemo(
-    () => effectiveStages.find((s) => s.id === lead?.stage_id),
-    [effectiveStages, lead?.stage_id]
+    () => effectiveStages.find((s) => s.id === (optimisticStageId || lead?.stage_id)),
+    [effectiveStages, lead?.stage_id, optimisticStageId]
   );
 
   // Sorted stages for progress
