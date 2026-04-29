@@ -25,6 +25,12 @@ import feed8 from "@/assets/campanhas/feed/08-concorrente-automatizou.jpg";
 import story8 from "@/assets/campanhas/stories/08-concorrente-automatizou.jpg";
 import feed9 from "@/assets/campanhas/feed/09-vende-dormindo.jpg";
 import story9 from "@/assets/campanhas/stories/09-vende-dormindo.jpg";
+import feed10 from "@/assets/campanhas/feed/10-vendedora-sem-clt.jpg";
+import story10 from "@/assets/campanhas/stories/10-vendedora-sem-clt.jpg";
+import feed11 from "@/assets/campanhas/feed/11-relatorio-whatsapp.jpg";
+import story11 from "@/assets/campanhas/stories/11-relatorio-whatsapp.jpg";
+import feed12 from "@/assets/campanhas/feed/12-vs-outros-crms.jpg";
+import story12 from "@/assets/campanhas/stories/12-vs-outros-crms.jpg";
 
 type Campanha = {
   id: number;
