@@ -15,8 +15,9 @@ const PROTECTED_WORKSPACES = new Set([
   "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
 ]);
 
-// Promo only valid on this single day (server-side check, America/Sao_Paulo)
-const PROMO_DATE_BR = "2026-04-29";
+// Promo válida até 30/04/2026 23:59:59 (America/Sao_Paulo) = 2026-05-01 02:59:59 UTC.
+// Se prorrogar/encerrar, mude APENAS aqui (e em src/components/promo/promoConfig.ts).
+const PROMO_END_ISO = "2026-05-01T02:59:59Z";
 
 const PROMO_VALUES: Record<string, number> = {
   essencial: 287.40,
@@ -33,7 +34,7 @@ const PLAN_LABELS: Record<string, string> = {
 const PAID_PLANS = new Set(["essencial", "negocio", "escala"]);
 
 function todayInSaoPaulo(): string {
-  // Returns YYYY-MM-DD in America/Sao_Paulo timezone
+  // Returns YYYY-MM-DD in America/Sao_Paulo timezone (used for Asaas dueDate)
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
@@ -41,6 +42,10 @@ function todayInSaoPaulo(): string {
     day: "2-digit",
   });
   return fmt.format(new Date());
+}
+
+function isPromoActive(): boolean {
+  return Date.now() < new Date(PROMO_END_ISO).getTime();
 }
 
 async function asaasRequest(path: string, init?: RequestInit) {
@@ -95,12 +100,11 @@ serve(async (req) => {
       });
     }
 
-    // 3) Server-side date guard
-    const today = todayInSaoPaulo();
-    if (today !== PROMO_DATE_BR) {
+    // 3) Server-side deadline guard
+    if (!isPromoActive()) {
       return new Response(JSON.stringify({
         error: "Promoção encerrada",
-        message: "Esta oferta era válida apenas em 29/04/2026.",
+        message: "Esta oferta já foi encerrada.",
       }), { status: 410, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -214,10 +218,13 @@ serve(async (req) => {
 
     // 7) Create one-off charge — encode plan in externalReference so the webhook
     // knows which plan to activate. Format: annual_promo_20260429_{plan}_{workspaceId}
+    // Mantemos o prefixo "annual_promo_20260429_" para o webhook continuar parseando
+    // a promo (mesma lógica em asaas-webhook), independente do dia em que o cliente paga.
     const externalReference = `annual_promo_20260429_${planName}_${workspaceId}`;
     const description = `Argos X - Plano Anual ${PLAN_LABELS[planName]} - Promo 50% OFF`;
 
-    const dueDate = today; // 2026-04-29
+    // Vencimento = hoje (Sao Paulo). Asaas aceita pagamento PIX/cartão imediato no mesmo dia.
+    const dueDate = todayInSaoPaulo();
 
     const charge = await asaasRequest("/payments", {
       method: "POST",
