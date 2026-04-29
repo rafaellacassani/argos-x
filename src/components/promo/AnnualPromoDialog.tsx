@@ -24,9 +24,18 @@ const PROMO_VALUES: Record<string, { full: number; promo: number }> = {
   escala: { full: 2374.80, promo: 1187.40 },
 };
 
+const PAID_PLANS = new Set(["essencial", "negocio", "escala"]);
+
 export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }: Props) {
   const [loading, setLoading] = useState(false);
-  const plan = (planName || "essencial").toLowerCase();
+  const currentPlan = (planName || "").toLowerCase();
+  const isPaidPlan = PAID_PLANS.has(currentPlan);
+
+  // Trials/gratuito: user picks plan; paid: fixed to current plan
+  const [selectedPlan, setSelectedPlan] = useState<string>(
+    isPaidPlan ? currentPlan : "negocio"
+  );
+  const plan = isPaidPlan ? currentPlan : selectedPlan;
   const label = PLAN_LABELS[plan] || "Essencial";
   const values = PROMO_VALUES[plan] || PROMO_VALUES.essencial;
 
@@ -37,7 +46,7 @@ export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }:
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("annual-promo-checkout", {
-        body: { workspaceId },
+        body: { workspaceId, plan },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.message || data.error);
@@ -73,9 +82,42 @@ export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }:
         </div>
 
         <div className="p-6 space-y-4">
+          {!isPaidPlan && (
+            <div>
+              <p className="text-sm font-semibold text-foreground mb-2">
+                Escolha seu plano anual:
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {(["essencial", "negocio", "escala"] as const).map((key) => {
+                  const v = PROMO_VALUES[key];
+                  const active = selectedPlan === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setSelectedPlan(key)}
+                      disabled={loading}
+                      className={`rounded-lg border-2 p-3 text-center transition-all ${
+                        active
+                          ? "border-emerald-500 bg-emerald-500/10 shadow-md"
+                          : "border-border bg-card hover:border-emerald-500/50"
+                      }`}
+                    >
+                      <p className="text-sm font-bold text-foreground">{PLAN_LABELS[key]}</p>
+                      <p className="text-xs text-muted-foreground line-through">{fmt(v.full)}</p>
+                      <p className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                        {fmt(v.promo)}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border-2 border-emerald-500/40 bg-emerald-500/5 p-5 text-center">
             <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-              Seu plano: {label} (anual)
+              {isPaidPlan ? "Seu plano" : "Plano selecionado"}: {label} (anual)
             </p>
             <div className="mt-1 flex items-baseline justify-center gap-2">
               <span className="text-sm line-through text-muted-foreground">{fmt(values.full)}</span>
@@ -92,7 +134,9 @@ export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }:
             {[
               "12 meses de plano garantidos",
               "Pagamento único: PIX, boleto ou cartão",
-              "Sua mensalidade atual é cancelada automaticamente",
+              isPaidPlan
+                ? "Sua mensalidade atual é cancelada automaticamente"
+                : "Plano ativado assim que o pagamento for confirmado",
               "Acesso liberado assim que o pagamento for confirmado",
             ].map((f) => (
               <li key={f} className="flex items-start gap-2">
