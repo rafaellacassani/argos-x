@@ -174,6 +174,14 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
     if (editStartTime !== (campaign.schedule_start_time || "")) updates.schedule_start_time = editStartTime || null;
     if (editEndTime !== (campaign.schedule_end_time || "")) updates.schedule_end_time = editEndTime || null;
 
+    // SAFETY: campanha em execução só permite ajustar janela/intervalo. Bloqueia tudo que pode quebrar envios em andamento.
+    if (campaign.status === "running") {
+      const SAFE_FIELDS = new Set(["schedule_start_time", "schedule_end_time", "interval_seconds"]);
+      for (const k of Object.keys(updates)) {
+        if (!SAFE_FIELDS.has(k)) delete updates[k];
+      }
+    }
+
     if (Object.keys(updates).length === 0) {
       setEditing(false);
       setSaving(false);
@@ -206,7 +214,8 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
     setEditTemplateVariables(varMap);
   };
 
-  const canEdit = ["draft", "paused", "completed", "canceled"].includes(campaign.status);
+  const canEdit = ["draft", "paused", "completed", "canceled", "running"].includes(campaign.status);
+  const isRunningEdit = campaign.status === "running";
 
   const filteredRecipients = recipients.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
@@ -379,13 +388,22 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
                 )}
               </div>
 
+              {editing && isRunningEdit && (
+                <div className="p-3 rounded-lg border border-warning/40 bg-warning/5 text-xs text-warning-foreground">
+                  <p className="font-medium text-warning">Campanha em execução — edição segura</p>
+                  <p className="text-muted-foreground mt-1">
+                    Para não quebrar nada, só é possível ajustar <strong>horário de início, horário fim e intervalo entre mensagens</strong>. As mudanças entram em vigor no próximo ciclo (até 1 minuto). Para alterar mensagem, template ou instância, pause a campanha primeiro.
+                  </p>
+                </div>
+              )}
+
               {editing ? (
                 <div className="grid grid-cols-2 gap-4">
                   {/* Instance / WABA connection — conditional */}
                   {!isWaba && (
                     <div className="p-3 rounded-lg border space-y-1.5">
                       <p className="text-xs text-muted-foreground">Instância principal</p>
-                      <Select value={editInstanceName} onValueChange={setEditInstanceName}>
+                      <Select value={editInstanceName} onValueChange={setEditInstanceName} disabled={isRunningEdit}>
                         <SelectTrigger className="h-8 text-sm">
                           <SelectValue />
                         </SelectTrigger>
