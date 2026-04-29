@@ -3,8 +3,9 @@ import { Helmet } from "react-helmet-async";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Download, Sparkles, Target, TrendingUp, Layers, RectangleHorizontal, Smartphone } from "lucide-react";
+import { Copy, Check, Download, Sparkles, Target, TrendingUp, Layers, RectangleHorizontal, Smartphone, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import JSZip from "jszip";
 
 import feed1 from "@/assets/campanhas/feed/01-dorme-vende.jpg";
 import story1 from "@/assets/campanhas/stories/01-dorme-vende.jpg";
@@ -18,6 +19,12 @@ import feed5 from "@/assets/campanhas/feed/05-um-painel.jpg";
 import story5 from "@/assets/campanhas/stories/05-um-painel.jpg";
 import feed6 from "@/assets/campanhas/feed/06-followup.jpg";
 import story6 from "@/assets/campanhas/stories/06-followup.jpg";
+import feed7 from "@/assets/campanhas/feed/07-leads-perdidos-noite.jpg";
+import story7 from "@/assets/campanhas/stories/07-leads-perdidos-noite.jpg";
+import feed8 from "@/assets/campanhas/feed/08-concorrente-automatizou.jpg";
+import story8 from "@/assets/campanhas/stories/08-concorrente-automatizou.jpg";
+import feed9 from "@/assets/campanhas/feed/09-vende-dormindo.jpg";
+import story9 from "@/assets/campanhas/stories/09-vende-dormindo.jpg";
 
 type Campanha = {
   id: number;
