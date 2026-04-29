@@ -503,10 +503,36 @@ export function LeadSidePanel({
           </span>
         </div>
         <Select
-          value={lead.stage_id || ""}
-          onValueChange={(newStageId) => {
-            if (newStageId && newStageId !== lead.stage_id) {
-              onMoveLead(lead.id, newStageId, 0);
+          value={optimisticStageId || lead.stage_id || ""}
+          disabled={movingStage}
+          onValueChange={async (newStageId) => {
+            const currentStageId = optimisticStageId || lead.stage_id;
+            if (!newStageId || newStageId === currentStageId) return;
+            const previousStageId = currentStageId;
+            // Optimistic update so UI reflects the change immediately
+            setOptimisticStageId(newStageId);
+            setMovingStage(true);
+            try {
+              const result = await onMoveLead(lead.id, newStageId, 0);
+              if (!result) {
+                // Rollback if move failed
+                setOptimisticStageId(previousStageId || null);
+                toast({
+                  title: "Não foi possível mover o lead",
+                  description: "Verifique sua conexão e tente novamente.",
+                  variant: "destructive",
+                });
+              }
+            } catch (err) {
+              console.error("[LeadSidePanel] move stage error:", err);
+              setOptimisticStageId(previousStageId || null);
+              toast({
+                title: "Erro ao mover lead",
+                description: "Tente novamente em instantes.",
+                variant: "destructive",
+              });
+            } finally {
+              setMovingStage(false);
             }
           }}
         >
