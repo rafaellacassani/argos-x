@@ -174,6 +174,14 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
     if (editStartTime !== (campaign.schedule_start_time || "")) updates.schedule_start_time = editStartTime || null;
     if (editEndTime !== (campaign.schedule_end_time || "")) updates.schedule_end_time = editEndTime || null;
 
+    // SAFETY: campanha em execução só permite ajustar janela/intervalo. Bloqueia tudo que pode quebrar envios em andamento.
+    if (campaign.status === "running") {
+      const SAFE_FIELDS = new Set(["schedule_start_time", "schedule_end_time", "interval_seconds"]);
+      for (const k of Object.keys(updates)) {
+        if (!SAFE_FIELDS.has(k)) delete updates[k];
+      }
+    }
+
     if (Object.keys(updates).length === 0) {
       setEditing(false);
       setSaving(false);
@@ -206,7 +214,8 @@ export default function CampaignDetailDialog({ open, onOpenChange, campaign }: P
     setEditTemplateVariables(varMap);
   };
 
-  const canEdit = ["draft", "paused", "completed", "canceled"].includes(campaign.status);
+  const canEdit = ["draft", "paused", "completed", "canceled", "running"].includes(campaign.status);
+  const isRunningEdit = campaign.status === "running";
 
   const filteredRecipients = recipients.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
