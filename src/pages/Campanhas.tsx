@@ -3,8 +3,9 @@ import { Helmet } from "react-helmet-async";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Download, Sparkles, Target, TrendingUp, Layers, RectangleHorizontal, Smartphone } from "lucide-react";
+import { Copy, Check, Download, Sparkles, Target, TrendingUp, Layers, RectangleHorizontal, Smartphone, Package, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import JSZip from "jszip";
 
 import feed1 from "@/assets/campanhas/feed/01-dorme-vende.jpg";
 import story1 from "@/assets/campanhas/stories/01-dorme-vende.jpg";
@@ -18,6 +19,12 @@ import feed5 from "@/assets/campanhas/feed/05-um-painel.jpg";
 import story5 from "@/assets/campanhas/stories/05-um-painel.jpg";
 import feed6 from "@/assets/campanhas/feed/06-followup.jpg";
 import story6 from "@/assets/campanhas/stories/06-followup.jpg";
+import feed7 from "@/assets/campanhas/feed/07-leads-perdidos-noite.jpg";
+import story7 from "@/assets/campanhas/stories/07-leads-perdidos-noite.jpg";
+import feed8 from "@/assets/campanhas/feed/08-concorrente-automatizou.jpg";
+import story8 from "@/assets/campanhas/stories/08-concorrente-automatizou.jpg";
+import feed9 from "@/assets/campanhas/feed/09-vende-dormindo.jpg";
+import story9 from "@/assets/campanhas/stories/09-vende-dormindo.jpg";
 
 type Campanha = {
   id: number;
@@ -220,6 +227,106 @@ Quer ver funcionando no seu negócio?`,
     descricao: "IA faz follow-up automático em 5 toques. Reativa quem sumiu.",
     cta: "AGENDAR",
   },
+  {
+    id: 7,
+    imagens: {
+      feed: { src: feed7, file: "feed-07-leads-perdidos-noite.jpg" },
+      stories: { src: story7, file: "stories-07-leads-perdidos-noite.jpg" },
+    },
+    conceito: "Gatilho FOMO + número específico — perda diária mensurável",
+    publico: "Donos que recebem muitos leads via WhatsApp e suspeitam estar perdendo vendas",
+    objetivo: "Conversões / Mensagens (alto CTR via número chocante)",
+    headline: "Você perdeu 47 leads hoje. E nem percebeu.",
+    textoPrincipal: `47.
+
+Esse é o número médio de leads que um pequeno negócio brasileiro perde por dia no WhatsApp. Sem perceber.
+
+➜ A pessoa mandou "oi" às 22h e você só viu de manhã
+➜ Caiu no grupo errado e ficou enterrado
+➜ Vendedor esqueceu de responder o follow-up
+➜ Você tava em reunião e o lead foi pro concorrente
+
+Cada lead perdido custa em média R$ 380 em ticket médio. Faça a conta do mês. Dói, né?
+
+O Argos X intercepta TODA mensagem nova no seu WhatsApp em menos de 3 segundos com IA treinada no seu negócio. Responde, qualifica e te avisa só quando o cara tá quente.
+
+⚡ 3 segundos pra primeira resposta
+🎯 0 leads perdidos por demora
+💰 R$ 47/mês (custa menos que 1 lead recuperado)
+
+Quer ver quanto VOCÊ tá perdendo? Teste 7 dias grátis.`,
+    titulo: "Pare de perder R$ 17 mil por mês no WhatsApp",
+    descricao: "IA responde seu WhatsApp em 3s, 24h por dia. Teste grátis 7 dias.",
+    cta: "OBTER_OFERTA",
+  },
+  {
+    id: 8,
+    imagens: {
+      feed: { src: feed8, file: "feed-08-concorrente-automatizou.jpg" },
+      stories: { src: story8, file: "stories-08-concorrente-automatizou.jpg" },
+    },
+    conceito: "Gatilho de comparação social — medo de ficar pra trás",
+    publico: "Empresários que ainda usam planilha/anotação manual e veem concorrentes crescendo",
+    objetivo: "Tráfego / Conversões (gatilho competitivo)",
+    headline: "Seu concorrente já automatizou. E você?",
+    textoPrincipal: `Enquanto você responde WhatsApp manualmente entre uma reunião e outra…
+
+Seu concorrente:
+✓ Tem IA respondendo cliente em 3 segundos
+✓ Funil visual mostrando exatamente onde cada lead parou
+✓ Follow-up automático recuperando vendas perdidas
+✓ Dashboard mostrando quanto entrou hoje
+
+E você? Planilha do Excel, post-it, cabeça cheia.
+
+A diferença entre os dois em 6 meses: ele dobrou o faturamento, você continuou no mesmo lugar.
+
+O Argos X é o CRM brasileiro que mais cresce — porque é o único feito 100% pra quem vende pelo WhatsApp.
+
+🔥 Setup em 5 minutos
+🔥 IA brasileira treinada no SEU negócio
+🔥 R$ 47/mês (sim, menos que um almoço)
+🔥 Teste 7 dias grátis, sem cartão
+
+Não fique pra trás. Quem automatiza primeiro, vence.`,
+    titulo: "Não fique pra trás. Automatize antes do concorrente.",
+    descricao: "O CRM brasileiro com IA no WhatsApp. Comece grátis hoje.",
+    cta: "CADASTRE_SE",
+  },
+  {
+    id: 9,
+    imagens: {
+      feed: { src: feed9, file: "feed-09-vende-dormindo.jpg" },
+      stories: { src: story9, file: "stories-09-vende-dormindo.jpg" },
+    },
+    conceito: "Prova viva — print real de venda fechada às 3h47 da manhã",
+    publico: "Empreendedores que sentem que precisam estar 'sempre online' no WhatsApp",
+    objetivo: "Conversões (alta prova social com print autêntico)",
+    headline: "03:47 AM. Você dormindo. Ela vendendo.",
+    textoPrincipal: `Esse print é real.
+
+3h47 da madrugada. Cliente mandou "ainda atendem?" no WhatsApp.
+
+A IA do Argos X respondeu em 4 segundos: "Atendemos sim! Posso te ajudar agora."
+
+Resultado? Reunião agendada pra terça. Venda fechada. R$ 2.400 no caixa.
+
+E você? Dormindo tranquilo. ✨
+
+É exatamente isso que o Argos X faz pelo seu negócio TODO DIA:
+
+🌙 Atende no horário que VOCÊ não consegue
+🤖 Conversa de verdade — não é robô burro
+🎯 Qualifica, agenda e só te chama quando vale
+💚 100% dentro do WhatsApp oficial
+
+Mais de 2.000 empresas brasileiras já dormem tranquilas com Argos X cuidando das vendas.
+
+👉 Comece em 5 minutos. 7 dias grátis. Sem cartão.`,
+    titulo: "Sua próxima venda pode acontecer enquanto você dorme",
+    descricao: "IA atende WhatsApp 24h, agenda e fecha. Teste grátis 7 dias.",
+    cta: "OBTER_OFERTA",
+  },
 ];
 
 function AssetPreview({ src, label, ratio }: { src: string; label: string; ratio: "square" | "stories" }) {
@@ -364,6 +471,8 @@ function CampaignCard({ campanha }: { campanha: Campanha }) {
 }
 
 export default function Campanhas() {
+  const [zipping, setZipping] = useState(false);
+
   const copyAll = async () => {
     const all = campanhas
       .map(
@@ -391,6 +500,66 @@ ${c.descricao}`,
     toast.success("Todas as campanhas copiadas!");
   };
 
+  const downloadAllZip = async () => {
+    setZipping(true);
+    const t = toast.loading("Preparando ZIP com todas as imagens...");
+    try {
+      const zip = new JSZip();
+      const feedFolder = zip.folder("feed");
+      const storiesFolder = zip.folder("stories");
+
+      await Promise.all(
+        campanhas.flatMap((c) => [
+          fetch(c.imagens.feed.src)
+            .then((r) => r.blob())
+            .then((b) => feedFolder?.file(c.imagens.feed.file, b)),
+          fetch(c.imagens.stories.src)
+            .then((r) => r.blob())
+            .then((b) => storiesFolder?.file(c.imagens.stories.file, b)),
+        ]),
+      );
+
+      const textos = campanhas
+        .map(
+          (c) => `═══════════════════════════════
+CAMPANHA ${c.id} — ${c.conceito}
+═══════════════════════════════
+HEADLINE: ${c.headline}
+PÚBLICO: ${c.publico}
+OBJETIVO: ${c.objetivo}
+CTA: ${c.cta}
+ARQUIVOS: ${c.imagens.feed.file} | ${c.imagens.stories.file}
+
+📝 TEXTO PRINCIPAL:
+${c.textoPrincipal}
+
+🎯 TÍTULO:
+${c.titulo}
+
+📄 DESCRIÇÃO:
+${c.descricao}`,
+        )
+        .join("\n\n");
+      zip.file("textos-campanhas.txt", textos);
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `argos-x-campanhas-meta-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast.success(`ZIP baixado · ${campanhas.length * 2} imagens + textos`, { id: t });
+    } catch (e) {
+      console.error(e);
+      toast.error("Falha ao gerar ZIP. Tente novamente.", { id: t });
+    } finally {
+      setZipping(false);
+    }
+  };
+
   return (
     <>
       <Helmet>
@@ -406,19 +575,23 @@ ${c.descricao}`,
               <span className="text-sm uppercase tracking-widest text-primary-foreground/80 font-semibold">Kit de Campanhas Meta Ads</span>
             </div>
             <h1 className="text-4xl lg:text-6xl font-display font-extrabold mb-4 leading-tight text-primary-foreground">
-              6 campanhas refinadas<br />em Feed + Stories
+              9 campanhas refinadas<br />em Feed + Stories
             </h1>
             <p className="text-lg lg:text-xl text-primary-foreground/85 max-w-3xl mb-8">
               Criativos sem logo embarcado, com composição mais forte, melhor hierarquia e versão pronta para os 2 formatos que mais performam na Meta.
             </p>
             <div className="flex flex-wrap gap-3 items-center">
+              <Button size="lg" onClick={downloadAllZip} disabled={zipping} className="font-semibold bg-primary-foreground text-primary hover:bg-primary-foreground/90">
+                {zipping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Package className="h-4 w-4 mr-2" />}
+                {zipping ? "Compactando..." : "Baixar todas as imagens (ZIP)"}
+              </Button>
               <Button size="lg" onClick={copyAll} variant="secondary" className="font-semibold">
                 <Copy className="h-4 w-4 mr-2" />
                 Copiar todos os textos
               </Button>
               <div className="flex flex-wrap items-center gap-5 text-sm text-primary-foreground/85">
-                <div><strong className="text-primary-foreground text-2xl font-display">12</strong> artes</div>
-                <div><strong className="text-primary-foreground text-2xl font-display">6</strong> campanhas</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">18</strong> artes</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">9</strong> campanhas</div>
                 <div><strong className="text-primary-foreground text-2xl font-display">2</strong> formatos por campanha</div>
               </div>
             </div>
