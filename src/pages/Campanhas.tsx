@@ -688,7 +688,7 @@ ${c.descricao}`,
               <span className="text-sm uppercase tracking-widest text-primary-foreground/80 font-semibold">Kit de Campanhas Meta Ads</span>
             </div>
             <h1 className="text-4xl lg:text-6xl font-display font-extrabold mb-4 leading-tight text-primary-foreground">
-              9 campanhas refinadas<br />em Feed + Stories
+              12 campanhas refinadas<br />em Feed + Stories
             </h1>
             <p className="text-lg lg:text-xl text-primary-foreground/85 max-w-3xl mb-8">
               Criativos sem logo embarcado, com composição mais forte, melhor hierarquia e versão pronta para os 2 formatos que mais performam na Meta.
@@ -703,8 +703,8 @@ ${c.descricao}`,
                 Copiar todos os textos
               </Button>
               <div className="flex flex-wrap items-center gap-5 text-sm text-primary-foreground/85">
-                <div><strong className="text-primary-foreground text-2xl font-display">18</strong> artes</div>
-                <div><strong className="text-primary-foreground text-2xl font-display">9</strong> campanhas</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">24</strong> artes</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">12</strong> campanhas</div>
                 <div><strong className="text-primary-foreground text-2xl font-display">2</strong> formatos por campanha</div>
               </div>
             </div>
