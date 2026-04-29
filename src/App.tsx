@@ -55,6 +55,7 @@ const SupportAdmin = lazy(() => import("./pages/SupportAdmin"));
 const ClientsPage = lazy(() => import("./pages/ClientsPage"));
 const TeamChat = lazy(() => import("./pages/TeamChat"));
 const Departments = lazy(() => import("./pages/Departments"));
+const Campanhas = lazy(() => import("./pages/Campanhas"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +108,8 @@ const App = () => (
                   <Route path="/cadastro" element={<Cadastro />} />
                   <Route path="/cadastro/sucesso" element={<CadastroSucesso />} />
                   <Route path="/escala-47" element={<CadastroEscala47 />} />
+                  {/* Página oculta — kit de campanhas Meta Ads (sem layout, não indexada) */}
+                  <Route path="/campanhas" element={<Campanhas />} />
                   {/* Rota antiga consolidada — redireciona para a nova área unificada */}
                   <Route path="/admin/panel" element={<Navigate to="/admin/clients" replace />} />
                   <Route path="/create-workspace" element={
