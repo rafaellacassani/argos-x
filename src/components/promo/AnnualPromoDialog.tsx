@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Check, Loader2 } from "lucide-react";
+import { Sparkles, Check, Loader2, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { getPromoCountdown, pad } from "./promoConfig";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,12 @@ const PAID_PLANS = new Set(["essencial", "negocio", "escala"]);
 
 export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }: Props) {
   const [loading, setLoading] = useState(false);
+  const [c, setC] = useState(() => getPromoCountdown());
+  useEffect(() => {
+    if (!open) return;
+    const t = setInterval(() => setC(getPromoCountdown()), 1000);
+    return () => clearInterval(t);
+  }, [open]);
   const currentPlan = (planName || "").toLowerCase();
   const isPaidPlan = PAID_PLANS.has(currentPlan);
 
@@ -73,12 +80,19 @@ export function AnnualPromoDialog({ open, onOpenChange, workspaceId, planName }:
           <Sparkles className="w-10 h-10 mx-auto mb-2 animate-pulse" />
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold text-white">
-              🎉 OFERTA RELÂMPAGO — SÓ HOJE!
+              🎉 OFERTA RELÂMPAGO!
             </DialogTitle>
             <DialogDescription className="text-emerald-50 text-base mt-2">
-              Pague seu plano anual com <strong className="text-white">50% de desconto</strong>. Válido apenas em 29/04/2026.
+              Pague seu plano anual com <strong className="text-white">50% de desconto</strong>.
             </DialogDescription>
           </DialogHeader>
+          <div className="mt-3 inline-flex items-center gap-2 bg-black/25 rounded-md px-3 py-2">
+            <Clock className="w-4 h-4" />
+            <span className="text-sm">A oferta termina em</span>
+            <span className="font-mono font-bold tabular-nums text-base">
+              {c.days > 0 && `${c.days}d `}{pad(c.hours)}:{pad(c.minutes)}:{pad(c.seconds)}
+            </span>
+          </div>
         </div>
 
         <div className="p-6 space-y-4">
