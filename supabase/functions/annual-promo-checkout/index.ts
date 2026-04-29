@@ -30,6 +30,8 @@ const PLAN_LABELS: Record<string, string> = {
   escala: "Escala",
 };
 
+const PAID_PLANS = new Set(["essencial", "negocio", "escala"]);
+
 function todayInSaoPaulo(): string {
   // Returns YYYY-MM-DD in America/Sao_Paulo timezone
   const fmt = new Intl.DateTimeFormat("en-CA", {
@@ -86,7 +88,7 @@ serve(async (req) => {
     const userId = claimsData.claims.sub as string;
 
     // 2) Body
-    const { workspaceId } = await req.json().catch(() => ({}));
+    const { workspaceId, plan: requestedPlan } = await req.json().catch(() => ({}));
     if (!workspaceId || typeof workspaceId !== "string") {
       return new Response(JSON.stringify({ error: "Missing workspaceId" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -153,7 +155,18 @@ serve(async (req) => {
       }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const planName = (ws.plan_name || "essencial").toLowerCase();
+    // Plan resolution:
+    //  - If workspace already has a paid plan → lock to it (ignore client input)
+    //  - Otherwise (trial / gratuito / null) → trust client choice from selector
+    const currentPlan = (ws.plan_name || "").toLowerCase();
+    const isPaidPlan = PAID_PLANS.has(currentPlan);
+    const clientPlan = typeof requestedPlan === "string" ? requestedPlan.toLowerCase() : "";
+    let planName = isPaidPlan ? currentPlan : clientPlan;
+    if (!PAID_PLANS.has(planName)) {
+      return new Response(JSON.stringify({ error: "Plano inválido. Escolha Essencial, Negócio ou Escala." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const value = PROMO_VALUES[planName];
     if (!value) {
       return new Response(JSON.stringify({ error: `Plano não suportado: ${planName}` }), {
@@ -199,8 +212,9 @@ serve(async (req) => {
         .eq("id", workspaceId);
     }
 
-    // 7) Create one-off charge
-    const externalReference = `annual_promo_20260429_${workspaceId}`;
+    // 7) Create one-off charge — encode plan in externalReference so the webhook
+    // knows which plan to activate. Format: annual_promo_20260429_{plan}_{workspaceId}
+    const externalReference = `annual_promo_20260429_${planName}_${workspaceId}`;
     const description = `Argos X - Plano Anual ${PLAN_LABELS[planName]} - Promo 50% OFF`;
 
     const dueDate = today; // 2026-04-29
