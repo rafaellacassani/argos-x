@@ -471,6 +471,8 @@ function CampaignCard({ campanha }: { campanha: Campanha }) {
 }
 
 export default function Campanhas() {
+  const [zipping, setZipping] = useState(false);
+
   const copyAll = async () => {
     const all = campanhas
       .map(
@@ -498,6 +500,66 @@ ${c.descricao}`,
     toast.success("Todas as campanhas copiadas!");
   };
 
+  const downloadAllZip = async () => {
+    setZipping(true);
+    const t = toast.loading("Preparando ZIP com todas as imagens...");
+    try {
+      const zip = new JSZip();
+      const feedFolder = zip.folder("feed");
+      const storiesFolder = zip.folder("stories");
+
+      await Promise.all(
+        campanhas.flatMap((c) => [
+          fetch(c.imagens.feed.src)
+            .then((r) => r.blob())
+            .then((b) => feedFolder?.file(c.imagens.feed.file, b)),
+          fetch(c.imagens.stories.src)
+            .then((r) => r.blob())
+            .then((b) => storiesFolder?.file(c.imagens.stories.file, b)),
+        ]),
+      );
+
+      const textos = campanhas
+        .map(
+          (c) => `═══════════════════════════════
+CAMPANHA ${c.id} — ${c.conceito}
+═══════════════════════════════
+HEADLINE: ${c.headline}
+PÚBLICO: ${c.publico}
+OBJETIVO: ${c.objetivo}
+CTA: ${c.cta}
+ARQUIVOS: ${c.imagens.feed.file} | ${c.imagens.stories.file}
+
+📝 TEXTO PRINCIPAL:
+${c.textoPrincipal}
+
+🎯 TÍTULO:
+${c.titulo}
+
+📄 DESCRIÇÃO:
+${c.descricao}`,
+        )
+        .join("\n\n");
+      zip.file("textos-campanhas.txt", textos);
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `argos-x-campanhas-meta-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast.success(`ZIP baixado · ${campanhas.length * 2} imagens + textos`, { id: t });
+    } catch (e) {
+      console.error(e);
+      toast.error("Falha ao gerar ZIP. Tente novamente.", { id: t });
+    } finally {
+      setZipping(false);
+    }
+  };
+
   return (
     <>
       <Helmet>
@@ -513,19 +575,23 @@ ${c.descricao}`,
               <span className="text-sm uppercase tracking-widest text-primary-foreground/80 font-semibold">Kit de Campanhas Meta Ads</span>
             </div>
             <h1 className="text-4xl lg:text-6xl font-display font-extrabold mb-4 leading-tight text-primary-foreground">
-              6 campanhas refinadas<br />em Feed + Stories
+              9 campanhas refinadas<br />em Feed + Stories
             </h1>
             <p className="text-lg lg:text-xl text-primary-foreground/85 max-w-3xl mb-8">
               Criativos sem logo embarcado, com composição mais forte, melhor hierarquia e versão pronta para os 2 formatos que mais performam na Meta.
             </p>
             <div className="flex flex-wrap gap-3 items-center">
+              <Button size="lg" onClick={downloadAllZip} disabled={zipping} className="font-semibold bg-primary-foreground text-primary hover:bg-primary-foreground/90">
+                {zipping ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Package className="h-4 w-4 mr-2" />}
+                {zipping ? "Compactando..." : "Baixar todas as imagens (ZIP)"}
+              </Button>
               <Button size="lg" onClick={copyAll} variant="secondary" className="font-semibold">
                 <Copy className="h-4 w-4 mr-2" />
                 Copiar todos os textos
               </Button>
               <div className="flex flex-wrap items-center gap-5 text-sm text-primary-foreground/85">
-                <div><strong className="text-primary-foreground text-2xl font-display">12</strong> artes</div>
-                <div><strong className="text-primary-foreground text-2xl font-display">6</strong> campanhas</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">18</strong> artes</div>
+                <div><strong className="text-primary-foreground text-2xl font-display">9</strong> campanhas</div>
                 <div><strong className="text-primary-foreground text-2xl font-display">2</strong> formatos por campanha</div>
               </div>
             </div>
