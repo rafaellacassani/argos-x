@@ -18,6 +18,21 @@ import { Menu } from "lucide-react";
 import { usePlanExcess, isExcessResolvePath } from "@/hooks/usePlanExcess";
 import { PlanExcessBlockScreen } from "./PlanExcessBlockScreen";
 import { PlanExcessBanner } from "./PlanExcessBanner";
+import { AnnualPromoBanner } from "@/components/promo/AnnualPromoBanner";
+import { AnnualPromoDialog } from "@/components/promo/AnnualPromoDialog";
+
+const PROMO_PROTECTED_WORKSPACES = new Set([
+  "41efdc6d-d4ba-4589-9761-7438a5911d57", // Argos X
+  "6a8540c9-6eb5-42ce-8d20-960002d85bac", // ECX Company
+]);
+const PROMO_DATE_BR = "2026-04-29";
+
+function todayInSaoPaulo(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -43,6 +58,28 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [promoOpen, setPromoOpen] = useState(false);
+
+  // ANNUAL PROMO 2026-04-29 — eligibility (frontend gate; server re-validates)
+  const promoEligible =
+    !!workspace &&
+    !isAdminViewing &&
+    todayInSaoPaulo() === PROMO_DATE_BR &&
+    !PROMO_PROTECTED_WORKSPACES.has(workspace.id) &&
+    !workspace.blocked_at &&
+    !(workspace.annual_promo_expires_at && new Date(workspace.annual_promo_expires_at) > new Date());
+
+  // Auto-open dialog once per session, 3s after eligibility settles
+  useEffect(() => {
+    if (!promoEligible || loading) return;
+    const KEY = "annual_promo_2026_04_29_shown";
+    if (sessionStorage.getItem(KEY)) return;
+    const t = setTimeout(() => {
+      sessionStorage.setItem(KEY, "1");
+      setPromoOpen(true);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [promoEligible, loading]);
 
   useEffect(() => {
     if (!loading && workspace) {
@@ -110,6 +147,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       />
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar mobileMenuSlot={mobileMenuSlot} />
+        {promoEligible && <AnnualPromoBanner onClick={() => setPromoOpen(true)} />}
         {isAdminViewing && (
           <div className="bg-amber-500/10 border-b border-amber-200 px-4 py-2 flex items-center justify-between">
             <span className="text-sm font-medium text-amber-700">
@@ -146,6 +184,14 @@ export function AppLayout({ children }: AppLayoutProps) {
       />
       <WorkspaceAssistantWidget open={assistantOpen} onOpenChange={setAssistantOpen} />
       <SupportChatWidget open={supportOpen} onOpenChange={setSupportOpen} />
+      {promoEligible && workspace && (
+        <AnnualPromoDialog
+          open={promoOpen}
+          onOpenChange={setPromoOpen}
+          workspaceId={workspace.id}
+          planName={workspace.plan_name}
+        />
+      )}
     </div>
   );
 }
