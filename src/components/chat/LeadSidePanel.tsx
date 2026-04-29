@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import { type Lead, type FunnelStage, type LeadTag, type LeadSale } from "@/hooks/useLeads";
 import { ChatTagManager } from "./ChatTagManager";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 import { LeadStatsTab } from "./LeadStatsTab";
 import { LeadSalesTab } from "./LeadSalesTab";
 import { LeadFollowupsTab } from "./LeadFollowupsTab";
