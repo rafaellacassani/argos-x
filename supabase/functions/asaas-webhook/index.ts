@@ -437,8 +437,21 @@ serve(async (req) => {
     // ========================================================================
     const paymentExternalRef: string = payment.externalReference || "";
     if (paymentExternalRef.startsWith("annual_promo_20260429_")) {
-      const promoWorkspaceId = paymentExternalRef.replace("annual_promo_20260429_", "");
-      console.log(`[asaas-webhook] ANNUAL PROMO event=${event} ws=${promoWorkspaceId}`);
+      // Parse: "annual_promo_20260429_{plan}_{workspaceId}" (new)
+      //  or:   "annual_promo_20260429_{workspaceId}"        (legacy fallback)
+      const tail = paymentExternalRef.replace("annual_promo_20260429_", "");
+      const PROMO_PLANS = new Set(["essencial", "negocio", "escala"]);
+      let promoPlan: string | null = null;
+      let promoWorkspaceId: string;
+      const firstUnderscore = tail.indexOf("_");
+      const maybePlan = firstUnderscore > 0 ? tail.slice(0, firstUnderscore).toLowerCase() : "";
+      if (PROMO_PLANS.has(maybePlan)) {
+        promoPlan = maybePlan;
+        promoWorkspaceId = tail.slice(firstUnderscore + 1);
+      } else {
+        promoWorkspaceId = tail;
+      }
+      console.log(`[asaas-webhook] ANNUAL PROMO event=${event} ws=${promoWorkspaceId} plan=${promoPlan || "(legacy/auto)"}`);
 
       if (event === "PAYMENT_CONFIRMED" || event === "PAYMENT_RECEIVED") {
         const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -446,7 +459,7 @@ serve(async (req) => {
         // Load workspace to get current subscription to cancel
         const { data: promoWs } = await supabaseAdmin
           .from("workspaces")
-          .select("id, asaas_subscription_id")
+          .select("id, asaas_subscription_id, plan_name")
           .eq("id", promoWorkspaceId)
           .maybeSingle();
 
@@ -457,13 +470,23 @@ serve(async (req) => {
           });
         }
 
-        // Activate annual promo
+        // Resolve final plan: explicit from ref > existing on workspace > essencial
+        const finalPlan = promoPlan
+          || (PROMO_PLANS.has((promoWs.plan_name || "").toLowerCase()) ? (promoWs.plan_name as string).toLowerCase() : "essencial");
+        const planConfig = getPlanConfig(finalPlan);
+
+        // Activate annual promo + apply plan limits
         await supabaseAdmin
           .from("workspaces")
           .update({
             annual_promo_expires_at: expiresAt,
             subscription_status: "active",
             plan_type: "active",
+            plan_name: planConfig.plan_name,
+            lead_limit: planConfig.lead_limit,
+            whatsapp_limit: planConfig.whatsapp_limit,
+            user_limit: planConfig.user_limit,
+            ai_interactions_limit: planConfig.ai_interactions_limit,
             blocked_at: null,
           })
           .eq("id", promoWorkspaceId);
@@ -489,7 +512,7 @@ serve(async (req) => {
             .eq("id", promoWorkspaceId);
         }
 
-        console.log(`[asaas-webhook] Annual promo activated for ws=${promoWorkspaceId} until ${expiresAt}`);
+        console.log(`[asaas-webhook] Annual promo activated for ws=${promoWorkspaceId} plan=${finalPlan} until ${expiresAt}`);
       } else {
         console.log(`[asaas-webhook] Annual promo: ignoring event ${event}`);
       }
