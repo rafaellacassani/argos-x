@@ -2461,8 +2461,32 @@ serve(async (req) => {
       // --- TRAINER MODE: wrap response in proposal ---
       // Safety net: strip any residual internal metadata patterns before sending to client
       responseContent = responseContent.replace(/\n*\[(?:INSTRUÇÃO INTERNA|Atendimento transferido|Eventos do lead)[^\]]*\]/g, '').trim();
-      // Sanitize any Calendly links that may leak from conversation history
-      responseContent = responseContent.replace(/https?:\/\/calendly\.com\/[^\s)>\]]+/gi, '').trim();
+      // Sanitize Calendly links ONLY if they were not authorized by the agent owner.
+      // Some clients put their own Calendly links directly in the system prompt / knowledge
+      // (Computer Doctor, etc) — those MUST be preserved. We only strip a Calendly URL when
+      // it does NOT appear anywhere in the agent's own configuration (prompt, knowledge fields).
+      try {
+        const agentConfigBlob = [
+          agent?.system_prompt || "",
+          agent?.knowledge_products || "",
+          agent?.knowledge_rules || "",
+          agent?.knowledge_extra || "",
+          JSON.stringify(agent?.knowledge_faq || []),
+          JSON.stringify(agent?.company_info || {}),
+        ].join("\n").toLowerCase();
+        responseContent = responseContent.replace(/https?:\/\/calendly\.com\/[^\s)>\]]+/gi, (match) => {
+          const normalized = match.toLowerCase().replace(/[.,;:!?)]+$/, "");
+          // Keep the link if any path segment of it is referenced in the agent config
+          const pathPart = normalized.replace(/^https?:\/\/calendly\.com\//, "");
+          const firstSegment = pathPart.split(/[\/?#]/)[0] || "";
+          if (firstSegment && agentConfigBlob.includes(firstSegment)) {
+            return match; // authorized — keep it
+          }
+          return ""; // unauthorized leak — strip it
+        }).replace(/[ \t]{2,}/g, " ").trim();
+      } catch (e) {
+        console.error("[ai-agent-chat] calendly sanitize error:", e);
+      }
       let finalResponse = responseContent;
       let finalStatus = "success";
       if (isTrainer) {
