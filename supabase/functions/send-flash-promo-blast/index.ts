@@ -118,35 +118,44 @@ serve(async (req) => {
 
     const apiUrl = EVOLUTION_API_URL.replace(/\/+$/, "");
     const batchId = `flash_promo_20260429_${Date.now()}`;
-    let sent = 0, failed = 0;
-    const errors: string[] = [];
 
-    for (const r of list) {
-      try {
-        const res = await fetch(`${apiUrl}/message/sendText/${ASSISTANT_INSTANCE_NAME}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
-          body: JSON.stringify({ number: r.phone, text: PROMO_MESSAGE }),
-        });
-        if (res.ok) sent++; else {
+    // Processa em background com EdgeRuntime.waitUntil para não estourar timeout do client
+    const sendAll = async () => {
+      let sent = 0, failed = 0;
+      for (const r of list) {
+        try {
+          const res = await fetch(`${apiUrl}/message/sendText/${ASSISTANT_INSTANCE_NAME}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", apikey: EVOLUTION_API_KEY },
+            body: JSON.stringify({ number: r.phone, text: PROMO_MESSAGE }),
+          });
+          if (res.ok) {
+            sent++;
+            console.log(`[${batchId}] SENT ${r.phone} (${r.name})`);
+          } else {
+            failed++;
+            const txt = await res.text().catch(() => "");
+            console.log(`[${batchId}] FAILED ${r.phone}: HTTP ${res.status} ${txt}`);
+          }
+        } catch (e: any) {
           failed++;
-          errors.push(`${r.phone}: HTTP ${res.status}`);
+          console.log(`[${batchId}] ERROR ${r.phone}: ${e.message}`);
         }
-      } catch (e: any) {
-        failed++;
-        errors.push(`${r.phone}: ${e.message}`);
+        await new Promise((res) => setTimeout(res, 4000));
       }
-      // Rate limit: 4s entre envios para reduzir risco de ban
-      await new Promise((res) => setTimeout(res, 4000));
-    }
+      console.log(`[${batchId}] DONE — sent=${sent} failed=${failed} total=${list.length}`);
+    };
+
+    // @ts-ignore EdgeRuntime is available in Supabase Edge Functions
+    EdgeRuntime.waitUntil(sendAll());
 
     return new Response(JSON.stringify({
       success: true,
+      started: true,
       batch_id: batchId,
       total_recipients: list.length,
-      sent,
-      failed,
-      errors: errors.slice(0, 20),
+      estimated_duration_seconds: list.length * 4,
+      message: "Disparos iniciados em background. Acompanhe pelos logs.",
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error("send-flash-promo-blast error:", e);
