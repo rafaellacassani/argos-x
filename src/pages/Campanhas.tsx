@@ -227,6 +227,106 @@ Quer ver funcionando no seu negócio?`,
     descricao: "IA faz follow-up automático em 5 toques. Reativa quem sumiu.",
     cta: "AGENDAR",
   },
+  {
+    id: 7,
+    imagens: {
+      feed: { src: feed7, file: "feed-07-leads-perdidos-noite.jpg" },
+      stories: { src: story7, file: "stories-07-leads-perdidos-noite.jpg" },
+    },
+    conceito: "Gatilho FOMO + número específico — perda diária mensurável",
+    publico: "Donos que recebem muitos leads via WhatsApp e suspeitam estar perdendo vendas",
+    objetivo: "Conversões / Mensagens (alto CTR via número chocante)",
+    headline: "Você perdeu 47 leads hoje. E nem percebeu.",
+    textoPrincipal: `47.
+
+Esse é o número médio de leads que um pequeno negócio brasileiro perde por dia no WhatsApp. Sem perceber.
+
+➜ A pessoa mandou "oi" às 22h e você só viu de manhã
+➜ Caiu no grupo errado e ficou enterrado
+➜ Vendedor esqueceu de responder o follow-up
+➜ Você tava em reunião e o lead foi pro concorrente
+
+Cada lead perdido custa em média R$ 380 em ticket médio. Faça a conta do mês. Dói, né?
+
+O Argos X intercepta TODA mensagem nova no seu WhatsApp em menos de 3 segundos com IA treinada no seu negócio. Responde, qualifica e te avisa só quando o cara tá quente.
+
+⚡ 3 segundos pra primeira resposta
+🎯 0 leads perdidos por demora
+💰 R$ 47/mês (custa menos que 1 lead recuperado)
+
+Quer ver quanto VOCÊ tá perdendo? Teste 7 dias grátis.`,
+    titulo: "Pare de perder R$ 17 mil por mês no WhatsApp",
+    descricao: "IA responde seu WhatsApp em 3s, 24h por dia. Teste grátis 7 dias.",
+    cta: "OBTER_OFERTA",
+  },
+  {
+    id: 8,
+    imagens: {
+      feed: { src: feed8, file: "feed-08-concorrente-automatizou.jpg" },
+      stories: { src: story8, file: "stories-08-concorrente-automatizou.jpg" },
+    },
+    conceito: "Gatilho de comparação social — medo de ficar pra trás",
+    publico: "Empresários que ainda usam planilha/anotação manual e veem concorrentes crescendo",
+    objetivo: "Tráfego / Conversões (gatilho competitivo)",
+    headline: "Seu concorrente já automatizou. E você?",
+    textoPrincipal: `Enquanto você responde WhatsApp manualmente entre uma reunião e outra…
+
+Seu concorrente:
+✓ Tem IA respondendo cliente em 3 segundos
+✓ Funil visual mostrando exatamente onde cada lead parou
+✓ Follow-up automático recuperando vendas perdidas
+✓ Dashboard mostrando quanto entrou hoje
+
+E você? Planilha do Excel, post-it, cabeça cheia.
+
+A diferença entre os dois em 6 meses: ele dobrou o faturamento, você continuou no mesmo lugar.
+
+O Argos X é o CRM brasileiro que mais cresce — porque é o único feito 100% pra quem vende pelo WhatsApp.
+
+🔥 Setup em 5 minutos
+🔥 IA brasileira treinada no SEU negócio
+🔥 R$ 47/mês (sim, menos que um almoço)
+🔥 Teste 7 dias grátis, sem cartão
+
+Não fique pra trás. Quem automatiza primeiro, vence.`,
+    titulo: "Não fique pra trás. Automatize antes do concorrente.",
+    descricao: "O CRM brasileiro com IA no WhatsApp. Comece grátis hoje.",
+    cta: "CADASTRE_SE",
+  },
+  {
+    id: 9,
+    imagens: {
+      feed: { src: feed9, file: "feed-09-vende-dormindo.jpg" },
+      stories: { src: story9, file: "stories-09-vende-dormindo.jpg" },
+    },
+    conceito: "Prova viva — print real de venda fechada às 3h47 da manhã",
+    publico: "Empreendedores que sentem que precisam estar 'sempre online' no WhatsApp",
+    objetivo: "Conversões (alta prova social com print autêntico)",
+    headline: "03:47 AM. Você dormindo. Ela vendendo.",
+    textoPrincipal: `Esse print é real.
+
+3h47 da madrugada. Cliente mandou "ainda atendem?" no WhatsApp.
+
+A IA do Argos X respondeu em 4 segundos: "Atendemos sim! Posso te ajudar agora."
+
+Resultado? Reunião agendada pra terça. Venda fechada. R$ 2.400 no caixa.
+
+E você? Dormindo tranquilo. ✨
+
+É exatamente isso que o Argos X faz pelo seu negócio TODO DIA:
+
+🌙 Atende no horário que VOCÊ não consegue
+🤖 Conversa de verdade — não é robô burro
+🎯 Qualifica, agenda e só te chama quando vale
+💚 100% dentro do WhatsApp oficial
+
+Mais de 2.000 empresas brasileiras já dormem tranquilas com Argos X cuidando das vendas.
+
+👉 Comece em 5 minutos. 7 dias grátis. Sem cartão.`,
+    titulo: "Sua próxima venda pode acontecer enquanto você dorme",
+    descricao: "IA atende WhatsApp 24h, agenda e fecha. Teste grátis 7 dias.",
+    cta: "OBTER_OFERTA",
+  },
 ];
 
 function AssetPreview({ src, label, ratio }: { src: string; label: string; ratio: "square" | "stories" }) {
