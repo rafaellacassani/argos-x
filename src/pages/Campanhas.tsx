@@ -333,6 +333,113 @@ Mais de 2.000 empresas brasileiras já dormem tranquilas com Argos X cuidando da
     descricao: "IA atende WhatsApp 24h, agenda e fecha. Teste grátis 7 dias.",
     cta: "OBTER_OFERTA",
   },
+  {
+    id: 10,
+    imagens: {
+      feed: { src: feed10, file: "feed-10-vendedora-sem-clt.jpg" },
+      stories: { src: story10, file: "stories-10-vendedora-sem-clt.jpg" },
+    },
+    conceito: "Vendedora-IA com personalidade — diferenciador único de mercado",
+    publico: "Donos cansados de turnover, faltas e custo de vendedor humano",
+    objetivo: "Conversões / Cadastros (gatilho de economia + personalidade)",
+    headline: "Contrate uma vendedora. Sem CLT.",
+    textoPrincipal: `Vendedor humano custa caro:
+
+❌ R$ 3.500 de salário + encargos
+❌ Falta, atrasa, fica doente
+❌ Sai e leva os contatos
+❌ Atende no horário comercial — só
+
+E se você pudesse "contratar" uma vendedora que:
+
+✨ Tem nome, voz e personalidade que VOCÊ define
+✨ Conhece cada produto, preço e regra do seu negócio
+✨ Atende 24h por dia no seu WhatsApp
+✨ Custa R$ 47/mês (não, não tem zero faltando)
+✨ Nunca pede aumento, nunca falta, nunca sai
+
+A Julia (ou o nome que VOCÊ escolher) é a primeira agente de IA brasileira feita pra vender pelo WhatsApp. Você define personalidade, tom de voz, objetivo e conhecimento — ela faz o resto.
+
+Mais de 500 empresas já trocaram vendedor humano por agente de IA do Argos X.
+
+👉 Monte a sua em 5 minutos. 7 dias grátis, sem cartão.`,
+    titulo: "Sua vendedora de IA por R$ 47/mês",
+    descricao: "Agente de IA com personalidade que vende 24h no seu WhatsApp.",
+    cta: "CADASTRE_SE",
+  },
+  {
+    id: 11,
+    imagens: {
+      feed: { src: feed11, file: "feed-11-relatorio-whatsapp.jpg" },
+      stories: { src: story11, file: "stories-11-relatorio-whatsapp.jpg" },
+    },
+    conceito: "Relatório no WhatsApp — gestor não precisa abrir nada",
+    publico: "Gestores e donos que não têm tempo de abrir dashboard todo dia",
+    objetivo: "Conversões (gatilho de simplicidade radical)",
+    headline: "Toda manhã, seu relatório cai no WhatsApp.",
+    textoPrincipal: `Você abre o dashboard do seu CRM quantas vezes por semana?
+
+Pois é. Quase ninguém abre.
+
+O Argos X resolveu isso de um jeito que ninguém mais resolve no Brasil: 
+
+📊 Todo dia, no horário que VOCÊ define, cai um relatório completo direto no seu WhatsApp.
+
+✅ Quantos leads novos entraram
+✅ Quantas conversas estão ativas
+✅ Sua taxa de conversão atual
+✅ Tempo médio de resposta da equipe
+✅ Quem foi o top vendedor
+✅ ⚠️ Alertas de leads sem resposta há +30min
+
+Sem abrir app. Sem clicar em nada. Sem aprender ferramenta nova. Você só lê e age.
+
+Configurável também: alerta instantâneo de novo lead, relatório semanal/mensal por vendedor, e disparo manual com 1 botão.
+
+Gestor que não tem tempo, ama Argos X.
+
+👉 Teste 7 dias grátis. Sem cartão.`,
+    titulo: "Receba o relatório da sua empresa no WhatsApp",
+    descricao: "Sem abrir app. Métricas e alertas direto no seu WhatsApp todo dia.",
+    cta: "OBTER_OFERTA",
+  },
+  {
+    id: 12,
+    imagens: {
+      feed: { src: feed12, file: "feed-12-vs-outros-crms.jpg" },
+      stories: { src: story12, file: "stories-12-vs-outros-crms.jpg" },
+    },
+    conceito: "Comparativo direto — argumentação racional pra quem já tem CRM",
+    publico: "Empresas que já usam RD, Pipedrive, HubSpot ou Kommo e não veem resultado",
+    objetivo: "Conversões / Tráfego (alta intenção, decisor B2B)",
+    headline: "Por que trocar de CRM em 2026.",
+    textoPrincipal: `Seu CRM atual tem isso?
+
+❌ IA genérica que parece chatbot dos anos 2010
+❌ WhatsApp via API instável que cai toda semana
+❌ Suporte por e-mail que responde em 3 dias
+❌ Sem campanhas Meta nativas
+❌ Relatórios que ninguém abre
+❌ Mensalidade gringa em dólar
+
+No Argos X é diferente:
+
+✅ IA com personalidade que VOCÊ configura — vende como o seu melhor vendedor
+✅ WhatsApp estável via QR Code + WhatsApp oficial Meta
+✅ Suporte humano em português, no WhatsApp, mesmo dia
+✅ Campanhas Meta integradas com rastreamento de conversão
+✅ Relatório que cai automático no seu WhatsApp
+✅ R$ 47/mês — preço brasileiro
+
+CRM gringo é feito pra empresa gringa. Argos X é feito pra você vender no WhatsApp brasileiro.
+
++500 empresas já fizeram a troca em 2026.
+
+👉 Migre em 5 minutos. 7 dias grátis. Sem cartão.`,
+    titulo: "Cansou do seu CRM? Conheça o Argos X.",
+    descricao: "CRM brasileiro com IA, WhatsApp estável e suporte humano. R$ 47/mês.",
+    cta: "SAIBA_MAIS",
+  },
 ];
 
 function AssetPreview({ src, label, ratio }: { src: string; label: string; ratio: "square" | "stories" }) {
