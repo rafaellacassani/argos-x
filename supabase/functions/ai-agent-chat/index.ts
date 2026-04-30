@@ -939,6 +939,13 @@ serve(async (req) => {
         }
       }
 
+      if (memory.is_paused && isTrainer) {
+        // Trainer mode: força resume e segue respondendo
+        await supabase.from("agent_memories").update({ is_paused: false, updated_at: new Date().toISOString() }).eq("id", memory.id);
+        memory.is_paused = false;
+        console.log("[ai-agent-chat] 🎓 Trainer bypassed pause — auto-resumed");
+      }
+
       if (memory.is_paused) {
         const resumeKeyword = (agent.resume_keyword || "").toLowerCase();
         const hasResumeKeyword = resumeKeyword && messageText.toLowerCase().includes(resumeKeyword);
