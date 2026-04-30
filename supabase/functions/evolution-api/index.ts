@@ -14,6 +14,68 @@ const EVOLUTION_API_URL = rawApiUrl.replace(/\/manager\/?$/, "");
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Service-role client (bypasses RLS) — used to persist outbound messages
+// even when the caller is a super admin viewing another workspace via
+// `?admin_ws=...` and is NOT a member of that workspace.
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// In-memory cache: instance_name -> workspace_id
+const _wsCache = new Map<string, { at: number; ws: string | null }>();
+const _WS_CACHE_TTL_MS = 5 * 60 * 1000;
+async function getWorkspaceIdForInstance(instanceName: string): Promise<string | null> {
+  const cached = _wsCache.get(instanceName);
+  if (cached && Date.now() - cached.at < _WS_CACHE_TTL_MS) return cached.ws;
+  try {
+    const { data } = await supabaseAdmin
+      .from("whatsapp_instances")
+      .select("workspace_id")
+      .eq("instance_name", instanceName)
+      .maybeSingle();
+    const ws = data?.workspace_id || null;
+    _wsCache.set(instanceName, { at: Date.now(), ws });
+    return ws;
+  } catch {
+    return null;
+  }
+}
+
+// Persist an outbound message we just sent via Evolution. Service role bypasses RLS.
+async function persistOutboundMessage(
+  instanceName: string,
+  number: string,
+  content: string,
+  messageType: "text" | "image" | "video" | "audio" | "document",
+  evoResult: any
+): Promise<void> {
+  try {
+    const wsId = await getWorkspaceIdForInstance(instanceName);
+    if (!wsId) return;
+    const digits = String(number).replace(/\D/g, "");
+    const remoteJid =
+      evoResult?.key?.remoteJid ||
+      (digits ? `${digits}@s.whatsapp.net` : null);
+    if (!remoteJid) return;
+    const messageId = evoResult?.key?.id || null;
+    const ts = evoResult?.messageTimestamp
+      ? new Date(Number(evoResult.messageTimestamp) * 1000).toISOString()
+      : new Date().toISOString();
+    await supabaseAdmin.from("whatsapp_messages").insert({
+      workspace_id: wsId,
+      instance_name: instanceName,
+      remote_jid: remoteJid,
+      from_me: true,
+      direction: "outbound",
+      content: content || "",
+      message_type: messageType,
+      timestamp: ts,
+      message_id: messageId,
+    });
+  } catch (err) {
+    console.warn(`[evolution-api] persistOutboundMessage failed for ${instanceName}:`, err);
+  }
+}
 
 // --- Cache & concurrency settings ---
 // QR codes from WhatsApp expire in ~40s. Cache must be SHORTER than that
