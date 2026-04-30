@@ -731,6 +731,24 @@ app.post("/", async (c) => {
             .maybeSingle();
 
           if (instRow?.workspace_id) {
+            const recentAiCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+            const { data: recentAiOutbound } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("workspace_id", instRow.workspace_id)
+              .eq("remote_jid", canonicalSessionJid)
+              .eq("direction", "outbound")
+              .eq("push_name", "IA")
+              .eq("content", fromMeText)
+              .gte("timestamp", recentAiCutoff)
+              .limit(1)
+              .maybeSingle();
+
+            if (recentAiOutbound) {
+              console.log("[whatsapp-webhook] ⏭️ Skipped: fromMe was recently sent by IA", canonicalSessionJid);
+              return c.json({ received: true, skipped: "fromMe_ai_echo" }, 200, corsHeaders);
+            }
+
             await supabase.from("whatsapp_messages").insert({
               workspace_id: instRow.workspace_id,
               instance_name: instanceName,
