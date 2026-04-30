@@ -847,33 +847,12 @@ export default function Chats() {
     
     if (success) {
       autoAssignLead(selectedChat);
-      // Fire-and-forget: persist outbound WA message for dashboard metrics
-      // Use lead's whatsapp_jid if available so inbound+outbound share the same remote_jid
+      // Outbound WA message is now persisted server-side by the
+      // `evolution-api/send-text` edge function (with service role).
+      // This guarantees persistence even when a super admin sends from
+      // another workspace via ?admin_ws= and is NOT a member there.
       if (workspaceId && !selectedChat.isMeta) {
-        const stripDigitsOut = (s: string) => s.replace(/[^0-9]/g, "");
-        const chatDigitsOut = stripDigitsOut(selectedChat.phone || "");
-        const outboundLead = leadsRef.current.find((l) => {
-          if (l.whatsapp_jid === selectedChat.remoteJid) return true;
-          if (selectedChat.remoteJidAlt && l.whatsapp_jid === selectedChat.remoteJidAlt) return true;
-          if (chatDigitsOut.length >= 10) {
-            const ld = stripDigitsOut(l.phone || "");
-            return ld.length >= 10 && ld.slice(-10) === chatDigitsOut.slice(-10);
-          }
-          return false;
-        });
-        const outboundJid = outboundLead?.whatsapp_jid || selectedChat.remoteJid;
-        supabase.from('whatsapp_messages').insert({
-          workspace_id: workspaceId,
-          instance_name: selectedChat.instanceName || selectedInstance || '',
-          remote_jid: outboundJid,
-          from_me: true,
-          direction: 'outbound',
-          content: text,
-          message_type: 'text',
-          timestamp: new Date().toISOString(),
-        }).then(() => {});
-        
-        // CORREÇÃO 2: Log message sent to lead_history
+        // Log message sent to lead_history (best-effort)
         const stripDigits = (s: string) => s.replace(/[^0-9]/g, "");
         const chatDigits = stripDigits(selectedChat.phone || "");
         const matchingLead = leadsRef.current.find((l) => {
