@@ -1450,7 +1450,7 @@ NOVAS CAPACIDADES:
     // --- STEP 1: Check for active AI Agent ---
     const { data: agents } = await supabase
       .from("ai_agents")
-      .select("id, instance_name, respond_to, respond_to_stages, department_id")
+      .select("id, instance_name, respond_to, respond_to_stages, department_id, trainer_phones")
       .eq("workspace_id", workspaceId)
       .eq("is_active", true);
 
@@ -1557,6 +1557,20 @@ NOVAS CAPACIDADES:
 
         // Check respond_to filter
         let shouldRespond = true;
+
+        // 🎓 TRAINER MODE — phone whitelisted to always test the AI
+        const _trainerPhones: string[] = Array.isArray(matchingAgent.trainer_phones) ? matchingAgent.trainer_phones : [];
+        const _phoneSuffix = (phoneNumber || "").slice(-10);
+        const isTrainerPhone =
+          _trainerPhones.length > 0 &&
+          _phoneSuffix.length === 10 &&
+          _trainerPhones.some((tp: string) => {
+            const t = (tp || "").replace(/\D/g, "");
+            return t.length >= 10 && t.endsWith(_phoneSuffix);
+          });
+        if (isTrainerPhone) {
+          console.log(`[whatsapp-webhook] 🎓 Trainer phone detected: ${phoneNumber} → bypassing opt-out and respond_to filters for agent ${matchingAgent.id}`);
+        }
         
         let leadId: string | null = null;
         // Search by JID + phone suffix to avoid missing leads with different JID format
@@ -1574,8 +1588,8 @@ NOVAS CAPACIDADES:
           .single();
         leadId = existingLead?.id || null;
 
-        // Skip AI if lead has opted out
-        if (existingLead?.is_opted_out) {
+        // Skip AI if lead has opted out (treinador ignora opt-out)
+        if (existingLead?.is_opted_out && !isTrainerPhone) {
           console.log(`[whatsapp-webhook] 🚫 Lead ${leadId} has opted out, skipping AI agent`);
           return new Response(JSON.stringify({ handler: "ai_agent", action: "skipped_opted_out" }), { status: 200, headers: { "Content-Type": "application/json" } });
         }
@@ -1626,12 +1640,12 @@ NOVAS CAPACIDADES:
           }
         }
 
-        if (matchingAgent.respond_to === "new_leads" && existingLead) {
+        if (!isTrainerPhone && matchingAgent.respond_to === "new_leads" && existingLead) {
           shouldRespond = false;
           console.log("[whatsapp-webhook] ⏭️ Agent skipped: respond_to=new_leads but lead already exists");
         }
 
-        if (matchingAgent.respond_to === "specific_stages" && existingLead) {
+        if (!isTrainerPhone && matchingAgent.respond_to === "specific_stages" && existingLead) {
           const stages = matchingAgent.respond_to_stages || [];
           if (stages.length > 0 && !stages.includes(existingLead.stage_id)) {
             shouldRespond = false;
