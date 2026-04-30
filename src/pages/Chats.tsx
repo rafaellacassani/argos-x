@@ -2977,6 +2977,12 @@ export default function Chats() {
     return result;
   }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, getChatSupportStatus, pinnedChatIds, contentSearchResults, contentSearchTerm]);
 
+  // Argos X only: tag each chat with subscriber's plan or "Lead novo"
+  const { enabled: argosTagsEnabled, getTag: getArgosTag } = useArgosClientPlanTags(
+    workspaceId,
+    filteredChats.map((c) => c.phone || "")
+  );
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (!params.has("search")) return;
