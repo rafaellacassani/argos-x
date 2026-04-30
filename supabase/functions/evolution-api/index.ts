@@ -580,6 +580,10 @@ app.post("/send-text/:instanceName", async (c) => {
     if (!number || !text || typeof text !== "string" || text.length > 4000) return c.json({ error: "number and text (max 4000 chars) are required" }, 400, corsHeaders);
     const normalizedNumber = normalizeBrazilianNumber(number);
     const result = await evolutionRequest(`/message/sendText/${instanceName}`, "POST", { number: normalizedNumber, text, delay: 0, linkPreview: true });
+    // Persist outbound message server-side with service role.
+    // This guarantees it's saved even when sender is a super admin viewing
+    // another workspace via ?admin_ws= and is NOT a member there.
+    persistOutboundMessage(instanceName, normalizedNumber, text, "text", result);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     const { status, body } = classifySendError(error);
@@ -596,6 +600,13 @@ app.post("/send-media/:instanceName", async (c) => {
     if (!["image", "video", "document", "audio"].includes(mediatype)) return c.json({ error: "Invalid mediatype" }, 400, corsHeaders);
     const normalizedNumber = normalizeBrazilianNumber(number);
     const result = await evolutionRequest(`/message/sendMedia/${instanceName}`, "POST", { number: normalizedNumber, mediatype, media, caption: caption || "", fileName: fileName || undefined });
+    const previewByType: Record<string, string> = {
+      image: caption || "📷 Imagem",
+      video: caption || "🎥 Vídeo",
+      document: fileName || "📎 Documento",
+      audio: "🎵 Áudio",
+    };
+    persistOutboundMessage(instanceName, normalizedNumber, previewByType[mediatype] || "", mediatype as any, result);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     const { status, body } = classifySendError(error);
@@ -611,6 +622,7 @@ app.post("/send-audio/:instanceName", async (c) => {
     if (!number || !audio) return c.json({ error: "number and audio are required" }, 400, corsHeaders);
     const normalizedNumber = normalizeBrazilianNumber(number);
     const result = await evolutionRequest(`/message/sendWhatsAppAudio/${instanceName}`, "POST", { number: normalizedNumber, audio, delay: 0, encoding: true });
+    persistOutboundMessage(instanceName, normalizedNumber, "🎵 Áudio", "audio", result);
     return c.json(result, 200, corsHeaders);
   } catch (error) {
     const { status, body } = classifySendError(error);
