@@ -979,7 +979,7 @@ serve(async (req) => {
         }
       }
 
-      if (agent.pause_code && messageText.includes(agent.pause_code)) {
+      if (!isTrainer && agent.pause_code && messageText.includes(agent.pause_code)) {
         await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
         console.log("[ai-agent-chat] ⏸️ Paused by code");
