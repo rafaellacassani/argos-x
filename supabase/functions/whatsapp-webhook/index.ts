@@ -722,6 +722,13 @@ app.post("/", async (c) => {
       if (fromMeText.trim()) {
         try {
           const sessionCandidates = buildSessionCandidates(remoteJid, data);
+          if (remoteJid.endsWith("@lid") && !sessionCandidates.some((jid) => jid.endsWith("@s.whatsapp.net"))) {
+            try {
+              const profileData = await evolutionFetch(`/chat/fetchProfile/${instanceName}`, "POST", { number: jidToNumber(remoteJid) });
+              const resolvedNumber = jidToNumber(String(profileData?.number || profileData?.wuid || profileData?.jid || "")).replace(/\D/g, "");
+              if (resolvedNumber.length >= 10 && resolvedNumber.length <= 15) sessionCandidates.push(`${resolvedNumber}@s.whatsapp.net`);
+            } catch { /* ignore */ }
+          }
           const canonicalSessionJid = getCanonicalSessionId(sessionCandidates, remoteJid);
           // Find workspace for this instance
           const { data: instRow } = await supabase
