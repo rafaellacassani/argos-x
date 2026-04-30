@@ -51,6 +51,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useHumanSupportQueue } from "@/hooks/useHumanSupportQueue";
+import { useArgosClientPlanTags } from "@/hooks/useArgosClientPlanTags";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
