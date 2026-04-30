@@ -51,6 +51,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useHumanSupportQueue } from "@/hooks/useHumanSupportQueue";
+import { useArgosClientPlanTags } from "@/hooks/useArgosClientPlanTags";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DropdownMenu,
@@ -2976,6 +2977,12 @@ export default function Chats() {
     return result;
   }, [chats, searchTerm, activeFilters, showQueueOnly, queue, findLeadByChat, getChatSupportStatus, pinnedChatIds, contentSearchResults, contentSearchTerm]);
 
+  // Argos X only: tag each chat with subscriber's plan or "Lead novo"
+  const { enabled: argosTagsEnabled, getTag: getArgosTag } = useArgosClientPlanTags(
+    workspaceId,
+    filteredChats.map((c) => c.phone || "")
+  );
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (!params.has("search")) return;
@@ -3383,6 +3390,24 @@ export default function Chats() {
                           </span>
                         )}
                         <span className="font-semibold text-sm text-foreground truncate">{chat.name}</span>
+                        {/* Argos X only: subscriber plan tag / "Lead novo" */}
+                        {argosTagsEnabled && (() => {
+                          const tag = getArgosTag(chat.phone);
+                          if (!tag.label) return null;
+                          return (
+                            <span
+                              className={cn(
+                                "text-[9px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap flex-shrink-0 border",
+                                tag.isClient
+                                  ? "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800"
+                                  : "bg-muted text-muted-foreground border-border"
+                              )}
+                              title={tag.isClient ? `Cliente Argos X • ${tag.label}` : "Sem conta no Argos X"}
+                            >
+                              {tag.label}
+                            </span>
+                          );
+                        })()}
                         {/* Support queue badge — next to name */}
                         {(() => {
                           const ss = getChatSupportStatus(chat);
