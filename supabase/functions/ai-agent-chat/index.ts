@@ -907,7 +907,7 @@ serve(async (req) => {
       // Check if there's an active human intercept for THIS SPECIFIC session or lead.
       // CRITICAL: a ticket with NULL lead_id AND a non-matching session_id must NOT block this lead.
       // Tickets with both lead_id=NULL and session_id=NULL are "ghost tickets" and ignored.
-      {
+      if (!isTrainer) {
         let blockingTicket: { id: string; ticket_number: number | null; lead_id: string | null; session_id: string | null } | null = null;
         if (session_id) {
           const { data: hsq } = await supabase
