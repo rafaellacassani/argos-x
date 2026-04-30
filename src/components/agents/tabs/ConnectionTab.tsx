@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { ShieldAlert, Plug } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ShieldAlert, Plug, GraduationCap, Plus, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/hooks/useWorkspace";
 
@@ -12,10 +14,25 @@ interface Props {
   updateField: (key: string, value: any) => void;
 }
 
+function normalizePhone(raw: string): string {
+  return (raw || "").replace(/\D/g, "");
+}
+
+function formatPhoneDisplay(digits: string): string {
+  const d = normalizePhone(digits);
+  if (d.length === 13 && d.startsWith("55")) {
+    return `+55 (${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
+  }
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return d;
+}
+
 export function ConnectionTab({ formData, updateField }: Props) {
   const { workspaceId } = useWorkspace();
   const [instances, setInstances] = useState<{ instance_name: string; display_name: string | null }[]>([]);
   const [cloudConnections, setCloudConnections] = useState<{ id: string; inbox_name: string; phone_number: string; phone_number_id: string }[]>([]);
+  const [newTrainer, setNewTrainer] = useState("");
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -26,6 +43,23 @@ export function ConnectionTab({ formData, updateField }: Props) {
       if (data) setCloudConnections(data);
     });
   }, [workspaceId]);
+
+  const trainerPhones: string[] = Array.isArray(formData.trainer_phones) ? formData.trainer_phones : [];
+
+  const addTrainer = () => {
+    const digits = normalizePhone(newTrainer);
+    if (digits.length < 10) return;
+    if (trainerPhones.includes(digits)) {
+      setNewTrainer("");
+      return;
+    }
+    updateField("trainer_phones", [...trainerPhones, digits]);
+    setNewTrainer("");
+  };
+
+  const removeTrainer = (digits: string) => {
+    updateField("trainer_phones", trainerPhones.filter((p) => p !== digits));
+  };
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -85,6 +119,63 @@ export function ConnectionTab({ formData, updateField }: Props) {
           </div>
         </>
       )}
+
+      <Separator />
+
+      <div className="space-y-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
+        <div className="flex items-start gap-3">
+          <GraduationCap className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+          <div className="flex-1 space-y-1">
+            <Label className="text-sm font-semibold">Modo Treinador — números liberados para testar a IA</Label>
+            <p className="text-xs text-muted-foreground">
+              Cadastre números de WhatsApp (geralmente seu próprio celular) que <strong>nunca</strong> serão bloqueados ao conversar com este agente.
+              A IA sempre responde para esses números, mesmo se a conta estiver vencida, com pausa ativa, com limite mensal estourado ou fora da janela de 24h.
+              Use para testar e treinar a IA sem restrições. Inclua DDI + DDD + número (ex: 5511999999999).
+            </p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Input
+            placeholder="Ex: 5511999999999"
+            value={newTrainer}
+            onChange={(e) => setNewTrainer(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTrainer();
+              }
+            }}
+            inputMode="tel"
+          />
+          <Button type="button" onClick={addTrainer} variant="secondary" disabled={normalizePhone(newTrainer).length < 10}>
+            <Plus className="w-4 h-4 mr-1" /> Adicionar
+          </Button>
+        </div>
+
+        {trainerPhones.length > 0 ? (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {trainerPhones.map((digits) => (
+              <div
+                key={digits}
+                className="inline-flex items-center gap-2 rounded-full bg-background border border-border px-3 py-1 text-sm"
+              >
+                <span className="font-mono">{formatPhoneDisplay(digits)}</span>
+                <button
+                  type="button"
+                  onClick={() => removeTrainer(digits)}
+                  className="text-muted-foreground hover:text-destructive"
+                  aria-label="Remover"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">Nenhum número de treinador cadastrado.</p>
+        )}
+      </div>
     </div>
   );
 }

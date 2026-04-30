@@ -322,6 +322,7 @@ export type Database = {
           tone_of_voice: string | null
           tools: Json | null
           trainer_phone: string | null
+          trainer_phones: string[]
           trigger_config: Json | null
           type: string
           updated_at: string
@@ -374,6 +375,7 @@ export type Database = {
           tone_of_voice?: string | null
           tools?: Json | null
           trainer_phone?: string | null
+          trainer_phones?: string[]
           trigger_config?: Json | null
           type?: string
           updated_at?: string
@@ -426,6 +428,7 @@ export type Database = {
           tone_of_voice?: string | null
           tools?: Json | null
           trainer_phone?: string | null
+          trainer_phones?: string[]
           trigger_config?: Json | null
           type?: string
           updated_at?: string

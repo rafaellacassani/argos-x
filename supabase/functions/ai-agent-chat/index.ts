@@ -633,7 +633,26 @@ serve(async (req) => {
       .eq("id", agent.workspace_id)
       .single();
 
-    if (wsCheck) {
+    // ============ TRAINER MODE: bypass de bloqueio/quota/pausa ============
+    // Se o session_id (JID/telefone) bate com algum trainer_phones do agente,
+    // a IA SEMPRE responde — ignora bloqueio do workspace, trial vencido,
+    // quota mensal de IA estourada e pausas. Usado para testar/treinar a IA.
+    const trainerPhones: string[] = Array.isArray((agent as any).trainer_phones) ? (agent as any).trainer_phones : [];
+    const sessionDigits = (session_id || "").replace(/\D/g, "");
+    const isTrainer =
+      trainerPhones.length > 0 &&
+      sessionDigits.length >= 10 &&
+      trainerPhones.some((tp) => {
+        const t = (tp || "").replace(/\D/g, "");
+        if (t.length < 10) return false;
+        // Match por sufixo (últimos 10 dígitos) para tolerar DDI 55 / @lid / @s.whatsapp.net
+        return sessionDigits.endsWith(t.slice(-10)) || t.endsWith(sessionDigits.slice(-10));
+      });
+    if (isTrainer) {
+      console.log(`[ai-agent-chat] 🎓 TRAINER MODE — session=${session_id} matched trainer_phones for agent=${agent.id}. Bypassing block/quota/pause.`);
+    }
+
+    if (wsCheck && !isTrainer) {
       const isBlocked = !!wsCheck.blocked_at || wsCheck.plan_type === "blocked" || wsCheck.plan_type === "canceled";
       const isTrialExpired = (wsCheck.plan_type === "trialing" || wsCheck.plan_type === "trial_manual") && wsCheck.trial_end && new Date(wsCheck.trial_end) < new Date();
       
@@ -888,7 +907,7 @@ serve(async (req) => {
       // Check if there's an active human intercept for THIS SPECIFIC session or lead.
       // CRITICAL: a ticket with NULL lead_id AND a non-matching session_id must NOT block this lead.
       // Tickets with both lead_id=NULL and session_id=NULL are "ghost tickets" and ignored.
-      {
+      if (!isTrainer) {
         let blockingTicket: { id: string; ticket_number: number | null; lead_id: string | null; session_id: string | null } | null = null;
         if (session_id) {
           const { data: hsq } = await supabase
@@ -918,6 +937,13 @@ serve(async (req) => {
           console.log(`[ai-agent-chat] ⏸️ Human support queue active — blocking AI. Ticket #${blockingTicket.ticket_number} (id=${blockingTicket.id}, ticket.lead_id=${blockingTicket.lead_id}, ticket.session_id=${blockingTicket.session_id}) for current lead=${lead_id} session=${session_id}`);
           return new Response(JSON.stringify({ response: null, paused: true, message: "Conversa em atendimento humano." }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
+      }
+
+      if (memory.is_paused && isTrainer) {
+        // Trainer mode: força resume e segue respondendo
+        await supabase.from("agent_memories").update({ is_paused: false, updated_at: new Date().toISOString() }).eq("id", memory.id);
+        memory.is_paused = false;
+        console.log("[ai-agent-chat] 🎓 Trainer bypassed pause — auto-resumed");
       }
 
       if (memory.is_paused) {
@@ -953,7 +979,7 @@ serve(async (req) => {
         }
       }
 
-      if (agent.pause_code && messageText.includes(agent.pause_code)) {
+      if (!isTrainer && agent.pause_code && messageText.includes(agent.pause_code)) {
         await supabase.from("agent_memories").update({ is_paused: true, updated_at: new Date().toISOString() }).eq("id", memory.id);
         await supabase.from("agent_executions").insert({ agent_id, lead_id, session_id, input_message: messageText || `[${media_type}]`, output_message: null, status: "paused", latency_ms: Date.now() - startTime, workspace_id: agent.workspace_id });
         console.log("[ai-agent-chat] ⏸️ Paused by code");
