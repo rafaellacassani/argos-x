@@ -49,6 +49,7 @@ export default function Departments() {
 
   const agentsByDept = (deptId: string) => agents.filter((a: any) => a.department_id === deptId);
   const unassignedAgents = agents.filter((a: any) => !a.department_id);
+  const agentsNotInDept = (deptId: string) => agents.filter((a: any) => a.department_id !== deptId);
 
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
@@ -181,21 +182,36 @@ export default function Departments() {
                       </div>
                     )}
                   </div>
-                  {unassignedAgents.length > 0 && (
+                  {agents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      Você ainda não criou nenhum agente. Vá em <strong>Agentes IA</strong> para criar.
+                    </p>
+                  ) : agentsNotInDept(dept.id).length > 0 ? (
                     <div>
                       <Select
+                        value=""
                         onValueChange={(agentId) => assignAgentToDepartment.mutate({ agentId, departmentId: dept.id })}
                       >
                         <SelectTrigger className="h-8 text-xs">
                           <SelectValue placeholder="+ Adicionar agente" />
                         </SelectTrigger>
                         <SelectContent>
-                          {unassignedAgents.map((a: any) => (
-                            <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                          ))}
+                          {agentsNotInDept(dept.id).map((a: any) => {
+                            const otherDept = departments.find((d) => d.id === a.department_id);
+                            return (
+                              <SelectItem key={a.id} value={a.id}>
+                                {a.name}
+                                {otherDept ? ` (mover de ${otherDept.name})` : ""}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">
+                      Todos os agentes já estão neste departamento.
+                    </p>
                   )}
                 </CardContent>
               </Card>
