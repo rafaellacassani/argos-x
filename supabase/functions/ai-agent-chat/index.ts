@@ -633,7 +633,26 @@ serve(async (req) => {
       .eq("id", agent.workspace_id)
       .single();
 
-    if (wsCheck) {
+    // ============ TRAINER MODE: bypass de bloqueio/quota/pausa ============
+    // Se o session_id (JID/telefone) bate com algum trainer_phones do agente,
+    // a IA SEMPRE responde — ignora bloqueio do workspace, trial vencido,
+    // quota mensal de IA estourada e pausas. Usado para testar/treinar a IA.
+    const trainerPhones: string[] = Array.isArray((agent as any).trainer_phones) ? (agent as any).trainer_phones : [];
+    const sessionDigits = (session_id || "").replace(/\D/g, "");
+    const isTrainer =
+      trainerPhones.length > 0 &&
+      sessionDigits.length >= 10 &&
+      trainerPhones.some((tp) => {
+        const t = (tp || "").replace(/\D/g, "");
+        if (t.length < 10) return false;
+        // Match por sufixo (últimos 10 dígitos) para tolerar DDI 55 / @lid / @s.whatsapp.net
+        return sessionDigits.endsWith(t.slice(-10)) || t.endsWith(sessionDigits.slice(-10));
+      });
+    if (isTrainer) {
+      console.log(`[ai-agent-chat] 🎓 TRAINER MODE — session=${session_id} matched trainer_phones for agent=${agent.id}. Bypassing block/quota/pause.`);
+    }
+
+    if (wsCheck && !isTrainer) {
       const isBlocked = !!wsCheck.blocked_at || wsCheck.plan_type === "blocked" || wsCheck.plan_type === "canceled";
       const isTrialExpired = (wsCheck.plan_type === "trialing" || wsCheck.plan_type === "trial_manual") && wsCheck.trial_end && new Date(wsCheck.trial_end) < new Date();
       
