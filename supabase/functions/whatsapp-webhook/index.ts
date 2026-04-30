@@ -53,6 +53,47 @@ function jidToNumber(jid: string): string {
   return jid.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 }
 
+function normalizeControlText(text: string): string {
+  return (text || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim().toLowerCase();
+}
+
+function matchesControlCode(text: string, code?: string | null): boolean {
+  const normalizedText = normalizeControlText(text);
+  const normalizedCode = normalizeControlText(code || "");
+  if (!normalizedText || !normalizedCode) return false;
+  return normalizedText === normalizedCode || (normalizedCode.length >= 4 && normalizedText.includes(normalizedCode));
+}
+
+function buildSessionCandidates(remoteJid: string, data: any): string[] {
+  const candidates = new Set<string>();
+  const add = (jid?: string) => {
+    if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast") return;
+    candidates.add(jid);
+  };
+
+  add(remoteJid);
+  add(data?.key?.remoteJidAlt);
+  add(data?.remoteJidAlt);
+  add(data?.participant);
+  add(data?.key?.participant);
+
+  for (const jid of Array.from(candidates)) {
+    const number = jidToNumber(jid).replace(/\D/g, "");
+    if (number.length >= 10 && number.length <= 15) {
+      candidates.add(`${number}@s.whatsapp.net`);
+      candidates.add(`${number}@c.us`);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function getCanonicalSessionId(sessionCandidates: string[], fallback: string): string {
+  return sessionCandidates.find((jid) => jid.endsWith("@s.whatsapp.net"))
+    || sessionCandidates.find((jid) => !jid.endsWith("@lid"))
+    || fallback;
+}
+
 // --- Anti-loop check ---
 async function wasRecentlyExecuted(
   supabase: ReturnType<typeof createClient>,
