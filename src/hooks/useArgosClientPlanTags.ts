@@ -1,8 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 // Argos X master workspace — only this workspace gets plan tags on chats
 const ARGOS_WORKSPACE_ID = "41efdc6d-d4ba-4589-9761-7438a5911d57";
+
+// Cache TTL: 5 min. The directory of Argos clients changes slowly.
+const CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedMap: Record<string, ChatPlanTag> | null = null;
+let cachedAt = 0;
+let inflight: Promise<Record<string, ChatPlanTag>> | null = null;
 
 const PLAN_LABELS: Record<string, string> = {
   escala_semestral: "Escala Semestral",
@@ -30,6 +36,74 @@ export interface ChatPlanTag {
   status?: string;   // subscription_status (active, trialing, past_due, ...)
 }
 
+async function buildArgosClientMap(): Promise<Record<string, ChatPlanTag>> {
+  // Fetch ALL user profiles (Argos has ~500, very cheap, no ILIKE/full-scan).
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, phone, personal_whatsapp")
+    .or("phone.not.is.null,personal_whatsapp.not.is.null")
+    .limit(5000);
+
+  if (!profiles || profiles.length === 0) return {};
+
+  const userIds = Array.from(new Set(profiles.map((p: any) => p.user_id).filter(Boolean)));
+  if (userIds.length === 0) return {};
+
+  const { data: members } = await supabase
+    .from("workspace_members")
+    .select("user_id, workspace_id")
+    .in("user_id", userIds)
+    .not("accepted_at", "is", null);
+
+  if (!members || members.length === 0) return {};
+
+  const wsIds = Array.from(new Set(members.map((m: any) => m.workspace_id)));
+
+  const { data: ws } = await supabase
+    .from("workspaces")
+    .select("id, plan_name, subscription_status, archived_at")
+    .in("id", wsIds);
+
+  if (!ws) return {};
+
+  const planRank: Record<string, number> = {
+    escala_semestral: 100, escala: 90, negocio: 80, essencial: 70, gratuito: 10, semente: 5,
+  };
+  const statusRank: Record<string, number> = {
+    active: 100, trialing: 80, past_due: 50, blocked: 30, canceled: 10, archived: 5,
+  };
+
+  const wsById: Record<string, any> = {};
+  ws.forEach((w: any) => (wsById[w.id] = w));
+
+  const userBest: Record<string, any> = {};
+  for (const m of members as any[]) {
+    const w = wsById[m.workspace_id];
+    if (!w || w.archived_at) continue;
+    if (w.id === ARGOS_WORKSPACE_ID) continue;
+    const score = (planRank[w.plan_name] || 0) * 1000 + (statusRank[w.subscription_status] || 0);
+    if (!userBest[m.user_id] || userBest[m.user_id]._score < score) {
+      userBest[m.user_id] = { ...w, _score: score };
+    }
+  }
+
+  const result: Record<string, ChatPlanTag> = {};
+  for (const p of profiles as any[]) {
+    const best = userBest[p.user_id];
+    if (!best) continue;
+    const tag: ChatPlanTag = {
+      label: planLabel(best.plan_name),
+      isClient: true,
+      status: best.subscription_status,
+    };
+    for (const f of [p.phone, p.personal_whatsapp]) {
+      const k = last10(f);
+      if (k.length >= 10 && !result[k]) result[k] = tag;
+    }
+  }
+  return result;
+}
+
 /**
  * For the Argos X workspace only: maps each chat phone (last 10 digits)
  * to the subscriber's plan label, or "Lead novo" when no Argos account
@@ -37,129 +111,48 @@ export interface ChatPlanTag {
  */
 export function useArgosClientPlanTags(
   workspaceId: string | null | undefined,
-  phones: string[]
+  _phones: string[]
 ) {
-  const [map, setMap] = useState<Record<string, ChatPlanTag>>({});
-
-  // Only active in Argos X workspace
+  const [map, setMap] = useState<Record<string, ChatPlanTag>>(() => cachedMap || {});
   const enabled = workspaceId === ARGOS_WORKSPACE_ID;
-
-  // Stable key from sorted unique 10-digit phones
-  const uniqueKey = enabled
-    ? Array.from(new Set(phones.map(last10).filter((p) => p.length >= 10)))
-        .sort()
-        .join(",")
-    : "";
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    if (!enabled || !uniqueKey) {
+    mountedRef.current = true;
+    if (!enabled) {
       setMap({});
-      return;
+      return () => { mountedRef.current = false; };
     }
-    let cancelled = false;
 
-    (async () => {
-      const digits = uniqueKey.split(",");
-      try {
-        // Build OR filter — chunk to avoid massive query strings
-        const chunkSize = 60;
-        const result: Record<string, ChatPlanTag> = {};
+    const now = Date.now();
+    if (cachedMap && now - cachedAt < CACHE_TTL_MS) {
+      setMap(cachedMap);
+      return () => { mountedRef.current = false; };
+    }
 
-        for (let i = 0; i < digits.length; i += chunkSize) {
-          const chunk = digits.slice(i, i + chunkSize);
-          const orClauses = chunk
-            .flatMap((d) => [`phone.ilike.%${d}`, `personal_whatsapp.ilike.%${d}`])
-            .join(",");
+    if (!inflight) {
+      inflight = buildArgosClientMap()
+        .then((m) => {
+          cachedMap = m;
+          cachedAt = Date.now();
+          return m;
+        })
+        .catch((err) => {
+          console.warn("[useArgosClientPlanTags] failed:", err);
+          return {};
+        })
+        .finally(() => {
+          // Reset inflight after a tick so retries are possible
+          setTimeout(() => { inflight = null; }, 0);
+        });
+    }
 
-          const { data: profiles } = await supabase
-            .from("user_profiles")
-            .select("user_id, phone, personal_whatsapp")
-            .or(orClauses)
-            .limit(500);
+    inflight.then((m) => {
+      if (mountedRef.current) setMap(m);
+    });
 
-          if (!profiles || profiles.length === 0) continue;
-
-          const userIds = Array.from(new Set(profiles.map((p: any) => p.user_id)));
-
-          const { data: members } = await supabase
-            .from("workspace_members")
-            .select("user_id, workspace_id")
-            .in("user_id", userIds)
-            .not("accepted_at", "is", null);
-
-          if (!members || members.length === 0) continue;
-
-          const wsIds = Array.from(new Set(members.map((m: any) => m.workspace_id)));
-
-          const { data: ws } = await supabase
-            .from("workspaces")
-            .select("id, plan_name, plan_type, subscription_status, archived_at")
-            .in("id", wsIds);
-
-          if (!ws) continue;
-
-          // Pick best workspace per user (prefer active+highest plan)
-          const planRank: Record<string, number> = {
-            escala_semestral: 100,
-            escala: 90,
-            negocio: 80,
-            essencial: 70,
-            gratuito: 10,
-            semente: 5,
-          };
-          const statusRank: Record<string, number> = {
-            active: 100,
-            trialing: 80,
-            past_due: 50,
-            blocked: 30,
-            canceled: 10,
-            archived: 5,
-          };
-
-          const wsById: Record<string, any> = {};
-          ws.forEach((w: any) => (wsById[w.id] = w));
-
-          const userBest: Record<string, any> = {};
-          for (const m of members as any[]) {
-            const w = wsById[m.workspace_id];
-            if (!w || w.archived_at) continue;
-            // Skip the Argos master workspace itself
-            if (w.id === ARGOS_WORKSPACE_ID) continue;
-            const score =
-              (planRank[w.plan_name] || 0) * 1000 +
-              (statusRank[w.subscription_status] || 0);
-            if (!userBest[m.user_id] || userBest[m.user_id]._score < score) {
-              userBest[m.user_id] = { ...w, _score: score };
-            }
-          }
-
-          for (const p of profiles as any[]) {
-            const best = userBest[p.user_id];
-            if (!best) continue;
-            const tag: ChatPlanTag = {
-              label: planLabel(best.plan_name),
-              isClient: true,
-              status: best.subscription_status,
-            };
-            // Index by 10-digit suffix of both phone fields
-            for (const f of [p.phone, p.personal_whatsapp]) {
-              const k = last10(f);
-              if (k.length >= 10 && !result[k]) result[k] = tag;
-            }
-          }
-        }
-
-        if (!cancelled) setMap(result);
-      } catch (err) {
-        console.warn("[useArgosClientPlanTags] failed:", err);
-        if (!cancelled) setMap({});
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, uniqueKey]);
+    return () => { mountedRef.current = false; };
+  }, [enabled]);
 
   function getTag(phone: string | null | undefined): ChatPlanTag {
     if (!enabled) return { label: "", isClient: false };
