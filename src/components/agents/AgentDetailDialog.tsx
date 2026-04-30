@@ -81,6 +81,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
         website_scraped_at: (agent as any).website_scraped_at || null,
         style_analysis: (agent as any).style_analysis || "",
         trainer_phone: (agent as any).trainer_phone || "",
+        trainer_phones: Array.isArray((agent as any).trainer_phones) ? (agent as any).trainer_phones : [],
         followup_enabled: (agent as any).followup_enabled ?? false,
         followup_sequence: (agent as any).followup_sequence || [],
         followup_end_stage_id: (agent as any).followup_end_stage_id || "",
