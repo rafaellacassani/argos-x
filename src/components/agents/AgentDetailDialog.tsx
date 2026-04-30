@@ -179,6 +179,7 @@ export function AgentDetailDialog({ agent, open, onOpenChange, initialTab }: Age
       website_url: formData.website_url || null,
       style_analysis: formData.style_analysis || null,
       trainer_phone: formData.trainer_phone,
+      trainer_phones: Array.isArray(formData.trainer_phones) ? formData.trainer_phones : [],
       followup_enabled: formData.followup_enabled,
       followup_sequence: formData.followup_sequence,
       followup_end_stage_id: formData.followup_end_stage_id || null,
