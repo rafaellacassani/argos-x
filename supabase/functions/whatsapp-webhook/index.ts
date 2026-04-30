@@ -53,6 +53,47 @@ function jidToNumber(jid: string): string {
   return jid.replace(/@s\.whatsapp\.net$|@lid$|@c\.us$/i, "");
 }
 
+function normalizeControlText(text: string): string {
+  return (text || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").trim().toLowerCase();
+}
+
+function matchesControlCode(text: string, code?: string | null): boolean {
+  const normalizedText = normalizeControlText(text);
+  const normalizedCode = normalizeControlText(code || "");
+  if (!normalizedText || !normalizedCode) return false;
+  return normalizedText === normalizedCode || (normalizedCode.length >= 4 && normalizedText.includes(normalizedCode));
+}
+
+function buildSessionCandidates(remoteJid: string, data: any): string[] {
+  const candidates = new Set<string>();
+  const add = (jid?: string) => {
+    if (!jid || jid.endsWith("@g.us") || jid === "status@broadcast") return;
+    candidates.add(jid);
+  };
+
+  add(remoteJid);
+  add(data?.key?.remoteJidAlt);
+  add(data?.remoteJidAlt);
+  add(data?.participant);
+  add(data?.key?.participant);
+
+  for (const jid of Array.from(candidates)) {
+    const number = jidToNumber(jid).replace(/\D/g, "");
+    if (number.length >= 10 && number.length <= 15) {
+      candidates.add(`${number}@s.whatsapp.net`);
+      candidates.add(`${number}@c.us`);
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function getCanonicalSessionId(sessionCandidates: string[], fallback: string): string {
+  return sessionCandidates.find((jid) => jid.endsWith("@s.whatsapp.net"))
+    || sessionCandidates.find((jid) => !jid.endsWith("@lid"))
+    || fallback;
+}
+
 // --- Anti-loop check ---
 async function wasRecentlyExecuted(
   supabase: ReturnType<typeof createClient>,
@@ -680,6 +721,15 @@ app.post("/", async (c) => {
       const fromMeText = data.message?.conversation || data.message?.extendedTextMessage?.text || "";
       if (fromMeText.trim()) {
         try {
+          const sessionCandidates = buildSessionCandidates(remoteJid, data);
+          if (remoteJid.endsWith("@lid") && !sessionCandidates.some((jid) => jid.endsWith("@s.whatsapp.net"))) {
+            try {
+              const profileData = await evolutionFetch(`/chat/fetchProfile/${instanceName}`, "POST", { number: jidToNumber(remoteJid) });
+              const resolvedNumber = jidToNumber(String(profileData?.number || profileData?.wuid || profileData?.jid || "")).replace(/\D/g, "");
+              if (resolvedNumber.length >= 10 && resolvedNumber.length <= 15) sessionCandidates.push(`${resolvedNumber}@s.whatsapp.net`);
+            } catch { /* ignore */ }
+          }
+          const canonicalSessionJid = getCanonicalSessionId(sessionCandidates, remoteJid);
           // Find workspace for this instance
           const { data: instRow } = await supabase
             .from("whatsapp_instances")
@@ -688,6 +738,36 @@ app.post("/", async (c) => {
             .maybeSingle();
 
           if (instRow?.workspace_id) {
+            const recentAiCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+            const { data: recentAiOutbound } = await supabase
+              .from("whatsapp_messages")
+              .select("id")
+              .eq("workspace_id", instRow.workspace_id)
+              .eq("remote_jid", canonicalSessionJid)
+              .eq("direction", "outbound")
+              .eq("push_name", "IA")
+              .eq("content", fromMeText)
+              .gte("timestamp", recentAiCutoff)
+              .limit(1)
+              .maybeSingle();
+
+            if (recentAiOutbound) {
+              console.log("[whatsapp-webhook] ⏭️ Skipped: fromMe was recently sent by IA", canonicalSessionJid);
+              return c.json({ received: true, skipped: "fromMe_ai_echo" }, 200, corsHeaders);
+            }
+
+            await supabase.from("whatsapp_messages").insert({
+              workspace_id: instRow.workspace_id,
+              instance_name: instanceName,
+              remote_jid: canonicalSessionJid,
+              from_me: true,
+              direction: "outbound",
+              content: fromMeText,
+              message_type: "text",
+              message_id: msgId || `fromme-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              timestamp: new Date((data.messageTimestamp ? Number(data.messageTimestamp) * 1000 : Date.now())).toISOString(),
+            }).then(() => null, () => null);
+
             // Find active agents that match this instance (or all instances)
             const { data: agents } = await supabase
               .from("ai_agents")
@@ -703,35 +783,61 @@ app.post("/", async (c) => {
               );
 
               if (matchingAgent) {
-                const contactJid = remoteJid;
+                const { data: memories } = await supabase
+                  .from("agent_memories")
+                  .select("id, messages, session_id")
+                  .eq("agent_id", matchingAgent.id)
+                  .in("session_id", sessionCandidates);
 
-                if (matchingAgent.pause_code && trimmedText === matchingAgent.pause_code.trim()) {
-                  console.log("[whatsapp-webhook] ⏸️ Pause code detected for agent", matchingAgent.id, "contact:", contactJid);
+                const ensureMemory = async (paused: boolean) => {
+                  if (memories && memories.length > 0) return memories;
+                  const { data: newMemory } = await supabase
+                    .from("agent_memories")
+                    .upsert({
+                      agent_id: matchingAgent.id,
+                      session_id: canonicalSessionJid,
+                      messages: [],
+                      workspace_id: instRow.workspace_id,
+                      is_paused: paused,
+                      updated_at: new Date().toISOString(),
+                    }, { onConflict: "agent_id,session_id" })
+                    .select("id, messages, session_id");
+                  return newMemory || [];
+                };
+
+                if (matchesControlCode(trimmedText, matchingAgent.pause_code)) {
+                  console.log("[whatsapp-webhook] ⏸️ Pause code detected for agent", matchingAgent.id, "contact:", canonicalSessionJid, "candidates:", sessionCandidates);
                   // Set is_paused on matching memory
+                  const targetMemories = await ensureMemory(true);
                   await supabase
                     .from("agent_memories")
                     .update({ is_paused: true, updated_at: new Date().toISOString() })
-                    .eq("agent_id", matchingAgent.id)
-                    .eq("session_id", contactJid);
+                    .in("id", targetMemories.map((m: any) => m.id));
 
                   // Cancel pending follow-ups
                   await supabase
                     .from("agent_followup_queue")
                     .update({ status: "canceled", canceled_reason: "pause_code" })
                     .eq("agent_id", matchingAgent.id)
-                    .eq("session_id", contactJid)
+                    .in("session_id", sessionCandidates)
                     .eq("status", "pending");
 
-                  console.log("[whatsapp-webhook] ✅ Agent paused for contact:", contactJid);
-                } else if (matchingAgent.resume_keyword && trimmedText === matchingAgent.resume_keyword.trim()) {
-                  console.log("[whatsapp-webhook] ▶️ Resume keyword detected for agent", matchingAgent.id, "contact:", contactJid);
+                  console.log("[whatsapp-webhook] ✅ Agent paused for contact:", canonicalSessionJid);
+                } else if (matchesControlCode(trimmedText, matchingAgent.resume_keyword)) {
+                  console.log("[whatsapp-webhook] ▶️ Resume keyword detected for agent", matchingAgent.id, "contact:", canonicalSessionJid);
+                  const targetMemories = await ensureMemory(false);
                   await supabase
                     .from("agent_memories")
                     .update({ is_paused: false, updated_at: new Date().toISOString() })
-                    .eq("agent_id", matchingAgent.id)
-                    .eq("session_id", contactJid);
+                    .in("id", targetMemories.map((m: any) => m.id));
 
-                  console.log("[whatsapp-webhook] ✅ Agent resumed for contact:", contactJid);
+                  console.log("[whatsapp-webhook] ✅ Agent resumed for contact:", canonicalSessionJid);
+                } else if (memories && memories.length > 0) {
+                  for (const memory of memories) {
+                    const history = Array.isArray(memory.messages) ? memory.messages : [];
+                    history.push({ role: "assistant", content: `[Atendente humano]: ${fromMeText}`, timestamp: new Date().toISOString() });
+                    await supabase.from("agent_memories").update({ messages: history, updated_at: new Date().toISOString() }).eq("id", memory.id);
+                  }
                 }
               }
             }
